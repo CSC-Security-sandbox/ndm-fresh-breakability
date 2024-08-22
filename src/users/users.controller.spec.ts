@@ -33,7 +33,7 @@ describe('UsersController', () => {
 
     describe('createUser', () => {
         it('should create a user successfully', async () => {
-            const createUserDTO: CreateUserDTO = { name: 'testuser', createdBy: "test", password: 'password123', email: "test@test.com" };
+            const createUserDTO: CreateUserDTO = { userName: 'testuser', createdBy: "test", password: 'password123', email: "test@test.com" };
             const createdUser = { ...createUserDTO, _id: 'someId' };
             jest.spyOn(userService, 'createUser').mockResolvedValue(createdUser as any);
     
@@ -77,7 +77,7 @@ describe('UsersController', () => {
     describe('updateUser', () => {
         it('should update a user successfully', async () => {
             const id = '66c4276756cfac7c8b89a6df';
-            const updateUserDTO = { name: 'John Doe Updated' }; // Adjust according to your DTO
+            const updateUserDTO = { userName: 'John Doe Updated' }; // Adjust according to your DTO
             const updatedUser = { _id: id, ...updateUserDTO };
             jest.spyOn(userService, 'updateUsersById').mockResolvedValue(updatedUser as any);
     
@@ -86,13 +86,13 @@ describe('UsersController', () => {
     
         it('should throw BadRequestException for invalid id', async () => {
             const id = 'invalidId';
-            const updateUserDTO = { name: 'John Doe Updated' };
+            const updateUserDTO = { userName: 'John Doe Updated' };
             await expect(usersController.updateUser(id, updateUserDTO)).rejects.toThrow(BadRequestException);
         });
     
         it('should throw NotFoundException if user not found', async () => {
             const id = '66c4276756cfac7c8b89a6df';
-            const updateUserDTO = { name: 'John Doe Updated' };
+            const updateUserDTO = { userName: 'John Doe Updated' };
             jest.spyOn(userService, 'updateUsersById').mockResolvedValue(null);
     
             await expect(usersController.updateUser(id, updateUserDTO)).rejects.toThrow(NotFoundException);

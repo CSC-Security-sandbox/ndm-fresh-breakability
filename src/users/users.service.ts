@@ -28,18 +28,18 @@ export class UserService {
     async findAllUsers(userPagenDTO: UserPagenDTO) {
         const { page = 1, limit = 10 } = userPagenDTO;
         const skip = (page - 1) * limit;
-        return this.userModel.find().skip(skip).limit(limit).populate(['accessRelation']).exec();
+        return this.userModel.find().skip(skip).limit(limit).exec();
     }
 
     async findUsersById(id: string) {
-        return this.userModel.findById(id).populate(['accessRelation']).exec();
+        return this.userModel.findById(id).exec();
     }
 
     async updateUsersById(id: string, updateUserDTO: UpdateUserDTO) {
-        return this.userModel.findByIdAndUpdate(id, updateUserDTO, { new: true }).populate('accessRelation').exec();
+        return this.userModel.findByIdAndUpdate(id, updateUserDTO, { new: true }).exec();
     }
 
     async deleteUserById(id: string) {
-        return this.userModel.findByIdAndDelete(id).populate(['accessRelation']).exec();
+        return this.userModel.findByIdAndDelete(id).exec();
     }
 }
