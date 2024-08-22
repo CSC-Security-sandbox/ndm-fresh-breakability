@@ -10,7 +10,7 @@ import { AccessrelationModule } from './accessrelation/accessrelation.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://localhost:27017/accounts-service'),
+    MongooseModule.forRoot('mongodb+srv://jafog21906:AbbfB5zo1Vz95NGF@cluster0.dpy2h.mongodb.net/'),
     CustomerModule, UsersModule, ProjectsModule, RolesModule, PermissionsModule, AccessrelationModule],
   controllers: [],
   providers: [],
