@@ -1,7 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { ApiProperty } from "@nestjs/swagger";
-import { AccessRelation } from "./accessrelation.schema";
-import mongoose from "mongoose";
 
 @Schema()
 export class User{

@@ -69,12 +69,12 @@ describe('UserService', () => {
 
     describe('updateUsersById', () => {
         it('should update a user by ID', async () => {
-            const updatedUser: UpdateUserDTO = { name: 'updateduser' };
+            const updatedUser: UpdateUserDTO = { userName: 'updateduser' };
             (mockUserModel.findByIdAndUpdate as jest.Mock).mockReturnValue({
                 exec: jest.fn().mockResolvedValue(updatedUser),
             } as any);
 
-            const updateUserDTO = { name: 'updateduser' };
+            const updateUserDTO = { userName: 'updateduser' };
             const result = await service.updateUsersById('someid', updateUserDTO);
             expect(result).toEqual(updatedUser);
         });
