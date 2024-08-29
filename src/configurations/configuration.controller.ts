@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, NotFoundException, Param, Post, Put } from "@nestjs/common";
 import { ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Types } from "mongoose";
 import { ConfigurationService } from "./configuration.service";
@@ -26,19 +26,19 @@ export class ConfigurationController{
     }
 
 
-    @ApiOperation({ summary: 'Get Configuration by ID' })
-    @ApiOkResponse({ description: 'Configuration Found' })
-    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
-    @Get(':id')
-    async getConfiguration(@Param('id') id: string): Promise<Configuration> {
-        try {
-            const res = await this.configurationService.findConfiguration({ filter: { _id: id} });
-            if(!res.length) throw new Error('No Data')
-            return res[0];
-        } catch (error) {
-            throw new NotFoundException(`Configuration with ID ${id} not found`);
-        }
-    }
+    // @ApiOperation({ summary: 'Get Configuration by ID' })
+    // @ApiOkResponse({ description: 'Configuration Found' })
+    // @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    // @Get(':id')
+    // async getConfiguration(@Param('id') id: string): Promise<Configuration> {
+    //     try {
+    //         const res = await this.configurationService.findConfiguration({ filter: { _id: id} });
+    //         if(!res.length) throw new Error('No Data')
+    //         return res[0];
+    //     } catch (error) {
+    //         throw new NotFoundException(`Configuration with ID ${id} not found`);
+    //     }
+    // }
 
     @ApiOperation({ summary: 'Get Configurations by Project ID' })
     @ApiOkResponse({ description: 'List of Configurations for the Project' })
@@ -67,5 +67,11 @@ export class ConfigurationController{
     @Delete(':id')
     async remove(@Param('id') id: string): Promise<{ success: boolean; id: Types.ObjectId; }> {
         return this.configurationService.remove(new Types.ObjectId(id));
+    }
+
+    @Get(':id')
+    async testApi(@Param('id') id: string) {
+        Logger.log(id)
+        this.configurationService.send(id)
     }
 }

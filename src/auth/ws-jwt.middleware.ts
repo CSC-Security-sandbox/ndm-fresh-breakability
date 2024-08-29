@@ -12,7 +12,8 @@ export const SockateAuthMiddleware  = () : SocketMiddleware=> {
             WsJwtGuard.validate(client)
             next() 
         }catch(error) {
-            next(new Error("Unauthorized"));
+            
+            next(new Error(error.message));
         }
     }
 }
