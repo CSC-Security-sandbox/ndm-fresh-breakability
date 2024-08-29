@@ -48,4 +48,8 @@ export class ConfigurationService {
     async send(id) {
         this.socket.sendToClient(id)
     }
+
+    async sendToClient(id) {
+        this.socket.sendToClient(id)
+    }
 }
