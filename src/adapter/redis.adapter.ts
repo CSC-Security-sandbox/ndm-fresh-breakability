@@ -8,7 +8,7 @@ export class RedisIoAdapter extends IoAdapter {
 
   async connectToRedis(): Promise<void> {
     const pubClient = createClient({
-        password: '',
+        password: 'iWPQZxvjs0paalo2f2WFQ7PQKTorrto2',
         socket: {
             host: 'redis-16479.c325.us-east-1-4.ec2.redns.redis-cloud.com',
             port: 16479

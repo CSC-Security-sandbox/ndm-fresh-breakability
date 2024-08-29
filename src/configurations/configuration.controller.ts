@@ -76,11 +76,12 @@ export class ConfigurationController{
         
     }
 
-    @Get(':clientId')
+    @Get('/ok/:clientId')
     async testInfiniteApi(@Param('clientId') id: string) {
         Logger.log(id)
+        let l = 0
         while(true){
-        this.configurationService.sendToClient(id)
+            l = 1
         }   
     }
 }
