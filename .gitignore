@@ -131,3 +131,4 @@ dist
 
 # test coverage report xml file
 test/unit/test-results/junit.xml
+junit.xml

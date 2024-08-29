@@ -18,6 +18,20 @@ export enum ServerType {
     emc = 'emc'
 }
 
+@Schema({ _id: false })
+export class Mount {
+    @ApiProperty({ description: 'Mount path' })
+    @Prop({ required: true })
+    mountPath: string;
+}
+
+@Schema({ _id: false })
+export class Share {
+    @ApiProperty({ description: 'Share path' })
+    @Prop({ required: true })
+    sharePath: string;
+}
+
 @Schema({ timestamps: true })
 export class Configuration {
     @ApiProperty({description: 'Project Id' })
@@ -43,6 +57,14 @@ export class Configuration {
     @ApiProperty({description: 'Host'})
     @Prop({ required: true })
     host: string;
+
+    @ApiProperty({ description: 'List of mounts' })
+    @Prop({ type: [Mount], default: [] })
+    mounts: Mount[];
+
+    @ApiProperty({ description: 'List of shares' })
+    @Prop({ type: [Share], default: [] })
+    shares: Share[];
 }
 
 export const ConfigurationSchema = SchemaFactory.createForClass(Configuration)

@@ -1,10 +1,26 @@
-import { IsNotEmpty, IsString, IsOptional, IsEnum, IsMongoId } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsEnum, IsMongoId, ValidateNested, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
 import { Protocol, ConfigurationType, ServerType } from '../../schemas/Configuration.schema';
+import { Type } from 'class-transformer';
+
+
+export class CreateMountDto {
+    @ApiProperty({ description: 'Mount path', example: '/mnt/data' })
+    @IsNotEmpty()
+    @IsString()
+    mountPath: string;
+}
+
+export class CreateShareDto {
+    @ApiProperty({ description: 'Share path', example: '/share/data' })
+    @IsNotEmpty()
+    @IsString()
+    sharePath: string;
+}
 
 export class CreateConfigurationDto {
-    @ApiProperty({ description: 'Project Id', example: '60c72b2f9b1e8b001c8b4567' })
+    @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
     @IsNotEmpty()
     @IsMongoId()
     projectId: Types.ObjectId;
@@ -22,7 +38,7 @@ export class CreateConfigurationDto {
     @ApiProperty({ description: 'Protocol', example: Protocol.NFS })
     @IsNotEmpty()
     @IsEnum(Protocol)
-    protocal: Protocol;
+    protocol: Protocol;
 
     @ApiProperty({ description: 'Username', example: 'admin' })
     @IsNotEmpty()
@@ -33,4 +49,18 @@ export class CreateConfigurationDto {
     @IsNotEmpty()
     @IsString()
     host: string;
+
+    @ApiProperty({ description: 'List of mounts', type: [CreateMountDto] })
+    @IsOptional()
+    @ValidateNested({ each: true })
+    @Type(() => CreateMountDto)
+    @IsArray()
+    mounts?: CreateMountDto[] = [];
+
+    @ApiProperty({ description: 'List of shares', type: [CreateShareDto] })
+    @IsOptional()
+    @ValidateNested({ each: true })
+    @Type(() => CreateShareDto)
+    @IsArray()
+    shares?: CreateShareDto[] = [];
 }
