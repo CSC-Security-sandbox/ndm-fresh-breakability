@@ -1,24 +1,22 @@
-FROM node:22-alpine As production
-# RUN npm config set @keystone:registry=https://artifactory.asurint.net/artifactory/api/npm/npm/
-RUN apk update \
-    && apk upgrade --no-cache --purge
- 
+FROM node:22-alpine AS production
+
+# Set the working directory
 WORKDIR /app
- 
+
 COPY . .
 
-COPY entrypoint.sh /app/entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
-#COPY ["package.json", "package-lock.json*", "./"]
- 
 RUN npm install
- 
+
+# Build the application
 RUN npm run build
- 
+
+# Expose the port
 EXPOSE 3000
- 
-# Start the server using the production build
-# CMD [ "node", "dist/main.js" ]
-ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Copy entrypoint script and set permissions
+COPY entrypoint.sh /entrypoint.sh
+# RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint and default command
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npm", "run", "start:prod"]

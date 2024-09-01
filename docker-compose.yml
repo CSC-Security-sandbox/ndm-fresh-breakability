@@ -1,18 +1,19 @@
 version: '3'
+
 services:
   app:
     build:
       context: .
+      dockerfile: Dockerfile
     deploy:
       replicas: 3
     environment:
       - RABBITMQ_URLS=amqp://guest:guest@host.docker.internal:5672,amqp://guest:guest@host.docker.internal:5673,amqp://guest:guest@host.docker.internal:5674
       - RABBITMQ_QUEUE=myqueue-2
       - RABBITMQ_QUEUE_DURABLE=true
-      - REPLICA_INDEX= ${REPLICA_INDEX}
-    entrypoint: ["/app/entrypoint.sh"]
+    entrypoint: ["/entrypoint.sh"]
     networks:
-      - local_network
+      - app-network
 
   nginx:
     image: nginx:latest
@@ -21,7 +22,8 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
     networks:
-      - local_network
+      - app-network
 
 networks:
- local_network:
+  app-network:
+    driver: bridge

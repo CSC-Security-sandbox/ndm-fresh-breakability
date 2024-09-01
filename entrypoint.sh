@@ -1,12 +1,12 @@
-#!/bin/bash
-# entrypoint.sh
+#!/bin/sh
 
-# Set REPLICA_INDEX environment variable based on the replica number
-# Here we use a placeholder method to illustrate the concept
-REPLICA_INDEX=${REPLICA_INDEX:-0}
+# Extract the replica index from the hostname
+REPLICA_INDEX=${HOSTNAME##*-}
 
-# Export the variable to be used by your application
+echo "Starting replica with index: $REPLICA_INDEX"
+
+# Export the replica index so it is available to the application
 export REPLICA_INDEX
 
-# Run the main application
-exec "$@"
+# Run the NestJS application
+exec npm run start
