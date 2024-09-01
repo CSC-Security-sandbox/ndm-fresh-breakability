@@ -27,13 +27,17 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   async handleConnection(client: Socket) {
-    const session = new this.sessionModel({ userId: client.handshake.query.userId, socketId: client.id });
-    Logger.log({ userId: client.handshake.query.userId, socketId: client.id })
-    await session.save();
+    //const session = new this.sessionModel({ userId: client.handshake.query.userId, socketId: client.id });
+    //Logger.log({ userId: client.handshake.query.userId, socketId: client.id })
+    //await session.save();
+    console.log('Client connected: ' + client.id);
+    this.clients.add(client);
   }
 
   async handleDisconnect(client: Socket) {
-    await this.sessionModel.deleteOne({ socketId: client.id });
+    console.log('Client disconnected: ' + client.id);
+    this.clients.delete(client);
+    //await this.sessionModel.deleteOne({ socketId: client.id });
   }
 
   @SubscribeMessage('message')
@@ -53,14 +57,10 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   async sendToClient(clientId) {
-    const sessions = await this.sessionModel.findOne({userId: clientId}).exec();
-    Logger.log({'asdb': clientId},sessions)
-    if(sessions) {
-      Logger.debug('Insizede')
-      this.server.to(sessions.socketId).emit('msg', "Got it");
-      // const con = this.server.to(sessions.socketId)
-      // console.debug(con)
-    //  con.emit('msg', "Got it");
+    this.clients.forEach(client => { console.log(client.id) });
+    const client = Array.from(this.clients).find(client => client.id === clientId);
+    if (client) {
+      client.emit('message', 'Hello from server');
     }
   }
 }

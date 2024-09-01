@@ -6,7 +6,10 @@ RUN apk update \
 WORKDIR /app
  
 COPY . .
- 
+
+COPY entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 #COPY ["package.json", "package-lock.json*", "./"]
  
 RUN npm install
@@ -17,4 +20,5 @@ EXPOSE 3000
  
 # Start the server using the production build
 # CMD [ "node", "dist/main.js" ]
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["npm", "run", "start:prod"]

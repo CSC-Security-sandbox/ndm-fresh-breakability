@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { RedisIoAdapter } from './adapter/redis.adapter';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -26,5 +28,26 @@ app.useWebSocketAdapter(redisIoAdapter);
   SwaggerModule.setup('docs', app, document);
 
   await app.listen(3000, '0.0.0.0');
+  
+  const appContext = await NestFactory.createApplicationContext(AppModule);
+  const configService = appContext.get(ConfigService);
+  const microservices = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.RMQ,
+      options: {
+        urls: configService.get<string>('rabbitmq.urls').split(','),
+        queue: configService.get<string>('rabbitmq.queue'),
+        noAck: false,
+        queueOptions: {
+          durable: configService.get<boolean>('rabbitmq.queueOptions.durable'),
+          arguments: {
+            'x-queue-type': 'quorum', // Define the queue as a quorum queue
+          },
+        },
+      },
+    },
+  );
+  await microservices.listen();
 }
 bootstrap();
