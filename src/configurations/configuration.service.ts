@@ -45,11 +45,11 @@ export class ConfigurationService {
         return { success: true, id }
     }
 
-    async send(id) {
-        this.socket.sendToClient(id)
-    }
+    // async send(id) {
+    //     this.socket.sendToClient(id)
+    // }
 
-    async sendToClient(id) {
-        this.socket.sendToClient(id)
-    }
+    // async sendToClient(id) {
+    //     this.socket.sendToClient(id)
+    // }
 }

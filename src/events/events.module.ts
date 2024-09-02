@@ -3,6 +3,8 @@ import { EventsGateway } from './events.gateway';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { Session, SessionSchema } from 'src/schemas/Session.schema';
+import { RabbtMqService } from './rabbitmq.service';
+import { EventsController } from './events.controller';
 
 @Module({
   imports: [
@@ -12,6 +14,7 @@ import { Session, SessionSchema } from 'src/schemas/Session.schema';
     }])
 ],
   exports: [EventsGateway, MongooseModule],
-  providers: [EventsGateway]
+  providers: [EventsGateway, RabbtMqService],
+  controllers: [EventsController]
 })
 export class EventsModule {}

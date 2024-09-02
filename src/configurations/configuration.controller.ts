@@ -26,19 +26,19 @@ export class ConfigurationController{
     }
 
 
-    // @ApiOperation({ summary: 'Get Configuration by ID' })
-    // @ApiOkResponse({ description: 'Configuration Found' })
-    // @ApiNotFoundResponse({ description: 'Configuration Not Found' })
-    // @Get(':id')
-    // async getConfiguration(@Param('id') id: string): Promise<Configuration> {
-    //     try {
-    //         const res = await this.configurationService.findConfiguration({ filter: { _id: id} });
-    //         if(!res.length) throw new Error('No Data')
-    //         return res[0];
-    //     } catch (error) {
-    //         throw new NotFoundException(`Configuration with ID ${id} not found`);
-    //     }
-    // }
+    @ApiOperation({ summary: 'Get Configuration by ID' })
+    @ApiOkResponse({ description: 'Configuration Found' })
+    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @Get(':id')
+    async getConfiguration(@Param('id') id: string): Promise<Configuration> {
+        try {
+            const res = await this.configurationService.findConfiguration({ filter: { _id: id} });
+            if(!res.length) throw new Error('No Data')
+            return res[0];
+        } catch (error) {
+            throw new NotFoundException(`Configuration with ID ${id} not found`);
+        }
+    }
 
     @ApiOperation({ summary: 'Get Configurations by Project ID' })
     @ApiOkResponse({ description: 'List of Configurations for the Project' })
@@ -67,21 +67,5 @@ export class ConfigurationController{
     @Delete(':id')
     async remove(@Param('id') id: string): Promise<{ success: boolean; id: Types.ObjectId; }> {
         return this.configurationService.remove(new Types.ObjectId(id));
-    }
-
-    @Get(':id')
-    async testApi(@Param('id') id: string) {
-        Logger.log(id)
-        this.configurationService.send(id)
-        
-    }
-
-    @Get('/ok/:clientId')
-    async testInfiniteApi(@Param('clientId') id: string) {
-        Logger.log(id)
-        let l = 0
-        while(true){
-            l = 1
-        }   
     }
 }
