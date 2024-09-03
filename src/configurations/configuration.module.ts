@@ -4,7 +4,6 @@ import { ConfigurationService } from './configuration.service';
 import { ConfigurationController } from './configuration.controller';
 import { Configuration, ConfigurationSchema } from '../schemas/Configuration.schema';
 import { EventsGateway } from 'src/events/events.gateway';
-import { Session, SessionSchema } from 'src/schemas/Session.schema';
 
 @Module({
     imports: [
@@ -12,14 +11,9 @@ import { Session, SessionSchema } from 'src/schemas/Session.schema';
             name: Configuration.name,
             schema: ConfigurationSchema
         },
-        {
-            name: Session.name,
-            schema: SessionSchema
-        }
     ]),
-        // EventsGateway
     ],
-    providers:[ConfigurationService, EventsGateway],
+    providers:[ConfigurationService],
     controllers: [ConfigurationController]
 })
 export class ConfigurationModule {}

@@ -3,36 +3,62 @@ import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { AgentStatus } from 'src/schemas/Agent.schema';
+import { AgentStatusStates } from 'constants/enums';
 
 
 @WebSocketGateway({namespace: 'event'})
-// @UseGuards(WsJwtGuard)
+@UseGuards(WsJwtGuard)
 export class EventsGateway implements OnGatewayInit{
   @WebSocketServer()
   private server: Server;
   private clients: Map<string, Socket> = new Map(); 
   private readonly logger = new Logger(EventsGateway.name);
+
+  constructor(
+    @InjectModel(AgentStatus.name)
+    private readonly agentModel: Model<AgentStatus>
+  ){}
   
   async afterInit(@ConnectedSocket() client: Socket) {
     Logger.log('WebSocket server initialized'); 
-    // client.use(SockateAuthMiddleware() as any);
+    client.use(SockateAuthMiddleware() as any);
   }
 
   async handleConnection(client: Socket) {
-    const conn:string = client.handshake.query.userId as string
-    this.logger.log(`Connecting ... ${conn}`)
-    if(conn) {
-      this.logger.log(`Client connected: ${conn}`);
-      this.clients.set(conn, client);
+    const agentId : string = client.handshake.query.agentId as string
+    const agentName : string = client.handshake.query.agentName as string
+    const projectId : string = client.handshake.query.projectId as string
+    if(!agentId || !agentName || !projectId) {
+      this.logger.error("Invalid Details")
+      return;
+    }
+   
+    this.logger.log(`Client connected: ${agentId}`);
+    this.clients.set(agentId, client);
+
+    const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId})
+    if(found) {
+      this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
+      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Active,})
+      this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
+      return
     }
     
+    const model  = new this.agentModel({agentId, projectId, agentName, status: AgentStatusStates.Active, clientId: client.id})
+    model.save()
+   
   }
 
-  handleDisconnect(client: Socket) {
-    const conn:string = client.handshake.query.userId as string
-    if(conn) {
-      this.logger.log(`Client disconnected: ${conn}`);
-      this.clients.delete(conn);
+  async handleDisconnect(client: Socket) {
+    const agentId : string = client.handshake.query.agentId as string
+    const projectId : string = client.handshake.query.projectId as string
+    if(agentId) {
+      this.logger.log(`Client disconnected: ${agentId}`);
+      this.clients.delete(agentId);
+      await this.agentModel.findOneAndUpdate({projectId, agentId}, {status: AgentStatusStates.Inactive})
     }
   }
 
@@ -43,16 +69,14 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   sendMessage(eventName: string, payload: any) {
-    Logger.log(`Sending message: ${eventName} with payload: ${JSON.stringify(payload)}`);
+    this.logger.log(`Sending message: ${eventName} with payload: ${JSON.stringify(payload)}`);
     this.server.emit(eventName, payload);
   }
 
   sendToClient(clientId: string, eventType: string, message: any,) {
-    this.logger.log('sendToClient')
-    this.logger.log(clientId, eventType, message)
     const client = this.clients.get(clientId);
     if (client) {
-      this.logger.log("Sendig Message to Client")
+      this.logger.log('sendToClient',{clientId, eventType, message})
       this.server.to(client.id).emit(eventType, message);
     }
   }

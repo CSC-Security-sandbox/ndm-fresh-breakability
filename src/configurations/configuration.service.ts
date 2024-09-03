@@ -4,14 +4,12 @@ import { Model, Types } from 'mongoose';
 import { Configuration } from '../schemas/Configuration.schema';
 import { CreateConfigurationDto } from './dto/createconfiguration.dto';
 import { DbQuery } from '../utils/utils.types';
-import { EventsGateway } from 'src/events/events.gateway';
 
 @Injectable()
 export class ConfigurationService {
     constructor(
         @InjectModel(Configuration.name)
         private readonly configurationModel: Model<Configuration>,
-        private readonly socket: EventsGateway
     ) {}
 
     async findConfiguration(query: DbQuery<Configuration>, model: Model<Configuration> = this.configurationModel): Promise<Configuration[]> {
@@ -45,11 +43,4 @@ export class ConfigurationService {
         return { success: true, id }
     }
 
-    // async send(id) {
-    //     this.socket.sendToClient(id)
-    // }
-
-    // async sendToClient(id) {
-    //     this.socket.sendToClient(id)
-    // }
 }

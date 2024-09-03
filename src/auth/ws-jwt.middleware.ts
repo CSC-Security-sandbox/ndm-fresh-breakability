@@ -9,7 +9,7 @@ type SocketMiddleware = (
 export const SockateAuthMiddleware  = () : SocketMiddleware=> {
     return async (client, next)  => {
         try {
-            WsJwtGuard.validate(client)
+            // WsJwtGuard.validate(client)
             next() 
         }catch(error) {
             
