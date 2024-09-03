@@ -14,7 +14,9 @@ import { AgentStatusStates } from 'constants/enums';
 export class EventsGateway implements OnGatewayInit{
   @WebSocketServer()
   private server: Server;
-  private clients: Map<string, Socket> = new Map(); 
+  // private clients: Map<string, Socket> = new Map(); 
+  private clients: Map<string, string> = new Map(); 
+
   private readonly logger = new Logger(EventsGateway.name);
 
   constructor(
@@ -37,12 +39,12 @@ export class EventsGateway implements OnGatewayInit{
     }
    
     this.logger.log(`Client connected: ${agentId}`);
-    this.clients.set(agentId, client);
+    this.clients.set(agentId, client.id);
 
     const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId})
     if(found) {
       this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
-      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Active,})
+      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Active})
       this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
       return
     }
@@ -73,11 +75,11 @@ export class EventsGateway implements OnGatewayInit{
     this.server.emit(eventName, payload);
   }
 
-  sendToClient(clientId: string, eventType: string, message: any,) {
-    const client = this.clients.get(clientId);
-    if (client) {
-      this.logger.log('sendToClient',{clientId, eventType, message})
-      this.server.to(client.id).emit(eventType, message);
+  sendToClient(agentId: string, eventType: string, message: any,) {
+    const clientId = this.clients.get(agentId);
+    if (clientId) {
+      this.logger.log('sendToClient',{agentId, eventType, message})
+      this.server.to(clientId).emit(eventType, message);
     }
   }
 
