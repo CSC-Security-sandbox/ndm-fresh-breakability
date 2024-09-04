@@ -29,7 +29,6 @@ async function bootstrap() {
 
   await app.listen(3000, '0.0.0.0');
   
-  // const appContext = await NestFactory.createApplicationContext(AppModule);
   
 }
 bootstrap();
