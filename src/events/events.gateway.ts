@@ -33,7 +33,8 @@ export class EventsGateway implements OnGatewayInit{
     const agentId : string = client.handshake.query.agentId as string
     const agentName : string = client.handshake.query.agentName as string
     const projectId : string = client.handshake.query.projectId as string
-    if(!agentId || !agentName || !projectId) {
+    const ipAddress: string = client.handshake.address as string
+    if(!agentId || !agentName || !projectId ) {
       this.logger.error("Invalid Details")
       return;
     }
@@ -41,7 +42,7 @@ export class EventsGateway implements OnGatewayInit{
     this.logger.log(`Client connected: ${agentId}`);
     this.clients.set(agentId, client.id);
 
-    const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId})
+    const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId, ipAddress})
     if(found) {
       this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
       await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Active})
@@ -49,7 +50,7 @@ export class EventsGateway implements OnGatewayInit{
       return
     }
     
-    const model  = new this.agentModel({agentId, projectId, agentName, status: AgentStatusStates.Active, clientId: client.id})
+    const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Active, clientId: client.id})
     model.save()
    
   }

@@ -7,11 +7,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-const redisIoAdapter = new RedisIoAdapter(app);
-await redisIoAdapter.connectToRedis();
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
 
-app.useWebSocketAdapter(redisIoAdapter);
+  app.useWebSocketAdapter(redisIoAdapter);
 
+  app.enableCors();
   
   app.useGlobalPipes(new ValidationPipe())
   const config = new DocumentBuilder()
