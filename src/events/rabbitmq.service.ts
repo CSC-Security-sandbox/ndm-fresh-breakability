@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
 import { EventsGateway } from "./events.gateway";
+import { QueueEvent } from "./events.type";
 
 @Injectable()
 export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
@@ -11,8 +12,8 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private routingKey =  'socketConnetion'
 
   constructor(private readonly eventsGateway: EventsGateway) {
-    // const connection = amqp.connect(['amqps://esaltwmv:j0JBJoYpKx_zgaz6ITXmnq40-zYkgTgl@puffin.rmq2.cloudamqp.com/esaltwmv']);
-    const connection = amqp.connect([`amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@${process.env.RABBITMQ_HOST}:${process.env.RABBITMQ_PORT}`]);
+    const connection = amqp.connect(['amqps://esaltwmv:j0JBJoYpKx_zgaz6ITXmnq40-zYkgTgl@puffin.rmq2.cloudamqp.com/esaltwmv']);
+    // const connection = amqp.connect([`amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@${process.env.RABBITMQ_HOST}:${process.env.RABBITMQ_PORT}`]);
     this.channelWrapper = connection.createChannel();
   }
 

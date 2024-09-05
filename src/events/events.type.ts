@@ -1,3 +1,5 @@
+import { SocketEvents } from "src/constants/status";
+
 export interface ClientToServerEvent{
     messageAck: (payload: MessageAck) => void
 }
@@ -10,3 +12,11 @@ export class MessageAck{
     updatedAt: string;
 }
 
+
+export interface QueueEvent{
+    agentId: string;
+    action: {
+        eventType: SocketEvents,
+        message: any
+    }
+}
