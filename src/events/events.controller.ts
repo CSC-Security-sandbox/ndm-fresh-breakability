@@ -4,8 +4,10 @@ import { TestConnectionDTO } from './dto/testconnection.dto';
 import { EventsService } from './events.service';
 import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
-import { ResponsePageFilterDto } from './dto/responcefilter.dto';
+import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
+import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags("SocketEvents")
 @Controller('events')
 export class EventsController {
     private logger: Logger =  new  Logger (EventsController.name)
@@ -21,11 +23,18 @@ export class EventsController {
     }  
 
     @Post('/test_connection')
+    @ApiOperation({ summary: 'Test Agent Connections ' })
+    @ApiCreatedResponse({ description: 'Test Agent Connection Request Created Successfully.', type: String })
     async testAgentConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
         return this.eventsService.testAgentConnetions(testConnectionsDTO)
     }
 
     @Get('/response')
+    @ApiOperation({ summary: 'Get a Response list of Agents',  description: 'Returns a list of Response based on the provided pagination parameters.'})
+    @ApiOkResponse({ description: 'The list of Response has been retrieved successfully.',  type: ResponsePageFilterResponseDto})
+    @ApiBadRequestResponse({
+        description: 'Invalid pagination parameters.'
+    })
     async getResponse(@Query(new ValidationPipe({ transform: false, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
         return this.eventsService.findAllRespose(responsePageFilterDto)
     }

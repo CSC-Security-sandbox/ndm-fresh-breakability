@@ -55,7 +55,7 @@ export class ResponsePageFilterDto {
 
 }
 
-export class ResponsePageFilterDtoDto {
+export class ResponsePageFilterResponseDto {
   @ApiProperty()
   total: string;
   @ApiProperty({ type: () => RequestTrack, description: 'RequestTrack object' })
