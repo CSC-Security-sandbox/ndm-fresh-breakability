@@ -20,3 +20,9 @@ export interface QueueEvent{
         message: any
     }
 }
+
+export interface AgentAckResponse{
+    requestId: string;
+    result?: any;
+    error?: any
+}

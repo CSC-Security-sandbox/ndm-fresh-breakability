@@ -7,6 +7,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AgentStatus } from 'src/schemas/Agent.schema';
 import { AgentStatusStates } from 'constants/enums';
+import { AgentAckResponse } from './events.type';
+import { RequestTrack } from 'src/schemas/RequestTrack.schema';
+import { ResponseStatus } from 'src/constants/status';
 
 
 @WebSocketGateway({namespace: 'event'})
@@ -21,7 +24,9 @@ export class EventsGateway implements OnGatewayInit{
 
   constructor(
     @InjectModel(AgentStatus.name)
-    private readonly agentModel: Model<AgentStatus>
+    private readonly agentModel: Model<AgentStatus>,
+    @InjectModel(RequestTrack.name)
+    private readonly requestTrack: Model<RequestTrack>
   ){}
   
   async afterInit(@ConnectedSocket() client: Socket) {
@@ -65,10 +70,14 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
-  @SubscribeMessage('trigger')
-  handleMessage(client: Socket, payload: any) {
-    Logger.log('Handling trigger event'); 
-    this.sendMessage('output', 'got it');
+  @SubscribeMessage('acknowledgement')
+  async handleMessage(client: Socket, message: string) {
+    const agentAckResponse:AgentAckResponse =  await JSON.parse(message)
+    if(agentAckResponse.error) 
+      await this.requestTrack.findByIdAndUpdate(agentAckResponse.requestId, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
+    else
+      await this.requestTrack.findByIdAndUpdate(agentAckResponse.requestId, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
+    this.logger.log(`Recived Ack for ${agentAckResponse.requestId} from ${client.handshake.query?.agentId}`)
   }
 
   sendMessage(eventName: string, payload: any) {

@@ -1,6 +1,7 @@
 export enum ResponseStatus {
     Pending = 'Pending',
-    Completed = 'Completed'
+    Completed = 'Completed',
+    Error = 'Error'
 }
 
 export enum RequestType {

@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Logger, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Query, ValidationPipe } from '@nestjs/common';
 import { RabbtMqService } from './rabbitmq.service';
 import { TestConnectionDTO } from './dto/testconnection.dto';
 import { EventsService } from './events.service';
 import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
+import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 
 @Controller('events')
 export class EventsController {
@@ -22,6 +23,11 @@ export class EventsController {
     @Post('/test_connection')
     async testAgentConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
         this.eventsService.testAgentConnetions(testConnectionsDTO)
+    }
+
+    @Get('/response')
+    async getResponse(@Query(new ValidationPipe({ transform: false, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
+        return this.eventsService.findAllRespose(responsePageFilterDto)
     }
 
 }

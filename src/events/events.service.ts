@@ -9,6 +9,7 @@ import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status'
 import { v4 as uuidv4 } from 'uuid';
 import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
+import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 
 @Injectable()
 export class EventsService {
@@ -47,4 +48,19 @@ export class EventsService {
         this.rabbtMqService.publishToExchange(queuEvent)
         this.logger.log(`${socketEvents} is published for ${agentId}`)
     }
+
+    async findAllRespose(responsePageFilterDto: ResponsePageFilterDto) {
+        const { page, limit, sort = 'created_at', order = 'asc', ...filter} = responsePageFilterDto;
+        let data = [], total = 0
+        if(page && limit && sort && order) {
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+            data = await this.model.find(filter).sort({[sort]: order}).skip(skip).limit(parseInt(limit)).exec();  
+            total = await this.model.find(filter).countDocuments(filter)
+            return { data, total}
+        }
+        data = await this.model.find().exec();
+        total = await this.model.find().countDocuments();
+        return { data, total}
+    }
+
 }
