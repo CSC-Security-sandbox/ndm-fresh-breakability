@@ -71,8 +71,8 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   @SubscribeMessage('acknowledgement')
-  async handleMessage(client: Socket, message: string) {
-    const agentAckResponse:AgentAckResponse =  await JSON.parse(message)
+  async handleMessage(client: Socket, message: AgentAckResponse) {
+    const agentAckResponse:AgentAckResponse = message
     if(agentAckResponse.error) 
       await this.requestTrack.findByIdAndUpdate(agentAckResponse.requestId, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
     else
@@ -92,5 +92,5 @@ export class EventsGateway implements OnGatewayInit{
       this.server.to(clientId).emit(eventType, message);
     }
   }
-
+  
 }
