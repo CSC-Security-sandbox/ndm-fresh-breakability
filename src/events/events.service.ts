@@ -58,8 +58,8 @@ export class EventsService {
             total = await this.model.find(filter).countDocuments(filter)
             return { data, total}
         }
-        data = await this.model.find().exec();
-        total = await this.model.find().countDocuments();
+        data = await this.model.find(filter).exec();
+        total = await this.model.find(filter).countDocuments();
         return { data, total}
     }
 

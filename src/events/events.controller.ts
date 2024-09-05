@@ -22,7 +22,7 @@ export class EventsController {
 
     @Post('/test_connection')
     async testAgentConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
-        this.eventsService.testAgentConnetions(testConnectionsDTO)
+        return this.eventsService.testAgentConnetions(testConnectionsDTO)
     }
 
     @Get('/response')
