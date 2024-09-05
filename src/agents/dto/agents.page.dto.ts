@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsIn, IsMongoId, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { AgentStatus } from 'src/schemas/Agent.schema';
 
 export class AgentsStatusPageDto {
