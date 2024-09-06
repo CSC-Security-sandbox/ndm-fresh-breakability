@@ -11,6 +11,7 @@ import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 
+
 @Injectable()
 export class EventsService {
     private logger : Logger = new Logger(AgentStatus.name);
@@ -23,18 +24,18 @@ export class EventsService {
 
     async testAgentConnetions(testConnectionsDTO: TestConnectionsDTO){
         const requestId = uuidv4(); 
-        testConnectionsDTO.agentIds.forEach(async agentId => {
+        testConnectionsDTO.agents.forEach(async agent => {
             const requestTrack = new this.model({
                 requestType: RequestType.TestConnection,
                 status: ResponseStatus.Pending,
                 requestId: requestId,
-                agentId: agentId
+                agentId: agent.agentId
             })
             const requestTrackSave = await requestTrack.save()
-            const payload = {requestId: requestTrackSave._id?.toString()}
-            this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
+            const payload = {requestId: requestTrackSave._id?.toString(), conectionDetails: testConnectionsDTO.connectionDetails}
+            this.notifyEventToAgent(agent.agentId, SocketEvents.TestConnection, payload)
         })
-        return requestId
+        return {requestId}
     }
 
     async notifyEventToAgent(agentId:string, socketEvents: SocketEvents, payload: any) {
