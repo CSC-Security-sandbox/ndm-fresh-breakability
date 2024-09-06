@@ -7,6 +7,7 @@ import { WsJwtGuard } from './auth/ws-jwt/ws-jwt.guard';
 import { ConfigurationModule } from './configurations/configuration.module';
 import { EventsModule } from './events/events.module';
 import { AgentsModule } from './agents/agents.module';
+import { AppConfig } from './config/AppConfig';
 
 @Module({
   imports: [

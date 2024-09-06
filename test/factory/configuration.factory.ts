@@ -7,5 +7,11 @@ export const mockConfigurationData: CreateConfigurationDto = {
     configurationType: ConfigurationType.file,
     userName: "admin",
     host: "127.0.0.1",
-    protocal: Protocol.NFS,
+    protocol: Protocol.NFS,
+    mounts: [{
+        mountPath: '/src/munt'
+    }],
+    shares: [{
+        sharePath: '/src/shares'
+    }]
 };

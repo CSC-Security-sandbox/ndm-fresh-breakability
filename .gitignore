@@ -133,3 +133,4 @@ dist
 test/unit/test-results/junit.xml
 
 package-lock.json
+junit.xml
