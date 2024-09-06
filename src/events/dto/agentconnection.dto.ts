@@ -6,7 +6,7 @@ class ConnectionDetails {
   @ApiProperty({ description: 'Username of connection', example: 'username' })
   @IsString()
   @IsNotEmpty()
-  username: string;
+  userName: string;
 
   @ApiProperty({ description: 'Password of connection', example: 'password' })
   @IsString()
