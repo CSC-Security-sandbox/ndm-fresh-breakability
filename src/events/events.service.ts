@@ -75,17 +75,14 @@ export class EventsService {
             data = await this.model.find(filter).sort({[sort]: order}).skip(skip).limit(parseInt(limit)).exec();  
 
             if(deserialize) 
-                data = data.map((it:RequestTrack) => ({...it.toObject(), response: JSON.parse(it.response)}))
-
-                console.log(data)
+                data = data.map((it:RequestTrack) => ({...it.toObject(), response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
             total = await this.model.find(filter).countDocuments(filter)
             return { data, total}
         }
         data = await this.model.find(filter).exec();
         total = await this.model.find(filter).countDocuments();
         if(deserialize) 
-        data = data.map((it:RequestTrack) => ({...it.toObject(), response: JSON.parse(it.response)}))
-        console.log(data)
+        data = data.map((it:RequestTrack) => ({...it.toObject(), response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
         return { data, total}
     }
 
