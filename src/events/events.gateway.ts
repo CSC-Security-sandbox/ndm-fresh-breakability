@@ -50,12 +50,12 @@ export class EventsGateway implements OnGatewayInit{
     const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId, ipAddress})
     if(found) {
       this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
-      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Active})
+      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Online})
       this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
       return
     }
     
-    const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Active, clientId: client.id})
+    const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Online, clientId: client.id})
     model.save()
    
   }
@@ -66,7 +66,7 @@ export class EventsGateway implements OnGatewayInit{
     if(agentId) {
       this.logger.log(`Client disconnected: ${agentId}`);
       this.clients.delete(agentId);
-      await this.agentModel.findOneAndUpdate({projectId, agentId}, {status: AgentStatusStates.Inactive})
+      await this.agentModel.findOneAndUpdate({projectId, agentId}, {status: AgentStatusStates.Offline})
     }
   }
 

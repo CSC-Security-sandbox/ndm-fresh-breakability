@@ -1,4 +1,4 @@
 export enum AgentStatusStates {
-    Active = 'Active',
-    Inactive = 'Inactive',
+    Online = 'Online',
+    Offline = 'Offline',
 }
