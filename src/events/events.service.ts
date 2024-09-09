@@ -84,7 +84,7 @@ export class EventsService {
         data = await this.model.find(filter).exec();
         total = await this.model.find(filter).countDocuments();
         if(deserialize) 
-            data = data.map(it => ({...it.toObject(), response: JSON.parse(it.response)}))
+        data = data.map((it:RequestTrack) => ({...it.toObject(), response: JSON.parse(it.response)}))
         console.log(data)
         return { data, total}
     }
