@@ -1,8 +1,7 @@
-import { IsNotEmpty, IsString, IsOptional, IsEnum, IsMongoId, ValidateNested, IsArray } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
-import { Protocol, ConfigurationType, ServerType } from '../../schemas/Configuration.schema';
-import { Type } from 'class-transformer';
+import { Protocol, ConfigurationType, ServerType, Volume } from '../../schemas/Configuration.schema';
 
 
 export class CreateMountDto {
@@ -22,16 +21,19 @@ export class CreateShareDto {
 export class CreateConfigurationDto {
     @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
     @IsNotEmpty()
-    @IsMongoId()
     projectId: Types.ObjectId;
 
-    @ApiProperty({ description: 'Configuration type', example: ConfigurationType.file })
+    @ApiProperty({ description: 'Name', example: "Agent 1" })
+    @IsString()
     @IsNotEmpty()
+    name: string;
+  
+    @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
     @IsEnum(ConfigurationType)
+    @IsNotEmpty()
     configurationType: ConfigurationType;
-
-    @ApiProperty({ description: 'Server type', example: ServerType.other })
-    @IsOptional()
+  
+    @ApiProperty({ description: 'Server type', enum: ServerType, default: ServerType.other, example: ServerType.other })
     @IsEnum(ServerType)
     serverType?: ServerType = ServerType.other;
 
@@ -42,25 +44,15 @@ export class CreateConfigurationDto {
 
     @ApiProperty({ description: 'Username', example: 'admin' })
     @IsNotEmpty()
-    @IsString()
     userName: string;
-
-    @ApiProperty({ description: 'Host', example: 'localhost' })
-    @IsNotEmpty()
+  
+    @ApiProperty({ description: 'Host', example: '127.0.0.1:2049' })
     @IsString()
+    @IsNotEmpty()
     host: string;
-
-    @ApiProperty({ description: 'List of mounts', type: [CreateMountDto] })
-    @IsOptional()
-    @ValidateNested({ each: true })
-    @Type(() => CreateMountDto)
+  
+    @ApiProperty({ description: 'Array of volumes with mountPath and sharePath', type: [Volume], default: [] })
     @IsArray()
-    mounts?: CreateMountDto[] = [];
-
-    @ApiProperty({ description: 'List of shares', type: [CreateShareDto] })
     @IsOptional()
-    @ValidateNested({ each: true })
-    @Type(() => CreateShareDto)
-    @IsArray()
-    shares?: CreateShareDto[] = [];
+    volumes: Volume[];
 }
