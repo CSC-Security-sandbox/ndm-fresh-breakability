@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { AgentStatusStates } from 'constants/enums';
 import { Document } from 'mongoose';
 
 @Schema({ timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }) 
@@ -13,7 +14,7 @@ export class AgentStatus extends Document {
   clientId: string;
 
   @ApiProperty({ description: 'status' })
-  @Prop({ required: true, enum: ['Active', 'Inactive'], default: 'Inactive' })
+  @Prop({ required: true, enum: AgentStatusStates, default: AgentStatusStates.Offline })
   status: string;
 
   @ApiProperty({ description: 'agentName' })
