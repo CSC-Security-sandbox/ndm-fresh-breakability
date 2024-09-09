@@ -47,4 +47,5 @@ export class TestConnectionsDTO {
   @Type(() => ConnectionDetails)
   @IsNotEmpty()
   connectionDetails: ConnectionDetails;
+  
 }

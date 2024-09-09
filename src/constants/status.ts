@@ -5,9 +5,11 @@ export enum ResponseStatus {
 }
 
 export enum RequestType {
-    TestConnection = 'TestConnection'
+    TestConnection = 'TestConnection',
+    Volumes = 'Volumes'
 }
 
 export enum SocketEvents{
-    TestConnection = 'TestConnection'
+    TestConnection = 'TestConnection',
+    Volumes = 'Volumes'
 }

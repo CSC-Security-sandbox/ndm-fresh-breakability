@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsBooleanString, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
 
@@ -52,6 +52,12 @@ export class ResponsePageFilterDto {
   @IsOptional()
   @IsString()
   agentId?: string;
+
+
+  @ApiPropertyOptional({ description: 'Desrialize JSON',example: false})
+  @IsOptional()
+  @IsBooleanString()
+  deserialize?: boolean = false
 
 }
 

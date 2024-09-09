@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
+import { MountConnectionsDTO } from './dto/agentmounts.dto';
 
 
 @Injectable()
@@ -38,6 +39,22 @@ export class EventsService {
         return {requestId}
     }
 
+    async mountAgentConnetions(mountConnectionsDTO: MountConnectionsDTO){
+        const requestId = uuidv4(); 
+        mountConnectionsDTO.agents.forEach(async agent => {
+            const requestTrack = new this.model({
+                requestType: RequestType.Volumes,
+                status: ResponseStatus.Pending,
+                requestId: requestId,
+                agentId: agent.agentId
+            })
+            const requestTrackSave = await requestTrack.save()
+            const payload = {requestId: requestTrackSave._id?.toString()}
+            this.notifyEventToAgent(agent.agentId, SocketEvents.Volumes, payload)
+        })
+        return {requestId}
+    }
+
     async notifyEventToAgent(agentId:string, socketEvents: SocketEvents, payload: any) {
         const queuEvent:QueueEvent = {
             agentId: agentId,
@@ -51,16 +68,24 @@ export class EventsService {
     }
 
     async findAllRespose(responsePageFilterDto: ResponsePageFilterDto) {
-        const { page, limit, sort = 'created_at', order = 'asc', ...filter} = responsePageFilterDto;
+        const { page, limit, sort = 'created_at', order = 'asc', deserialize = false, ...filter} = responsePageFilterDto;
         let data = [], total = 0
         if(page && limit && sort && order) {
             const skip = (parseInt(page) - 1) * parseInt(limit);
             data = await this.model.find(filter).sort({[sort]: order}).skip(skip).limit(parseInt(limit)).exec();  
+
+            if(deserialize) 
+                data = data.map((it:RequestTrack) => ({...it.toObject(), response: JSON.parse(it.response)}))
+
+                console.log(data)
             total = await this.model.find(filter).countDocuments(filter)
             return { data, total}
         }
         data = await this.model.find(filter).exec();
         total = await this.model.find(filter).countDocuments();
+        if(deserialize) 
+            data = data.map(it => ({...it.toObject(), response: JSON.parse(it.response)}))
+        console.log(data)
         return { data, total}
     }
 

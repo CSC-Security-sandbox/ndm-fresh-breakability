@@ -6,6 +6,7 @@ import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
 import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MountConnectionsDTO } from './dto/agentmounts.dto';
 
 @ApiTags("SocketEvents")
 @Controller('events')
@@ -37,6 +38,13 @@ export class EventsController {
     })
     async getResponse(@Query(new ValidationPipe({ transform: false, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
         return this.eventsService.findAllRespose(responsePageFilterDto)
+    }
+
+    @Post('/mounts')
+    @ApiOperation({ summary: 'Test Agent mounts ' })
+    @ApiCreatedResponse({ description: 'Test Agent mounts Request Created Successfully.', type: String })
+    async mountsAgentConnetions(@Body() mountConnectionsDTO: MountConnectionsDTO) {
+        return this.eventsService.mountAgentConnetions(mountConnectionsDTO)
     }
 
 }
