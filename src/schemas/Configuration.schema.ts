@@ -44,13 +44,13 @@ export class Volume {
   @Prop({ required: true, type: String })
   mountPath: string;
 
-  @ApiProperty({ description: 'Share path' })
-  @Prop({ required: true, type: String })
-  sharePath: string;
-
   @ApiProperty({ description: 'Mapping' })
+  @Prop({ required: true, type: String })
+  mapping: string;
+
+  @ApiProperty({ description: 'Mapping Type' })
   @Prop({ type: String, enum: Mapping })
-  mapping: Mapping;
+  mappingType: Mapping;
 }
 
 @Schema({ timestamps: true })
