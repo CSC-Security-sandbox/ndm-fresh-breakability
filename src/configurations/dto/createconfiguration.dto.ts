@@ -3,21 +3,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
 import { Protocol, ConfigurationType, ServerType, Volume } from '../../schemas/Configuration.schema';
 
-
-export class CreateMountDto {
-    @ApiProperty({ description: 'Mount path', example: '/mnt/data' })
-    @IsNotEmpty()
-    @IsString()
-    mountPath: string;
-}
-
-export class CreateShareDto {
-    @ApiProperty({ description: 'Share path', example: '/share/data' })
-    @IsNotEmpty()
-    @IsString()
-    sharePath: string;
-}
-
 export class CreateConfigurationDto {
     @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
     @IsNotEmpty()
