@@ -51,10 +51,6 @@ export class Volume {
   @ApiProperty({ description: 'Mapping' })
   @Prop({ type: String, enum: Mapping })
   mapping: Mapping;
-
-  @ApiProperty({ description: 'Account' })
-  @Prop({ type: String })
-  account: string;
 }
 
 @Schema({ timestamps: true })
