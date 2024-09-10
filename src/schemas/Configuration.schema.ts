@@ -32,39 +32,50 @@ export class Share {
     sharePath: string;
 }
 
+@Schema({ _id: false })
+export class Volume {
+  @ApiProperty({ description: 'Mount path' })
+  @Prop({ required: true, type: String })
+  mountPath: string;
+
+  @ApiProperty({ description: 'Share path' })
+  @Prop({ required: true, type: String })
+  sharePath: string;
+}
+
 @Schema({ timestamps: true })
 export class Configuration {
     @ApiProperty({description: 'Project Id' })
     @Prop({ type: MongooseSchema.Types.ObjectId , ref: 'Project' })
     projectId: ObjectId;
 
+    @ApiProperty({description: 'Name'})
+    @Prop({ required: true, type: String })
+    name: string;
+
     @ApiProperty({description: 'Configuration type'})
-    @Prop({ required: true })
+    @Prop({ required: true, enum: ConfigurationType, type: String })
     configurationType: ConfigurationType;
    
     @ApiProperty({description: 'Server type'})
-    @Prop({ default: ServerType.other })
+    @Prop({ default: ServerType.other, enum: ServerType, type: String })
     serverType: ServerType;
 
     @ApiProperty({description: 'Protocol'})
-    @Prop({ required: true })
+    @Prop({ required: true, enum: Protocol, type: String })
     protocol: Protocol;
 
     @ApiProperty({description: 'Username'})
-    @Prop({ required: true })
+    @Prop({ required: true, type: String })
     userName: string;
 
     @ApiProperty({description: 'Host'})
-    @Prop({ required: true })
+    @Prop({ required: true, type: String })
     host: string;
 
-    @ApiProperty({ description: 'List of mounts' })
-    @Prop({ type: [Mount], default: [] })
-    mounts: Mount[];
-
-    @ApiProperty({ description: 'List of shares' })
-    @Prop({ type: [Share], default: [] })
-    shares: Share[];
+    @ApiProperty({ description: 'Array of volumes with mountPath and sharePath' })
+    @Prop({ default: [], type: [Volume] })
+    volumes: Volume[];
 }
 
 export const ConfigurationSchema = SchemaFactory.createForClass(Configuration)

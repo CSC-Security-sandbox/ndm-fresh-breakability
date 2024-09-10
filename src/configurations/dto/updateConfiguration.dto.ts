@@ -1,27 +1,39 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
-import { CreateConfigurationDto, CreateMountDto, CreateShareDto } from './createconfiguration.dto';
-import { ConfigurationType, Protocol, ServerType } from '../../schemas/Configuration.schema';
+import { CreateConfigurationDto } from './createconfiguration.dto';
+import { ConfigurationType, Protocol, ServerType, Volume } from '../../schemas/Configuration.schema';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UpdateConfigurationDto extends PartialType(CreateConfigurationDto) {
-    @ApiProperty({description: 'Configuration type'})
+    @ApiProperty({ description: 'Name', example: "Agent 1" })
+    @IsOptional()
+    @IsString()
+    name?: string;
+
+    @ApiProperty({ description: 'Server type', enum: ServerType, example: ServerType.other })
+    @IsEnum(ServerType)
+    serverType?: ServerType = ServerType.other;
+
+    @ApiProperty({ description: 'Protocol', example: Protocol.NFS })
+    @IsOptional()
+    @IsEnum(Protocol)
+    protocol?: Protocol;
+
+    @ApiProperty({ description: 'Configuration type', example: ConfigurationType.file })
+    @IsEnum(ConfigurationType)
+    @IsOptional()
     configurationType?: ConfigurationType;
 
     @ApiProperty({ description: 'User name', example: 'admin', required: false })
+    @IsOptional()
+    @IsString()
     userName?: string;
 
     @ApiProperty({ description: 'Host', example: 'localhost', required: false })
+    @IsOptional()
+    @IsString()
     host?: string;
-
-    @ApiProperty({ description: 'Protocol', example: 'NFS', required: false })
-    protocol?: Protocol;
-   
-    @ApiProperty({description: 'Server type'})
-    serverType?: ServerType;
-
-    @ApiProperty({ description: 'List of mounts', type: [CreateMountDto], required: false })
-    mounts?: CreateMountDto[];
-
-    @ApiProperty({ description: 'List of shares', type: [CreateShareDto], required: false })
-    shares?: CreateShareDto[];
+      
+    @ApiProperty({ description: 'Array of volumes with mountPath and sharePath', type: [Volume], default: [] })
+    volumes: Volume[];
 }
