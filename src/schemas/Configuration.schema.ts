@@ -13,9 +13,15 @@ export enum ConfigurationType {
 }
 
 export enum ServerType {
-    other = 'other',
+    other = 'OtherNAS',
     dell = 'dell',
     emc = 'emc'
+}
+
+export enum Mapping {
+    automatic = 'Automatic',
+    manual = 'Manual',
+    none = 'None'
 }
 
 @Schema({ _id: false })
@@ -41,6 +47,10 @@ export class Volume {
   @ApiProperty({ description: 'Share path' })
   @Prop({ required: true, type: String })
   sharePath: string;
+
+  @ApiProperty({ description: 'Mapping' })
+  @Prop({ type: String, enum: Mapping })
+  mapping: Mapping;
 }
 
 @Schema({ timestamps: true })
