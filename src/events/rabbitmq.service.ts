@@ -12,7 +12,7 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private routingKey =  'socketConnetion'
 
   constructor(private readonly eventsGateway: EventsGateway) {
-    const connection = amqp.connect(['amqps://esaltwmv:j0JBJoYpKx_zgaz6ITXmnq40-zYkgTgl@puffin.rmq2.cloudamqp.com/esaltwmv']);
+    const connection = amqp.connect(['amqps://frbrucjq:UDm9yWoZ4kig37NzOQM_HxU8xuXmMdWD@lionfish.rmq.cloudamqp.com/frbrucjq']);
     // const connection = amqp.connect([`amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@${process.env.RABBITMQ_HOST}:${process.env.RABBITMQ_PORT}`]);
     this.channelWrapper = connection.createChannel();
   }
