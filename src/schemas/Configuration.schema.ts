@@ -45,7 +45,7 @@ export class Volume {
   mountPath: string;
 
   @ApiProperty({ description: 'Mapping' })
-  @Prop({ required: true, type: String })
+  @Prop({ type: String })
   mapping: string;
 
   @ApiProperty({ description: 'Mapping Type' })
