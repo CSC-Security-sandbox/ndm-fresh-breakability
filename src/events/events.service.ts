@@ -50,17 +50,24 @@ export class EventsService {
     async mountAgentConnetions(mountConnectionsDTO: MountConnectionsDTO){
         const requestId = uuidv4(); 
         mountConnectionsDTO.agents.forEach(async agent => {
-            const requestTrack = new this.model({
-                requestType: RequestType.Volumes,
-                status: ResponseStatus.Pending,
-                requestId: requestId,
-                agentId: agent.agentId
-            })
-            const requestTrackSave = await requestTrack.save()
-            const payload = {requestId: requestTrackSave._id?.toString()}
-            this.notifyEventToAgent(agent.agentId, SocketEvents.Volumes, payload)
+            mountConnectionsDTO.protocal.forEach(protocal => {
+                this.makeAgentMountConnectionRequest(requestId, agent.agentId, protocal)
+            });
         })
         return {requestId}
+    }
+
+    async makeAgentMountConnectionRequest(requestId: string, agentId:string,  protocal: Protocal){
+        const requestTrack = new this.model({
+            requestType: RequestType.Volumes,
+            status: ResponseStatus.Pending,
+            requestId: requestId,
+            agentId: agentId,
+            protocal: protocal
+        })
+        const requestTrackSave = await requestTrack.save()
+        const payload = {requestId: requestTrackSave._id?.toString()}
+        this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
     }
 
     async notifyEventToAgent(agentId:string, socketEvents: SocketEvents, payload: any) {
