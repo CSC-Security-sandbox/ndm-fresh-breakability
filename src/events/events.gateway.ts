@@ -9,7 +9,7 @@ import { AgentStatus } from 'src/schemas/Agent.schema';
 import { AgentStatusStates } from 'constants/enums';
 import { AgentAckResponse } from './events.type';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
-import { ResponseStatus } from 'src/constants/status';
+import { ResponseStatus, SocketEvents } from 'src/constants/status';
 import { Project } from 'src/schemas/Project.schema';
 
 
@@ -62,7 +62,7 @@ export class EventsGateway implements OnGatewayInit{
     
     const project = await this.projectModel.findOne({_id: projectId})
     if(!project) {
-      this.sendToClient(agentId, 'Error', `Record Not Found for Project: ${projectId} Unabel to register agent`)
+      this.sendToClient(agentId, SocketEvents.Error, `Record Not Found for Project: ${projectId} Unabel to register agent`)
       this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
       return
     }

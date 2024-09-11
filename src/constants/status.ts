@@ -11,5 +11,6 @@ export enum RequestType {
 
 export enum SocketEvents{
     TestConnection = 'TestConnection',
-    Volumes = 'Volumes'
+    Volumes = 'Volumes',
+    Error = 'Error'
 }
