@@ -6,6 +6,7 @@ import { EventsController } from './events.controller';
 import {  AgentStatus, AgentStatusSchema } from 'src/schemas/Agent.schema';
 import { EventsService } from './events.service';
 import { RequestTrack, RequestTrackSchema } from 'src/schemas/RequestTrack.schema';
+import { Project, ProjectSchema } from 'src/schemas/Project.schema';
 
 @Module({
   imports: [
@@ -13,6 +14,10 @@ import { RequestTrack, RequestTrackSchema } from 'src/schemas/RequestTrack.schem
         name: AgentStatus.name,
         schema: AgentStatusSchema
     },
+    {
+      name: Project.name,
+      schema: ProjectSchema
+  },
     {
       name: RequestTrack.name,
       schema: RequestTrackSchema

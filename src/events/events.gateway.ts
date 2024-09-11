@@ -10,6 +10,7 @@ import { AgentStatusStates } from 'constants/enums';
 import { AgentAckResponse } from './events.type';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
 import { ResponseStatus } from 'src/constants/status';
+import { Project } from 'src/schemas/Project.schema';
 
 
 @WebSocketGateway({namespace: 'event'})
@@ -26,7 +27,9 @@ export class EventsGateway implements OnGatewayInit{
     @InjectModel(AgentStatus.name)
     private readonly agentModel: Model<AgentStatus>,
     @InjectModel(RequestTrack.name)
-    private readonly requestTrack: Model<RequestTrack>
+    private readonly requestTrack: Model<RequestTrack>,
+    @InjectModel(Project.name)
+    private readonly projectModel: Model<Project>
   ){}
   
   async afterInit(@ConnectedSocket() client: Socket) {
@@ -56,13 +59,13 @@ export class EventsGateway implements OnGatewayInit{
       this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
       return
     }
-
-    if(projectId === '1234') {
+    
+    const project = await this.projectModel.findOne({_id: projectId})
+    if(!project) {
       this.sendToClient(agentId, 'Error', `Record Not Found for Project: ${projectId} Unabel to register agent`)
       this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
-
+      return
     }
-    
     const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Online, clientId: client.id})
     model.save()
    

@@ -1,7 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { verify } from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { Observable } from 'rxjs';
 import { Socket } from 'socket.io';
+
 
 @Injectable()
 export class WsJwtGuard implements CanActivate {
@@ -12,7 +14,7 @@ export class WsJwtGuard implements CanActivate {
     if(context.getType() !== 'ws') return true 
     const client : Socket = context.switchToWs().getClient()
     // WsJwtGuard.validate(client)
-    return true;
+    return true ;
   }
 
   static validate(client: Socket) {
