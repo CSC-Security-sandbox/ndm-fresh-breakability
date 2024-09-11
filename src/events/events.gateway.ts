@@ -1,4 +1,4 @@
-import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer, WsException } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
@@ -11,6 +11,7 @@ import { AgentAckResponse } from './events.type';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
 import { Project } from 'src/schemas/Project.schema';
+import { error } from 'console';
 
 
 @WebSocketGateway({namespace: 'event'})
@@ -62,8 +63,9 @@ export class EventsGateway implements OnGatewayInit{
     
     const project = await this.projectModel.findOne({_id: projectId})
     if(!project) {
-      this.sendToClient(agentId, SocketEvents.Error, `Record Not Found for Project: ${projectId} Unabel to register agent`)
       this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
+      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unabel to register agent`})
+      client.disconnect()
       return
     }
     const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Online, clientId: client.id})
