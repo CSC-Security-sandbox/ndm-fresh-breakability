@@ -41,6 +41,5 @@ export class UpdateConfigurationDto extends PartialType(CreateConfigurationDto) 
 
     @ApiProperty({ description: 'Array of AgentId', type: [String], default: [] })
     @IsArray()
-    @IsOptional()
     agents: string[];
 }

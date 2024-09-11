@@ -1,7 +1,7 @@
 import { IsArray, ArrayNotEmpty, IsString, ValidateNested, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { Protocal } from 'constants/enums';
+import { Protocol } from 'constants/enums';
 
 
 class AgentDetails {
@@ -25,12 +25,11 @@ export class MountConnectionsDTO {
 
   @ApiProperty({
     description: 'List of protocals',
-    enum: Protocal,
+    enum: Protocol,
     isArray: true,
   })
   @IsArray()
   @ArrayNotEmpty()
-  @Type(() => AgentDetails)
-  protocal: Protocal[];
+  protocol: Protocol[];
 
 }

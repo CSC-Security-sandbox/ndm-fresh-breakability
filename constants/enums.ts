@@ -3,7 +3,7 @@ export enum AgentStatusStates {
     Offline = 'Offline',
 }
 
-export enum Protocal{
+export enum Protocol{
     NFS = 'NFS',
     SMB = 'SMB'
 }

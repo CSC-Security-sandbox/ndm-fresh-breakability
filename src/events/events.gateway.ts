@@ -13,7 +13,7 @@ import { ResponseStatus } from 'src/constants/status';
 
 
 @WebSocketGateway({namespace: 'event'})
-// @UseGuards(WsJwtGuard)
+@UseGuards(WsJwtGuard)
 export class EventsGateway implements OnGatewayInit{
   @WebSocketServer()
   private server: Server;
@@ -55,6 +55,12 @@ export class EventsGateway implements OnGatewayInit{
       await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Online})
       this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
       return
+    }
+
+    if(projectId === '1234') {
+      this.sendToClient(agentId, 'Error', `Record Not Found for Project: ${projectId} Unabel to register agent`)
+      this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
+
     }
     
     const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Online, clientId: client.id})

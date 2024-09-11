@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { Protocal } from 'constants/enums';
+import { Protocol } from 'constants/enums';
+
 import { Document } from 'mongoose';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 
@@ -23,8 +24,8 @@ export class RequestTrack extends Document {
   requestId: string;
 
   @ApiProperty({ description: 'Protocal of the request' })
-  @Prop({ required: true, enum: Protocal })
-  protocal: Protocal;
+  @Prop({ required: true, enum: Protocol })
+  protocol: Protocol;
 
   @ApiProperty({ description: 'Agent ID' })
   @Prop({ required: true })
