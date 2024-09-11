@@ -14,7 +14,7 @@ import { AppConfig } from './config/AppConfig';
     ConfigModule.forRoot({
       load: [],
     }),
-    MongooseModule.forRoot('mongodb+srv://jafog21906:AbbfB5zo1Vz95NGF@cluster0.dpy2h.mongodb.net/'),
+    MongooseModule.forRoot('mongodb+srv://admin:XKam5vuZ0rvykgIX@personal.cyjsz.mongodb.net/'),
     ConfigurationModule, EventsModule, AuthModule, AgentsModule,
   ],
   controllers: [],

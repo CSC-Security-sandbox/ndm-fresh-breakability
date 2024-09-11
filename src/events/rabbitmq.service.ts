@@ -18,7 +18,7 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const queue = `consumer_queue_156${process.env.REPLICA_INDEX || 'default'}`;
+    const queue = `consumer_queue_156_K_${process.env.REPLICA_INDEX || 'default'}`;
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
         await channel.assertExchange(this.exchange, 'fanout', { durable: true });

@@ -4,13 +4,13 @@ import { Model } from 'mongoose';
 import { AgentStatus } from 'src/schemas/Agent.schema';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
 import { RabbtMqService } from './rabbitmq.service';
-
 import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status';
 import { v4 as uuidv4 } from 'uuid';
-import { TestConnectionsDTO } from './dto/agentconnection.dto';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/agentconnection.dto';
 import { QueueEvent } from './events.type';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { Protocal } from 'constants/enums';
 
 
 @Injectable()
@@ -26,17 +26,25 @@ export class EventsService {
     async testAgentConnetions(testConnectionsDTO: TestConnectionsDTO){
         const requestId = uuidv4(); 
         testConnectionsDTO.agents.forEach(async agent => {
-            const requestTrack = new this.model({
-                requestType: RequestType.TestConnection,
-                status: ResponseStatus.Pending,
-                requestId: requestId,
-                agentId: agent.agentId
-            })
-            const requestTrackSave = await requestTrack.save()
-            const payload = {requestId: requestTrackSave._id?.toString(), conectionDetails: testConnectionsDTO.connectionDetails}
-            this.notifyEventToAgent(agent.agentId, SocketEvents.TestConnection, payload)
+            if(testConnectionsDTO.nfsConnectionDetails) 
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocal.NFS)
+            if(testConnectionsDTO.sbmConnectionDetails)
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocal.SMB)
         })
         return {requestId}
+    }
+
+    async  makeTestConnectionnRequest(requestId: string, agentId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocal: Protocal) {
+        const requestTrack = new this.model({
+            requestType: RequestType.TestConnection,
+            status: ResponseStatus.Pending,
+            requestId: requestId,
+            agentId: agentId,
+            protocal: protocal
+        })
+        const requestTrackSave = await requestTrack.save()
+        const payload = {requestId: requestTrackSave._id?.toString(), ConnectionDetails: connection }
+        this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
     }
 
     async mountAgentConnetions(mountConnectionsDTO: MountConnectionsDTO){

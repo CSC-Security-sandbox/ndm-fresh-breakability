@@ -1,12 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { Protocal } from 'constants/enums';
 import { Document } from 'mongoose';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 
-@Schema({ timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } })
+@Schema({ timestamps: true })
 export class RequestTrack extends Document {
   @ApiProperty({ description: 'Type of the request' })
-  @Prop({ required: true, enum: RequestType, })
+  @Prop({ required: true, enum: RequestType })
   requestType: RequestType;
 
   @ApiProperty({ description: 'Response' })
@@ -21,17 +22,21 @@ export class RequestTrack extends Document {
   @Prop({ required: true })
   requestId: string;
 
-  @ApiProperty({ description: 'agentId' })
+  @ApiProperty({ description: 'Protocal of the request' })
+  @Prop({ required: true, enum: Protocal })
+  protocal: Protocal;
+
+  @ApiProperty({ description: 'Agent ID' })
   @Prop({ required: true })
   agentId: string;
 
   @ApiProperty({ description: 'Creation timestamp' })
   @Prop({ type: Date })
-  created_at: Date;
+  createdAt: Date;
 
   @ApiProperty({ description: 'Last updated timestamp' })
   @Prop({ type: Date })
-  updated_at: Date;
+  updatedAt: Date;
 }
 
 export const RequestTrackSchema = SchemaFactory.createForClass(RequestTrack);
