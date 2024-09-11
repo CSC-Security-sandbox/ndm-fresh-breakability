@@ -86,6 +86,11 @@ export class Configuration {
     @ApiProperty({ description: 'Array of volumes with mountPath and sharePath' })
     @Prop({ default: [], type: [Volume] })
     volumes: Volume[];
+
+    @ApiProperty({description: 'List of agentsID'})
+    @Prop({  required: true, type: [String] })
+    agents: string[]
+    
 }
 
 export const ConfigurationSchema = SchemaFactory.createForClass(Configuration)

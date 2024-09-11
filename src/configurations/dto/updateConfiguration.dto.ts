@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateConfigurationDto } from './createconfiguration.dto';
 import { ConfigurationType, Protocol, ServerType, Volume } from '../../schemas/Configuration.schema';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UpdateConfigurationDto extends PartialType(CreateConfigurationDto) {
     @ApiProperty({ description: 'Name', example: "Agent 1" })
@@ -35,5 +35,12 @@ export class UpdateConfigurationDto extends PartialType(CreateConfigurationDto) 
     host?: string;
       
     @ApiProperty({ description: 'Array of volumes with mountPath and sharePath', type: [Volume], default: [] })
+    @IsArray()
+    @IsOptional()
     volumes: Volume[];
+
+    @ApiProperty({ description: 'Array of AgentId', type: [String], default: [] })
+    @IsArray()
+    @IsOptional()
+    agents: string[];
 }

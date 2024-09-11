@@ -40,4 +40,9 @@ export class CreateConfigurationDto {
     @IsArray()
     @IsOptional()
     volumes: Volume[];
+
+    @ApiProperty({ description: 'Array of AgentId', type: [String], default: [] })
+    @IsArray()
+    @IsOptional()
+    agents: string[];
 }
