@@ -94,4 +94,9 @@ export class TestConnectionsDTO {
 
   @Validate(AtLeastOneConnectionConstraint)
   validateConnection: boolean;
+
+  @ApiPropertyOptional({description: 'configId'})
+  @IsOptional()
+  @IsString()
+  configId: string
 }

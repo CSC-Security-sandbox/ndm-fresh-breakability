@@ -27,23 +27,24 @@ export class EventsService {
         const requestId = uuidv4(); 
         testConnectionsDTO.agents.forEach(async agent => {
             if(testConnectionsDTO.nfsConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS)
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
             if(testConnectionsDTO.sbmConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.SMB) 
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
         })
         return {requestId}
     }
 
-    async  makeTestConnectionnRequest(requestId: string, agentId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol) {
+    async  makeTestConnectionnRequest(requestId: string, agentId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
         const requestTrack = new this.model({
             requestType: RequestType.TestConnection,
             status: ResponseStatus.Pending,
             requestId: requestId,
             agentId: agentId,
             protocol: protocol
+           
         })
         const requestTrackSave = await requestTrack.save()
-        const payload = {requestId: requestTrackSave._id?.toString(), connectionDetails: connection }
+        const payload = {requestId: requestTrackSave._id?.toString(), connectionDetails: connection, configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
     }
 
@@ -51,13 +52,13 @@ export class EventsService {
         const requestId = uuidv4(); 
         mountConnectionsDTO.agents.forEach(async agent => {
             mountConnectionsDTO.protocol.forEach(protocol => {
-                this.makeAgentMountConnectionRequest(requestId, agent.agentId, protocol)
+                this.makeAgentMountConnectionRequest(requestId, agent.agentId, protocol, mountConnectionsDTO.configId)
             });
         })
         return {requestId}
     }
 
-    async makeAgentMountConnectionRequest(requestId: string, agentId:string,  protocol: Protocol){
+    async makeAgentMountConnectionRequest(requestId: string, agentId:string,  protocol: Protocol, configId?: string | undefined) {
         const requestTrack = new this.model({
             requestType: RequestType.Volumes,
             status: ResponseStatus.Pending,
@@ -66,7 +67,7 @@ export class EventsService {
             protocol: protocol
         })
         const requestTrackSave = await requestTrack.save()
-        const payload = {requestId: requestTrackSave._id?.toString()}
+        const payload = {requestId: requestTrackSave._id?.toString(), configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
     }
 

@@ -1,5 +1,5 @@
-import { IsArray, ArrayNotEmpty, IsString, ValidateNested, IsNotEmpty } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsArray, ArrayNotEmpty, IsString, ValidateNested, IsNotEmpty, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { Protocol } from 'constants/enums';
 
@@ -31,5 +31,10 @@ export class MountConnectionsDTO {
   @IsArray()
   @ArrayNotEmpty()
   protocol: Protocol[];
+
+  @ApiPropertyOptional({description: 'configId'})
+  @IsOptional()
+  @IsString()
+  configId: string
 
 }
