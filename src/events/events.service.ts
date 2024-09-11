@@ -28,8 +28,8 @@ export class EventsService {
         testConnectionsDTO.agents.forEach(async agent => {
             if(testConnectionsDTO.nfsConnectionDetails) 
                 await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocal.NFS)
-            if(testConnectionsDTO.sbmConnectionDetails)
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocal.SMB)
+            if(testConnectionsDTO.sbmConnectionDetails) 
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocal.SMB) 
         })
         return {requestId}
     }
@@ -43,7 +43,7 @@ export class EventsService {
             protocal: protocal
         })
         const requestTrackSave = await requestTrack.save()
-        const payload = {requestId: requestTrackSave._id?.toString(), ConnectionDetails: connection }
+        const payload = {requestId: requestTrackSave._id?.toString(), connectionDetails: connection }
         this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
     }
 

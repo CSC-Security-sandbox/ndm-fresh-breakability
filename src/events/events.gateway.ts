@@ -13,7 +13,7 @@ import { ResponseStatus } from 'src/constants/status';
 
 
 @WebSocketGateway({namespace: 'event'})
-@UseGuards(WsJwtGuard)
+// @UseGuards(WsJwtGuard)
 export class EventsGateway implements OnGatewayInit{
   @WebSocketServer()
   private server: Server;
