@@ -36,8 +36,8 @@ export class EventsController {
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    async getResponse(@Query(new ValidationPipe({ transform: false, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
-        return this.eventsService.findAllRespose(responsePageFilterDto)
+    async getResponse(@Query(new ValidationPipe({ transform: true, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
+        return this.eventsService.findAllResponse(responsePageFilterDto)
     }
 
     @Post('/mounts')

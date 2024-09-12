@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsBoolean, IsBooleanString, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { RequestType, ResponseStatus } from 'src/constants/status';
-import { RequestTrack } from 'src/schemas/RequestTrack.schema';
+import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
+import { Protocol } from 'src/schemas/Configuration.schema';
 
 export class ResponsePageFilterDto {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })
@@ -14,9 +16,9 @@ export class ResponsePageFilterDto {
   @IsNumberString()
   limit?: string;
 
-  @ApiPropertyOptional({ description: 'Field to sort by', example: 'created_at', enum: ['requestType', 'status', 'createdOn', 'agentId', 'created_at', 'updated_at'] })
+  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdOn', enum: ['requestType', 'status', 'createdOn', 'agentId', 'createdOn', 'updatedAt'] })
   @IsOptional()
-  @IsIn(['requestType', 'status', 'createdOn', 'agentId', 'created_at', 'updated_at'])
+  @IsIn(['requestType', 'status', 'createdOn', 'agentId', 'createdOn', 'updatedOn'])
   sort?: string;
 
   @ApiPropertyOptional({ description: 'Order of sorting', example: 'asc', enum: ['asc', 'desc'] })
@@ -24,46 +26,55 @@ export class ResponsePageFilterDto {
   @IsIn(['asc', 'desc'])
   order?: 'asc' | 'desc';
 
-
-  @ApiPropertyOptional({ 
-    description: 'RequestType of the response', 
-    example: RequestType.TestConnection, 
-    enum: RequestType 
+  @ApiPropertyOptional({
+    description: 'RequestType of the response',
+    example: RequestType.TestConnection,
+    enum: RequestType,
   })
   @IsOptional()
   @IsIn(Object.values(RequestType))
   requestType?: RequestType;
 
-  @ApiPropertyOptional({ 
-    description: 'Status of the response', 
-    example: ResponseStatus.Pending, 
-    enum: ResponseStatus 
+  @ApiPropertyOptional({
+    description: 'Status of the response',
+    example: ResponseStatus.Pending,
+    enum: ResponseStatus,
   })
   @IsOptional()
   @IsIn(Object.values(ResponseStatus))
   status?: ResponseStatus;
 
-  @ApiPropertyOptional({ description: 'Field to Filter requestId'})
+  @ApiPropertyOptional({
+    description: 'Protocol of the response',
+    example: Protocol.NFS,
+    enum: Protocol,
+  })
+  @IsOptional()
+  @IsIn(Object.values(Protocol))
+  protocol?: Protocol;
+
+
+  @ApiPropertyOptional({ description: 'Field to Filter requestId' })
   @IsOptional()
   @IsString()
   requestId?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter agentId'})
+  @ApiPropertyOptional({ description: 'Field to Filter agentId' })
   @IsOptional()
   @IsString()
   agentId?: string;
 
-
-  @ApiPropertyOptional({ description: 'Desrialize JSON',example: false})
+  @ApiPropertyOptional({ description: 'Deserialize JSON', example: 'false' })
   @IsOptional()
-  @IsBooleanString()
-  deserialize?: boolean = false
-
+  @IsBoolean()
+  @Transform(({ value }) => typeof value == 'string' ? value === 'true' :  value)
+  deserialize?: boolean; 
 }
+
 
 export class ResponsePageFilterResponseDto {
   @ApiProperty()
   total: string;
-  @ApiProperty({ type: () => RequestTrack, description: 'RequestTrack object' })
-  data: RequestTrack[];
+  @ApiProperty({ type: () => RequestTrackEntity, description: 'RequestTrack object' })
+  data: RequestTrackEntity[];
 }

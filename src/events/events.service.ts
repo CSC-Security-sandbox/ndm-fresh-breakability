@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AgentStatus } from 'src/schemas/Agent.schema';
 import { RequestTrack } from 'src/schemas/RequestTrack.schema';
 import { RabbtMqService } from './rabbitmq.service';
 import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status';
@@ -10,15 +9,18 @@ import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from '
 import { QueueEvent } from './events.type';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 import { MountConnectionsDTO } from './dto/agentmounts.dto';
-import {  Protocol } from 'constants/enums';
+import {  Protocol } from 'src/constants/enums';
+import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
+import { FindManyOptions, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
 
 @Injectable()
 export class EventsService {
-    private logger : Logger = new Logger(AgentStatus.name);
+    private logger : Logger = new Logger(EventsService.name);
     constructor(
-        @InjectModel(RequestTrack.name)
-        private readonly model: Model<RequestTrack>,
+        @InjectRepository(RequestTrackEntity)
+        private readonly requestTrackEntity: Repository<RequestTrackEntity>,
         private rabbtMqService: RabbtMqService,
 
     ) {}
@@ -35,16 +37,15 @@ export class EventsService {
     }
 
     async  makeTestConnectionnRequest(requestId: string, agentId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
-        const requestTrack = new this.model({
+        const requestTrack = this.requestTrackEntity.create({
             requestType: RequestType.TestConnection,
             status: ResponseStatus.Pending,
             requestId: requestId,
             agentId: agentId,
             protocol: protocol
-           
         })
-        const requestTrackSave = await requestTrack.save()
-        const payload = {requestId: requestTrackSave._id?.toString(), connectionDetails: connection, configId: configId }
+        const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
+        const payload = {requestId: requestTrackSave.requestId?.toString(), connectionDetails: connection, configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
     }
 
@@ -59,15 +60,15 @@ export class EventsService {
     }
 
     async makeAgentMountConnectionRequest(requestId: string, agentId:string,  protocol: Protocol, configId?: string | undefined) {
-        const requestTrack = new this.model({
+        const requestTrack = this.requestTrackEntity.create({
             requestType: RequestType.Volumes,
             status: ResponseStatus.Pending,
             requestId: requestId,
             agentId: agentId,
             protocol: protocol
         })
-        const requestTrackSave = await requestTrack.save()
-        const payload = {requestId: requestTrackSave._id?.toString(), configId: configId }
+        const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
+        const payload = {requestId: requestTrackSave.requestId?.toString(), configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
     }
 
@@ -83,23 +84,25 @@ export class EventsService {
         this.logger.log(`${socketEvents} is published for ${agentId}`)
     }
 
-    async findAllRespose(responsePageFilterDto: ResponsePageFilterDto) {
-        const { page, limit, sort = 'created_at', order = 'asc', deserialize = false, ...filter} = responsePageFilterDto;
-        let data = [], total = 0
-        if(page && limit && sort && order) {
-            const skip = (parseInt(page) - 1) * parseInt(limit);
-            data = await this.model.find(filter).sort({[sort]: order}).skip(skip).limit(parseInt(limit)).exec();  
-
-            if(deserialize) 
-                data = data.map((it:RequestTrack) => ({...it.toObject(), response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
-            total = await this.model.find(filter).countDocuments(filter)
-            return { data, total}
+    async findAllResponse(responsePageFilterDto: ResponsePageFilterDto) {
+        const { page, limit, sort = 'createdOn', order = 'ASC', deserialize , ...filter } = responsePageFilterDto;
+        
+        const findOptions: FindManyOptions<RequestTrackEntity> = {
+          where: filter, order: { [sort]: order }, 
+        };
+        let data = [], total = 0;
+        if (page && limit) {
+          findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+          findOptions.take = parseInt(limit); 
+          data = await this.requestTrackEntity.find(findOptions);
+          total = await this.requestTrackEntity.count({ where: filter });
+        } else {
+          data = await this.requestTrackEntity.find(findOptions);
+          total = await this.requestTrackEntity.count();
         }
-        data = await this.model.find(filter).exec();
-        total = await this.model.find(filter).countDocuments();
         if(deserialize) 
-        data = data.map((it:RequestTrack) => ({...it.toObject(), response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
-        return { data, total}
-    }
+            data = data.map((it:RequestTrackEntity) => ({...it, response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
+        return { data, total };
+      }
 
 }

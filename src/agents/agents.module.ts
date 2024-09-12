@@ -2,15 +2,13 @@ import { Module } from '@nestjs/common';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AgentStatus, AgentStatusSchema } from 'src/schemas/Agent.schema';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AgentEntity } from 'src/entities/agent.entity';
+
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{
-        name: AgentStatus.name,
-        schema: AgentStatusSchema
-    },
-  ])
+    TypeOrmModule.forFeature([AgentEntity]),
   ],
   controllers: [AgentsController],
   providers: [AgentsService]

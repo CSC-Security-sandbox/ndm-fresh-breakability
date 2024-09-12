@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { Protocol } from 'constants/enums';
+import { Protocol } from 'src/constants/enums';
 
 import { Document } from 'mongoose';
 import { RequestType, ResponseStatus } from 'src/constants/status';

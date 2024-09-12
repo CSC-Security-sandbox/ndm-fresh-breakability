@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
-import { AgentStatus } from 'src/schemas/Agent.schema';
+import { AgentStatus } from 'src/constants/enums';
+import { AgentEntity } from 'src/entities/agent.entity';
 
 export class AgentsStatusPageDto {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })
@@ -13,9 +14,9 @@ export class AgentsStatusPageDto {
   @IsNumberString()
   limit?: string;
 
-  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdOn', enum: ['userName', 'email', 'createdOn', 'createdBy', 'updateAt', 'updatedBy'] })
+  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdOn', enum: ['createdOn', 'createdBy', 'updatedAt', 'updatedBy'] })
   @IsOptional()
-  @IsIn(['userName', 'email', 'createdOn', 'createdBy', 'updateAt', 'updatedBy'])
+  @IsIn(['createdOn', 'createdBy', 'updatedAt', 'updatedBy'])
   sort?: string;
 
   @ApiPropertyOptional({ description: 'Order of sorting', example: 'asc', enum: ['asc', 'desc'] })
@@ -38,10 +39,10 @@ export class AgentsStatusPageDto {
   @IsString()
   ipAddress?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentName', enum: ['Active', 'Inactive'] })
+  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentName', enum: AgentStatus})
   @IsOptional()
-  @IsIn(['Active', 'Inactive'])
-  status?: 'Active' | 'Inactive';
+  @IsIn(Object.values(AgentStatus))
+  status?: AgentStatus;
 
   @ApiPropertyOptional({ description: 'Field to Filter ObjectId of projectId'})
   @IsOptional()
@@ -59,6 +60,6 @@ export class AgentsStatusPageDto {
 export class AgentsStatusPageResponceDto {
   @ApiProperty()
   total: string;
-  @ApiProperty({ type: () => AgentStatus, description: 'User object' })
-  data: AgentStatus[];
+  @ApiProperty({ type: () => AgentEntity, description: 'AgentEntity object' })
+  data: AgentEntity[];
 }

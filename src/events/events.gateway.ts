@@ -1,17 +1,18 @@
-import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer, WsException } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
-import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
-import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { InjectModel } from '@nestjs/mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Model } from 'mongoose';
-import { AgentStatus } from 'src/schemas/Agent.schema';
-import { AgentStatusStates } from 'constants/enums';
-import { AgentAckResponse } from './events.type';
-import { RequestTrack } from 'src/schemas/RequestTrack.schema';
+import { Server, Socket } from 'socket.io';
+import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
+import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
+import { AgentStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
+import { AgentEntity } from 'src/entities/agent.entity';
+import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Project } from 'src/schemas/Project.schema';
-import { error } from 'console';
+import { Repository } from 'typeorm';
+import { AgentAckResponse } from './events.type';
 
 
 @WebSocketGateway({namespace: 'event'})
@@ -19,16 +20,14 @@ import { error } from 'console';
 export class EventsGateway implements OnGatewayInit{
   @WebSocketServer()
   private server: Server;
-  // private clients: Map<string, Socket> = new Map(); 
   private clients: Map<string, string> = new Map(); 
-
   private readonly logger = new Logger(EventsGateway.name);
 
   constructor(
-    @InjectModel(AgentStatus.name)
-    private readonly agentModel: Model<AgentStatus>,
-    @InjectModel(RequestTrack.name)
-    private readonly requestTrack: Model<RequestTrack>,
+    @InjectRepository(AgentEntity) 
+    private readonly agentEntity: Repository<AgentEntity>,
+    @InjectRepository(RequestTrackEntity) 
+    private readonly requestTrackEntity: Repository<RequestTrackEntity>,
     @InjectModel(Project.name)
     private readonly projectModel: Model<Project>
   ){}
@@ -53,10 +52,10 @@ export class EventsGateway implements OnGatewayInit{
     this.logger.log(`Client connected: ${agentId}`);
     this.clients.set(agentId, client.id);
 
-    const found = await this.agentModel.findOne({agentId: agentId, projectId: projectId})
-    if(found) {
+    const agent = await this.agentEntity.findOne({where: {agentId: agentId}})
+    if(agent) {
       this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
-      await this.agentModel.findByIdAndUpdate(found.id, {agentName: agentName, clientId: client.id, status: AgentStatusStates.Online})
+      await this.agentEntity.update({agentId: agentId}, {agentName: agentName, clientId: client.id, status: AgentStatus.Online})
       this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
       return
     }
@@ -68,9 +67,8 @@ export class EventsGateway implements OnGatewayInit{
       client.disconnect()
       return
     }
-    const model  = new this.agentModel({agentId, projectId, agentName, ipAddress, status: AgentStatusStates.Online, clientId: client.id})
-    model.save()
-   
+    const registerAgent =  this.agentEntity.create({agentId, projectId, agentName, ipAddress, status: AgentStatus.Online, clientId: client.id})
+    await this.agentEntity.save(registerAgent)
   }
 
   async handleDisconnect(client: Socket) {
@@ -79,7 +77,7 @@ export class EventsGateway implements OnGatewayInit{
     if(agentId) {
       this.logger.log(`Client disconnected: ${agentId}`);
       this.clients.delete(agentId);
-      await this.agentModel.findOneAndUpdate({projectId, agentId}, {status: AgentStatusStates.Offline})
+      await this.agentEntity.update({projectId, agentId}, {status: AgentStatus.Offline})
     }
   }
 
@@ -87,9 +85,9 @@ export class EventsGateway implements OnGatewayInit{
   async handleMessage(client: Socket, message: AgentAckResponse) {
     const agentAckResponse:AgentAckResponse = message
     if(agentAckResponse.error) 
-      await this.requestTrack.findByIdAndUpdate(agentAckResponse.requestId, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
+      await this.requestTrackEntity.update({requestId:agentAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
     else
-      await this.requestTrack.findByIdAndUpdate(agentAckResponse.requestId, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
+      await this.requestTrackEntity.update({requestId:agentAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
     this.logger.log(`Recived Ack for ${agentAckResponse.requestId} from ${client.handshake.query?.agentId}`)
   }
 

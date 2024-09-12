@@ -3,17 +3,18 @@ import { EventsGateway } from './events.gateway';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RabbtMqService } from './rabbitmq.service';
 import { EventsController } from './events.controller';
-import {  AgentStatus, AgentStatusSchema } from 'src/schemas/Agent.schema';
+
 import { EventsService } from './events.service';
 import { RequestTrack, RequestTrackSchema } from 'src/schemas/RequestTrack.schema';
 import { Project, ProjectSchema } from 'src/schemas/Project.schema';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AgentEntity } from 'src/entities/agent.entity';
+import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{
-        name: AgentStatus.name,
-        schema: AgentStatusSchema
-    },
+    TypeOrmModule.forFeature([AgentEntity, RequestTrackEntity]),
+    MongooseModule.forFeature([
     {
       name: Project.name,
       schema: ProjectSchema

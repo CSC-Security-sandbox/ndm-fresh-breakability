@@ -7,7 +7,9 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  app.enableCors();
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  
+  app.setGlobalPrefix('config-service')
   
   app.useGlobalPipes(new ValidationPipe())
   const config = new DocumentBuilder()
@@ -16,13 +18,15 @@ async function bootstrap() {
   .setVersion('1.0')
   .addTag('config')
   .build();
-
+  
   const document = SwaggerModule.createDocument(app, config);
-
+  
   SwaggerModule.setup('docs', app, document);
   app.enableShutdownHooks();
   app.set('trust proxy', true);
-
+  
+  app.enableCors();
+  
   await app.listen(3000, '0.0.0.0');
   
   

@@ -1,33 +1,38 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AgentsStatusPageDto } from './dto/agents.page.dto';
-import { AgentStatus } from 'src/schemas/Agent.schema';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, FindManyOptions, FindOptionsWhere } from 'typeorm';
 
+import { AgentsStatusPageDto } from './dto/agents.page.dto';
+import { AgentEntity } from 'src/entities/agent.entity';
 
 
 @Injectable()
 export class AgentsService {
-    private logger : Logger = new Logger(AgentStatus.name);
-    constructor(
-        @InjectModel(AgentStatus.name)
-        private readonly model: Model<AgentStatus>,
-    ) {}
+  private logger: Logger = new Logger(AgentsService.name);
 
+  constructor(
+    @InjectRepository(AgentEntity)
+    private readonly agentEntity: Repository<AgentEntity>,
+  ) {}
 
-    async findAllAgents(agentsStatusPageDto: AgentsStatusPageDto) {
-        const { page, limit, sort = 'createdOn', order = 'asc', ...filter} = agentsStatusPageDto;
-        let data = [], total = 0
-        if(page && limit && sort && order) {
-            const skip = (parseInt(page) - 1) * parseInt(limit);
-            data = await this.model.find(filter).sort({[sort]: order}).skip(skip).limit(parseInt(limit)).exec();  
-            total = await this.model.find(filter).countDocuments(filter)
-            return { data, total}
-        }
-        data = await this.model.find().exec();
-        total = await this.model.find().countDocuments();
-        return { data, total}
+  async findAllAgents(agentsStatusPageDto: AgentsStatusPageDto) {
+    const { page, limit, sort = 'created_at', order = 'ASC', ...filter } = agentsStatusPageDto;
+    
+    const findOptions: FindManyOptions<AgentEntity> = {
+      where: filter , 
+      order: { [sort]: order }, 
+    };
+
+    let data = [], total = 0;
+    if (page && limit) {
+      findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+      findOptions.take = parseInt(limit); 
+      data = await this.agentEntity.find(findOptions);
+      total = await this.agentEntity.count({ where: filter });
+    } else {
+      data = await this.agentEntity.find(findOptions);
+      total = await this.agentEntity.count();
     }
-
-   
+    return { data, total };
+  }
 }

@@ -1,7 +1,7 @@
 import { IsArray, ArrayNotEmpty, IsString, ValidateNested, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { Protocol } from 'constants/enums';
+import { Protocol } from 'src/constants/enums';
 
 
 class AgentDetails {
