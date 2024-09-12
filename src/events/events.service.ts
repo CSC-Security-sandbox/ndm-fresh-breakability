@@ -1,18 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { RequestTrack } from 'src/schemas/RequestTrack.schema';
-import { RabbtMqService } from './rabbitmq.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status';
-import { v4 as uuidv4 } from 'uuid';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/agentconnection.dto';
-import { QueueEvent } from './events.type';
-import { ResponsePageFilterDto } from './dto/responcefilter.dto';
-import { MountConnectionsDTO } from './dto/agentmounts.dto';
-import {  Protocol } from 'src/constants/enums';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/agentconnection.dto';
+import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { ResponsePageFilterDto } from './dto/responcefilter.dto';
+import { QueueEvent } from './events.type';
+import { RabbtMqService } from './rabbitmq.service';
 
 
 @Injectable()

@@ -1,15 +1,14 @@
 import { Module } from '@nestjs/common';
-import { EventsGateway } from './events.gateway';
 import { MongooseModule } from '@nestjs/mongoose';
-import { RabbtMqService } from './rabbitmq.service';
 import { EventsController } from './events.controller';
+import { EventsGateway } from './events.gateway';
+import { RabbtMqService } from './rabbitmq.service';
 
-import { EventsService } from './events.service';
-import { RequestTrack, RequestTrackSchema } from 'src/schemas/RequestTrack.schema';
-import { Project, ProjectSchema } from 'src/schemas/Project.schema';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentEntity } from 'src/entities/agent.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
+import { Project, ProjectSchema } from 'src/schemas/Project.schema';
+import { EventsService } from './events.service';
 
 @Module({
   imports: [
@@ -18,10 +17,6 @@ import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
     {
       name: Project.name,
       schema: ProjectSchema
-  },
-    {
-      name: RequestTrack.name,
-      schema: RequestTrackSchema
   }])
 ],
   exports: [EventsGateway, MongooseModule],
