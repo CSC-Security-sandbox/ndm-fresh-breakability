@@ -85,9 +85,9 @@ export class EventsGateway implements OnGatewayInit{
   async handleMessage(client: Socket, message: AgentAckResponse) {
     const agentAckResponse:AgentAckResponse = message
     if(agentAckResponse.error) 
-      await this.requestTrackEntity.update({requestId:agentAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
+      await this.requestTrackEntity.update({id:agentAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
     else
-      await this.requestTrackEntity.update({requestId:agentAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
+      await this.requestTrackEntity.update({id:agentAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
     this.logger.log(`Recived Ack for ${agentAckResponse.requestId} from ${client.handshake.query?.agentId}`)
   }
 
