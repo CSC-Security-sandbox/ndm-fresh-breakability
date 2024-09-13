@@ -28,7 +28,7 @@ export class EventsService {
             if(testConnectionsDTO.nfsConnectionDetails) 
                 await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
             if(testConnectionsDTO.sbmConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
+                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
         })
         return {requestId}
     }

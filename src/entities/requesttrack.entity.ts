@@ -3,31 +3,35 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 
-@Entity({name:'request_track', schema:'data'})
+@Entity({name:'request_track', schema:'kunal'})
 export class RequestTrackEntity {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')
-  requestId: string;
+  id: string;
 
   @ApiProperty({ description: 'Type of the request' })
-  @Column({ type: 'enum', enum: RequestType, nullable: false })
+  @Column({ type: 'enum', enum: RequestType, nullable: false, name:'request_type' })
   requestType: RequestType;
 
-  @ApiProperty({ description: 'Response' })
-  @Column({ type: 'text', nullable: true })
+  @ApiProperty({ description: 'data' })
+  @Column({ type: 'text', nullable: true,  name:'response' })
   response: string;
 
-  @ApiProperty({ description: 'Status of the request' })
+  @ApiProperty({ description: 'Status of the request', name:'status'  })
   @Column({ type: 'enum', enum: ResponseStatus, default: ResponseStatus.Pending })
   status: ResponseStatus;
 
-  @ApiProperty({ description: 'Protocol of the request' })
+  @ApiProperty({ description: 'Protocol of the request',  name:'protocol'  })
   @Column({ type: 'enum', enum: Protocol, nullable: false })
   protocol: Protocol;
 
   @ApiProperty({ description: 'Agent ID' })
-  @Column({ type: 'uuid', nullable: false })
+  @Column({ type: 'uuid', nullable: false,  name: 'agent_id'  })
   agentId: string;
+
+  @ApiProperty({ description: 'requestId' })
+  @Column({ type: 'uuid', nullable: false,  name: 'request_id'  })
+  requestId: string;
 
   @ApiProperty({ description: 'Creation timestamp' })
   @CreateDateColumn()

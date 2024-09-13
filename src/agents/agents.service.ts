@@ -19,8 +19,7 @@ export class AgentsService {
     const { page, limit, sort = 'created_at', order = 'ASC', ...filter } = agentsStatusPageDto;
     
     const findOptions: FindManyOptions<AgentEntity> = {
-      where: filter , 
-      order: { [sort]: order }, 
+      where: filter, order: { [sort]: order }, 
     };
 
     let data = [], total = 0;
