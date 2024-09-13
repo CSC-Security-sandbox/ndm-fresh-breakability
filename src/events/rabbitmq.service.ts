@@ -8,7 +8,7 @@ import { QueueEvent } from "./events.type";
 export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private channelWrapper: ChannelWrapper;
   private readonly logger = new Logger(RabbtMqService.name);
-  private exchange = 'testasd';
+  private exchange = 'kunal';
   private routingKey =  'socketConnetion'
 
   constructor(private readonly eventsGateway: EventsGateway) {
