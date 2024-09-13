@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 
-@Entity({name:'request_track', schema:'kunal'})
+@Entity({name:'request_track', schema:'data'})
 export class RequestTrackEntity {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')
