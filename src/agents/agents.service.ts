@@ -16,7 +16,7 @@ export class AgentsService {
   ) {}
 
   async findAllAgents(agentsStatusPageDto: AgentsStatusPageDto) {
-    const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = agentsStatusPageDto;
+    const { page, limit, sort = 'createdOn', order = 'ASC', ...filter } = agentsStatusPageDto;
     
     const findOptions: FindManyOptions<AgentEntity> = {
       where: filter, order: { [sort]: order }, 
