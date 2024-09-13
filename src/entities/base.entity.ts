@@ -3,19 +3,19 @@ import { Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 export class Base {
 
-  @ApiProperty({ description: 'createdOn' })
-  @CreateDateColumn({ name: 'createdOn', type: 'timestamp' })
-  createdOn: Date;
+  @ApiProperty({ description: 'createdAt' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  createdAt: Date;
 
   @ApiProperty({ description: 'updatedAt' })
-  @UpdateDateColumn({ name: 'updatedAt', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
   
   @ApiProperty({ description: 'createdBy' })
-  @Column({ name: 'createdBy', type: 'uuid' })
+  @Column({ name: 'created_by', type: 'uuid', })
   createdBy: string;
 
   @ApiProperty({ description: 'updatedBy' })
-  @Column({ name: 'updatedBy', type: 'uuid', nullable: true})
+  @Column({ name: 'updated_by', type: 'uuid', nullable: true})
   updatedBy: string;
 }

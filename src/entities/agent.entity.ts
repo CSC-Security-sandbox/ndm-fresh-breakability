@@ -1,24 +1,23 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { AgentStatus } from 'src/constants/enums';
+import { ProjectEntity } from './project.entity';
+import { Base } from './base.entity';
 
-@Entity({name:'agent', schema:'data'})
-export class AgentEntity {
+@Entity({name:'agent', schema:'kunal'})
+export class AgentEntity extends Base  {
   @ApiProperty({ description: 'agentId' })
   @PrimaryColumn({ type: 'uuid', name: 'id' })
   agentId: string;
 
   @ApiProperty({ description: 'projectId' })
-  @Column({ type: 'varchar', length: 255, nullable: false , name: 'project_id'})
+  @Column({ type: 'uuid', nullable: false , name: 'project_id'})
   projectId: string;
+
 
   @ApiProperty({ description: 'clientId' })
   @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
   clientId: string;
-
-  @ApiProperty({ description: 'status' })
-  @Column({ type: 'enum', enum: AgentStatus, default: AgentStatus.Offline, name:'status' })
-  status: AgentStatus;
 
   @ApiProperty({ description: 'agentName' })
   @Column({ type: 'varchar', length: 255, nullable: false, name:'agent_name' })
@@ -28,11 +27,12 @@ export class AgentEntity {
   @Column({ type: 'varchar', length: 255, nullable: false , name: 'ip_address' })
   ipAddress: string;
 
-  @ApiProperty({ description: 'createdOn' })
-  @CreateDateColumn({ name: 'createdOn', type: 'timestamp' })
-  createdOn: Date;
+  @ManyToOne(() => ProjectEntity, project => project.agents)
+  @JoinColumn({ name: 'project_id' }) 
+  project: ProjectEntity;
 
-  @ApiProperty({ description: 'updatedAt' })
-  @UpdateDateColumn({ name: 'updatedAt', type: 'timestamp' })
-  updatedAt: Date;
+  @ApiProperty({ description: 'status' })
+  @Column({ type: 'enum', enum: AgentStatus, default: AgentStatus.Offline, name:'status' })
+  status: AgentStatus;
+
 }

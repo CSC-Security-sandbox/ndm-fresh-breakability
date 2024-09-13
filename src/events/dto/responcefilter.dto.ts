@@ -16,9 +16,9 @@ export class ResponsePageFilterDto {
   @IsNumberString()
   limit?: string;
 
-  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdOn', enum: ['requestType', 'status', 'createdOn', 'agentId', 'createdOn', 'updatedAt'] })
+  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdAt', enum: ['requestType', 'status', 'createdAt', 'agentId', 'createdAt', 'updatedAt'] })
   @IsOptional()
-  @IsIn(['requestType', 'status', 'createdOn', 'agentId', 'createdOn', 'updatedOn'])
+  @IsIn(['requestType', 'status', 'createdAt', 'agentId', 'createdAt', 'updatedOn'])
   sort?: string;
 
   @ApiPropertyOptional({ description: 'Order of sorting', example: 'asc', enum: ['asc', 'desc'] })

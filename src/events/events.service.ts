@@ -82,7 +82,7 @@ export class EventsService {
     }
 
     async findAllResponse(responsePageFilterDto: ResponsePageFilterDto) {
-        const { page, limit, sort = 'createdOn', order = 'ASC', deserialize , ...filter } = responsePageFilterDto;
+        const { page, limit, sort = 'createdAt', order = 'ASC', deserialize , ...filter } = responsePageFilterDto;
         
         const findOptions: FindManyOptions<RequestTrackEntity> = {
           where: filter, order: { [sort]: order }, 

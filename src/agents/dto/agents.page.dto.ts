@@ -14,9 +14,9 @@ export class AgentsStatusPageDto {
   @IsNumberString()
   limit?: string;
 
-  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdOn', enum: ['createdOn', 'createdBy', 'updatedAt', 'updatedBy'] })
+  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdAt', enum: ['createdAt', 'createdBy', 'updatedAt', 'updatedBy'] })
   @IsOptional()
-  @IsIn(['createdOn', 'createdBy', 'updatedAt', 'updatedBy'])
+  @IsIn(['createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
   sort?: string;
 
   @ApiPropertyOptional({ description: 'Order of sorting', example: 'asc', enum: ['asc', 'desc'] })

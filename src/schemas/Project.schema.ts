@@ -21,7 +21,7 @@ export class Project {
 
   @ApiProperty({ description: 'Date when the project was created' })
   @Prop({ default: () => new Date() })
-  createdOn: Date;
+  createdAt: Date;
 
   @ApiProperty({ description: 'Date when the project was last updated' })
   @Prop({ default: () => new Date() })

@@ -1,10 +1,12 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, JoinColumn, ManyToOne } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus } from 'src/constants/status';
+import { AgentEntity } from './agent.entity';
+import { Base } from './base.entity';
 
-@Entity({name:'request_track', schema:'data'})
-export class RequestTrackEntity {
+@Entity({name:'request_track', schema:'kunal'})
+export class RequestTrackEntity extends Base {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,11 +35,8 @@ export class RequestTrackEntity {
   @Column({ type: 'uuid', nullable: false,  name: 'request_id'  })
   requestId: string;
 
-  @ApiProperty({ description: 'Creation timestamp' })
-  @CreateDateColumn()
-  createdOn: Date;
+  @ManyToOne(() => AgentEntity)
+  @JoinColumn({ name: 'agent_id' }) 
+  agentEntity: AgentEntity;
 
-  @ApiProperty({ description: 'Last updated timestamp' })
-  @UpdateDateColumn()
-  updatedAt: Date;
 }
