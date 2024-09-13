@@ -42,7 +42,7 @@ export class EventsService {
             protocol: protocol
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.requestId?.toString(), connectionDetails: connection, configId: configId }
+        const payload = {requestId: requestTrackSave.id?.toString(), connectionDetails: connection, configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
     }
 
@@ -65,7 +65,7 @@ export class EventsService {
             protocol: protocol
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.requestId?.toString(), configId: configId }
+        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId }
         this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
     }
 
