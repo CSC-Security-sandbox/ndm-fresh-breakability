@@ -14,14 +14,18 @@ export class VolumeEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'volume_path' })
     volumePath: string;
 
+    @ApiProperty({ description: 'data' })
+    @Column({ type: 'boolean', nullable: true,  name:'included' })
+    isIncluded: boolean;
+
     @ApiProperty({ description: 'fileServerId' })
-    @Column({ type: 'uuid', nullable: false , name: 'file_server_id'})
+    @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
     fileServerId: string;
 
-    @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes)
+    @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes, { onDelete:'CASCADE', onUpdate:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
-
-    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume)
+ 
+    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: true})
     inventory: InventoryEntity[]
 }

@@ -1,7 +1,8 @@
 import { IsNotEmpty, IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
-import { Protocol, ConfigurationType, ServerType, Volume } from '../../schemas/Configuration.schema';
+import { Protocol, ServerType, Volume } from '../../schemas/Configuration.schema';
+import { ConfigurationType } from 'src/constants/enums';
 
 export class CreateConfigurationDto {
     @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })

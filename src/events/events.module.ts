@@ -9,10 +9,11 @@ import { AgentEntity } from 'src/entities/agent.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Project, ProjectSchema } from 'src/schemas/Project.schema';
 import { EventsService } from './events.service';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AgentEntity, RequestTrackEntity]),
+    TypeOrmModule.forFeature([AgentEntity, RequestTrackEntity, ProjectEntity]),
     MongooseModule.forFeature([
     {
       name: Project.name,

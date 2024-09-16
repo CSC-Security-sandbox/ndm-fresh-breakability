@@ -1,8 +1,9 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, ManyToMany } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { AgentStatus } from 'src/constants/enums';
 import { ProjectEntity } from './project.entity';
 import { Base } from './base.entity';
+import { FileServerEntity } from './fileserver.entity';
 
 @Entity({name:'agent', schema:'kunal'})
 export class AgentEntity extends Base  {
@@ -34,5 +35,8 @@ export class AgentEntity extends Base  {
   @ApiProperty({ description: 'status' })
   @Column({ type: 'enum', enum: AgentStatus, default: AgentStatus.Offline, name:'status' })
   status: AgentStatus;
+
+  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.agents,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+  fileServers: FileServerEntity[];
 
 }

@@ -1,6 +1,6 @@
 import { Socket } from "socket.io";
 import { WsJwtGuard } from "./ws-jwt/ws-jwt.guard";
-import mongoose from "mongoose";
+import { validate as isUUID  } from 'uuid'; 
 
 type SocketMiddleware = (
     socket: Socket,
@@ -12,7 +12,7 @@ export const SockateAuthMiddleware  = () : SocketMiddleware=> {
         try {
             // WsJwtGuard.validate(client)
             const  projectId = client.handshake.query?.projectId as string
-            const isValid = mongoose.Types.ObjectId.isValid(projectId);
+            const isValid = isUUID(projectId);
             if(!isValid) throw new Error(`Invalid Project Details ${projectId}`)
             next() 
         }catch(error) {

@@ -1,16 +1,13 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { ObjectId, Schema as MongooseSchema } from "mongoose";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { ConfigurationType } from "src/constants/enums";
 
 export enum Protocol {
     NFS = 'NFS',
     SMB = 'SMB'
 }
 
-export enum ConfigurationType {
-    file = 'FILE',
-    objectStorage = 'OBJECT_STORAGE'
-}
 
 export enum ServerType {
     other = 'OtherNAS',

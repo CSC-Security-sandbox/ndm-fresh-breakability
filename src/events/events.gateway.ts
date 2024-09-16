@@ -1,19 +1,17 @@
 import { Logger, UseGuards } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
 import { AgentStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
 import { AgentEntity } from 'src/entities/agent.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
-import { Project } from 'src/schemas/Project.schema';
 import { Repository } from 'typeorm';
 import { AgentAckResponse } from './events.type';
-
+import { v4 as uuidv4 } from 'uuid';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -28,8 +26,8 @@ export class EventsGateway implements OnGatewayInit{
     private readonly agentEntity: Repository<AgentEntity>,
     @InjectRepository(RequestTrackEntity) 
     private readonly requestTrackEntity: Repository<RequestTrackEntity>,
-    @InjectModel(Project.name)
-    private readonly projectModel: Model<Project>
+    @InjectRepository(ProjectEntity) 
+    private readonly projectEntity: Repository<ProjectEntity>,
   ){}
   
   async afterInit(@ConnectedSocket() client: Socket) {
@@ -60,14 +58,14 @@ export class EventsGateway implements OnGatewayInit{
       return
     }
     
-    const project = await this.projectModel.findOne({_id: projectId})
+    const project = await this.projectEntity.findOneBy({id: projectId})
     if(!project) {
       this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
       client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unabel to register agent`})
       client.disconnect()
       return
     }
-    const registerAgent =  this.agentEntity.create({agentId, projectId, agentName, ipAddress, status: AgentStatus.Online, clientId: client.id})
+    const registerAgent =  this.agentEntity.create({agentId, projectId, agentName, ipAddress, status: AgentStatus.Online, clientId: client.id, createdBy:  uuidv4()})
     await this.agentEntity.save(registerAgent)
   }
 

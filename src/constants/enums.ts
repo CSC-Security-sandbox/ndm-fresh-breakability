@@ -13,3 +13,8 @@ export enum ServerType {
     dell = 'dell',
     emc = 'emc'
 }
+
+export enum ConfigurationType {
+    file = 'FILE',
+    objectStorage = 'OBJECT_STORAGE'
+}

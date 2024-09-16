@@ -2,10 +2,10 @@ import { ApiProperty } from "@nestjs/swagger";
 import { ServerType } from "src/constants/enums";
 import { Protocol } from "src/schemas/Configuration.schema";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { Base } from "./base.entity";
-import { VolumeEntity } from "./volume.entity";
-import { ConfigEntity } from "./config.entity";
 import { AgentEntity } from "./agent.entity";
+import { Base } from "./base.entity";
+import { ConfigEntity } from "./config.entity";
+import { VolumeEntity } from "./volume.entity";
 
 @Entity({name:'file_server', schema:'kunal'})
 export class FileServerEntity extends Base {
@@ -28,20 +28,20 @@ export class FileServerEntity extends Base {
     @Column({ type: 'enum', enum: ServerType, name:'server_type' })
     serverType: ServerType;
 
-    @ApiProperty({ description: 'configId' })
-    @Column({ type: 'uuid', nullable: false , name: 'config_id'})
+    @ApiProperty({ description: 'projectId' })
+    @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
     configId: string;
 
-    @ManyToOne(() => ConfigEntity, config => config.fileServers)
+    @ManyToOne(() => ConfigEntity, config => config.fileServers,{ onDelete:'CASCADE', onUpdate:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;
 
-    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer)
+    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
     volumes: VolumeEntity[]
 
-    @ManyToMany(() => AgentEntity)
+    @ManyToMany(() => AgentEntity, agent=>agent.fileServers)
     @JoinTable({
-        name: 'file_server_agent', // Name of the join table
+        name: 'file_server_agent',
         joinColumn: {
             name: 'file_server_id',
             referencedColumnName: 'id',
@@ -51,5 +51,5 @@ export class FileServerEntity extends Base {
             referencedColumnName: 'agentId',
         },
     })
-    inventories: AgentEntity[];
+    agents: AgentEntity[];
 }

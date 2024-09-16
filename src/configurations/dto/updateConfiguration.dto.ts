@@ -1,8 +1,9 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateConfigurationDto } from './createconfiguration.dto';
-import { ConfigurationType, Protocol, ServerType, Volume } from '../../schemas/Configuration.schema';
+import {  Protocol, ServerType, Volume } from '../../schemas/Configuration.schema';
 import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ConfigurationType } from 'src/constants/enums';
 
 export class UpdateConfigurationDto extends PartialType(CreateConfigurationDto) {
     @ApiProperty({ description: 'Name', example: "Agent 1" })

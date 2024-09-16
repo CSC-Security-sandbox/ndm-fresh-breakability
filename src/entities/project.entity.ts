@@ -18,13 +18,13 @@ export class ProjectEntity extends Base {
     @Column({type:'timestamp without time zone', name:'start_date', nullable: false})
     startDate : string;
 
-    @OneToMany(()=> AgentEntity, agent=>agent.project)
+    @OneToMany(()=> AgentEntity, agent=>agent.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
     agents: AgentEntity[]
 
-    @OneToMany(()=> JobEntity, job=>job.project)
+    @OneToMany(()=> JobEntity, job=>job.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
     jobs: JobEntity[]
 
-    @OneToMany(()=> ConfigEntity, config=>config.project)
+    @OneToMany(()=> ConfigEntity, config=>config.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
     configs: ConfigEntity[]
 
 }

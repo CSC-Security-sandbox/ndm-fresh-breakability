@@ -22,7 +22,7 @@ export class ConfigEntity extends Base {
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
 
-    @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config)
+    @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: true})
     fileServers: FileServerEntity[]
 
     @ManyToOne(() => ProjectEntity, project => project.configs)
