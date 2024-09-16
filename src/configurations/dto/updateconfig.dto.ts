@@ -18,6 +18,13 @@ export class VolumesUpdateDTO {
     @ApiProperty({ description: 'Is path included', example: "true" })
     @IsBoolean()
     isIncluded: boolean;
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy: string;
+
 }
 
 export class FileServersUpdateDTO {
@@ -56,12 +63,23 @@ export class FileServersUpdateDTO {
     @IsArray()
     @IsUUID('all', { each: true })
     agents: string[];
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy: string;
 }
 
 export class ConfigUpdateDTO {
     @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
     @IsNotEmpty()
     projectId: string;
+
+    @ApiProperty({ description: 'stage', example: 'stage 1' })
+    @IsString()
+    @IsNotEmpty()
+    stage: string;
 
     @ApiProperty({ description: 'Name', example: 'Config 1' })
     @IsString()
@@ -78,4 +96,10 @@ export class ConfigUpdateDTO {
     @ValidateNested({ each: true })
     @Type(() => FileServersUpdateDTO)
     fileServers: FileServersUpdateDTO[];
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy: string;
 }

@@ -1,19 +1,14 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Model, Types } from 'mongoose';
 import { AgentEntity } from 'src/entities/agent.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { Configuration } from '../schemas/Configuration.schema';
-import { DbQuery } from '../utils/utils.types';
 import { CreateConfigDTO } from './dto/createconfig.dto';
-import { CreateConfigurationDto } from './dto/createconfiguration.dto';
-import { ConfigUpdateDTO } from './dto/updateconfig.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
+import { ConfigUpdateDTO } from './dto/updateconfig.dto';
 
 
 @Injectable()
@@ -102,6 +97,7 @@ export class ConfigurationService {
             configName: createConfig.configName,
             configType: createConfig.configType,
             projectId: createConfig.projectId,
+            stage: createConfig.stage,
             fileServers:  await Promise.all(fileServerPromises),
             createdBy: userId
         });
@@ -127,9 +123,12 @@ export class ConfigurationService {
         if (!config) {
             throw new NotFoundException(`Config for id ${id} not found.`);
         }
-    
+
         config.configName = updateConfig.configName;
         config.configType = updateConfig.configType;
+        config.createdBy = updateConfig.createdBy || userId
+        config.stage = updateConfig.stage
+        config.updatedBy = userId
     
         const fileServerPromises = updateConfig.fileServers.map(async (fileServer) => {
             const agents = await this.agentEntity.findByIds(fileServer.agents);
@@ -139,7 +138,8 @@ export class ConfigurationService {
                     id: volume.id,
                     volumePath: volume.volumePath,
                     isIncluded: volume.isIncluded,
-                    createdBy: userId
+                    createdBy: volume.createdBy || userId,
+                    updatedBy: userId
                 })
             );
     
@@ -148,15 +148,14 @@ export class ConfigurationService {
                 host: fileServer.host,
                 serverType: fileServer.serverType,
                 agents: agents,
-                createdBy: userId,
+                createdBy: fileServer.createdBy || userId,
                 protocal: fileServer.protocol,  
                 userName: fileServer.userName,
-                volumes: volumes
+                volumes: volumes,
+                updatedBy: userId
             });
         });
-    
         config.fileServers = await Promise.all(fileServerPromises);
-
         return await this.configEntity.save(config);
     }
     

@@ -5,6 +5,7 @@ import { MountConnectionsDTO } from './dto/agentmounts.dto';
 import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
 import { EventsService } from './events.service';
 import { RabbtMqService } from './rabbitmq.service';
+import { DeleteConnectionsDTO } from './dto/agentdeleteconfig.dto';
 
 @ApiTags("SocketEvents")
 @Controller('events')
@@ -39,4 +40,10 @@ export class EventsController {
         return this.eventsService.mountAgentConnetions(mountConnectionsDTO)
     }
 
+    @Post('/deleteAgentConnections')
+    @ApiOperation({ summary: 'Test Agent mounts ' })
+    @ApiCreatedResponse({ description: 'Test Agent mounts Request Created Successfully.', type: String })
+    async deletesAgentConnetions(@Body() deleteConnectionsDTO: DeleteConnectionsDTO) {
+        // return this.eventsService.deleteAgentConnetions(deleteConnectionsDTO)
+    }
 }

@@ -10,6 +10,10 @@ export class ConfigEntity extends Base {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    @ApiProperty({ description: 'stage' })
+    @Column({ type: 'text', nullable: true,  name:'stage' })
+    stage: string;
+
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_name' })
     configName: string;

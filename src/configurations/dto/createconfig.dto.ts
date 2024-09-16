@@ -50,6 +50,11 @@ export class CreateConfigDTO {
     @IsNotEmpty()
     projectId: string;
 
+    @ApiProperty({ description: 'stage', example: 'stage 1' })
+    @IsString()
+    @IsNotEmpty()
+    stage: string;
+
     @ApiProperty({ description: 'Name', example: 'Config 1' })
     @IsString()
     @IsNotEmpty()
