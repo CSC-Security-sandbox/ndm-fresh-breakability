@@ -34,6 +34,11 @@ export class FindallConfigPageDto {
   @IsString()
   configName?: string;
 
+  @ApiPropertyOptional({ description: 'Field to Filter stage'})
+  @IsOptional()
+  @IsString()
+  stage?: string;
+
 }
 
 
