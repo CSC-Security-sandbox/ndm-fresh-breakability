@@ -27,9 +27,13 @@ export class AppController {
     console.log('Received message:', data);
 
     // persisting data into mnongoDB    
+    console.log('inventory creation started');
     await this.inventoryService.createInventory(JSON.parse(data).message);
-    console.log("created invetory");
-    
+    console.log('inventory created successfully');
+
+    // const invData = await this.inventoryService.getInventoryById("66ead3d09c19e154d7a849b5");
+    // console.log(`invData ${invData}`);
+  
     // Acknowledge the message
     channel.ack(originalMsg);
   }

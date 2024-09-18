@@ -1,28 +1,46 @@
 // src/schemas/inventory.schema.ts
 import { Schema, Document, model } from 'mongoose';
 
+// interface Metadata {
+//   rwxflag: string;
+//   gid: number;
+//   uid: number;
+//   timestamp: Date;
+// }
+
 interface Metadata {
-  rwxflag: string;
-  gid: number;
   uid: number;
-  timestamp: Date;
+  gid: number;
+  blksize: number;
+  size: number;
+  blocks: number;
+  atime: string;
+  mtime: string;
+  ctime: string;
+  birthtime: string;
+  fileName: string;
+  filePath: string;
+  extension: string;
+  type: string;
+  folder: boolean;
+  permission: string
 }
 
 export interface Inventory extends Document {
-  name: string;
+  fileName: string;
   folder: boolean;
   metadata: Metadata;
 }
 
 export const MetadataSchema = new Schema<Metadata>({
-  rwxflag: { type: String, required: true },
+  // rwxflag: { type: String, required: true },
   gid: { type: Number, required: true },
   uid: { type: Number, required: true },
-  timestamp: { type: Date, default: Date.now },
+  // timestamp: { type: Date, default: Date.now },
 });
 
 export const InventorySchema = new Schema<Inventory>({
-  name: { type: String, required: true },
+  fileName: { type: String, required: true },
   folder: { type: Boolean, required: true, default: false },
   metadata: { type: MetadataSchema, required: true },
 });
