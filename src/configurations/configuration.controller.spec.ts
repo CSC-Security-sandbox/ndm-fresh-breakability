@@ -1,114 +1,138 @@
-import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Types } from 'mongoose';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
-import { CreateConfigurationDto } from './dto/createconfiguration.dto';
-import { UpdateConfigurationDto } from './dto/updateConfiguration.dto';
-import { Configuration } from '../schemas/Configuration.schema';
-import { mockConfigurationData } from '../../test/factory/configuration.factory';
-
-const mockConfigurationService = {
-    createConfiguration: jest.fn(),
-    findConfiguration: jest.fn(),
-    update: jest.fn(),
-    remove: jest.fn(),
-};
+import { CreateConfigDTO } from './dto/createconfig.dto';
+import { ConfigResponceDto, FindallConfigPageDto } from './dto/findallconfig.dto';
+import { ConfigUpdateDTO } from './dto/updateconfig.dto';
+import { ConfigurationType } from 'src/constants/enums';
 
 describe('ConfigurationController', () => {
-    let controller: ConfigurationController;
-    let service: ConfigurationService;
+  let controller: ConfigurationController;
+  let service: ConfigurationService;
 
-    beforeEach(async () => {
-        const module: TestingModule = await Test.createTestingModule({
-            controllers: [ConfigurationController],
-            providers: [
-                {
-                    provide: ConfigurationService,
-                    useValue: mockConfigurationService,
-                },
-            ],
-        }).compile();
+  const mockConfigurationService = {
+    createConfiguration: jest.fn(),
+    getAllConfig: jest.fn(),
+    getConfigById: jest.fn(),
+    updateConfiguration: jest.fn(),
+    remove: jest.fn(),
+  };
 
-        controller = module.get<ConfigurationController>(ConfigurationController);
-        service = module.get<ConfigurationService>(ConfigurationService);
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [ConfigurationController],
+      providers: [
+        {
+          provide: ConfigurationService,
+          useValue: mockConfigurationService,
+        },
+      ],
+    }).compile();
+
+    controller = module.get<ConfigurationController>(ConfigurationController);
+    service = module.get<ConfigurationService>(ConfigurationService);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('createConfiguration', () => {
+    it('should create a new configuration', async () => {
+      const createConfigDTO: CreateConfigDTO = {
+        configName: "testConfig",
+        configType: ConfigurationType.file,
+        fileServers: [],
+        projectId: "2345678",
+        stage: "212"
+      };
+      const createdConfig = {
+        configName: "testConfig",
+        configType: ConfigurationType.file,
+        fileServers: [],
+        projectId: "2345678",
+        stage: "212"
+       };
+      mockConfigurationService.createConfiguration.mockResolvedValue(createdConfig);
+
+      const result = await controller.createConfiguration(createConfigDTO);
+      expect(result).toEqual(createdConfig);
+      expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO);
+    });
+  });
+
+  describe('getConfigs', () => {
+    it('should return paginated list of configurations', async () => {
+      const findAllConfigPageDto: FindallConfigPageDto = { page: "1", limit: "10" };
+      const configList = [];
+
+      mockConfigurationService.getAllConfig.mockResolvedValue(configList);
+
+      const result = await controller.getConfigs(findAllConfigPageDto);
+      expect(result).toEqual(configList);
+      expect(service.getAllConfig).toHaveBeenCalledWith(findAllConfigPageDto);
+    });
+  });
+
+  describe('getConfiguration', () => {
+    it('should return a configuration by ID', async () => {
+      const configId = '1';
+      const config = {}; 
+
+      mockConfigurationService.getConfigById.mockResolvedValue(config);
+
+      const result = await controller.getConfiguration(configId);
+      expect(result).toEqual(config);
+      expect(service.getConfigById).toHaveBeenCalledWith(configId);
     });
 
-    afterEach(() => {
-        jest.clearAllMocks();
+    it('should throw not found error when config is not found', async () => {
+      const configId = '1';
+      mockConfigurationService.getConfigById.mockResolvedValue(null);
+
+      await expect(controller.getConfiguration(configId)).rejects.toThrow('Configuration Not Found');
     });
+  });
 
-    describe('createConfiguration', () => {
-        it('should create a new configuration', async () => {
-            const createDto: CreateConfigurationDto = { ...mockConfigurationData }
-            const mockId = new Types.ObjectId();
-            const createdConfig: any = { _id: mockId, ...createDto, projectId: new Types.ObjectId(mockConfigurationData.projectId) };
+  describe('update', () => {
+    it('should update configuration by ID', async () => {
+      const configId = '1';
 
-            jest.spyOn(service, 'createConfiguration').mockResolvedValue(createdConfig);
 
-            const result = await controller.createConfiguration(createDto);
+      const updateConfigDTO: ConfigUpdateDTO = {
+        configName: "testConfigUpdate",
+        configType: ConfigurationType.file,
+        fileServers: [],
+        projectId: "2345678",
+        stage: "212",
+        createdBy: "1234"
+      };
+      const updatedConfig = {
+        configName: "testConfig",
+        configType: ConfigurationType.file,
+        fileServers: [],
+        projectId: "2345678",
+        stage: "212"
+       };
 
-            expect(result).toEqual(createdConfig);
-            expect(service.createConfiguration).toHaveBeenCalledWith(createDto);
-        });
+      mockConfigurationService.updateConfiguration.mockResolvedValue(updatedConfig);
+
+      const result = await controller.update(configId, updateConfigDTO);
+      expect(result).toEqual(updatedConfig);
+      expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO);
     });
+  });
 
-    describe('getConfiguration', () => {
-        it('should return a configuration by ID', async () => {
-            const id = new Types.ObjectId();
-            const configuration: any = { _id: id, ...mockConfigurationData, projectId: new Types.ObjectId(mockConfigurationData.projectId) };
+  describe('remove', () => {
+    it('should delete configuration by ID', async () => {
+      const configId = '1';
+      const deleteResult = { /* mock delete response */ };
 
-            jest.spyOn(service, 'findConfiguration').mockResolvedValue([{_id: id.toString(), ...configuration}]);
+      mockConfigurationService.remove.mockResolvedValue(deleteResult);
 
-            const result = await controller.getConfiguration(id.toString());
-
-            expect(result).toEqual(configuration);
-            expect(service.findConfiguration).toHaveBeenCalledWith({ filter: { _id: id.toString() } });
-        });
-
-        it('should throw NotFoundException if no configuration is found', async () => {
-            const id = new Types.ObjectId();
-            jest.spyOn(service, 'findConfiguration').mockResolvedValue([]);
-            await expect(controller.getConfiguration(id.toString())).rejects.toThrow(NotFoundException);
-        });
+      const result = await controller.remove(configId);
+      expect(result).toEqual(deleteResult);
+      expect(service.remove).toHaveBeenCalledWith(configId);
     });
-
-    describe('findByProjectId', () => {
-        it('should return configurations by project ID', async () => {
-            const projectId = new Types.ObjectId().toHexString();
-            const configurations = [{ }] as Configuration[];
-
-            jest.spyOn(service, 'findConfiguration').mockResolvedValue(configurations);
-
-            const result = await controller.findByProjectId(projectId);
-
-            expect(result).toEqual(configurations);
-            expect(service.findConfiguration).toHaveBeenCalledWith({ filter: { projectId: new Types.ObjectId(projectId) } });
-        });
-    });
-
-    describe('update', () => {
-        it('should update a configuration by ID', async () => {
-            const id =  new Types.ObjectId()
-            const updateDto: UpdateConfigurationDto = mockConfigurationData
-            const updatedConfig: any = { id: id, ...updateDto, mountPath: '/new' }
-
-            jest.spyOn(service, 'update').mockResolvedValue(updatedConfig);
-
-            const result = await controller.update(id.toString(), updateDto);
-
-            expect(result).toEqual(updatedConfig);
-            expect(service.update).toHaveBeenCalledWith(new Types.ObjectId(id), updateDto);
-        });
-    });
-
-    describe('remove', () => {
-        it('should delete a configuration by ID', async () => {
-            const id =  new Types.ObjectId()
-            jest.spyOn(service, 'remove').mockResolvedValue({ success: true, id: new Types.ObjectId(id) });
-            const result = await controller.remove(id.toString());
-            expect(result).toEqual({ success: true, id: new Types.ObjectId(id) });
-            expect(service.remove).toHaveBeenCalledWith(new Types.ObjectId(id));
-        });
-    });
+  });
 });

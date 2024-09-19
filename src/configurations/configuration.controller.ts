@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, ValidationPipe } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { Types } from "mongoose";
 import { ConfigurationService } from "./configuration.service";
 import { CreateConfigDTO } from "./dto/createconfig.dto";
 import { ConfigResponceDto, FindallConfigPageDto } from "./dto/findallconfig.dto";

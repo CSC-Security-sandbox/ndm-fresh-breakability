@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, FindOptionsWhere } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 
-import { AgentsStatusPageDto } from './dto/agents.page.dto';
 import { AgentEntity } from 'src/entities/agent.entity';
+import { AgentsStatusPageDto } from './dto/agents.page.dto';
 
 
 @Injectable()

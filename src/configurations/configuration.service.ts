@@ -168,5 +168,4 @@ export class ConfigurationService {
             });
         return await this.configEntity.remove(config)
     }
-
 }

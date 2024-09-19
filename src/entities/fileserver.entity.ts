@@ -1,6 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { ServerType } from "src/constants/enums";
-import { Protocol } from "src/schemas/Configuration.schema";
+import { Protocol, ServerType } from "src/constants/enums";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { AgentEntity } from "./agent.entity";
 import { Base } from "./base.entity";

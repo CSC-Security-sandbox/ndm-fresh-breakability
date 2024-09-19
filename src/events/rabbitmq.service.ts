@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
 import { EventsGateway } from "./events.gateway";
-import { QueueEvent } from "./events.type";
 
 @Injectable()
 export class RabbtMqService implements OnModuleInit, OnModuleDestroy {

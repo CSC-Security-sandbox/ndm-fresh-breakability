@@ -39,7 +39,8 @@ export class EventsService {
             status: ResponseStatus.Pending,
             requestId: requestId,
             agentId: agentId,
-            protocol: protocol
+            protocol: protocol,
+            createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
         const payload = {requestId: requestTrackSave.id?.toString(), connectionDetails: connection, configId: configId }
@@ -62,7 +63,8 @@ export class EventsService {
             status: ResponseStatus.Pending,
             requestId: requestId,
             agentId: agentId,
-            protocol: protocol
+            protocol: protocol,
+            createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
         const payload = {requestId: requestTrackSave.id?.toString(), configId: configId }

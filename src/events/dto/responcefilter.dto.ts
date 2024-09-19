@@ -1,9 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsBooleanString, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
-import { Protocol } from 'src/schemas/Configuration.schema';
+
 
 export class ResponsePageFilterDto {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })

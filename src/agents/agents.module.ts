@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AgentsController } from './agents.controller';
-import { AgentsService } from './agents.service';
-import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentEntity } from 'src/entities/agent.entity';
+import { AgentsController } from './agents.controller';
+import { AgentsService } from './agents.service';
 
 
 @Module({

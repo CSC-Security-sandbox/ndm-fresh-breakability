@@ -12,7 +12,6 @@ import { DeleteConnectionsDTO } from './dto/agentdeleteconfig.dto';
 export class EventsController {
     private logger: Logger =  new  Logger (EventsController.name)
     constructor(
-        private rabbtMqService:RabbtMqService,
         private eventsService: EventsService
     ) {}
 
