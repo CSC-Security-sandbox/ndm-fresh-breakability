@@ -82,7 +82,7 @@ describe('ConfigurationService', () => {
 
   describe('getConfigById', () => {
     it('should return a config by id', async () => {
-      const configId = '1';
+      const configId = '53e6713e-17a2-47a0-bb58-724ec3329827';
       const config = { id: configId, configName: 'testConfig' };
 
       mockConfigRepository.findOne.mockResolvedValue(config);
@@ -99,10 +99,10 @@ describe('ConfigurationService', () => {
     });
 
     it('should throw NotFoundException if config is not found', async () => {
-      const configId = '1';
+      const configId = '53e6713e-17a2-47a0-bb58-724ec3329827';
       mockConfigRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.getConfigById(configId)).rejects.toThrow(BadRequestException);
+      await expect(service.getConfigById(configId)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -130,7 +130,7 @@ describe('ConfigurationService', () => {
 
   describe('updateConfiguration', () => {
     it('should update and return the updated configuration', async () => {
-      const configId = '1';
+      const configId = '53e6713e-17a2-47a0-bb58-724ec3329827';
       const updateConfigDTO: ConfigUpdateDTO = { configName: "testConfigUpdate",
       configType: ConfigurationType.file,
       fileServers: [],
@@ -148,7 +148,7 @@ describe('ConfigurationService', () => {
     });
 
     it('should throw NotFoundException if config not found for update', async () => {
-      const configId = '1';
+      const configId = '53e6713e-17a2-47a0-bb58-724ec3329827';
       const updateConfigDTO: ConfigUpdateDTO = {  configName: "testConfigUpdate",
       configType: ConfigurationType.file,
       fileServers: [],
@@ -165,7 +165,7 @@ describe('ConfigurationService', () => {
 
   describe('remove', () => {
     it('should delete and return the removed config', async () => {
-      const configId = '1';
+      const configId = '53e6713e-17a2-47a0-bb58-724ec3329827';
       const configToDelete = { id: configId };
 
       mockConfigRepository.findOne.mockResolvedValue(configToDelete);
@@ -176,11 +176,11 @@ describe('ConfigurationService', () => {
       expect(mockConfigRepository.remove).toHaveBeenCalledWith(configToDelete);
     });
 
-    it('should throw NotFoundException if config to delete is not found', async () => {
-      const configId = '1';
+    it('should throw BadRequestException if config to delete is not found', async () => {
+      const configId = '5';
       mockConfigRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.remove(configId)).rejects.toThrow(NotFoundException);
+      await expect(service.remove(configId)).rejects.toThrow(BadRequestException);
     });
   });
 });

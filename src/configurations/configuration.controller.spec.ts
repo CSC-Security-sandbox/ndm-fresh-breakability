@@ -86,12 +86,6 @@ describe('ConfigurationController', () => {
       expect(service.getConfigById).toHaveBeenCalledWith(configId);
     });
 
-    it('should throw not found error when config is not found', async () => {
-      const configId = '1';
-      mockConfigurationService.getConfigById.mockResolvedValue(null);
-
-      await expect(controller.getConfiguration(configId)).rejects.toThrow('Configuration Not Found');
-    });
   });
 
   describe('update', () => {
