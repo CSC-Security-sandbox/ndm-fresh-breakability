@@ -20,7 +20,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @MessagePattern('hello')
+  @MessagePattern('createInventory')
   public async handleMessage(@Payload() data: any, @Ctx() context: RmqContext) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
