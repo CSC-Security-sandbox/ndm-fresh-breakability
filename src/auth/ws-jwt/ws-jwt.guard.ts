@@ -1,6 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { verify } from 'jsonwebtoken';
-import mongoose from 'mongoose';
 import { Observable } from 'rxjs';
 import { Socket } from 'socket.io';
 

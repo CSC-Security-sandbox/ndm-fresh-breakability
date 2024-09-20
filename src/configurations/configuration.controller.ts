@@ -32,7 +32,6 @@ export class ConfigurationController{
     })
     @Get('/allconfig')
     async getConfigs(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findallConfigPageDto: FindallConfigPageDto) {
-        console.log('asdkjasdlasndas', findallConfigPageDto)
         return await this.configurationService.getAllConfig(findallConfigPageDto);
     }
 
