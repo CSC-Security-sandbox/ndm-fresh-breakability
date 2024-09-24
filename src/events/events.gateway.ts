@@ -100,7 +100,6 @@ export class EventsGateway implements OnGatewayInit{
     const clientId = this.clients.get(agentId);
     if (clientId) {
       this.logger.log('sendToClient',{agentId, eventType, message})
-      console.log(this.server)
       this.server.to(clientId).emit(eventType, message);
     }
   }

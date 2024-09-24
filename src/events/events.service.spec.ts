@@ -51,7 +51,7 @@ describe('EventsService', () => {
     service = module.get<EventsService>(EventsService);
     repository = module.get<MockRepositor<RequestTrackEntity>>(getRepositoryToken(RequestTrackEntity));
     rabbitMqService = module.get<RabbtMqService>(RabbtMqService);
-    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});  // Mock Logger
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});  
   });
 
   it('should be defined', () => {
@@ -70,7 +70,7 @@ describe('EventsService', () => {
 
       await service.testAgentConnetions(testConnectionsDTO);
 
-      expect(makeTestConnectionnRequestSpy).toHaveBeenCalledTimes(4);  // 2 agents * 2 protocols
+      expect(makeTestConnectionnRequestSpy).toHaveBeenCalledTimes(4); 
     });
   });
 
