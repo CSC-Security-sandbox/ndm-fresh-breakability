@@ -1,107 +1,72 @@
 import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
-import { RequestType, ResponseStatus } from 'src/constants/status';
-import { Protocol } from 'src/constants/enums';
-import { ResponsePageFilterDto } from './responcefilter.dto';
+import { AgentDetails, NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './agentconnection.dto';
 
-describe('ResponsePageFilterDto', () => {
-  it('should succeed when all valid fields are provided', async () => {
-    const validData = {
-      page: '1',
-      limit: '10',
-      sort: 'createdAt',
-      order: 'asc',
-      requestType: RequestType.TestConnection,
-      status: ResponseStatus.Pending,
-      protocol: Protocol.NFS,
-      requestId: 'req123',
-      agentId: 'agent456',
-      deserialize: 'false',
-    };
+describe('TestConnectionsDTO', () => {
+  it('should pass validation when valid data is provided', async () => {
+    const dto = new TestConnectionsDTO();
+    dto.agents = [new AgentDetails()];
+    dto.agents[0].agentId = 'agentId';
+    dto.nfsConnectionDetails = new NFSConnectionDetails();
+    dto.nfsConnectionDetails.userName = 'username';
+    dto.nfsConnectionDetails.password = 'password';
+    dto.nfsConnectionDetails.host = 'host';
+    dto.nfsConnectionDetails.protocol = 'protocol';
 
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
-    const errors = await validate(dto as any);
-
+    const errors = await validate(dto);
     expect(errors.length).toBe(0);
   });
 
-  it('should fail when page is not a number string', async () => {
-    const invalidData = {
-      page: 'abc',
-    };
+  it('should fail validation when both connection details are missing', async () => {
+    const dto = new TestConnectionsDTO();
+    dto.agents = [new AgentDetails()];
+    dto.agents[0].agentId = 'agentId';
+    dto.validateConnection = true; 
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
-    const errors = await validate(dto as any);
-
+    const errors = await validate(dto);
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isNumberString');
+    expect(errors[0].constraints).toHaveProperty('atLeastOneConnection');
   });
 
-  it('should fail when limit is not a number string', async () => {
-    const invalidData = {
-      limit: 'xyz',
-    };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
-    const errors = await validate(dto as any);
+  it('should fail validation when agents array is empty', async () => {
+    const dto = new TestConnectionsDTO();
+    dto.agents = []; 
+    dto.nfsConnectionDetails = new NFSConnectionDetails();
+    dto.nfsConnectionDetails.userName = 'username';
+    dto.nfsConnectionDetails.password = 'password';
+    dto.nfsConnectionDetails.host = 'host';
+    dto.nfsConnectionDetails.protocol = 'protocol';
 
+    const errors = await validate(dto);
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isNumberString');
+    expect(errors[0].constraints).toHaveProperty('arrayNotEmpty');
   });
 
-  it('should fail when sort is not one of the allowed values', async () => {
-    const invalidData = {
-      sort: 'invalidField',
-    };
+  it('should pass validation when only NFS connection details are provided', async () => {
+    const dto = new TestConnectionsDTO();
+    dto.agents = [new AgentDetails()];
+    dto.agents[0].agentId = 'agentId';
+    dto.nfsConnectionDetails = new NFSConnectionDetails();
+    dto.nfsConnectionDetails.userName = 'username';
+    dto.nfsConnectionDetails.password = 'password';
+    dto.nfsConnectionDetails.host = 'host';
+    dto.nfsConnectionDetails.protocol = 'protocol';
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isIn');
-  });
-
-  it('should fail when order is not either "asc" or "desc"', async () => {
-    const invalidData = {
-      order: 'invalidOrder',
-    };
-
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isIn');
-  });
-
-  it('should succeed when optional fields are not provided', async () => {
-    const validData = {};
-
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBe(0); // Validation should pass
-  });
-
-  it('should correctly transform string to boolean for deserialize', async () => {
-    const validData = {
-      deserialize: 'true',
-    };
-
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
-    const errors = await validate(dto as any);
-
+    const errors = await validate(dto);
     expect(errors.length).toBe(0);
-
   });
 
-  it('should correctly fail when requestId is not a string', async () => {
-    const invalidData = {
-      requestId: 12345, 
-    };
+  it('should pass validation when only SMB connection details are provided', async () => {
+    const dto = new TestConnectionsDTO();
+    dto.agents = [new AgentDetails()];
+    dto.agents[0].agentId = 'agentId';
+    dto.sbmConnectionDetails = new SMBConnectionDetails();
+    dto.sbmConnectionDetails.userName = 'username';
+    dto.sbmConnectionDetails.password = 'password';
+    dto.sbmConnectionDetails.host = 'host';
+    dto.sbmConnectionDetails.protocol = 'protocol';
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
-    const errors = await validate(dto as any);
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isString');
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
   });
 });

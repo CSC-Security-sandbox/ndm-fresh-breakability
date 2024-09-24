@@ -46,7 +46,7 @@ export class SMBConnectionDetails {
   protocol: string;
 }
 
-class AgentDetails {
+export class AgentDetails {
   @ApiProperty({ description: 'Agent ID', example: 'agentId' })
   @IsString()
   @IsNotEmpty()
