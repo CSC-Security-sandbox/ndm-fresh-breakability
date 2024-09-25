@@ -4,12 +4,16 @@ import { TestConnectionsDTO } from './dto/agentconnection.dto';
 import { MountConnectionsDTO } from './dto/agentmounts.dto';
 import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
 import { EventsService } from './events.service';
+import { RabbtMqService } from './rabbitmq.service';
+import { TestConnectionDTO } from './dto/testconnection.dto';
+import { QueueEvent } from './events.type';
 
 @ApiTags("SocketEvents")
 @Controller('events')
 export class EventsController {
     private logger: Logger =  new  Logger (EventsController.name)
     constructor(
+        private rabbtMqService: RabbtMqService,
         private eventsService: EventsService
     ) {}
 
@@ -36,5 +40,11 @@ export class EventsController {
     async mountsAgentConnetions(@Body() mountConnectionsDTO: MountConnectionsDTO) {
         return this.eventsService.mountAgentConnetions(mountConnectionsDTO)
     }
+
+    @Post('/test')
+    async sendMessage(@Body() testConnectionDTO: TestConnectionDTO) {
+        this.logger.debug(testConnectionDTO)
+        this.rabbtMqService.publishToExchange(testConnectionDTO as QueueEvent)
+    }  
 
 }
