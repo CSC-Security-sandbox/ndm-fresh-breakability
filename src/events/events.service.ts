@@ -67,7 +67,7 @@ export class EventsService {
             createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId }
+        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId, protocol, }
         this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
     }
 

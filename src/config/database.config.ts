@@ -18,12 +18,12 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         username: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
-        synchronize: true,
+        synchronize: false,
         dropSchema: false,
         ssl: {
             rejectUnauthorized: false, 
         },
         logging: true,
         entities: [AgentEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobEntity],
-        // migrations: [AgentEntity]
+        migrations: []
     }))

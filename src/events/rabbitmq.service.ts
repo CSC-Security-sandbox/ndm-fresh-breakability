@@ -7,7 +7,7 @@ import { EventsGateway } from "./events.gateway";
 export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private channelWrapper: ChannelWrapper;
   private readonly logger = new Logger(RabbtMqService.name);
-  private exchange = 'testasd';
+  private exchange = 'testing';
   private routingKey =  'socketConnetion'
 
   constructor(private readonly eventsGateway: EventsGateway) {
