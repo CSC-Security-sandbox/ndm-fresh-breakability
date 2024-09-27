@@ -1,21 +1,26 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import rabbitmqConfig from './config/rabbitmq.config';
-import { MongooseModule } from '@nestjs/mongoose';
 import { InventoryController } from './controllers/inventory.controller';
 import { InventoryService } from './services/inventory.service';
-import { InventoryModel, InventorySchema } from './schemas/inventory.schema';
+import databaseConfig from './config/database.config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { InventoryEntity } from './entities/inventory.entity';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      load: [rabbitmqConfig],
+      load: [databaseConfig, rabbitmqConfig],
     }),
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/test3?directConnection=true'),
-    MongooseModule.forFeature([{ name: 'Inventory', schema: InventorySchema }]),
-    InventoryModel
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) =>
+        configService.get('typeorm'),
+      inject: [ConfigService],
+    }),
+    TypeOrmModule.forFeature([InventoryEntity]),
   ],
   controllers: [AppController, InventoryController],
   providers: [AppService, InventoryService],

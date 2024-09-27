@@ -6,8 +6,22 @@ import { RmqContext } from '@nestjs/microservices';
 
 describe('AppController', () => {
   let appController: AppController;
-  let appService: AppService;
   let inventoryService: InventoryService;
+
+  const mockAppService = {
+    getHello: jest.fn().mockReturnValue('Hello World!'),
+  };
+
+  const mockInventoryService = {
+    createInventory: jest.fn(),
+  };
+
+  const mockRmqContext = {
+    getChannelRef: jest.fn().mockReturnValue({
+      ack: jest.fn(),
+    }),
+    getMessage: jest.fn().mockReturnValue({}),
+  } as unknown as RmqContext;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -15,66 +29,40 @@ describe('AppController', () => {
       providers: [
         {
           provide: AppService,
-          useValue: { getHello: jest.fn().mockReturnValue('Hello World!') },
+          useValue: mockAppService,
         },
         {
           provide: InventoryService,
-          useValue: {
-            createInventory: jest.fn().mockResolvedValue({}),
-          },
+          useValue: mockInventoryService,
         },
       ],
     }).compile();
 
     appController = module.get<AppController>(AppController);
-    appService = module.get<AppService>(AppService);
     inventoryService = module.get<InventoryService>(InventoryService);
   });
 
-  it('should return "Hello World!"', () => {
-    expect(appController.getHello()).toBe('Hello World!');
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('getHello', () => {
+    it('should return "Hello World!"', () => {
+      expect(appController.getHello()).toBe('Hello World!');
+      expect(mockAppService.getHello).toHaveBeenCalled();
+    });
   });
 
   describe('handleMessage', () => {
-    let mockRmqContext: Partial<RmqContext>;
+    it('should handle the createInventory message', async () => {
+      const messageData = JSON.stringify({ message: { mountPath: '/mnt/storage', fileName: 'file.txt' } });
+      const payload = { message: messageData };
 
-    beforeEach(() => {
-      mockRmqContext = {
-        getChannelRef: jest.fn().mockReturnValue({
-          ack: jest.fn(), // Mock acknowledgment
-        }),
-        getMessage: jest.fn().mockReturnValue({}),
-      };
-    });
+      await appController.handleMessage(payload.message, mockRmqContext);
 
-    it('should handle message and create inventory', async () => {
-      const mockData = JSON.stringify({
-        message: { name: 'Test Inventory', quantity: 10 },
-      });
-
-      await appController.handleMessage(mockData, mockRmqContext as RmqContext);
-
-      expect(inventoryService.createInventory).toHaveBeenCalledWith({
-        name: 'Test Inventory',
-        quantity: 10,
-      });
-
-      // Check if the message was acknowledged
-      const channelRef = mockRmqContext.getChannelRef as jest.Mock;
-      expect(channelRef().ack).toHaveBeenCalled();
-    });
-
-    it('should log received message', async () => {
-      console.log = jest.fn(); // Mock console.log
-
-      const mockData = JSON.stringify({
-        message: { name: 'Test Inventory', quantity: 10 },
-      });
-
-      await appController.handleMessage(mockData, mockRmqContext as RmqContext);
-
-      expect(console.log).toHaveBeenCalledWith('Received message:', mockData);
-      expect(console.log).toHaveBeenCalledWith('created invetory');
+      expect(inventoryService.createInventory).toHaveBeenCalledWith(JSON.parse(messageData).message);
+      
+      expect(mockRmqContext.getChannelRef().ack).toHaveBeenCalledWith(mockRmqContext.getMessage());
     });
   });
 });

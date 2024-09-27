@@ -1,4 +1,3 @@
-// src/controllers/inventory.controller.ts
 import {
   Controller,
   Get,
@@ -9,37 +8,37 @@ import {
   Param,
 } from '@nestjs/common';
 import { InventoryService } from '../services/inventory.service';
-import { Inventory } from '../schemas/inventory.schema';
+import { createInventoryDTO } from '../dto/create-inventory.dto';
 
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Post()
-  async createInventory(@Body() data: Partial<Inventory>): Promise<Inventory> {
+  async createInventory(@Body() data: createInventoryDTO ) {
     return await this.inventoryService.createInventory(data);
   }
 
   @Get(':id')
-  async getInventoryById(@Param('id') id: string): Promise<Inventory | null> {
+  async getInventoryById(@Param('id') id: string) {
     return await this.inventoryService.getInventoryById(id);
   }
 
   @Put(':id')
   async updateInventory(
     @Param('id') id: string,
-    @Body() data: Partial<Inventory>,
-  ): Promise<Inventory | null> {
+    @Body() data,
+  ) {
     return await this.inventoryService.updateInventory(id, data);
   }
 
   @Delete(':id')
-  async deleteInventory(@Param('id') id: string): Promise<Inventory | null> {
+  async deleteInventory(@Param('id') id: string) {
     return await this.inventoryService.deleteInventory(id);
   }
 
   @Get()
-  async getAllInventories(): Promise<Inventory[]> {
+  async getAllInventories() {
     return await this.inventoryService.getAllInventories();
   }
 }

@@ -1,51 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from '../services/inventory.service';
-import { Inventory } from '../schemas/inventory.schema';
+import { createInventoryDTO } from 'src/dto/create-inventory.dto';
 
 describe('InventoryController', () => {
   let controller: InventoryController;
-  let inventoryService: InventoryService;
+  let service: InventoryService;
 
   const mockInventoryService = {
-    createInventory: jest.fn((data: Partial<Inventory>) => {
-      return {
-        _id: '111',
-        ...data,
-      };
-    }),
-    getInventoryById: jest.fn((id: string) => {
-      return {
-        _id: id,
-        name: 'test',
-        folder: false,
-        metadata: {
-          rwxflag: 'rwx',
-          gid: 1001,
-          uid: 1001,
-          timestamp: new Date(),
-        },
-      };
-    }),
-    updateInventory: jest.fn((id: string, data: Partial<Inventory>) => {
-      return {
-        _id: id,
-        name: 'updatedTest',
-        folder: false,
-      };
-    }),
-    deleteInventory: jest.fn((id: string) => {
-      return {
-        _id: id,
-        name: 'deletedTest',
-        folder: false,
-      };
-    }),
-    getAllInventories: jest.fn(() => {
-      return [
-        { _id: '1', name: 'test', folder: true },
-      ];
-    }),
+    createInventory: jest.fn(),
+    getInventoryById: jest.fn(),
+    updateInventory: jest.fn(),
+    deleteInventory: jest.fn(),
+    getAllInventories: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -60,78 +27,103 @@ describe('InventoryController', () => {
     }).compile();
 
     controller = module.get<InventoryController>(InventoryController);
-    inventoryService = module.get<InventoryService>(InventoryService);
+    service = module.get<InventoryService>(InventoryService);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  // describe('createInventory', () => {
-  //   it('should create a new inventory', async () => {
-  //     const inventoryData: Partial<Inventory> = {
-  //       name: 'test',
-  //       folder: false,
-  //       metadata: {
-  //         rwxflag: 'rwx',
-  //         gid: 1001,
-  //         uid: 1001,
-  //         timestamp: new Date(),
-  //       },
-  //     };
-  //     const result = await controller.createInventory(inventoryData);
+  describe('createInventory', () => {
+    it('should create a new inventory item', async () => {
+      const dto: createInventoryDTO = {
+        mountPath: '/mnt/storage',
+        fileServer: 'server1',
+        fileName: 'file.txt',
+        folder: true,
+        metadata: {
+          uid: 1000,
+          gid: 1000,
+          blksize: 4096,
+          size: 1024,
+          blocks: 8,
+          atime: '2024-01-01T00:00:00Z',
+          mtime: '2024-01-01T00:00:00Z',
+          ctime: '2024-01-01T00:00:00Z',
+          birthtime: '2024-01-01T00:00:00Z',
+          fileName: 'file.txt',
+          filePath: '/mnt/storage/file.txt',
+          extension: '.txt',
+          type: 'file',
+          folder: false,
+          permission: 'rw-r--r--',
+        },
+      };
 
-  //     expect(inventoryService.createInventory).toHaveBeenCalledWith(inventoryData);
-  //     expect(result).toEqual({ _id: '111', ...inventoryData });
-  //   });
-  // });
+      const expectedResult = { id: '1', ...dto };
 
-  describe('getInventoryById', () => {
-    it('should return inventory by id', async () => {
-      const id = '222';
-      const result = await controller.getInventoryById(id);
+      mockInventoryService.createInventory.mockResolvedValue(expectedResult);
 
-      expect(inventoryService.getInventoryById).toHaveBeenCalledWith(id);
-      expect(result).toEqual({
-        _id: id,
-        name: 'test',
-        folder: false,
-        metadata: expect.any(Object),
-      });
+      const result = await controller.createInventory(dto);
+      
+      expect(result).toEqual(expectedResult);
+      expect(mockInventoryService.createInventory).toHaveBeenCalledWith(dto);
     });
   });
 
-  // describe('updateInventory', () => {
-  //   it('should call inventoryService.updateInventory and return updated inventory', async () => {
-  //     const mockId = '123';
-  //     const mockUpdateData: Partial<Inventory> = { name: 'updatedTest', folder: false };
-  //     const result = await controller.updateInventory(mockId, mockUpdateData);
+  describe('getInventoryById', () => {
+    it('should return an inventory item by ID', async () => {
+      const inventoryId = '1';
+      const expectedInventory = { id: inventoryId, fileName: 'file.txt' };
 
-  //     expect(inventoryService.updateInventory).toHaveBeenCalledWith(mockId, mockUpdateData);
-  //     expect(result).toEqual({ _id: mockId, ...mockUpdateData });
-  //   });
-  // });
+      mockInventoryService.getInventoryById.mockResolvedValue(expectedInventory);
+
+      const result = await controller.getInventoryById(inventoryId);
+
+      expect(result).toEqual(expectedInventory);
+      expect(mockInventoryService.getInventoryById).toHaveBeenCalledWith(inventoryId);
+    });
+  });
+
+  describe('updateInventory', () => {
+    it('should update an inventory item', async () => {
+      const inventoryId = '1';
+      const updateData = { fileName: 'updated-file.txt' };
+      const expectedResult = { id: inventoryId, ...updateData };
+
+      mockInventoryService.updateInventory.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateInventory(inventoryId, updateData);
+
+      expect(result).toEqual(expectedResult);
+      expect(mockInventoryService.updateInventory).toHaveBeenCalledWith(inventoryId, updateData);
+    });
+  });
 
   describe('deleteInventory', () => {
-    it('should call inventoryService.deleteInventory and return deleted inventory', async () => {
-      const mockId = '113';
-      const result = await controller.deleteInventory(mockId);
+    it('should delete an inventory item', async () => {
+      const inventoryId = '1';
+      const expectedResult = { deleted: true };
 
-      expect(inventoryService.deleteInventory).toHaveBeenCalledWith(mockId);
-      expect(result).toEqual({ _id: mockId, name: 'deletedTest', folder: false });
+      mockInventoryService.deleteInventory.mockResolvedValue(expectedResult);
+
+      const result = await controller.deleteInventory(inventoryId);
+
+      expect(result).toEqual(expectedResult);
+      expect(mockInventoryService.deleteInventory).toHaveBeenCalledWith(inventoryId);
     });
   });
 
   describe('getAllInventories', () => {
-    it('should call inventoryService.getAllInventories and return all inventories', async () => {
+    it('should return all inventory items', async () => {
+      const expectedInventories = [{ id: '1', fileName: 'file.txt' }, { id: '2', fileName: 'file2.txt' }];
+
+      mockInventoryService.getAllInventories.mockResolvedValue(expectedInventories);
+
       const result = await controller.getAllInventories();
 
-      expect(inventoryService.getAllInventories).toHaveBeenCalled();
-      expect(result).toEqual([
-        { _id: '1', name: 'test', folder: true },
-      ]);
+      expect(result).toEqual(expectedInventories);
+      expect(mockInventoryService.getAllInventories).toHaveBeenCalled();
     });
   });
 });
-
-
