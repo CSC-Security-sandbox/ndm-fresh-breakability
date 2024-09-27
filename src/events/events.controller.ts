@@ -17,7 +17,7 @@ export class EventsController {
         private eventsService: EventsService
     ) {}
 
-    @Post('/test_connection')
+    @Post('/test-connection')
     @ApiOperation({ summary: 'Test Agent Connections ' })
     @ApiCreatedResponse({ description: 'Test Agent Connection Request Created Successfully.', type: String })
     async testAgentConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
@@ -41,10 +41,10 @@ export class EventsController {
         return this.eventsService.mountAgentConnetions(mountConnectionsDTO)
     }
 
-    @Post('/test')
-    async sendMessage(@Body() testConnectionDTO: TestConnectionDTO) {
-        this.logger.debug(testConnectionDTO)
-        this.rabbtMqService.publishToExchange(testConnectionDTO as QueueEvent)
-    }  
+    // @Post('/test')
+    // async sendMessage(@Body() testConnectionDTO: TestConnectionDTO) {
+    //     this.logger.debug(testConnectionDTO)
+    //     this.rabbtMqService.publishToExchange(testConnectionDTO as QueueEvent)
+    // }  
 
 }

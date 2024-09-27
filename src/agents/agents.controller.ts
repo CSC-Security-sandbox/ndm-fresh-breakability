@@ -16,7 +16,7 @@ export class AgentsController {
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    @Get('/all')
+    @Get('/')
     async getAgents(@Query(new ValidationPipe({ transform: false, whitelist: true }))  agentsStatusPageDto: AgentsStatusPageDto) {
         return await this.agentsService.findAllAgents(agentsStatusPageDto);
     }

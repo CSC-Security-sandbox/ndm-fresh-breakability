@@ -6,7 +6,7 @@ import { ConfigResponceDto, FindallConfigPageDto } from "./dto/findallconfig.dto
 import { ConfigUpdateDTO } from "./dto/updateconfig.dto";
 
 @ApiTags("Configuration")
-@Controller('configuration')
+@Controller('configurations')
 export class ConfigurationController{
     constructor(
         private configurationService: ConfigurationService
@@ -30,7 +30,7 @@ export class ConfigurationController{
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    @Get('/allconfig')
+    @Get('/')
     async getConfigs(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findallConfigPageDto: FindallConfigPageDto) {
         return await this.configurationService.getAllConfig(findallConfigPageDto);
     }

@@ -7,11 +7,11 @@ import { EventsGateway } from "./events.gateway";
 export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private channelWrapper: ChannelWrapper;
   private readonly logger = new Logger(RabbtMqService.name);
-  private exchange = 'testing';
-  private routingKey =  'socketConnetion'
+  private exchange = process.env.RABBITMQ_URL_EXCHANGE || 'defaultEX';
+  private routingKey =  process.env.RABBITMQ_URL_ROUTING_KEY || 'socketConnetion'
 
   constructor(private readonly eventsGateway: EventsGateway) {
-    const connection = amqp.connect(['amqps://frbrucjq:UDm9yWoZ4kig37NzOQM_HxU8xuXmMdWD@lionfish.rmq.cloudamqp.com/frbrucjq']);
+    const connection = amqp.connect([process.env.RABBITMQ_URL]);
     // const connection = amqp.connect([`amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@${process.env.RABBITMQ_HOST}:${process.env.RABBITMQ_PORT}`]);
     this.channelWrapper = connection.createChannel();
   }

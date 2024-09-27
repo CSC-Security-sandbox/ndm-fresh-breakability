@@ -5,7 +5,7 @@ import { RequestType, ResponseStatus } from 'src/constants/status';
 import { AgentEntity } from './agent.entity';
 import { Base } from './base.entity';
 
-@Entity({name:'request_track', schema:'kunal'})
+@Entity({name:'request_track', schema:'migrate'})
 export class RequestTrackEntity extends Base {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')

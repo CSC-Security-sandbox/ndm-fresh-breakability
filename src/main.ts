@@ -9,7 +9,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   
-  app.setGlobalPrefix('config-service')
+  app.setGlobalPrefix('api/v1/config')
   
   app.useGlobalPipes(new ValidationPipe())
   const config = new DocumentBuilder()
@@ -20,8 +20,10 @@ async function bootstrap() {
   .build();
   
   const document = SwaggerModule.createDocument(app, config);
-  
-  SwaggerModule.setup('docs', app, document);
+
+  SwaggerModule.setup('docs', app, document,{
+    jsonDocumentUrl: 'swagger/json',
+  });
   app.enableShutdownHooks();
   app.set('trust proxy', true);
   
