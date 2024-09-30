@@ -4,27 +4,27 @@ import { Type } from 'class-transformer';
 import { Protocol } from 'src/constants/enums';
 
 
-class AgentDetails {
-  @ApiProperty({ description: 'Agent ID', example: 'agentId' })
+class WorkerDetails {
+  @ApiProperty({ description: 'Worker ID', example: 'workerId' })
   @IsString()
   @IsNotEmpty()   
-  agentId: string;
+  workerId: string;
 }
 
 export class MountConnectionsDTO {
   @ApiProperty({
-    description: 'List of agent details',
-    type: [AgentDetails],
+    description: 'List of worker details',
+    type: [WorkerDetails],
   })
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
-  @Type(() => AgentDetails)
-  agents: AgentDetails[];
+  @Type(() => WorkerDetails)
+  workers: WorkerDetails[];
 
 
   @ApiProperty({
-    description: 'List of protocals',
+    description: 'List of protocols',
     enum: Protocol,
     isArray: true,
   })

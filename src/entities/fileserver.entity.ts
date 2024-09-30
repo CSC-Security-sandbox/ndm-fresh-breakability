@@ -1,7 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Protocol, ServerType } from "src/constants/enums";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { AgentEntity } from "./agent.entity";
+import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
@@ -38,17 +38,17 @@ export class FileServerEntity extends Base {
     @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
     volumes: VolumeEntity[]
 
-    @ManyToMany(() => AgentEntity, agent=>agent.fileServers)
+    @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
-        name: 'file_server_agent',
+        name: 'file_server_worker',
         joinColumn: {
             name: 'file_server_id',
             referencedColumnName: 'id',
         },
         inverseJoinColumn: {
-            name: 'agent_id',
-            referencedColumnName: 'agentId',
+            name: 'worker_id',
+            referencedColumnName: 'workerId',
         },
     })
-    agents: AgentEntity[];
+    workers: WorkerEntity[];
 }

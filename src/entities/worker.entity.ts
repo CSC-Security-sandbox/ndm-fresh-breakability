@@ -1,15 +1,15 @@
 import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, ManyToMany } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { AgentStatus } from 'src/constants/enums';
+import { WorkerStatus } from 'src/constants/enums';
 import { ProjectEntity } from './project.entity';
 import { Base } from './base.entity';
 import { FileServerEntity } from './fileserver.entity';
 
-@Entity({name:'agent', schema:'migrate'})
-export class AgentEntity extends Base  {
-  @ApiProperty({ description: 'agentId' })
+@Entity({name:'worker', schema:'migrate'})
+export class WorkerEntity extends Base  {
+  @ApiProperty({ description: 'workerId' })
   @PrimaryColumn({ type: 'uuid', name: 'id' })
-  agentId: string;
+  workerId: string;
 
   @ApiProperty({ description: 'projectId' })
   @Column({ type: 'uuid', nullable: false , name: 'project_id'})
@@ -20,23 +20,23 @@ export class AgentEntity extends Base  {
   @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
   clientId: string;
 
-  @ApiProperty({ description: 'agentName' })
-  @Column({ type: 'varchar', length: 255, nullable: false, name:'agent_name' })
-  agentName: string;
+  @ApiProperty({ description: 'workerName' })
+  @Column({ type: 'varchar', length: 255, nullable: false, name:'worker_name' })
+  workerName: string;
 
   @ApiProperty({ description: 'ipAddress' })
   @Column({ type: 'varchar', length: 255, nullable: false , name: 'ip_address' })
   ipAddress: string;
 
-  @ManyToOne(() => ProjectEntity, project => project.agents)
+  @ManyToOne(() => ProjectEntity, project => project.workers)
   @JoinColumn({ name: 'project_id' }) 
   project: ProjectEntity;
 
   @ApiProperty({ description: 'status' })
-  @Column({ type: 'enum', enum: AgentStatus, default: AgentStatus.Offline, name:'status' })
-  status: AgentStatus;
+  @Column({ type: 'enum', enum: WorkerStatus, default: WorkerStatus.Offline, name:'status' })
+  status: WorkerStatus;
 
-  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.agents,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
   fileServers: FileServerEntity[];
 
 }

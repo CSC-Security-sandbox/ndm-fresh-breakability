@@ -25,7 +25,7 @@ export class ConfigurationController{
     }
 
 
-    @ApiOperation({ summary: 'Get a paginated list of Config',  description: 'Returns a list of Agents based on the provided pagination parameters.'})
+    @ApiOperation({ summary: 'Get a paginated list of Config',  description: 'Returns a list of Workers based on the provided pagination parameters.'})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponceDto})
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'

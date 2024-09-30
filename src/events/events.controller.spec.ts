@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TestConnectionsDTO } from './dto/agentconnection.dto';
-import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { TestConnectionsDTO } from './dto/workerconnection.dto';
+import { MountConnectionsDTO } from './dto/workermounts.dto';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
@@ -16,10 +16,10 @@ describe('EventsController', () => {
         {
           provide: EventsService,
           useValue: {
-            testAgentConnetions: jest.fn(),
+            testWorkerConnetions: jest.fn(),
             findAllResponse: jest.fn(),
-            mountAgentConnetions: jest.fn(),
-            deleteAgentConnetions: jest.fn(),
+            mountWorkerConnetions: jest.fn(),
+            deleteWorkerConnetions: jest.fn(),
           },
         },
       ],
@@ -33,14 +33,14 @@ describe('EventsController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('testAgentConnetions', () => {
+  describe('testWorkerConnetions', () => {
     it('should return a request ID on successful connection test', async () => {
-      const testConnectionsDTO: TestConnectionsDTO = { agents: [], configId: "2345", validateConnection: false};
+      const testConnectionsDTO: TestConnectionsDTO = { workers: [], configId: "2345", validateConnection: false};
       const requestId = 'test-request-id';
       
-      jest.spyOn(service, 'testAgentConnetions').mockResolvedValue({ requestId });
+      jest.spyOn(service, 'testWorkerConnetions').mockResolvedValue({ requestId });
 
-      expect(await controller.testAgentConnetions(testConnectionsDTO)).toEqual({ requestId });
+      expect(await controller.testWorkerConnetions(testConnectionsDTO)).toEqual({ requestId });
     });
   });
 
@@ -64,14 +64,14 @@ describe('EventsController', () => {
     });
   });
 
-  describe('mountsAgentConnetions', () => {
+  describe('mountsWorkerConnetions', () => {
     it('should return a request ID on successful mount', async () => {
-      const mountConnectionsDTO: MountConnectionsDTO = {agents: [],configId:"1234",protocol:[] };
+      const mountConnectionsDTO: MountConnectionsDTO = {workers: [],configId:"1234",protocol:[] };
       const requestId = 'mount-request-id';
 
-      jest.spyOn(service, 'mountAgentConnetions').mockResolvedValue({ requestId });
+      jest.spyOn(service, 'mountWorkerConnetions').mockResolvedValue({ requestId });
 
-      expect(await controller.mountsAgentConnetions(mountConnectionsDTO)).toEqual({ requestId });
+      expect(await controller.mountsWorkerConnetions(mountConnectionsDTO)).toEqual({ requestId });
     });
   });
 

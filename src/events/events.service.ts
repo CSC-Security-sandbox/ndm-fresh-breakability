@@ -5,8 +5,8 @@ import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status'
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/agentconnection.dto';
-import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/workerconnection.dto';
+import { MountConnectionsDTO } from './dto/workermounts.dto';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 import { QueueEvent } from './events.type';
 import { RabbtMqService } from './rabbitmq.service';
@@ -22,65 +22,65 @@ export class EventsService {
 
     ) {}
 
-    async testAgentConnetions(testConnectionsDTO: TestConnectionsDTO){
+    async testWorkerConnetions(testConnectionsDTO: TestConnectionsDTO){
         const requestId = uuidv4(); 
-        testConnectionsDTO.agents.forEach(async agent => {
+        testConnectionsDTO.workers.forEach(async worker => {
             if(testConnectionsDTO.nfsConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
+                await this.makeTestConnectionnRequest(requestId, worker.workerId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
             if(testConnectionsDTO.sbmConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, agent.agentId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
+                await this.makeTestConnectionnRequest(requestId, worker.workerId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
         })
         return {requestId}
     }
 
-    async  makeTestConnectionnRequest(requestId: string, agentId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
+    async  makeTestConnectionnRequest(requestId: string, workerId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
         const requestTrack = this.requestTrackEntity.create({
             requestType: RequestType.TestConnection,
             status: ResponseStatus.Pending,
             requestId: requestId,
-            agentId: agentId,
+            workerId: workerId,
             protocol: protocol,
             createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
         const payload = {requestId: requestTrackSave.id?.toString(), connectionDetails: connection, configId: configId }
-        this.notifyEventToAgent(agentId, SocketEvents.TestConnection, payload)
+        this.notifyEventToWorker(workerId, SocketEvents.TestConnection, payload)
     }
 
-    async mountAgentConnetions(mountConnectionsDTO: MountConnectionsDTO){
+    async mountWorkerConnetions(mountConnectionsDTO: MountConnectionsDTO){
         const requestId = uuidv4(); 
-        mountConnectionsDTO.agents.forEach(async agent => {
+        mountConnectionsDTO.workers.forEach(async worker => {
             mountConnectionsDTO.protocol.forEach(protocol => {
-                this.makeAgentMountConnectionRequest(requestId, agent.agentId, protocol, mountConnectionsDTO.configId)
+                this.makeWorkerMountConnectionRequest(requestId, worker.workerId, protocol, mountConnectionsDTO.configId)
             });
         })
         return {requestId}
     }
 
-    async makeAgentMountConnectionRequest(requestId: string, agentId:string,  protocol: Protocol, configId?: string | undefined) {
+    async makeWorkerMountConnectionRequest(requestId: string, workerId:string,  protocol: Protocol, configId?: string | undefined) {
         const requestTrack = this.requestTrackEntity.create({
             requestType: RequestType.Volumes,
             status: ResponseStatus.Pending,
             requestId: requestId,
-            agentId: agentId,
+            workerId: workerId,
             protocol: protocol,
             createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
         const payload = {requestId: requestTrackSave.id?.toString(), configId: configId, protocol, }
-        this.notifyEventToAgent(agentId, SocketEvents.Volumes, payload)
+        this.notifyEventToWorker(workerId, SocketEvents.Volumes, payload)
     }
 
-    async notifyEventToAgent(agentId:string, socketEvents: SocketEvents, payload: any) {
+    async notifyEventToWorker(workerId:string, socketEvents: SocketEvents, payload: any) {
         const queuEvent:QueueEvent = {
-            agentId: agentId,
+            workerId: workerId,
             action: {
                 eventType: socketEvents,
                 message: payload
             }
         }
         this.rabbtMqService.publishToExchange(queuEvent)
-        this.logger.log(`${socketEvents} is published for ${agentId}`)
+        this.logger.log(`${socketEvents} is published for ${workerId}`)
     }
 
     async findAllResponse(responsePageFilterDto: ResponsePageFilterDto) {

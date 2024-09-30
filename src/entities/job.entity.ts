@@ -30,7 +30,7 @@ export class JobEntity extends Base {
     @JoinColumn({ name: 'target_config_id' }) 
     targetConfig: ConfigEntity;
 
-    @ManyToOne(() => ProjectEntity, project => project.agents)
+    @ManyToOne(() => ProjectEntity, project => project.workers)
     @JoinColumn({ name: 'project_id' }) 
     project: ProjectEntity;
 

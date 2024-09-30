@@ -1,11 +1,11 @@
 import { validate } from 'class-validator';
-import { AgentDetails, NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './agentconnection.dto';
+import { WorkerDetails, NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './workerconnection.dto';
 
 describe('TestConnectionsDTO', () => {
   it('should pass validation when valid data is provided', async () => {
     const dto = new TestConnectionsDTO();
-    dto.agents = [new AgentDetails()];
-    dto.agents[0].agentId = 'agentId';
+    dto.workers = [new WorkerDetails()];
+    dto.workers[0].workerId = 'workerId';
     dto.nfsConnectionDetails = new NFSConnectionDetails();
     dto.nfsConnectionDetails.userName = 'username';
     dto.nfsConnectionDetails.password = 'password';
@@ -18,8 +18,8 @@ describe('TestConnectionsDTO', () => {
 
   it('should fail validation when both connection details are missing', async () => {
     const dto = new TestConnectionsDTO();
-    dto.agents = [new AgentDetails()];
-    dto.agents[0].agentId = 'agentId';
+    dto.workers = [new WorkerDetails()];
+    dto.workers[0].workerId = 'workerId';
     dto.validateConnection = true; 
 
     const errors = await validate(dto);
@@ -28,9 +28,9 @@ describe('TestConnectionsDTO', () => {
   });
 
 
-  it('should fail validation when agents array is empty', async () => {
+  it('should fail validation when workers array is empty', async () => {
     const dto = new TestConnectionsDTO();
-    dto.agents = []; 
+    dto.workers = []; 
     dto.nfsConnectionDetails = new NFSConnectionDetails();
     dto.nfsConnectionDetails.userName = 'username';
     dto.nfsConnectionDetails.password = 'password';
@@ -44,8 +44,8 @@ describe('TestConnectionsDTO', () => {
 
   it('should pass validation when only NFS connection details are provided', async () => {
     const dto = new TestConnectionsDTO();
-    dto.agents = [new AgentDetails()];
-    dto.agents[0].agentId = 'agentId';
+    dto.workers = [new WorkerDetails()];
+    dto.workers[0].workerId = 'workerId';
     dto.nfsConnectionDetails = new NFSConnectionDetails();
     dto.nfsConnectionDetails.userName = 'username';
     dto.nfsConnectionDetails.password = 'password';
@@ -58,8 +58,8 @@ describe('TestConnectionsDTO', () => {
 
   it('should pass validation when only SMB connection details are provided', async () => {
     const dto = new TestConnectionsDTO();
-    dto.agents = [new AgentDetails()];
-    dto.agents[0].agentId = 'agentId';
+    dto.workers = [new WorkerDetails()];
+    dto.workers[0].workerId = 'workerId';
     dto.sbmConnectionDetails = new SMBConnectionDetails();
     dto.sbmConnectionDetails.userName = 'username';
     dto.sbmConnectionDetails.password = 'password';

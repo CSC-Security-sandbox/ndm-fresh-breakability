@@ -46,11 +46,11 @@ export class SMBConnectionDetails {
   protocol: string;
 }
 
-export class AgentDetails {
-  @ApiProperty({ description: 'Agent ID', example: 'agentId' })
+export class WorkerDetails {
+  @ApiProperty({ description: 'Worker ID', example: 'workerId' })
   @IsString()
   @IsNotEmpty()
-  agentId: string;
+  workerId: string;
 }
 
 @ValidatorConstraint({ name: 'atLeastOneConnection', async: false })
@@ -67,16 +67,16 @@ class AtLeastOneConnectionConstraint implements ValidatorConstraintInterface {
 
 export class TestConnectionsDTO {
   @ApiProperty({
-    description: 'List of agent details',
-    type: [AgentDetails],
+    description: 'List of worker details',
+    type: [WorkerDetails],
   })
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
-  @Type(() => AgentDetails)
-  agents: AgentDetails[];
+  @Type(() => WorkerDetails)
+  workers: WorkerDetails[];
 
-  @ApiPropertyOptional({ description: 'NFS Connection Details for Agent' })
+  @ApiPropertyOptional({ description: 'NFS Connection Details for Worker' })
   @ValidateIf((o) => !o.sbmConnectionDetails)
   @ValidateNested()
   @Type(() => NFSConnectionDetails)
@@ -84,7 +84,7 @@ export class TestConnectionsDTO {
   @IsNotEmpty()
   nfsConnectionDetails?: NFSConnectionDetails;
 
-  @ApiPropertyOptional({ description: 'SMB Connection Details for Agent' })
+  @ApiPropertyOptional({ description: 'SMB Connection Details for Worker' })
   @ValidateIf((o) => !o.nfsConnectionDetails)
   @ValidateNested()
   @Type(() => SMBConnectionDetails)

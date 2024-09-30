@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigurationService } from './configuration.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,9 +13,9 @@ import { ConfigurationType, Protocol, ServerType } from 'src/constants/enums';
 
 // Mock data for entities
 const mockConfig = { id: uuidv4(), configName: 'Test Config', configType: 'Type1' };
-const mockFileServer = { id: uuidv4(), host: 'localhost', serverType: 'Type1', agents: [], volumes: [] };
+const mockFileServer = { id: uuidv4(), host: 'localhost', serverType: 'Type1', workers: [], volumes: [] };
 const mockVolume = { id: uuidv4(), volumePath: '/path', isIncluded: true };
-const mockAgent = { id: uuidv4(), agentName: 'Agent1' };
+const mockWorker = { id: uuidv4(), workerName: 'Worker1' };
 
 const mockConfigRepository = {
   find: jest.fn(),
@@ -36,7 +36,7 @@ const mockVolumeRepository = {
   save: jest.fn(),
 };
 
-const mockAgentRepository = {
+const mockWorkerRepository = {
   findByIds: jest.fn(),
 };
 
@@ -61,8 +61,8 @@ describe('ConfigurationService', () => {
           useValue: mockVolumeRepository,
         },
         {
-          provide: getRepositoryToken(AgentEntity),
-          useValue: mockAgentRepository,
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: mockWorkerRepository,
         },
       ],
     }).compile();
@@ -118,7 +118,7 @@ describe('ConfigurationService', () => {
     it('should create and save a new configuration', async () => {
       mockConfigRepository.create.mockReturnValue(mockConfig);
       mockConfigRepository.save.mockResolvedValue(mockConfig);
-      mockAgentRepository.findByIds.mockResolvedValue([mockAgent]);
+      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
       const createConfigDTO = {
         projectId:"123456",
@@ -129,7 +129,7 @@ describe('ConfigurationService', () => {
         fileServers: [{
           host: 'localhost',
           serverType: ServerType.emc,
-          agents: [mockAgent.id],
+          workers: [mockWorker.id],
           volumes: [{  volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
           createdBy:"1234567",
           protocol: Protocol.NFS,
@@ -148,7 +148,7 @@ describe('ConfigurationService', () => {
     it('should update and save the configuration', async () => {
       mockConfigRepository.findOne.mockResolvedValue(mockConfig);
       mockConfigRepository.save.mockResolvedValue(mockConfig);
-      mockAgentRepository.findByIds.mockResolvedValue([mockAgent]);
+      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
       const updateConfigDTO:ConfigUpdateDTO = {
         projectId:"123456",
@@ -160,7 +160,7 @@ describe('ConfigurationService', () => {
           id: mockFileServer.id,
           host: 'localhost',
           serverType: ServerType.emc,
-          agents: [mockAgent.id],
+          workers: [mockWorker.id],
           volumes: [{ id: mockVolume.id, volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
           createdBy:"1234567",
           protocol: Protocol.NFS,

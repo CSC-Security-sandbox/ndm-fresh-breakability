@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { AgentEntity } from "./agent.entity";
+import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
 import { JobEntity } from "./job.entity";
 import { ConfigEntity } from "./config.entity";
@@ -18,8 +18,8 @@ export class ProjectEntity extends Base {
     @Column({type:'timestamp without time zone', name:'start_date', nullable: false})
     startDate : string;
 
-    @OneToMany(()=> AgentEntity, agent=>agent.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
-    agents: AgentEntity[]
+    @OneToMany(()=> WorkerEntity, worker=>worker.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+    workers: WorkerEntity[]
 
     @OneToMany(()=> JobEntity, job=>job.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
     jobs: JobEntity[]

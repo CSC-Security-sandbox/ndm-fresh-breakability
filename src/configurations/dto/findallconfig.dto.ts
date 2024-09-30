@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 
 export class FindallConfigPageDto {
@@ -45,6 +45,6 @@ export class FindallConfigPageDto {
 export class ConfigResponceDto {
   @ApiProperty()
   total: string;
-  @ApiProperty({ type: () => AgentEntity, description: 'AgentEntity object' })
+  @ApiProperty({ type: () => WorkerEntity, description: 'WorkerEntity object' })
   data: ConfigEntity[];
 }

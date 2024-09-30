@@ -59,10 +59,10 @@ export class FileServersUpdateDTO {
     @Type(() => VolumesUpdateDTO)
     volumes: VolumesUpdateDTO[];
 
-    @ApiProperty({ description: 'Array of Agent IDs', type: [String] })
+    @ApiProperty({ description: 'Array of Worker IDs', type: [String] })
     @IsArray()
     @IsUUID('all', { each: true })
-    agents: string[];
+    workers: string[];
 
     @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
     @IsString()

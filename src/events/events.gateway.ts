@@ -4,13 +4,13 @@ import { ConnectedSocket, OnGatewayInit, SubscribeMessage, WebSocketGateway, Web
 import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
-import { AgentStatus } from 'src/constants/enums';
+import { WorkerStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
-import { AgentAckResponse } from './events.type';
+import { WorkerAckResponse } from './events.type';
 import { v4 as uuidv4 } from 'uuid';
 
 @WebSocketGateway({namespace: 'event'})
@@ -22,8 +22,8 @@ export class EventsGateway implements OnGatewayInit{
   private readonly logger = new Logger(EventsGateway.name);
 
   constructor(
-    @InjectRepository(AgentEntity) 
-    private readonly agentEntity: Repository<AgentEntity>,
+    @InjectRepository(WorkerEntity) 
+    private readonly WorkerEntity: Repository<WorkerEntity>,
     @InjectRepository(RequestTrackEntity) 
     private readonly requestTrackEntity: Repository<RequestTrackEntity>,
     @InjectRepository(ProjectEntity) 
@@ -36,57 +36,57 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   async handleConnection(client: Socket) {
-    const agentId : string = client.handshake.query.agentId as string
-    const agentName : string = client.handshake.query.agentName as string
+    const workerId : string = client.handshake.query.agentId as string
+    const workerName : string = client.handshake.query.agentName as string
     const projectId : string = client.handshake.query.projectId as string
     const ipAddress: string = client.handshake.address as string
     
     this.logger.log(`Client IP Address: ${ipAddress}`)
-    if(!agentId || !agentName || !projectId ) {
-      this.logger.error("Invalid Details")
+    if(!workerId || !workerName || !projectId ) {
+      this.logger.error("Invalid Details",workerId)
       return;
     }
    
-    this.logger.log(`Client connected: ${agentId}`);
-    this.clients.set(agentId, client.id);
+    this.logger.log(`Client connected: ${workerId}`);
+    this.clients.set(workerId, client.id);
 
-    const agent = await this.agentEntity.findOne({where: {agentId: agentId}})
-    if(agent) {
-      this.logger.log(`Record Found for Agent: ${agentId} Project: ${projectId}`)
-      await this.agentEntity.update({agentId: agentId}, {agentName: agentName, clientId: client.id, status: AgentStatus.Online})
-      this.logger.log(`Record Updated for Agent: ${agentId} Project: ${projectId}`)
+    const worker = await this.WorkerEntity.findOne({where: {workerId: workerId}})
+    if(worker) {
+      this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
+      await this.WorkerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
+      this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
       return
     }
     
     const project = await this.projectEntity.findOneBy({id: projectId})
     if(!project) {
-      this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register agent`)
-      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unabel to register agent`})
+      this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register worker`)
+      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unabel to register worker`})
       client.disconnect()
       return
     }
-    const registerAgent =  this.agentEntity.create({agentId, projectId, agentName, ipAddress, status: AgentStatus.Online, clientId: client.id, createdBy:  uuidv4()})
-    await this.agentEntity.save(registerAgent)
+    const registerWorker =  this.WorkerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
+    await this.WorkerEntity.save(registerWorker)
   }
 
   async handleDisconnect(client: Socket) {
-    const agentId : string = client.handshake.query.agentId as string
+    const workerId : string = client.handshake.query.agentId as string
     const projectId : string = client.handshake.query.projectId as string
-    if(agentId) {
-      this.logger.log(`Client disconnected: ${agentId}`);
-      this.clients.delete(agentId);
-      await this.agentEntity.update({projectId, agentId}, {status: AgentStatus.Offline})
+    if(workerId) {
+      this.logger.log(`Client disconnected: ${workerId}`);
+      this.clients.delete(workerId);
+      await this.WorkerEntity.update({projectId, workerId}, {status: WorkerStatus.Offline})
     }
   }
 
   @SubscribeMessage('acknowledgement')
-  async handleMessage(client: Socket, message: AgentAckResponse) {
-    const agentAckResponse:AgentAckResponse = message
-    if(agentAckResponse.error) 
-      await this.requestTrackEntity.update({id:agentAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(agentAckResponse.error)})
+  async handleMessage(client: Socket, message: WorkerAckResponse) {
+    const workerAckResponse:WorkerAckResponse = message
+    if(workerAckResponse.error) 
+      await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
     else
-      await this.requestTrackEntity.update({id:agentAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(agentAckResponse.result)})
-    this.logger.log(`Recived Ack for ${agentAckResponse.requestId} from ${client.handshake.query?.agentId}`)
+      await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
+    this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
   }
 
   sendMessage(eventName: string, payload: any) {
@@ -94,12 +94,12 @@ export class EventsGateway implements OnGatewayInit{
     this.server.emit(eventName, payload);
   }
 
-  sendToClient(agentId: string, eventType: string, message: any,) {
-    this.logger.log('agentId', agentId)
-    this.logger.log('agentId', this.clients.get(agentId))
-    const clientId = this.clients.get(agentId);
+  sendToClient(workerId: string, eventType: string, message: any,) {
+    this.logger.log('workerId', workerId)
+    this.logger.log('workerId', this.clients.get(workerId))
+    const clientId = this.clients.get(workerId);
     if (clientId) {
-      this.logger.log('sendToClient',{agentId, eventType, message})
+      this.logger.log('sendToClient',{workerId, eventType, message})
       this.server.to(clientId).emit(eventType, message);
     }
   }

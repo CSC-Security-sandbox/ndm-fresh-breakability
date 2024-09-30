@@ -2,7 +2,7 @@ import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateCol
 import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
 import { RequestType, ResponseStatus } from 'src/constants/status';
-import { AgentEntity } from './agent.entity';
+import { WorkerEntity } from './worker.entity';
 import { Base } from './base.entity';
 
 @Entity({name:'request_track', schema:'migrate'})
@@ -27,16 +27,16 @@ export class RequestTrackEntity extends Base {
   @Column({ type: 'enum', enum: Protocol, nullable: false })
   protocol: Protocol;
 
-  @ApiProperty({ description: 'Agent ID' })
-  @Column({ type: 'uuid', nullable: false,  name: 'agent_id'  })
-  agentId: string;
+  @ApiProperty({ description: 'Worker ID' })
+  @Column({ type: 'uuid', nullable: false,  name: 'worker_id'  })
+  workerId: string;
 
   @ApiProperty({ description: 'requestId' })
   @Column({ type: 'uuid', nullable: false,  name: 'request_id'  })
   requestId: string;
 
-  @ManyToOne(() => AgentEntity)
-  @JoinColumn({ name: 'agent_id' }) 
-  agentEntity: AgentEntity;
+  @ManyToOne(() => WorkerEntity)
+  @JoinColumn({ name: 'worker_id' }) 
+  WorkerEntity: WorkerEntity;
 
 }

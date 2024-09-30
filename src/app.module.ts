@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AgentsModule } from './agents/agents.module';
+import { WorkerModule } from './workers/workers.module';
 import { WsJwtGuard } from './auth/ws-jwt/ws-jwt.guard';
 import databaseConfig from './config/database.config';
 import { ConfigurationModule } from './configurations/configuration.module';
@@ -17,7 +17,7 @@ import { EventsModule } from './events/events.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    ConfigurationModule, EventsModule, AgentsModule,
+    ConfigurationModule, EventsModule, WorkerModule,
   ],
   controllers: [],
   providers: [{

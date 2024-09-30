@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
@@ -21,8 +21,8 @@ export class ConfigurationService {
         private readonly fileServerEntity: Repository<FileServerEntity>,
         @InjectRepository(VolumeEntity)
         private readonly volumeEntity: Repository<VolumeEntity>,
-        @InjectRepository(AgentEntity)
-        private readonly agentEntity: Repository<AgentEntity>,
+        @InjectRepository(WorkerEntity)
+        private readonly WorkerEntity: Repository<WorkerEntity>,
     ) {}
 
     async getAllConfig(findallConfigPageDto: FindallConfigPageDto) {
@@ -33,7 +33,7 @@ export class ConfigurationService {
           relations: {
             project: true,
             fileServers: {
-                agents: true,
+                workers: true,
                 volumes: true
             }
           }
@@ -59,7 +59,7 @@ export class ConfigurationService {
             relations: {
                 project: true,
                 fileServers: {
-                    agents: true,
+                    workers: true,
                     volumes: true
                 }
             }
@@ -72,7 +72,7 @@ export class ConfigurationService {
         const userId = uuidv4();
     
         const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
-            const agents = await this.agentEntity.findByIds(fileServer.agents);
+            const workers = await this.WorkerEntity.findByIds(fileServer.workers);
 
             const volumes = fileServer.volumes.map(volume => 
                 this.volumeEntity.create({
@@ -85,7 +85,7 @@ export class ConfigurationService {
             return this.fileServerEntity.create({
                 host: fileServer.host,
                 serverType: fileServer.serverType,
-                agents: agents,
+                workers: workers,
                 createdBy: userId,
                 protocal: fileServer.protocol,  
                 userName: fileServer.userName,
@@ -114,7 +114,7 @@ export class ConfigurationService {
             where: { id },
             relations: {
                 fileServers: {
-                    agents: true,
+                    workers: true,
                     volumes: true
                 }
             }
@@ -131,7 +131,7 @@ export class ConfigurationService {
         config.updatedBy = userId
     
         const fileServerPromises = updateConfig.fileServers.map(async (fileServer) => {
-            const agents = await this.agentEntity.findByIds(fileServer.agents);
+            const workers = await this.WorkerEntity.findByIds(fileServer.workers);
 
             const volumes = fileServer.volumes.map(volume => 
                 this.volumeEntity.create({
@@ -147,7 +147,7 @@ export class ConfigurationService {
                 id: fileServer.id,
                 host: fileServer.host,
                 serverType: fileServer.serverType,
-                agents: agents,
+                workers: workers,
                 createdBy: fileServer.createdBy || userId,
                 protocal: fileServer.protocol,  
                 userName: fileServer.userName,

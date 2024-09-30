@@ -15,7 +15,7 @@ describe('ResponsePageFilterDto', () => {
       status: ResponseStatus.Pending,
       protocol: Protocol.NFS,
       requestId: 'req123',
-      agentId: 'agent456',
+      workerId: 'worker456',
     };
 
     const dto = plainToInstance(ResponsePageFilterDto, validData);

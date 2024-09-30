@@ -1,5 +1,5 @@
 import { registerAs } from "@nestjs/config";
-import { AgentEntity } from "src/entities/agent.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 
@@ -18,12 +18,12 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         username: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
-        synchronize: true,
+        synchronize: false,
         dropSchema: false,
         ssl: {
             rejectUnauthorized: false, 
         },
         logging: true,
-        entities: [AgentEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobEntity],
+        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobEntity],
         migrations: []
     }))

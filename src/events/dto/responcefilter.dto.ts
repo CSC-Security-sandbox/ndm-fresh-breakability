@@ -17,9 +17,9 @@ export class ResponsePageFilterDto {
   @IsNumberString()
   limit?: string;
 
-  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdAt', enum: ['requestType', 'status', 'createdAt', 'agentId', 'createdAt', 'updatedAt'] })
+  @ApiPropertyOptional({ description: 'Field to sort by', example: 'createdAt', enum: ['requestType', 'status', 'createdAt', 'workerId', 'createdAt', 'updatedAt'] })
   @IsOptional()
-  @IsIn(['requestType', 'status', 'createdAt', 'agentId', 'createdAt', 'updatedOn'])
+  @IsIn(['requestType', 'status', 'createdAt', 'workerId', 'createdAt', 'updatedOn'])
   sort?: string;
 
   @ApiPropertyOptional({ description: 'Order of sorting', example: 'asc', enum: ['asc', 'desc'] })
@@ -60,10 +60,10 @@ export class ResponsePageFilterDto {
   @IsString()
   requestId?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter agentId' })
+  @ApiPropertyOptional({ description: 'Field to Filter workerId' })
   @IsOptional()
   @IsString()
-  agentId?: string;
+  workerId?: string;
 
   @ApiPropertyOptional({ description: 'Deserialize JSON', example: 'false' })
   @IsOptional()

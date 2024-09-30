@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
-import { AgentStatus } from 'src/constants/enums';
+import { WorkerStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
@@ -46,7 +46,7 @@ describe('EventsGateway', () => {
   let gateway: EventsGateway;
   let mockServer: Partial<Server>;
   let mockSocket: Partial<Socket>;
-  let mockAgentRepository: MockRepositor<AgentEntity>
+  let mockWorkerRepository: MockRepositor<WorkerEntity>
   let mockRequestTrackRepository: MockRepositor<RequestTrackEntity>
   let mockProjectRepository: MockRepositor<ProjectEntity>
 
@@ -84,7 +84,7 @@ describe('EventsGateway', () => {
           useValue: mockServer,
         },
         {
-            provide: getRepositoryToken(AgentEntity),
+            provide: getRepositoryToken(WorkerEntity),
             useValue: mockRepository
         },
         {
@@ -99,7 +99,7 @@ describe('EventsGateway', () => {
     }).compile();
 
     gateway = module.get<EventsGateway>(EventsGateway);
-    mockAgentRepository = module.get<MockRepositor<AgentEntity>>(getRepositoryToken(AgentEntity));
+    mockWorkerRepository = module.get<MockRepositor<WorkerEntity>>(getRepositoryToken(WorkerEntity));
     mockRequestTrackRepository = module.get<MockRepositor<RequestTrackEntity>>(getRepositoryToken(RequestTrackEntity));
     mockProjectRepository = module.get<MockRepositor<ProjectEntity>>(getRepositoryToken(ProjectEntity));
   });
@@ -117,65 +117,65 @@ describe('EventsGateway', () => {
   });
 
   describe('handleConnection', () => {
-    it('should handle connection and update agent', async () => {
-      const agentId = 'agent-id';
-      const agentName = 'agent-name';
+    it('should handle connection and update worker', async () => {
+      const workerId = 'worker-id';
+      const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId, agentName, projectId };
+      mockSocket.handshake.query = { workerId, workerName, projectId };
 
-      const mockAgent = { agentId, projectId, agentName, ipAddress: '127.0.0.1', status: AgentStatus.Online, clientId: 'socket-id' };
-      (mockAgentRepository.findOne as jest.Mock).mockResolvedValue(mockAgent);
-      (mockAgentRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      const mockWorker = { workerId, projectId, workerName, ipAddress: '127.0.0.1', status: WorkerStatus.Online, clientId: 'socket-id' };
+      (mockWorkerRepository.findOne as jest.Mock).mockResolvedValue(mockWorker);
+      (mockWorkerRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
       const mockProject = { id: projectId };
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue(mockProject);
 
       await gateway.handleConnection(mockSocket as Socket);
 
-      expect(mockAgentRepository.update).toHaveBeenCalledWith({ agentId }, { agentName, clientId: 'socket-id', status: AgentStatus.Online });
+      expect(mockWorkerRepository.update).toHaveBeenCalledWith({ workerId }, { workerName, clientId: 'socket-id', status: WorkerStatus.Online });
     });
 
-    it('should handle connection and create agent if not found', async () => {
-      const agentId = 'agent-id';
-      const agentName = 'agent-name';
+    it('should handle connection and create worker if not found', async () => {
+      const workerId = 'worker-id';
+      const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId, agentName, projectId };
+      mockSocket.handshake.query = { workerId, workerName, projectId };
 
       (mockProjectRepository.findOne as jest.Mock).mockResolvedValue(null);
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue({ id: projectId } as any);
 
       await gateway.handleConnection(mockSocket as Socket);
 
-      expect(mockAgentRepository.create).toHaveBeenCalled();
-      expect(mockAgentRepository.save).toHaveBeenCalled();
+      expect(mockWorkerRepository.create).toHaveBeenCalled();
+      expect(mockWorkerRepository.save).toHaveBeenCalled();
     });
 
     it('should disconnect client if project is not found', async () => {
-      const agentId = 'agent-id';
-      const agentName = 'agent-name';
+      const workerId = 'worker-id';
+      const workerName = 'worker-name';
       const projectId = 'invalid-project-id';
-      mockSocket.handshake.query = { agentId, agentName, projectId };
+      mockSocket.handshake.query = { workerId, workerName, projectId };
 
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue(null);
 
       await gateway.handleConnection(mockSocket as Socket);
 
-      expect(mockSocket.emit).toHaveBeenCalledWith(SocketEvents.Error, { error: `Record Not Found for Project: ${projectId} Unabel to register agent` });
+      expect(mockSocket.emit).toHaveBeenCalledWith(SocketEvents.Error, { error: `Record Not Found for Project: ${projectId} Unabel to register worker` });
       expect(mockSocket.disconnect).toHaveBeenCalled();
     });
   });
 
   describe('handleDisconnect', () => {
-    it('should handle disconnection and update agent status', async () => {
-      const agentId = 'agent-id';
+    it('should handle disconnection and update worker status', async () => {
+      const workerId = 'worker-id';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId, projectId };
+      mockSocket.handshake.query = { workerId, projectId };
 
-      (mockAgentRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (mockWorkerRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
       await gateway.handleDisconnect(mockSocket as Socket);
 
-      expect(mockAgentRepository.update).toHaveBeenCalledWith({ projectId, agentId }, { status: AgentStatus.Offline });
+      expect(mockWorkerRepository.update).toHaveBeenCalledWith({ projectId, workerId }, { status: WorkerStatus.Offline });
     });
   });
 
@@ -216,25 +216,25 @@ describe('EventsGateway', () => {
 
   describe('sendToClient', () => {
     it('should send not send message to a specific client if not connected', () => {
-      const agentId = 'agent-id';
+      const workerId = 'worker-id';
       const eventType = 'test-event';
       const message = { key: 'value' };
       (mockServer.to as jest.Mock).mockReturnThis();
       (gateway as any).server = mockSocket;
 
-      (gateway as any).clients.set(agentId, undefined);
-      gateway.sendToClient(agentId, eventType, message);
+      (gateway as any).clients.set(workerId, undefined);
+      gateway.sendToClient(workerId, eventType, message);
 
       expect(mockServer.to).toBeDefined();
     });
 
     it('should send a message to a specific client', () => {
-      const agentId = 'agent-id';
+      const workerId = 'worker-id';
       const eventType = 'test-event';
       const message = { key: 'value' };
       (gateway as any).server = {...mockServer, to: jest.fn().mockReturnValue(mockServer)};
-      (gateway as any).clients.set(agentId, mockSocket);
-      gateway.sendToClient(agentId, eventType, message);
+      (gateway as any).clients.set(workerId, mockSocket);
+      gateway.sendToClient(workerId, eventType, message);
       expect(mockServer.to).toBeDefined();
     });
     

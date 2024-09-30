@@ -1,12 +1,10 @@
 import { Body, Controller, Get, Logger, Post, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { TestConnectionsDTO } from './dto/agentconnection.dto';
-import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { TestConnectionsDTO } from './dto/workerconnection.dto';
+import { MountConnectionsDTO } from './dto/workermounts.dto';
 import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
 import { EventsService } from './events.service';
 import { RabbtMqService } from './rabbitmq.service';
-import { TestConnectionDTO } from './dto/testconnection.dto';
-import { QueueEvent } from './events.type';
 
 @ApiTags("SocketEvents")
 @Controller('events')
@@ -18,14 +16,14 @@ export class EventsController {
     ) {}
 
     @Post('/test-connection')
-    @ApiOperation({ summary: 'Test Agent Connections ' })
-    @ApiCreatedResponse({ description: 'Test Agent Connection Request Created Successfully.', type: String })
-    async testAgentConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
-        return this.eventsService.testAgentConnetions(testConnectionsDTO)
+    @ApiOperation({ summary: 'Test Worker Connections ' })
+    @ApiCreatedResponse({ description: 'Test Worker Connection Request Created Successfully.', type: String })
+    async testWorkerConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
+        return this.eventsService.testWorkerConnetions(testConnectionsDTO)
     }
 
     @Get('/response')
-    @ApiOperation({ summary: 'Get a Response list of Agents',  description: 'Returns a list of Response based on the provided pagination parameters.'})
+    @ApiOperation({ summary: 'Get a Response list of Workers',  description: 'Returns a list of Response based on the provided pagination parameters.'})
     @ApiOkResponse({ description: 'The list of Response has been retrieved successfully.',  type: ResponsePageFilterResponseDto})
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
@@ -35,10 +33,10 @@ export class EventsController {
     }
 
     @Post('/mounts')
-    @ApiOperation({ summary: 'Test Agent mounts ' })
-    @ApiCreatedResponse({ description: 'Test Agent mounts Request Created Successfully.', type: String })
-    async mountsAgentConnetions(@Body() mountConnectionsDTO: MountConnectionsDTO) {
-        return this.eventsService.mountAgentConnetions(mountConnectionsDTO)
+    @ApiOperation({ summary: 'Test Worker mounts ' })
+    @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
+    async mountsWorkerConnetions(@Body() mountConnectionsDTO: MountConnectionsDTO) {
+        return this.eventsService.mountWorkerConnetions(mountConnectionsDTO)
     }
 
     // @Post('/test')

@@ -39,10 +39,10 @@ export class FileServersDTO {
     @Type(() => VolumesDTO)
     volumes: VolumesDTO[];
 
-    @ApiProperty({ description: 'Array of Agent IDs', type: [String] })
+    @ApiProperty({ description: 'Array of Worker IDs', type: [String] })
     @IsArray()
     @IsUUID('all', { each: true })
-    agents: string[];
+    workers: string[];
 }
 
 export class CreateConfigDTO {

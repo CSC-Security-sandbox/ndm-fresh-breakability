@@ -27,7 +27,7 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
-            this.eventsGateway.sendToClient(content?.agentId, content?.action?.eventType, content?.action?.message)
+            this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
             channel.ack(message);
           }
         });

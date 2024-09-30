@@ -1,5 +1,5 @@
 import { DataSourceOptions } from 'typeorm';
-import { AgentEntity } from "src/entities/agent.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -45,7 +45,7 @@ describe('TypeORM Config', () => {
       },
       logging: true,
       entities: [
-        AgentEntity,
+        WorkerEntity,
         RequestTrackEntity,
         ConfigEntity,
         InventoryEntity,

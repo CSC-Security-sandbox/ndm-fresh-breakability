@@ -6,8 +6,8 @@ import { SocketEvents } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/agentconnection.dto';
-import { MountConnectionsDTO } from './dto/agentmounts.dto';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/workerconnection.dto';
+import { MountConnectionsDTO } from './dto/workermounts.dto';
 import { ResponsePageFilterDto } from './dto/responcefilter.dto';
 import { EventsService } from './events.service';
 import { RabbtMqService } from './rabbitmq.service';
@@ -58,82 +58,82 @@ describe('EventsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('testAgentConnetions', () => {
-    it('should call makeTestConnectionnRequest for each agent', async () => {
+  describe('testWorkerConnetions', () => {
+    it('should call makeTestConnectionnRequest for each worker', async () => {
       const testConnectionsDTO: TestConnectionsDTO = {
-        agents: [{ agentId: 'agent1' }, { agentId: 'agent2' }],
+        workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }],
         nfsConnectionDetails: {} as NFSConnectionDetails,
         sbmConnectionDetails: {} as SMBConnectionDetails,
         configId: 'config1',
       } as TestConnectionsDTO;
       const makeTestConnectionnRequestSpy = jest.spyOn(service, 'makeTestConnectionnRequest').mockResolvedValue(undefined);
 
-      await service.testAgentConnetions(testConnectionsDTO);
+      await service.testWorkerConnetions(testConnectionsDTO);
 
       expect(makeTestConnectionnRequestSpy).toHaveBeenCalledTimes(4); 
     });
   });
 
   describe('makeTestConnectionnRequest', () => {
-    it('should save requestTrack and notify agent', async () => {
+    it('should save requestTrack and notify worker', async () => {
       const requestId = uuidv4();
-      const agentId = 'agent1';
+      const workerId = 'worker1';
       const connection = {} as SMBConnectionDetails;
       const protocol = Protocol.SMB;
       const configId = 'config1';
 
       jest.spyOn(repository, 'save').mockResolvedValue({ id: '1' } as any);
-      const notifyEventToAgentSpy = jest.spyOn(service, 'notifyEventToAgent').mockResolvedValue();
+      const notifyEventToWorkerSpy = jest.spyOn(service, 'notifyEventToWorker').mockResolvedValue();
 
-      await service.makeTestConnectionnRequest(requestId, agentId, connection, protocol, configId);
+      await service.makeTestConnectionnRequest(requestId, workerId, connection, protocol, configId);
 
       expect(repository.save).toHaveBeenCalled();
-      expect(notifyEventToAgentSpy).toHaveBeenCalled();
+      expect(notifyEventToWorkerSpy).toHaveBeenCalled();
     });
   });
 
-  describe('mountAgentConnetions', () => {
-    it('should call makeAgentMountConnectionRequest for each agent and protocol', async () => {
+  describe('mountWorkerConnetions', () => {
+    it('should call makeWorkerMountConnectionRequest for each worker and protocol', async () => {
       const mountConnectionsDTO: MountConnectionsDTO = {
-        agents: [{ agentId: 'agent1' }, { agentId: 'agent2' }],
+        workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }],
         protocol: [Protocol.NFS, Protocol.SMB],
         configId: 'config1',
       };
-      const makeAgentMountConnectionRequestSpy = jest.spyOn(service, 'makeAgentMountConnectionRequest').mockResolvedValue(undefined);
+      const makeWorkerMountConnectionRequestSpy = jest.spyOn(service, 'makeWorkerMountConnectionRequest').mockResolvedValue(undefined);
 
-      await service.mountAgentConnetions(mountConnectionsDTO);
+      await service.mountWorkerConnetions(mountConnectionsDTO);
 
-      expect(makeAgentMountConnectionRequestSpy).toHaveBeenCalledTimes(4);  // 2 agents * 2 protocols
+      expect(makeWorkerMountConnectionRequestSpy).toHaveBeenCalledTimes(4);  // 2 workers * 2 protocols
     });
   });
 
-  describe('makeAgentMountConnectionRequest', () => {
-    it('should save requestTrack and notify agent', async () => {
+  describe('makeWorkerMountConnectionRequest', () => {
+    it('should save requestTrack and notify worker', async () => {
       const requestId = uuidv4();
-      const agentId = 'agent1';
+      const workerId = 'worker1';
       const protocol = Protocol.SMB;
       const configId = 'config1';
 
       jest.spyOn(repository, 'save').mockResolvedValue({ id: '1' } as any);
-      const notifyEventToAgentSpy = jest.spyOn(service, 'notifyEventToAgent').mockResolvedValue();
+      const notifyEventToWorkerSpy = jest.spyOn(service, 'notifyEventToWorker').mockResolvedValue();
 
-      await service.makeAgentMountConnectionRequest(requestId, agentId, protocol, configId);
+      await service.makeWorkerMountConnectionRequest(requestId, workerId, protocol, configId);
 
       expect(repository.save).toHaveBeenCalled();
-      expect(notifyEventToAgentSpy).toHaveBeenCalled();
+      expect(notifyEventToWorkerSpy).toHaveBeenCalled();
     });
   });
 
-  describe('notifyEventToAgent', () => {
+  describe('notifyEventToWorker', () => {
     it('should publish event to RabbitMQ', async () => {
-      const agentId = 'agent1';
+      const workerId = 'worker1';
       const socketEvents = SocketEvents.TestConnection;
       const payload = { requestId: '1' };
 
-      await service.notifyEventToAgent(agentId, socketEvents, payload);
+      await service.notifyEventToWorker(workerId, socketEvents, payload);
 
       expect(rabbitMqService.publishToExchange).toHaveBeenCalledWith({
-        agentId,
+        workerId,
         action: {
           eventType: socketEvents,
           message: payload,

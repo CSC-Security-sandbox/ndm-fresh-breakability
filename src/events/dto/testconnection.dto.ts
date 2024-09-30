@@ -13,10 +13,10 @@ class ActionDTO {
     message: string;
 }
 export class TestConnectionDTO {
-    @ApiProperty({ description: 'AgentId Id', example: '60c72b2f9b1e8b001c8b4567' })
+    @ApiProperty({ description: 'WorkerId Id', example: '60c72b2f9b1e8b001c8b4567' })
     @IsString()
     @IsNotEmpty()
-    agentId: string;
+    workerId: string;
     @ApiProperty({ description: 'Action object containing event type and message' })
     @ValidateNested()
     @Type(() => ActionDTO)

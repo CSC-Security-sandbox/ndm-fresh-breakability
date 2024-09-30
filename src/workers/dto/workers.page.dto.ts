@@ -1,9 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
-import { AgentStatus } from 'src/constants/enums';
-import { AgentEntity } from 'src/entities/agent.entity';
+import { WorkerStatus } from 'src/constants/enums';
+import { WorkerEntity } from 'src/entities/worker.entity';
 
-export class AgentsStatusPageDto {
+export class WorkersStatusPageDto {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })
   @IsOptional()
   @IsNumberString()
@@ -24,25 +24,25 @@ export class AgentsStatusPageDto {
   @IsIn(['asc', 'desc'])
   order?: 'asc' | 'desc';
 
-  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentId'})
+  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of workerId'})
   @IsOptional()
   @IsString()
-  agentId?: string;
+  workerId?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentName'})
+  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of workerName'})
   @IsOptional()
   @IsString()
-  agentName?: string;
+  workerName?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentName'})
+  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of workerName'})
   @IsOptional()
   @IsString()
   ipAddress?: string;
 
-  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of agentName', enum: AgentStatus})
+  @ApiPropertyOptional({ description: 'Field to Filter ObjectId of workerName', enum: WorkerStatus})
   @IsOptional()
-  @IsIn(Object.values(AgentStatus))
-  status?: AgentStatus;
+  @IsIn(Object.values(WorkerStatus))
+  status?: WorkerStatus;
 
   @ApiPropertyOptional({ description: 'Field to Filter ObjectId of projectId'})
   @IsOptional()
@@ -57,9 +57,9 @@ export class AgentsStatusPageDto {
 }
 
 
-export class AgentsStatusPageResponceDto {
+export class WorkerStatusPageResponceDto {
   @ApiProperty()
   total: string;
-  @ApiProperty({ type: () => AgentEntity, description: 'AgentEntity object' })
-  data: AgentEntity[];
+  @ApiProperty({ type: () => WorkerEntity, description: 'WorkerEntity object' })
+  data: WorkerEntity[];
 }

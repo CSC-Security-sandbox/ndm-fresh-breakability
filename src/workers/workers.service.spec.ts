@@ -1,21 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AgentsService } from './agents.service';
+import { WorkersService } from './workers.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AgentEntity } from 'src/entities/agent.entity';
-import { AgentsStatusPageDto } from './dto/agents.page.dto';
-import { AgentStatus } from 'src/constants/enums';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { WorkersStatusPageDto } from './dto/workers.page.dto';
+import { WorkerStatus } from 'src/constants/enums';
 
-describe('AgentsService', () => {
-  let service: AgentsService;
-  let repository: Repository<AgentEntity>;
+describe('WorkersService', () => {
+  let service: WorkersService;
+  let repository: Repository<WorkerEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        AgentsService,
+        WorkersService,
         {
-          provide: getRepositoryToken(AgentEntity),
+          provide: getRepositoryToken(WorkerEntity),
           useValue: {
             find: jest.fn(),
             count: jest.fn(),
@@ -24,46 +24,46 @@ describe('AgentsService', () => {
       ],
     }).compile();
 
-    service = module.get<AgentsService>(AgentsService);
-    repository = module.get<Repository<AgentEntity>>(getRepositoryToken(AgentEntity));
+    service = module.get<WorkersService>(WorkersService);
+    repository = module.get<Repository<WorkerEntity>>(getRepositoryToken(WorkerEntity));
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('findAllAgents', () => {
+  describe('findAllWorkers', () => {
     it('should return paginated data with count', async () => {
-      const agentsStatusPageDto: AgentsStatusPageDto = {
+      const workerStatusPageDto: WorkersStatusPageDto = {
         page: '1',
         limit: '10',
         sort: 'name',
         order: 'asc',
-        agentId: '345678',
-        agentName: 'test',
+        workerId: '345678',
+        workerName: 'test',
         clientId: 'asd',
         ipAddress: '121.12.12.2',
         projectId: '234',
-        status: AgentStatus.Online
+        status: WorkerStatus.Online
       };
-      const agents = [{ id: '1', name: 'Agent1' }, { id: '2', name: 'Agent2' }];
+      const workers = [{ id: '1', name: 'Worker1' }, { id: '2', name: 'Worker2' }];
       const total = 2;
 
-      jest.spyOn(repository, 'find').mockResolvedValueOnce(agents as any);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
       jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
-      const result = await service.findAllAgents(agentsStatusPageDto);
+      const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: agents, total });
+      expect(result).toEqual({ data: workers, total });
       expect(repository.find).toHaveBeenCalledWith({
         where: {
-          agentId: '345678',
-          agentName: 'test',
+          workerId: '345678',
+          workerName: 'test',
           clientId: 'asd',
           ipAddress: '121.12.12.2',
           projectId: '234',
-          status: AgentStatus.Online,
+          status: WorkerStatus.Online,
         },
         order: { name: 'asc' },
         skip: 0,
@@ -71,32 +71,32 @@ describe('AgentsService', () => {
       });
       expect(repository.count).toHaveBeenCalledWith({
         where: {
-          agentId: '345678',
-          agentName: 'test',
+          workerId: '345678',
+          workerName: 'test',
           clientId: 'asd',
           ipAddress: '121.12.12.2',
           projectId: '234',
-          status: AgentStatus.Online,
+          status: WorkerStatus.Online,
         },
       });
     });
 
     it('should return data without pagination if no page and limit are provided', async () => {
-      const agentsStatusPageDto: AgentsStatusPageDto = {
+      const workerStatusPageDto: WorkersStatusPageDto = {
         sort: 'name',
         order: 'asc',
         // additional filters
       };
-      const agents = [{ id: '1', name: 'Agent1' }, { id: '2', name: 'Agent2' }];
+      const workers = [{ id: '1', name: 'Worker1' }, { id: '2', name: 'Worker2' }];
       const total = 2;
 
-      jest.spyOn(repository, 'find').mockResolvedValueOnce(agents as any);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
       jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
-      const result = await service.findAllAgents(agentsStatusPageDto);
+      const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: agents, total });
+      expect(result).toEqual({ data: workers, total });
       expect(repository.find).toHaveBeenCalledWith({
         where: {},
         order: { name: 'asc' },
@@ -104,12 +104,12 @@ describe('AgentsService', () => {
       expect(repository.count).toHaveBeenCalled();
     });
 
-    it('should return an empty result when no agents are found', async () => {
-      const agentsStatusPageDto: AgentsStatusPageDto = { page: '1', limit: '10' };
+    it('should return an empty result when no workers are found', async () => {
+      const workerStatusPageDto: WorkersStatusPageDto = { page: '1', limit: '10' };
       jest.spyOn(repository, 'find').mockResolvedValueOnce([]);
       jest.spyOn(repository, 'count').mockResolvedValueOnce(0);
 
-      const result = await service.findAllAgents(agentsStatusPageDto);
+      const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
       expect(result).toEqual({ data: [], total: 0 });
@@ -118,10 +118,10 @@ describe('AgentsService', () => {
     });
 
     it('should handle repository errors', async () => {
-      const agentsStatusPageDto: AgentsStatusPageDto = { page: '1', limit: '10' };
+      const workerStatusPageDto: WorkersStatusPageDto = { page: '1', limit: '10' };
       jest.spyOn(repository, 'find').mockRejectedValueOnce(new Error('Database error'));
 
-      await expect(service.findAllAgents(agentsStatusPageDto)).rejects.toThrow('Database error');
+      await expect(service.findAllWorkers(workerStatusPageDto)).rejects.toThrow('Database error');
       expect(repository.find).toHaveBeenCalled();
     });
   });
