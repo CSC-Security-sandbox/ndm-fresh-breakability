@@ -60,4 +60,15 @@ export class JobDTO {
   @ApiProperty({ description: 'Chunk size for file transfer' })
   @IsNumber()
   chunk_size: number;
+
+  @ApiProperty({ description: 'Created by user' })
+  @IsString()
+  created_by: string;
+
+  @ApiProperty({ description: 'Updated by user' })
+  @IsString()
+  updated_by: string;
+
 }
+
+

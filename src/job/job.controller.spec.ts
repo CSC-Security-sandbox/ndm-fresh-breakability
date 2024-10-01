@@ -19,10 +19,10 @@ const mockJobEntity: JobEntity = {
   integrative_algorithms: 'alg-1',
   notification: 'email',
   chunk_size: 1024,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  createdBy: '',
-  updatedBy: ''
+  created_at: new Date(),
+  updated_at: new Date(),
+  created_by: '',
+  updated_by: ''
 };
 
 const mockJobDto: JobDTO = {
@@ -39,6 +39,8 @@ const mockJobDto: JobDTO = {
   integrative_algorithms: 'alg-1',
   notification: 'email',
   chunk_size: 1024,
+  created_by: '',
+  updated_by: ''
 };
 
 describe('JobController', () => {

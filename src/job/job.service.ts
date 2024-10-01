@@ -27,7 +27,9 @@ export class JobService {
         cron_settings: jobData?.cron_settings,
         integrative_algorithms: jobData?.integrative_algorithms,
         notification: jobData?.notification,
-        chunk_size: jobData?.chunk_size
+        chunk_size: jobData?.chunk_size,
+        created_by: jobData?.created_by,
+        updated_by: jobData?.updated_by
     });
 
     return this.jobRepo.save(jobRecord);

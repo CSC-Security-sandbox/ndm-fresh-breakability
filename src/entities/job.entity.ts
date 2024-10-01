@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 
-@Entity({ name: 'job', schema: 'job' })
+@Entity({ name: 'job' })
 export class JobEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')
