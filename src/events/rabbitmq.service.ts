@@ -9,6 +9,7 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbtMqService.name);
   private exchange = process.env.RABBITMQ_URL_EXCHANGE || 'defaultEX';
   private routingKey =  process.env.RABBITMQ_URL_ROUTING_KEY || 'socketConnetion'
+  private queue = `consumer_queue_156_K_${process.env.REPLICA_INDEX || 'default'}`;
 
   constructor(private readonly eventsGateway: EventsGateway) {
     const connection = amqp.connect([process.env.RABBITMQ_URL]);
@@ -17,13 +18,12 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const queue = `consumer_queue_156_K_${process.env.REPLICA_INDEX || 'default'}`;
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
         await channel.assertExchange(this.exchange, 'fanout', { durable: true });
-        await channel.assertQueue(queue, { durable: true });
-        await channel.bindQueue(queue, this.exchange, this.routingKey);
-        await channel.consume(queue, async (message) => {
+        await channel.assertQueue(this.queue, { durable: true });
+        await channel.bindQueue(this.queue, this.exchange, this.routingKey);
+        await channel.consume(this.queue, async (message) => {
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
@@ -49,13 +49,10 @@ export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     Logger.debug('Module destroyed called!');
-    const queue = `consumer_queue_${process.env.REPLICA_INDEX || 'default'}`;
-    const exchange = 'test';
-
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
-        await channel.unbindQueue(queue, exchange, 'your-routing-key');
-        await channel.deleteQueue(queue);
+        await channel.unbindQueue(this.queue, this.exchange, 'your-routing-key');
+        await channel.deleteQueue(this.queue);
       });
 
       this.logger.log('Queue successfully unbound from the exchange and deleted.');
