@@ -2,7 +2,6 @@ import { registerAs } from '@nestjs/config';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { DataSourceOptions } from 'typeorm';
 
-
 export default registerAs(
   'typeorm',
   (): DataSourceOptions => ({
@@ -12,6 +11,7 @@ export default registerAs(
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    schema: process.env.SCHEMA,
     synchronize: false,
     dropSchema: false,
     ssl: false,

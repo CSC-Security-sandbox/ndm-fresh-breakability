@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Logger } from '@nestjs/common';
 import { AppService } from './app.service';
 import {
   Ctx,
@@ -7,6 +7,7 @@ import {
   RmqContext,
 } from '@nestjs/microservices';
 import { InventoryService } from './services/inventory.service';
+import { MessagesName } from './enum/message.enum';
 
 @Controller()
 export class AppController {
@@ -20,15 +21,13 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @MessagePattern('createInventory')
+  @MessagePattern(MessagesName.CREATE_INVENTORY)
   public async handleMessage(@Payload() data: any, @Ctx() context: RmqContext) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    console.log('Received message:', data);
-
-    console.log('inventory creation started');
-    await this.inventoryService.createInventory(JSON.parse(data).message);
-    console.log('inventory created successfully');
+    Logger.log('inventory creation started');
+    await this.inventoryService.createInventory(JSON.parse(data));
+    Logger.log('inventory created successfully');
 
     // Acknowledge the message
     channel.ack(originalMsg);

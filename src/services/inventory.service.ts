@@ -13,15 +13,13 @@ export class InventoryService {
   ) {}
 
   async createInventory(data: createInventoryDTO) {
-    console.log(`Data to create inventory - ${JSON.stringify(data)}`);
     const inventoryRecord = this.inventoryRepo.create({
-      mountPath: data?.mountPath,
-      fileServer: data?.fileServer,
-      fileName: data?.fileName,
+      mount_path: data?.mountPath,
+      file_server: data?.fileServer,
+      file_name: data?.fileName,
       folder: data?.folder,
       metadata: JSON.stringify(data?.metadata)
     });
-
     return this.inventoryRepo.save(inventoryRecord);
   }
 
@@ -39,9 +37,9 @@ export class InventoryService {
       throw new Error(`Inventory with id ${id} not found`);
     }
   
-    inventory.mountPath = data.mountPath ?? inventory.mountPath;
-    inventory.fileServer = data.fileServer ?? inventory.fileServer;
-    inventory.fileName = data.fileName ?? inventory.fileName;
+    inventory.mount_path = data.mountPath ?? inventory.mount_path;
+    inventory.file_server = data.fileServer ?? inventory.file_server;
+    inventory.file_name = data.fileName ?? inventory.file_name;
     inventory.folder = data.folder ?? inventory.folder;
     inventory.metadata = JSON.stringify(data.metadata ?? inventory.metadata);
   

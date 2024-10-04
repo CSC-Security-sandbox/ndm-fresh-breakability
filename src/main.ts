@@ -2,13 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const appContext = await NestFactory.createApplicationContext(AppModule);
   const configService = appContext.get(ConfigService);
 
-  console.log(configService.get<string>('rabbitmq.urls'));
-  console.log(configService.get<string>('rabbitmq.queue'));
+  Logger.log(configService.get<string>('rabbitmq.urls'));
+  Logger.log(configService.get<string>('rabbitmq.queue'));
 
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     AppModule,
