@@ -57,7 +57,7 @@ export class WorkersStatusPageDto {
 }
 
 
-export class WorkerStatusPageResponceDto {
+export class WorkerStatusPageResponseDto {
   @ApiProperty()
   total: string;
   @ApiProperty({ type: () => WorkerEntity, description: 'WorkerEntity object' })

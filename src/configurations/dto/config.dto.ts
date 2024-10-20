@@ -1,19 +1,39 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, isString, IsString, IsUUID, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { ConfigurationType, Protocol, ServerType } from "src/constants/enums";
 
 export class VolumesDTO {
+
+    @ApiProperty({ description: 'UUID of Volume', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    id?: string;
+
     @ApiProperty({ description: 'Volume path', example: '/dir' })
     @IsString()
     volumePath: string;
 
-    @ApiProperty({ description: 'Is path included', example: true })
+    @ApiProperty({ description: 'Is path included', example: "true" })
     @IsBoolean()
     isIncluded: boolean;
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy?: string;
+
 }
 
 export class FileServersDTO {
+    @ApiProperty({ description: 'UUID of fileserver', example: "true" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    id?: string;
+
     @ApiProperty({ description: 'Server type', enum: ServerType, default: ServerType.other, example: ServerType.other })
     @IsEnum(ServerType)
     serverType?: ServerType = ServerType.other;
@@ -43,9 +63,15 @@ export class FileServersDTO {
     @IsArray()
     @IsUUID('all', { each: true })
     workers: string[];
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy?: string;
 }
 
-export class CreateConfigDTO {
+export class ConfigDTO {
     @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
     @IsNotEmpty()
     projectId: string;
@@ -70,4 +96,10 @@ export class CreateConfigDTO {
     @ValidateNested({ each: true })
     @Type(() => FileServersDTO)
     fileServers: FileServersDTO[];
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy?: string;
 }

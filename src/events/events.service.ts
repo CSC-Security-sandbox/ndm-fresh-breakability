@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
-import { RequestType, ResponseStatus, SocketEvents } from 'src/constants/status';
+import { WorkerCommand, ResponseStatus, SocketEvents } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/workerconnection.dto';
 import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { ResponsePageFilterDto } from './dto/responcefilter.dto';
+import { WorkerRequestDTO } from './dto/responsefilter.dto';
 import { QueueEvent } from './events.type';
-import { RabbtMqService } from './rabbitmq.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 
 @Injectable()
@@ -18,24 +18,24 @@ export class EventsService {
     constructor(
         @InjectRepository(RequestTrackEntity)
         private readonly requestTrackEntity: Repository<RequestTrackEntity>,
-        private rabbtMqService: RabbtMqService,
+        private rabbitMqService: RabbitMqService,
 
     ) {}
 
-    async testWorkerConnetions(testConnectionsDTO: TestConnectionsDTO){
+    async testWorkerConnections(testConnectionsDTO: TestConnectionsDTO){
         const requestId = uuidv4(); 
         testConnectionsDTO.workers.forEach(async worker => {
             if(testConnectionsDTO.nfsConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, worker.workerId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
+                await this.verifyWorkerConnection(requestId, worker.workerId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
             if(testConnectionsDTO.sbmConnectionDetails) 
-                await this.makeTestConnectionnRequest(requestId, worker.workerId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
+                await this.verifyWorkerConnection(requestId, worker.workerId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
         })
         return {requestId}
     }
 
-    async  makeTestConnectionnRequest(requestId: string, workerId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
+    async  verifyWorkerConnection(requestId: string, workerId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
         const requestTrack = this.requestTrackEntity.create({
-            requestType: RequestType.TestConnection,
+            requestType: WorkerCommand.TestConnection,
             status: ResponseStatus.Pending,
             requestId: requestId,
             workerId: workerId,
@@ -47,19 +47,19 @@ export class EventsService {
         this.notifyEventToWorker(workerId, SocketEvents.TestConnection, payload)
     }
 
-    async mountWorkerConnetions(mountConnectionsDTO: MountConnectionsDTO){
+    async mountWorkerConnections(mountConnectionsDTO: MountConnectionsDTO){
         const requestId = uuidv4(); 
         mountConnectionsDTO.workers.forEach(async worker => {
             mountConnectionsDTO.protocol.forEach(protocol => {
-                this.makeWorkerMountConnectionRequest(requestId, worker.workerId, protocol, mountConnectionsDTO.configId)
+                this.fetchExportPath(requestId, worker.workerId, protocol, mountConnectionsDTO.configId)
             });
         })
         return {requestId}
     }
 
-    async makeWorkerMountConnectionRequest(requestId: string, workerId:string,  protocol: Protocol, configId?: string | undefined) {
+    async fetchExportPath(requestId: string, workerId:string,  protocol: Protocol, configId?: string | undefined) {
         const requestTrack = this.requestTrackEntity.create({
-            requestType: RequestType.Volumes,
+            requestType: WorkerCommand.Volumes,
             status: ResponseStatus.Pending,
             requestId: requestId,
             workerId: workerId,
@@ -72,19 +72,19 @@ export class EventsService {
     }
 
     async notifyEventToWorker(workerId:string, socketEvents: SocketEvents, payload: any) {
-        const queuEvent:QueueEvent = {
+        const queueEvent:QueueEvent = {
             workerId: workerId,
             action: {
                 eventType: socketEvents,
                 message: payload
             }
         }
-        this.rabbtMqService.publishToExchange(queuEvent)
+        this.rabbitMqService.publishToExchange(queueEvent)
         this.logger.log(`${socketEvents} is published for ${workerId}`)
     }
 
-    async findAllResponse(responsePageFilterDto: ResponsePageFilterDto) {
-        const { page, limit, sort = 'createdAt', order = 'ASC', deserialize , ...filter } = responsePageFilterDto;
+    async processWorkerResponses(workerRequestDTO: WorkerRequestDTO) {
+        const { page, limit, sort = 'createdAt', order = 'ASC', deserialize , ...filter } = workerRequestDTO;
         
         const findOptions: FindManyOptions<RequestTrackEntity> = {
           where: filter, order: { [sort]: order }, 

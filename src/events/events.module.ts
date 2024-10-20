@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsGateway } from './events.gateway';
-import { RabbtMqService } from './rabbitmq.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { WorkerEntity } from 'src/entities/worker.entity';
@@ -13,7 +13,7 @@ import { EventsService } from './events.service';
   imports: [
     TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity]),],
   exports: [EventsGateway],
-  providers: [EventsGateway, RabbtMqService, EventsService],
+  providers: [EventsGateway, RabbitMqService, EventsService],
   controllers: [EventsController]
 })
 export class EventsModule {}

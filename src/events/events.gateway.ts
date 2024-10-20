@@ -52,9 +52,13 @@ export class EventsGateway implements OnGatewayInit{
 
     const worker = await this.WorkerEntity.findOne({where: {workerId: workerId}})
     if(worker) {
-      this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
-      await this.WorkerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
-      this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
+      try{
+        this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
+        await this.WorkerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
+        this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
+      }catch(e){
+        this.logger.error(`Error occurred during worker details update`, e);
+      }
       return
     }
     
@@ -65,8 +69,13 @@ export class EventsGateway implements OnGatewayInit{
       client.disconnect()
       return
     }
+    try{
     const registerWorker =  this.WorkerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
     await this.WorkerEntity.save(registerWorker)
+    }
+    catch(e) {
+      this.logger.error(`Error occurred during worker registration`, e);
+    }
   }
 
   async handleDisconnect(client: Socket) {
@@ -82,11 +91,15 @@ export class EventsGateway implements OnGatewayInit{
   @SubscribeMessage('acknowledgement')
   async handleMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
-    if(workerAckResponse.error) 
-      await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
-    else
-      await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
-    this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
+    try{
+      if(workerAckResponse.error) 
+        await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
+      else
+        await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
+      this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
+    }catch(e) {
+      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
+    }
   }
 
   sendMessage(eventName: string, payload: any) {
@@ -95,8 +108,7 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   sendToClient(workerId: string, eventType: string, message: any,) {
-    this.logger.log('workerId', workerId)
-    this.logger.log('workerId', this.clients.get(workerId))
+    this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}`)
     const clientId = this.clients.get(workerId);
     if (clientId) {
       this.logger.log('sendToClient',{workerId, eventType, message})

@@ -1,15 +1,16 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigurationType, Protocol, ServerType } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { ConfigurationService } from './configuration.service';
-import { v4 as uuidv4 } from 'uuid';
 import { Repository } from 'typeorm';
-import { ConfigUpdateDTO } from './dto/updateconfig.dto';
-import { ConfigurationType, Protocol, ServerType } from 'src/constants/enums';
+import { v4 as uuidv4 } from 'uuid';
+import { ConfigurationService } from './configuration.service';
+import { ConfigDTO } from './dto/config.dto';
+
 
 // Mock data for entities
 const mockConfig = { id: uuidv4(), configName: 'Test Config', configType: 'Type1' };
@@ -38,6 +39,7 @@ const mockVolumeRepository = {
 
 const mockWorkerRepository = {
   findByIds: jest.fn(),
+  find: jest.fn(),
 };
 
 describe('ConfigurationService', () => {
@@ -118,7 +120,7 @@ describe('ConfigurationService', () => {
     it('should create and save a new configuration', async () => {
       mockConfigRepository.create.mockReturnValue(mockConfig);
       mockConfigRepository.save.mockResolvedValue(mockConfig);
-      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
+      mockWorkerRepository.find.mockResolvedValue([mockWorker]);
 
       const createConfigDTO = {
         projectId:"123456",
@@ -150,7 +152,7 @@ describe('ConfigurationService', () => {
       mockConfigRepository.save.mockResolvedValue(mockConfig);
       mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
-      const updateConfigDTO:ConfigUpdateDTO = {
+      const updateConfigDTO:ConfigDTO = {
         projectId:"123456",
         createdBy: "123123",
         stage:"",

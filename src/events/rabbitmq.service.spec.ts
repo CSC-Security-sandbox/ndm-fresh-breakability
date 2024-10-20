@@ -2,12 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventsGateway } from './events.gateway';
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
-import { RabbtMqService } from './rabbitmq.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 jest.mock('amqp-connection-manager');
 
-describe('RabbtMqService', () => {
-  let service: RabbtMqService;
+describe('RabbitMqService', () => {
+  let service: RabbitMqService;
   let mockChannelWrapper: jest.Mocked<ChannelWrapper>;
   let mockEventsGateway: jest.Mocked<EventsGateway>;
 
@@ -24,12 +24,12 @@ describe('RabbtMqService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        RabbtMqService,
+        RabbitMqService,
         { provide: EventsGateway, useValue: mockEventsGateway },
       ],
     }).compile();
 
-    service = module.get<RabbtMqService>(RabbtMqService);
+    service = module.get<RabbitMqService>(RabbitMqService);
   });
 
   it('should be defined', () => {
@@ -75,7 +75,7 @@ describe('RabbtMqService', () => {
       await service.publishToExchange(message);
 
       expect(mockChannelWrapper.publish).toHaveBeenCalledWith(
-        'testasd',
+        'defaultEX',
         'socketConnetion',
         Buffer.from(JSON.stringify(message)),
         { persistent: true }

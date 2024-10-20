@@ -2,47 +2,50 @@ import { Body, Controller, Get, Logger, Post, Query, ValidationPipe } from '@nes
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TestConnectionsDTO } from './dto/workerconnection.dto';
 import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { ResponsePageFilterDto, ResponsePageFilterResponseDto } from './dto/responcefilter.dto';
+import { WorkerRequestDTO, WorkerResponseDto } from './dto/responsefilter.dto';
 import { EventsService } from './events.service';
-import { RabbtMqService } from './rabbitmq.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 @ApiTags("SocketEvents")
-@Controller('events')
+@Controller('workers')
 export class EventsController {
     private logger: Logger =  new  Logger (EventsController.name)
     constructor(
-        private rabbtMqService: RabbtMqService,
+        // private rabbitMqService: RabbitMqService,
         private eventsService: EventsService
     ) {}
 
-    @Post('/test-connection')
+    @Post('/event/test-connection')
     @ApiOperation({ summary: 'Test Worker Connections ' })
     @ApiCreatedResponse({ description: 'Test Worker Connection Request Created Successfully.', type: String })
-    async testWorkerConnetions(@Body() testConnectionsDTO: TestConnectionsDTO) {
-        return this.eventsService.testWorkerConnetions(testConnectionsDTO)
+    async testWorkerConnections(@Body() testConnectionsDTO: TestConnectionsDTO) {
+        return this.eventsService.testWorkerConnections(testConnectionsDTO)
     }
 
     @Get('/response')
     @ApiOperation({ summary: 'Get a Response list of Workers',  description: 'Returns a list of Response based on the provided pagination parameters.'})
-    @ApiOkResponse({ description: 'The list of Response has been retrieved successfully.',  type: ResponsePageFilterResponseDto})
+    @ApiOkResponse({ description: 'The list of Response has been retrieved successfully.',  type: WorkerResponseDto})
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    async getResponse(@Query(new ValidationPipe({ transform: true, whitelist: true }))  responsePageFilterDto: ResponsePageFilterDto) {
-        return this.eventsService.findAllResponse(responsePageFilterDto)
+    async getWorkerResponse(@Query(new ValidationPipe({ transform: true, whitelist: true }))  responsePageFilterDto: WorkerRequestDTO) {
+        return this.eventsService.processWorkerResponses(responsePageFilterDto)
     }
 
-    @Post('/mounts')
+    @Post('/event/mounts')
     @ApiOperation({ summary: 'Test Worker mounts ' })
     @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
-    async mountsWorkerConnetions(@Body() mountConnectionsDTO: MountConnectionsDTO) {
-        return this.eventsService.mountWorkerConnetions(mountConnectionsDTO)
+    async fetchExportPath(@Body() mountConnectionsDTO: MountConnectionsDTO) {
+        return this.eventsService.mountWorkerConnections(mountConnectionsDTO)
     }
 
     // @Post('/test')
-    // async sendMessage(@Body() testConnectionDTO: TestConnectionDTO) {
+    // async sendMessage(@Body() testConnectionDTO: WorkerConnectionDTO) {
     //     this.logger.debug(testConnectionDTO)
-    //     this.rabbtMqService.publishToExchange(testConnectionDTO as QueueEvent)
+    //     this.rabbitMqService.publishToExchange(testConnectionDTO as QueueEvent)
     // }  
 
 }
+
+
+

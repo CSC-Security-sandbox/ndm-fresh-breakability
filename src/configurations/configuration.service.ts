@@ -4,11 +4,10 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { CreateConfigDTO } from './dto/createconfig.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { ConfigUpdateDTO } from './dto/updateconfig.dto';
+import { ConfigDTO } from './dto/config.dto';
 
 
 @Injectable()
@@ -68,11 +67,11 @@ export class ConfigurationService {
         return config
     }
 
-    async createConfiguration(createConfig: CreateConfigDTO) {
+    async createConfiguration(createConfig: ConfigDTO) {
         const userId = uuidv4();
     
         const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
-            const workers = await this.WorkerEntity.findByIds(fileServer.workers);
+            const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
 
             const volumes = fileServer.volumes.map(volume => 
                 this.volumeEntity.create({
@@ -87,7 +86,7 @@ export class ConfigurationService {
                 serverType: fileServer.serverType,
                 workers: workers,
                 createdBy: userId,
-                protocal: fileServer.protocol,  
+                protocol: fileServer.protocol,  
                 userName: fileServer.userName,
                 volumes: volumes
             });
@@ -105,7 +104,7 @@ export class ConfigurationService {
         return await this.configEntity.save(config);
     }
 
-    async updateConfiguration(id: string, updateConfig: ConfigUpdateDTO) {
+    async updateConfiguration(id: string, updateConfig: ConfigDTO) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
@@ -131,7 +130,7 @@ export class ConfigurationService {
         config.updatedBy = userId
     
         const fileServerPromises = updateConfig.fileServers.map(async (fileServer) => {
-            const workers = await this.WorkerEntity.findByIds(fileServer.workers);
+            const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
 
             const volumes = fileServer.volumes.map(volume => 
                 this.volumeEntity.create({
@@ -149,7 +148,7 @@ export class ConfigurationService {
                 serverType: fileServer.serverType,
                 workers: workers,
                 createdBy: fileServer.createdBy || userId,
-                protocal: fileServer.protocol,  
+                protocol: fileServer.protocol,  
                 userName: fileServer.userName,
                 volumes: volumes,
                 updatedBy: userId

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { WorkersStatusPageDto, WorkerStatusPageResponceDto } from './dto/workers.page.dto';
+import { WorkersStatusPageDto, WorkerStatusPageResponseDto } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
 
 
@@ -12,7 +12,7 @@ export class WorkersController {
     constructor(private workersService: WorkersService) {}
 
     @ApiOperation({ summary: 'Get a paginated list of Workers',  description: 'Returns a list of Workers based on the provided pagination parameters.'})
-    @ApiOkResponse({ description: 'The list of Workers has been retrieved successfully.',  type: WorkerStatusPageResponceDto})
+    @ApiOkResponse({ description: 'The list of Workers has been retrieved successfully.',  type: WorkerStatusPageResponseDto})
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })

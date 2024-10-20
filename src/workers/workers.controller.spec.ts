@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
-import { WorkersStatusPageDto, WorkerStatusPageResponceDto } from './dto/workers.page.dto';
-import { ValidationPipe } from '@nestjs/common';
+import { WorkersStatusPageDto,  } from './dto/workers.page.dto';
 
 describe('WorkersController', () => {
   let controller: WorkersController;

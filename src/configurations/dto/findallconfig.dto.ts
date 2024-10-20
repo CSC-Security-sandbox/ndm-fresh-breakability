@@ -42,7 +42,7 @@ export class FindallConfigPageDto {
 }
 
 
-export class ConfigResponceDto {
+export class ConfigResponseDto {
   @ApiProperty()
   total: string;
   @ApiProperty({ type: () => WorkerEntity, description: 'WorkerEntity object' })

@@ -1,15 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { WorkerStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
-import { WorkerEntity } from 'src/entities/worker.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
 import { EventsGateway } from './events.gateway';
-import { getRepositoryToken } from '@nestjs/typeorm';
 
 jest.mock('src/auth/ws-jwt.middleware');
 jest.mock('src/auth/ws-jwt/ws-jwt.guard');
@@ -121,7 +120,7 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { workerId, workerName, projectId };
+      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
 
       const mockWorker = { workerId, projectId, workerName, ipAddress: '127.0.0.1', status: WorkerStatus.Online, clientId: 'socket-id' };
       (mockWorkerRepository.findOne as jest.Mock).mockResolvedValue(mockWorker);
@@ -139,7 +138,7 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { workerId, workerName, projectId };
+      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
 
       (mockProjectRepository.findOne as jest.Mock).mockResolvedValue(null);
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue({ id: projectId } as any);
@@ -154,7 +153,7 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'invalid-project-id';
-      mockSocket.handshake.query = { workerId, workerName, projectId };
+      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
 
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue(null);
 
@@ -169,7 +168,7 @@ describe('EventsGateway', () => {
     it('should handle disconnection and update worker status', async () => {
       const workerId = 'worker-id';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { workerId, projectId };
+      mockSocket.handshake.query = { agentId:workerId, projectId };
 
       (mockWorkerRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 

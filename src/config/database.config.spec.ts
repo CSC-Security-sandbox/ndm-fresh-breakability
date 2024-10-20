@@ -38,7 +38,7 @@ describe('TypeORM Config', () => {
       username: 'testuser',
       password: 'testpassword',
       database: 'testdb',
-      synchronize: true,
+      synchronize: false,
       dropSchema: false,
       ssl: {
         rejectUnauthorized: false,
@@ -54,6 +54,7 @@ describe('TypeORM Config', () => {
         ProjectEntity,
         JobEntity,
       ],
+      migrations: []
     };
 
     expect(config).toEqual(expectedConfig);

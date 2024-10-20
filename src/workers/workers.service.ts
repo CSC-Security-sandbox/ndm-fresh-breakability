@@ -30,7 +30,7 @@ export class WorkersService {
       total = await this.WorkerEntity.count({ where: filter });
     } else {
       data = await this.WorkerEntity.find(findOptions);
-      total = await this.WorkerEntity.count();
+      total = await this.WorkerEntity.count({ where: filter });
     }
     return { data, total };
   }

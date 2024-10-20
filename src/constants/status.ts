@@ -4,7 +4,7 @@ export enum ResponseStatus {
     Error = 'Error'
 }
 
-export enum RequestType {
+export enum WorkerCommand {
     TestConnection = 'TestConnection',
     Volumes = 'Volumes'
 }

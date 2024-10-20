@@ -1,7 +1,7 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, JoinColumn, ManyToOne } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
-import { RequestType, ResponseStatus } from 'src/constants/status';
+import { WorkerCommand, ResponseStatus } from 'src/constants/status';
 import { WorkerEntity } from './worker.entity';
 import { Base } from './base.entity';
 
@@ -12,8 +12,8 @@ export class RequestTrackEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Type of the request' })
-  @Column({ type: 'enum', enum: RequestType, nullable: false, name:'request_type' })
-  requestType: RequestType;
+  @Column({ type: 'enum', enum: WorkerCommand, nullable: false, name:'request_type' })
+  requestType: WorkerCommand;
 
   @ApiProperty({ description: 'data' })
   @Column({ type: 'text', nullable: true,  name:'response' })

@@ -4,16 +4,15 @@ import { ConfirmChannel } from 'amqplib';
 import { EventsGateway } from "./events.gateway";
 
 @Injectable()
-export class RabbtMqService implements OnModuleInit, OnModuleDestroy {
+export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private channelWrapper: ChannelWrapper;
-  private readonly logger = new Logger(RabbtMqService.name);
+  private readonly logger = new Logger(RabbitMqService.name);
   private exchange = process.env.RABBITMQ_URL_EXCHANGE || 'defaultEX';
   private routingKey =  process.env.RABBITMQ_URL_ROUTING_KEY || 'socketConnetion'
   private queue = `consumer_queue_156_K_${process.env.REPLICA_INDEX || 'default'}`;
 
   constructor(private readonly eventsGateway: EventsGateway) {
     const connection = amqp.connect([process.env.RABBITMQ_URL]);
-    // const connection = amqp.connect([`amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@${process.env.RABBITMQ_HOST}:${process.env.RABBITMQ_PORT}`]);
     this.channelWrapper = connection.createChannel();
   }
 

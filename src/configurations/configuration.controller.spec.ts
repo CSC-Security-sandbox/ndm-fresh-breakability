@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
-import { CreateConfigDTO } from './dto/createconfig.dto';
-import { ConfigResponceDto, FindallConfigPageDto } from './dto/findallconfig.dto';
-import { ConfigUpdateDTO } from './dto/updateconfig.dto';
+
+import { FindallConfigPageDto } from './dto/findallconfig.dto';
+
 import { ConfigurationType } from 'src/constants/enums';
+import { ConfigDTO } from './dto/config.dto';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
@@ -39,7 +40,7 @@ describe('ConfigurationController', () => {
 
   describe('createConfiguration', () => {
     it('should create a new configuration', async () => {
-      const createConfigDTO: CreateConfigDTO = {
+      const createConfigDTO: ConfigDTO = {
         configName: "testConfig",
         configType: ConfigurationType.file,
         fileServers: [],
@@ -68,7 +69,7 @@ describe('ConfigurationController', () => {
 
       mockConfigurationService.getAllConfig.mockResolvedValue(configList);
 
-      const result = await controller.getConfigs(findAllConfigPageDto);
+      const result = await controller.getAllConfiguration(findAllConfigPageDto);
       expect(result).toEqual(configList);
       expect(service.getAllConfig).toHaveBeenCalledWith(findAllConfigPageDto);
     });
@@ -93,7 +94,7 @@ describe('ConfigurationController', () => {
       const configId = '1';
 
 
-      const updateConfigDTO: ConfigUpdateDTO = {
+      const updateConfigDTO: ConfigDTO = {
         configName: "testConfigUpdate",
         configType: ConfigurationType.file,
         fileServers: [],

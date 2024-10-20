@@ -20,9 +20,9 @@ export class FileServerEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'config_type' })
     userName: string;
 
-    @ApiProperty({ description: 'protocal' })
-    @Column({ type: 'enum', enum: Protocol, name:'protocal' })
-    protocal: Protocol;
+    @ApiProperty({ description: 'protocol' })
+    @Column({ type: 'enum', enum: Protocol, name:'protocol' })
+    protocol: Protocol;
 
     @Column({ type: 'enum', enum: ServerType, name:'server_type' })
     serverType: ServerType;

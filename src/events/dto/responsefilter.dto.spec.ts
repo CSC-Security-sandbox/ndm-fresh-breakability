@@ -1,24 +1,24 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { RequestType, ResponseStatus } from 'src/constants/status';
+import { WorkerCommand, ResponseStatus } from 'src/constants/status';
 import { Protocol } from 'src/constants/enums';
-import { ResponsePageFilterDto } from './responcefilter.dto';
+import { WorkerRequestDTO } from './responsefilter.dto';
 
-describe('ResponsePageFilterDto', () => {
+describe('WorkerRequestDTO', () => {
   it('should succeed when all valid fields are provided', async () => {
-    const validData: ResponsePageFilterDto = {
+    const validData: WorkerRequestDTO = {
       page: '1',
       limit: '10',
       sort: 'createdAt',
       order: 'asc',
-      requestType: RequestType.TestConnection,
+      requestType: WorkerCommand.TestConnection,
       status: ResponseStatus.Pending,
       protocol: Protocol.NFS,
       requestId: 'req123',
       workerId: 'worker456',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
+    const dto = plainToInstance(WorkerRequestDTO, validData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBe(0);
@@ -29,7 +29,7 @@ describe('ResponsePageFilterDto', () => {
       page: 'abc',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
+    const dto = plainToInstance(WorkerRequestDTO, invalidData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -41,7 +41,7 @@ describe('ResponsePageFilterDto', () => {
       limit: 'xyz',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
+    const dto = plainToInstance(WorkerRequestDTO, invalidData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -53,7 +53,7 @@ describe('ResponsePageFilterDto', () => {
       sort: 'invalidField',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
+    const dto = plainToInstance(WorkerRequestDTO, invalidData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -65,7 +65,7 @@ describe('ResponsePageFilterDto', () => {
       order: 'invalidOrder',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
+    const dto = plainToInstance(WorkerRequestDTO, invalidData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -75,7 +75,7 @@ describe('ResponsePageFilterDto', () => {
   it('should succeed when optional fields are not provided', async () => {
     const validData = {};
 
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
+    const dto = plainToInstance(WorkerRequestDTO, validData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBe(0); // Validation should pass
@@ -86,7 +86,7 @@ describe('ResponsePageFilterDto', () => {
       deserialize: 'true',
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, validData);
+    const dto = plainToInstance(WorkerRequestDTO, validData);
     const errors = await validate(dto as any);
 
     expect(errors.length).toBe(0);
@@ -98,7 +98,7 @@ describe('ResponsePageFilterDto', () => {
       requestId: 12345, 
     };
 
-    const dto = plainToInstance(ResponsePageFilterDto, invalidData);
+    const dto = plainToInstance(WorkerRequestDTO, invalidData);
     const errors = await validate(dto as any);
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0].constraints).toHaveProperty('isString');

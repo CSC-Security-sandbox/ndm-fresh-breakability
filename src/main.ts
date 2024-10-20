@@ -9,14 +9,13 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   
-  app.setGlobalPrefix('api/v1/config')
+  app.setGlobalPrefix('api/v1')
   
   app.useGlobalPipes(new ValidationPipe())
   const config = new DocumentBuilder()
   .setTitle('Config service')
-  .setDescription('Configuration Mangement')
+  .setDescription('Configuration Management')
   .setVersion('1.0')
-  .addTag('config')
   .build();
   
   const document = SwaggerModule.createDocument(app, config);

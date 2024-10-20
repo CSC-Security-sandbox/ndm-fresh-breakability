@@ -12,7 +12,7 @@ class ActionDTO {
     @IsNotEmpty()
     message: string;
 }
-export class TestConnectionDTO {
+export class WorkerConnectionDTO {
     @ApiProperty({ description: 'WorkerId Id', example: '60c72b2f9b1e8b001c8b4567' })
     @IsString()
     @IsNotEmpty()

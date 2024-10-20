@@ -2,11 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { Protocol } from 'src/constants/enums';
-import { RequestType, ResponseStatus } from 'src/constants/status';
+import { WorkerCommand, ResponseStatus } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 
 
-export class ResponsePageFilterDto {
+export class WorkerRequestDTO {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })
   @IsOptional()
   @IsNumberString()
@@ -28,13 +28,13 @@ export class ResponsePageFilterDto {
   order?: 'asc' | 'desc';
 
   @ApiPropertyOptional({
-    description: 'RequestType of the response',
-    example: RequestType.TestConnection,
-    enum: RequestType,
+    description: 'WorkerCommand of the response',
+    example: WorkerCommand.TestConnection,
+    enum: WorkerCommand,
   })
   @IsOptional()
-  @IsIn(Object.values(RequestType))
-  requestType?: RequestType;
+  @IsIn(Object.values(WorkerCommand))
+  requestType?: WorkerCommand;
 
   @ApiPropertyOptional({
     description: 'Status of the response',
@@ -73,7 +73,7 @@ export class ResponsePageFilterDto {
 }
 
 
-export class ResponsePageFilterResponseDto {
+export class WorkerResponseDto {
   @ApiProperty()
   total: string;
   @ApiProperty({ type: () => RequestTrackEntity, description: 'RequestTrack object' })

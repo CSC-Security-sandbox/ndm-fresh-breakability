@@ -8,9 +8,9 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/workerconnection.dto';
 import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { ResponsePageFilterDto } from './dto/responcefilter.dto';
+import { WorkerRequestDTO } from './dto/responsefilter.dto';
 import { EventsService } from './events.service';
-import { RabbtMqService } from './rabbitmq.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 class MockRepositor<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -24,7 +24,7 @@ class MockRepositor<T> extends Repository<T> {
 describe('EventsService', () => {
   let service: EventsService;
   let repository: MockRepositor<RequestTrackEntity>;
-  let rabbitMqService: RabbtMqService;
+  let rabbitMqService: RabbitMqService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -40,7 +40,7 @@ describe('EventsService', () => {
           },
         },
         {
-          provide: RabbtMqService,
+          provide: RabbitMqService,
           useValue: {
             publishToExchange: jest.fn(),
           },
@@ -50,7 +50,7 @@ describe('EventsService', () => {
 
     service = module.get<EventsService>(EventsService);
     repository = module.get<MockRepositor<RequestTrackEntity>>(getRepositoryToken(RequestTrackEntity));
-    rabbitMqService = module.get<RabbtMqService>(RabbtMqService);
+    rabbitMqService = module.get<RabbitMqService>(RabbitMqService);
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});  
   });
 
@@ -58,23 +58,23 @@ describe('EventsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('testWorkerConnetions', () => {
-    it('should call makeTestConnectionnRequest for each worker', async () => {
+  describe('testWorkerConnections', () => {
+    it('should call verifyWorkerConnection for each worker', async () => {
       const testConnectionsDTO: TestConnectionsDTO = {
         workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }],
         nfsConnectionDetails: {} as NFSConnectionDetails,
         sbmConnectionDetails: {} as SMBConnectionDetails,
         configId: 'config1',
       } as TestConnectionsDTO;
-      const makeTestConnectionnRequestSpy = jest.spyOn(service, 'makeTestConnectionnRequest').mockResolvedValue(undefined);
+      const makeTestConnectionnRequestSpy = jest.spyOn(service, 'verifyWorkerConnection').mockResolvedValue(undefined);
 
-      await service.testWorkerConnetions(testConnectionsDTO);
+      await service.testWorkerConnections(testConnectionsDTO);
 
       expect(makeTestConnectionnRequestSpy).toHaveBeenCalledTimes(4); 
     });
   });
 
-  describe('makeTestConnectionnRequest', () => {
+  describe('verifyWorkerConnection', () => {
     it('should save requestTrack and notify worker', async () => {
       const requestId = uuidv4();
       const workerId = 'worker1';
@@ -85,29 +85,29 @@ describe('EventsService', () => {
       jest.spyOn(repository, 'save').mockResolvedValue({ id: '1' } as any);
       const notifyEventToWorkerSpy = jest.spyOn(service, 'notifyEventToWorker').mockResolvedValue();
 
-      await service.makeTestConnectionnRequest(requestId, workerId, connection, protocol, configId);
+      await service.verifyWorkerConnection(requestId, workerId, connection, protocol, configId);
 
       expect(repository.save).toHaveBeenCalled();
       expect(notifyEventToWorkerSpy).toHaveBeenCalled();
     });
   });
 
-  describe('mountWorkerConnetions', () => {
-    it('should call makeWorkerMountConnectionRequest for each worker and protocol', async () => {
+  describe('mountWorkerConnections', () => {
+    it('should call fetchExportPath for each worker and protocol', async () => {
       const mountConnectionsDTO: MountConnectionsDTO = {
         workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }],
         protocol: [Protocol.NFS, Protocol.SMB],
         configId: 'config1',
       };
-      const makeWorkerMountConnectionRequestSpy = jest.spyOn(service, 'makeWorkerMountConnectionRequest').mockResolvedValue(undefined);
+      const makeWorkerMountConnectionRequestSpy = jest.spyOn(service, 'fetchExportPath').mockResolvedValue(undefined);
 
-      await service.mountWorkerConnetions(mountConnectionsDTO);
+      await service.mountWorkerConnections(mountConnectionsDTO);
 
       expect(makeWorkerMountConnectionRequestSpy).toHaveBeenCalledTimes(4);  // 2 workers * 2 protocols
     });
   });
 
-  describe('makeWorkerMountConnectionRequest', () => {
+  describe('fetchExportPath', () => {
     it('should save requestTrack and notify worker', async () => {
       const requestId = uuidv4();
       const workerId = 'worker1';
@@ -117,7 +117,7 @@ describe('EventsService', () => {
       jest.spyOn(repository, 'save').mockResolvedValue({ id: '1' } as any);
       const notifyEventToWorkerSpy = jest.spyOn(service, 'notifyEventToWorker').mockResolvedValue();
 
-      await service.makeWorkerMountConnectionRequest(requestId, workerId, protocol, configId);
+      await service.fetchExportPath(requestId, workerId, protocol, configId);
 
       expect(repository.save).toHaveBeenCalled();
       expect(notifyEventToWorkerSpy).toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('EventsService', () => {
 
   describe('findAllResponse', () => {
     it('should return paginated results if page and limit are provided', async () => {
-      const responsePageFilterDto: ResponsePageFilterDto = {
+      const responsePageFilterDto: WorkerRequestDTO = {
         page: '1',
         limit: '10',
         sort: 'createdAt',
@@ -154,19 +154,19 @@ describe('EventsService', () => {
       jest.spyOn(repository, 'find').mockResolvedValue([{ id: '1' } as any]);
       jest.spyOn(repository, 'count').mockResolvedValue(1);
 
-      const result = await service.findAllResponse(responsePageFilterDto);
+      const result = await service.processWorkerResponses(responsePageFilterDto);
 
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
     });
 
     it('should return all results if page and limit are not provided', async () => {
-      const responsePageFilterDto: ResponsePageFilterDto = {};
+      const responsePageFilterDto: WorkerRequestDTO = {};
 
       jest.spyOn(repository, 'find').mockResolvedValue([{ id: '1' } as any]);
       jest.spyOn(repository, 'count').mockResolvedValue(1);
 
-      const result = await service.findAllResponse(responsePageFilterDto);
+      const result = await service.processWorkerResponses(responsePageFilterDto);
 
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
