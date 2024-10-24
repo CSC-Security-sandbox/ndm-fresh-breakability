@@ -4,8 +4,8 @@ import { JobEntity } from '../entities/job.entity';
 import { JobDTO } from '../dto/job.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-@ApiTags('job')
-@Controller('job')
+@ApiTags('jobs')
+@Controller('jobs')
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 
@@ -14,6 +14,13 @@ export class JobController {
   @Post()
   async createJob(@Body() jobData: JobDTO): Promise<JobEntity> {
     return await this.jobService.createJob(jobData);
+  }
+
+  @ApiOperation({ summary: 'Get all jobs' })
+  @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
+  @Get()
+  async getAllJob(): Promise<JobEntity[]> {
+    return await this.jobService.getAllJob();
   }
 
   @ApiOperation({ summary: 'Get job by ID' })
@@ -43,10 +50,4 @@ export class JobController {
     return await this.jobService.deleteJob(id);
   }
 
-  @ApiOperation({ summary: 'Get all jobs' })
-  @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
-  @Get()
-  async getAllJob(): Promise<JobEntity[]> {
-    return await this.jobService.getAllJob();
-  }
 }
