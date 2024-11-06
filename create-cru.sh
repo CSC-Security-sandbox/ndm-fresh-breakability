@@ -38,7 +38,8 @@ REALM_PAYLOAD=$(node -pe "
     loginWithEmailAllowed: true,
     verifyEmail: false,
     duplicateEmailsAllowed: false,
-    resetPasswordAllowed: true
+    resetPasswordAllowed: true,
+    loginTheme: 'datamigrate'
   });
 ")
 
@@ -73,7 +74,8 @@ CLIENT_PAYLOAD=$(node -pe "
       'post.logout.redirect.uris': 'http://localhost:3111/dashboard',
       'client.auth.method': 'client_secret',
       'access.token.lifespan': 3600
-    }
+    },
+    loginTheme: 'datamigrate'
   });
 ")
 
@@ -133,8 +135,8 @@ MAPPER_PAYLOAD=$(node -pe "
     protocol: 'openid-connect',
     protocolMapper: 'oidc-usermodel-attribute-mapper',
     consentRequired: false,
-    userAttribute: 'user', // Your claim name
-    claimName: 'user', // The name you want to use in the access token
+    userAttribute: 'user',
+    claimName: 'user',
     jsonTypeLabel: 'String',
     addToAccessToken: true,
     addToIdToken: false,
