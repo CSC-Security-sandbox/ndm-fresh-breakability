@@ -9,7 +9,7 @@
 
             <div class="bg-white flex flex-grow items-center justify-center p-8">
                 <div class="md:w-6/12">
-                    <div class="text-4xl">Hi! Welcome to DoCUS</div>
+                    <div class="text-4xl">Hi! Welcome to Datamigrate</div>
                     <div class="text-base-secondary text-sm leading-tight py-2">Build strong connections with customers to enhance brand loyalty and drive business growth.</div>
                     <div>
                         <form 
@@ -89,17 +89,7 @@
                                 </span>
                             </#if>
 
-                            <#--  Registration button  -->
-                            <div class="my-2 w-full">
-                                <div id="kc-form-registration" class="${properties.kcFormGroupClass!}" style="display: block; text-align: center; ">
-                                    <a 
-                                        tabindex="6" 
-                                        class="${properties.kcButtonClass!} ${properties.kcButtonDefaultClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" 
-                                        href="${url.registrationUrl}"
-                                        style="display: block;"
-                                    >${msg("doRegister")}</a>
-                                </div>
-                            </div>
+                            
                         </form>
                     </div>
                 </div>
