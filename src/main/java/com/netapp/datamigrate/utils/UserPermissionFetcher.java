@@ -7,9 +7,9 @@ import java.util.*;
 import java.util.logging.Logger;
 
 public class UserPermissionFetcher {
-    private static final String JDBC_URL = "jdbc:postgresql://host.docker.internal:5432/datamigrate";
-    private static final String DB_USER = "dmadmin";
-    private static final String DB_PASSWORD = "dmadmin";
+    private static final String JDBC_URL = System.getenv("KC_DB_URL");
+    private static final String DB_USER = System.getenv("KC_DB_USERNAME");
+    private static final String DB_PASSWORD = System.getenv("KC_DB_PASSWORD");
     private static final Logger logger = Logger.getLogger(UserPermissionFetcher.class.getName());
 
     public static Map<String, Object> getUserPermissions(UserSessionModel userSession) {
