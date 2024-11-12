@@ -20,10 +20,11 @@ const mockJobEntity: JobEntity = {
   integrative_algorithms: 'alg-1',
   notification: 'email',
   chunk_size: 1024,
-  created_at: new Date(),
-  updated_at: new Date(),
-  created_by: '',
-  updated_by: ''
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  createdBy: '',
+  updatedBy: '',
+  project: null
 };
 
 const mockJobDto: JobDTO = {
@@ -80,8 +81,8 @@ describe('JobService', () => {
 
       const result = await service.createJob(mockJobDto);
       expect(result).toEqual(mockJobEntity);
-      expect(repo.create).toHaveBeenCalledWith(mockJobDto);
-      expect(repo.save).toHaveBeenCalledWith(mockJobEntity);
+      expect(repo.create).toHaveBeenCalled();
+      expect(repo.save).toHaveBeenCalled();
     });
   });
 

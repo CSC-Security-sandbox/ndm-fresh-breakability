@@ -19,10 +19,11 @@ const mockJobEntity: JobEntity = {
   integrative_algorithms: 'alg-1',
   notification: 'email',
   chunk_size: 1024,
-  created_at: new Date(),
-  updated_at: new Date(),
-  created_by: '',
-  updated_by: ''
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  createdBy: '',
+  updatedBy: '',
+  project: null
 };
 
 const mockJobDto: JobDTO = {
