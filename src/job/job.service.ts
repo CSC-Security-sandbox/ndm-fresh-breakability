@@ -28,8 +28,8 @@ export class JobService {
         integrative_algorithms: jobData?.integrative_algorithms,
         notification: jobData?.notification,
         chunk_size: jobData?.chunk_size,
-        created_by: jobData?.created_by,
-        updated_by: jobData?.updated_by
+        createdBy: jobData?.created_by,
+        updatedBy: jobData?.updated_by
     });
 
     return this.jobRepo.save(jobRecord);

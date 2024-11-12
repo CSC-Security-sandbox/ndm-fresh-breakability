@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { ProjectEntity } from './project.entity';
 
 @Entity({ name: 'job' })
 export class JobEntity extends Base {
@@ -59,6 +60,11 @@ export class JobEntity extends Base {
   @ApiProperty({ description: 'Chunk size for file transfer' })
   @Column({ name: 'chunk_size' })
   chunk_size: number;
+
+  @ManyToOne(() => ProjectEntity, project => project.workers)
+  @JoinColumn({ name: 'project_id' }) 
+  project: ProjectEntity;
+
 }
 
 

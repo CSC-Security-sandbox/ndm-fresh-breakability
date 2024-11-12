@@ -3,6 +3,8 @@ import { JobModule } from './job/job.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventsModule } from './events/events.module';
+import { WorkerModule } from './workers/workers.module';
 
 @Module({
   imports: [
@@ -13,7 +15,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobModule
+    JobModule, EventsModule, WorkerModule
   ],
   controllers: [],
   providers: [],

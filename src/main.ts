@@ -6,25 +6,30 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.setGlobalPrefix('job-service');
-  app.useGlobalPipes(new ValidationPipe());
 
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  
+  app.setGlobalPrefix('api/v1/')
+  
+  app.useGlobalPipes(new ValidationPipe())
   const config = new DocumentBuilder()
   .setTitle('Job service')
-  .setDescription('The Job API description')
+  .setDescription('Job Management')
   .setVersion('1.0')
-  .addTag('job')
   .build();
   
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
 
+  SwaggerModule.setup('docs', app, document,{
+    jsonDocumentUrl: 'swagger/json',
+  });
+  
   app.enableShutdownHooks();
   app.set('trust proxy', true);
+  
   app.enableCors();
-
-  await app.listen(3000);
+  
+  await app.listen(3000, '0.0.0.0');
 }
 bootstrap();
 
