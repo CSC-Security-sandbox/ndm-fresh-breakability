@@ -31,7 +31,7 @@ export class FileServerEntity extends Base {
     @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
     configId: string;
 
-    @ManyToOne(() => ConfigEntity, config => config.fileServers,{ onDelete:'CASCADE', onUpdate:'CASCADE', orphanedRowAction : 'delete'})
+    @ManyToOne(() => ConfigEntity, config => config.fileServers,{ onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;
 

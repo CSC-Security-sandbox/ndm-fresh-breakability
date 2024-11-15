@@ -5,11 +5,12 @@ import { WorkerCommand, ResponseStatus, SocketEvents } from 'src/constants/statu
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from './dto/workerconnection.dto';
-import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { WorkerRequestDTO } from './dto/responsefilter.dto';
-import { QueueEvent } from './events.type';
 import { RabbitMqService } from './rabbitmq.service';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from '../dto/workerconnection.dto';
+import { QueueEvent } from '../events.type';
+import { WorkerRequestDTO } from '../dto/responsefilter.dto';
+import { MountConnectionsDTO } from '../dto/workermounts.dto';
+import { FileConfigService } from './config.service';
 
 
 @Injectable()
@@ -19,6 +20,7 @@ export class EventsService {
         @InjectRepository(RequestTrackEntity)
         private readonly requestTrackEntity: Repository<RequestTrackEntity>,
         private rabbitMqService: RabbitMqService,
+        private readonly fileConfigService: FileConfigService
 
     ) {}
 
@@ -67,7 +69,7 @@ export class EventsService {
             createdBy: uuidv4()
         })
         const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId, protocol, }
+        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId, protocol}
         this.notifyEventToWorker(workerId, SocketEvents.Volumes, payload)
     }
 
@@ -104,4 +106,13 @@ export class EventsService {
         return { data, total };
       }
 
+      async fetchPaths(configId: string) {
+        const config =  await this.fileConfigService.getPathConfig(configId)
+        if(config) {
+          config.fileServers.forEach(async server=> {
+            if(server.workers.length > 0)
+                await this.notifyEventToWorker(server.workers[0].workerId, SocketEvents.Volumes, server.protocol)
+          })
+        }
+      }
 }

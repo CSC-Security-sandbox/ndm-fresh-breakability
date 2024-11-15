@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
-import { EventsGateway } from "./events.gateway";
+import { EventsGateway } from "../getway/events.gateway";
+
 
 @Injectable()
 export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
@@ -9,7 +10,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMqService.name);
   private exchange = process.env.RABBITMQ_URL_EXCHANGE || 'defaultEX';
   private routingKey =  process.env.RABBITMQ_URL_ROUTING_KEY || 'socketConnetion'
-  private queue = `consumer_queue_156_K_${process.env.REPLICA_INDEX || 'default'}`;
+  private queueWorkerNotify = `worker_notification_queue_${process.env.REPLICA_INDEX || 'default'}`;
 
   constructor(private readonly eventsGateway: EventsGateway) {
     const connection = amqp.connect([process.env.RABBITMQ_URL]);
@@ -20,9 +21,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
         await channel.assertExchange(this.exchange, 'fanout', { durable: true });
-        await channel.assertQueue(this.queue, { durable: true });
-        await channel.bindQueue(this.queue, this.exchange, this.routingKey);
-        await channel.consume(this.queue, async (message) => {
+        await channel.assertQueue(this.queueWorkerNotify, { durable: true });
+        await channel.bindQueue(this.queueWorkerNotify, this.exchange, this.routingKey);
+        await channel.consume(this.queueWorkerNotify, async (message) => {
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
@@ -50,8 +51,8 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     Logger.debug('Module destroyed called!');
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
-        await channel.unbindQueue(this.queue, this.exchange, this.routingKey);
-        await channel.deleteQueue(this.queue);
+        await channel.unbindQueue(this.queueWorkerNotify, this.exchange, this.routingKey);
+        await channel.deleteQueue(this.queueWorkerNotify);
       });
 
       this.logger.log('Queue successfully unbound from the exchange and deleted.');

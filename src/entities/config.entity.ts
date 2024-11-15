@@ -10,10 +10,6 @@ export class ConfigEntity extends Base {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @ApiProperty({ description: 'stage' })
-    @Column({ type: 'text', nullable: true,  name:'stage' })
-    stage: string;
-
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_name' })
     configName: string;
@@ -26,12 +22,15 @@ export class ConfigEntity extends Base {
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
 
-    @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: true})
+    @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 
     @ManyToOne(() => ProjectEntity, project => project.configs)
     @JoinColumn({ name: 'project_id' }) 
     project: ProjectEntity;
 
+    @ApiProperty({ description: 'refreshedOn' })
+    @Column({ name: 'refreshed_on' , nullable : true, type : 'date'})
+    refreshedOn: Date;
 
 }

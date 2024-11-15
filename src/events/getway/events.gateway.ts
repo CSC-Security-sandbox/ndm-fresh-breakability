@@ -8,11 +8,12 @@ import { WorkerStatus } from 'src/constants/enums';
 import { ResponseStatus, SocketEvents } from 'src/constants/status';
 
 import { Repository } from 'typeorm';
-import { WorkerAckResponse } from './events.type';
+import { WorkerAckResponse } from '../events.type';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { FileConfigService } from '../service/config.service';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -29,6 +30,7 @@ export class EventsGateway implements OnGatewayInit{
     private readonly requestTrackEntity: Repository<RequestTrackEntity>,
     @InjectRepository(ProjectEntity) 
     private readonly projectEntity: Repository<ProjectEntity>,
+    private readonly fileConfigService:FileConfigService
   ){}
   
 
@@ -92,13 +94,27 @@ export class EventsGateway implements OnGatewayInit{
   }
 
   @SubscribeMessage('acknowledgement')
-  async handleMessage(client: Socket, message: WorkerAckResponse) {
+  async handleAcknowledgementMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
     try{
       if(workerAckResponse.error) 
         await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
       else
         await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
+      this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
+    }catch(e) {
+      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
+    }
+  }
+
+  @SubscribeMessage('volumes-ack')
+  async handleVolumeMessage(client: Socket, message: WorkerAckResponse) {
+    const workerAckResponse:WorkerAckResponse = message
+    try{
+      if(workerAckResponse.error) 
+        this.logger.error(workerAckResponse.error)
+      else
+        await this.fileConfigService.updatePathToConfig(workerAckResponse.result)
       this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
     }catch(e) {
       this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
@@ -118,5 +134,6 @@ export class EventsGateway implements OnGatewayInit{
       this.server.to(clientId).emit(eventType, message);
     }
   }
-  
+
 }
+

@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TestConnectionsDTO } from './dto/workerconnection.dto';
-import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { WorkerRequestDTO } from './dto/responsefilter.dto';
-import { EventsService } from './events.service';
+import { TestConnectionsDTO } from '../dto/workerconnection.dto';
+import { MountConnectionsDTO } from '../dto/workermounts.dto';
+import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { EventsController } from './events.controller';
+import { EventsService } from '../service/events.service';
 
 describe('EventsController', () => {
   let controller: EventsController;

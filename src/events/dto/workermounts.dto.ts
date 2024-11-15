@@ -33,7 +33,6 @@ export class MountConnectionsDTO {
   protocol: Protocol[];
 
   @ApiPropertyOptional({description: 'configId'})
-  @IsOptional()
   @IsString()
   configId: string
 
