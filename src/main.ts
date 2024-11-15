@@ -3,9 +3,24 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule,);
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [process.env.RABBITMQ_URL],
+      queue: `${process.env.SERVICE}_queue`,
+      noAck: false,
+      queueOptions: {
+        durable: true,
+      },
+    },
+  });
+
+  await app.startAllMicroservices();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   
@@ -23,6 +38,7 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
+  
   app.enableShutdownHooks();
   app.set('trust proxy', true);
   

@@ -1,13 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { WorkerEntity } from 'src/entities/worker.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
-import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { FindallConfigPageDto } from './dto/findallconfig.dto';
 import { ConfigDTO } from './dto/config.dto';
+import { FindallConfigPageDto } from './dto/findallconfig.dto';
 
 
 @Injectable()
@@ -18,8 +17,6 @@ export class ConfigurationService {
         private readonly configEntity: Repository<ConfigEntity>,
         @InjectRepository(FileServerEntity)
         private readonly fileServerEntity: Repository<FileServerEntity>,
-        @InjectRepository(VolumeEntity)
-        private readonly volumeEntity: Repository<VolumeEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
     ) {}
@@ -30,11 +27,7 @@ export class ConfigurationService {
         const findOptions: FindManyOptions<ConfigEntity> = {
           where: filter, order: { [sort]: order }, 
           relations: {
-            project: true,
-            fileServers: {
-                workers: true,
-                volumes: true
-            }
+            fileServers: true
           }
         };
         let data = [], total = 0;
@@ -73,14 +66,6 @@ export class ConfigurationService {
         const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
             const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
 
-            const volumes = fileServer.volumes.map(volume => 
-                this.volumeEntity.create({
-                    volumePath: volume.volumePath,
-                    isIncluded: volume.isIncluded,
-                    createdBy: userId
-                })
-            );
-    
             return this.fileServerEntity.create({
                 host: fileServer.host,
                 serverType: fileServer.serverType,
@@ -88,7 +73,7 @@ export class ConfigurationService {
                 createdBy: userId,
                 protocol: fileServer.protocol,  
                 userName: fileServer.userName,
-                volumes: volumes
+                volumes: []
             });
         });
 
@@ -96,7 +81,6 @@ export class ConfigurationService {
             configName: createConfig.configName,
             configType: createConfig.configType,
             projectId: createConfig.projectId,
-            stage: createConfig.stage,
             fileServers:  await Promise.all(fileServerPromises),
             createdBy: userId
         });
@@ -119,41 +103,32 @@ export class ConfigurationService {
             }
         });
     
-        if (!config) {
+        if (!config) 
             throw new NotFoundException(`Config for id ${id} not found.`);
-        }
 
         config.configName = updateConfig.configName;
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
-        config.stage = updateConfig.stage
         config.updatedBy = userId
-    
-        const fileServerPromises = updateConfig.fileServers.map(async (fileServer) => {
+
+        const fileServerPromises = config.fileServers.map(async (fileServer)=> {
             const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
 
-            const volumes = fileServer.volumes.map(volume => 
-                this.volumeEntity.create({
-                    id: volume.id,
-                    volumePath: volume.volumePath,
-                    isIncluded: volume.isIncluded,
-                    createdBy: volume.createdBy || userId,
-                    updatedBy: userId
-                })
-            );
-    
+            const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
+            
             return this.fileServerEntity.create({
                 id: fileServer.id,
                 host: fileServer.host,
                 serverType: fileServer.serverType,
                 workers: workers,
-                createdBy: fileServer.createdBy || userId,
+                createdBy: fileServer.createdBy,
                 protocol: fileServer.protocol,  
-                userName: fileServer.userName,
-                volumes: volumes,
+                userName: update.userName || update.userName,
+                volumes: fileServer.volumes,
                 updatedBy: userId
             });
-        });
+        })
+
         config.fileServers = await Promise.all(fileServerPromises);
         return await this.configEntity.save(config);
     }

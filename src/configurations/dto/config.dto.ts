@@ -52,13 +52,6 @@ export class FileServersDTO {
     @IsNotEmpty()
     host: string;
 
-    @ApiProperty({ description: 'Array of volumes', type: [VolumesDTO]})
-    @IsArray()
-    @IsOptional()
-    @ValidateNested({ each: true })
-    @Type(() => VolumesDTO)
-    volumes: VolumesDTO[];
-
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] })
     @IsArray()
     @IsUUID('all', { each: true })

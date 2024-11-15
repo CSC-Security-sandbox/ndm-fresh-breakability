@@ -22,7 +22,7 @@ export class VolumeEntity extends Base {
     @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
     fileServerId: string;
 
-    @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes, { onDelete:'CASCADE', onUpdate:'CASCADE', orphanedRowAction : 'delete'})
+    @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
  

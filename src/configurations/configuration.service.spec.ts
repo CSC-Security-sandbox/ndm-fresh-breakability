@@ -163,7 +163,6 @@ describe('ConfigurationService', () => {
           host: 'localhost',
           serverType: ServerType.emc,
           workers: [mockWorker.id],
-          volumes: [{ id: mockVolume.id, volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
           createdBy:"1234567",
           protocol: Protocol.NFS,
           userName: "TEST"
