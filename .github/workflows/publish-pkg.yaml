@@ -17,7 +17,10 @@ jobs:
           registry-url: 'https://npm.pkg.github.com'
           # Defaults to the user or organization that owns the workflow file
           scope: '@datamigrate'
-      - run: npm ci
+      - name: Install dependencies
+        run: npm i && npm run build
+      - name: Update version in package.json
+        run: npm version --new-version ${{ github.event.release.tag_name }} --no-git-tag-version
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
