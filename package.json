@@ -1,5 +1,5 @@
 {
-  "name": "@datamigrate/auth-lib",
+  "name": "@NetApp-Cloud-DataMigrate/auth-lib",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
