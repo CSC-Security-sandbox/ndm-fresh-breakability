@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { JobEntity } from '../entities/job.entity';
 import { JobDTO } from '../dto/job.dto';
 
@@ -26,7 +26,6 @@ export class JobService {
         file_permissions: jobData?.file_permissions,
         cron_settings: jobData?.cron_settings,
         integrative_algorithms: jobData?.integrative_algorithms,
-        notification: jobData?.notification,
         chunk_size: jobData?.chunk_size,
         createdBy: jobData?.created_by,
         updatedBy: jobData?.updated_by
@@ -41,6 +40,10 @@ export class JobService {
       throw new Error(`Job with id ${id} not found`);
     }
     return job;
+  }
+
+  async getJobs(condition: FindManyOptions<JobEntity>): Promise<JobEntity[]> {
+    return await this.jobRepo.find(condition);
   }
   
   async updateJob(id: string, data: JobDTO): Promise<JobEntity> {

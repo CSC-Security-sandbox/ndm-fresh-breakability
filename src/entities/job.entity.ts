@@ -49,13 +49,13 @@ export class JobEntity extends Base {
   @Column({ name: 'cron_settings' })
   cron_settings: boolean;
 
+  @ApiProperty({ description: 'Job status' })
+  @Column({ name: 'status' })
+  status: string;
+
   @ApiProperty({ description: 'Algorithms for integration' })
   @Column({ name: 'integrative_algorithms' })
   integrative_algorithms: string;
-
-  @ApiProperty({ description: 'Notification settings' })
-  @Column({ name: 'notification' })
-  notification: string;
 
   @ApiProperty({ description: 'Chunk size for file transfer' })
   @Column({ name: 'chunk_size' })
@@ -64,7 +64,6 @@ export class JobEntity extends Base {
   @ManyToOne(() => ProjectEntity, project => project.workers)
   @JoinColumn({ name: 'project_id' }) 
   project: ProjectEntity;
-
 }
 
 
