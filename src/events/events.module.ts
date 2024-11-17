@@ -11,6 +11,7 @@ import { FileConfigService } from './service/config.service';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
+import { RabbimqController } from './controller/rabbimq.controller';
 
 
 @Module({
@@ -18,6 +19,6 @@ import { ConfigEntity } from 'src/entities/config.entity';
     TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity]),],
   exports: [EventsGateway],
   providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService],
-  controllers: [EventsController]
+  controllers: [EventsController, RabbimqController]
 })
 export class EventsModule {}

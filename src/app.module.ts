@@ -5,6 +5,8 @@ import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from './events/events.module';
 import { WorkerModule } from './workers/workers.module';
+import { RabbimqController } from './events/controller/rabbimq.controller';
+
 
 @Module({
   imports: [
@@ -15,7 +17,7 @@ import { WorkerModule } from './workers/workers.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobModule, EventsModule, WorkerModule
+    JobModule, EventsModule, WorkerModule,
   ],
   controllers: [],
   providers: [],

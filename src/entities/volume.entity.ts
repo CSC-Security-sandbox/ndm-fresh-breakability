@@ -14,14 +14,22 @@ export class VolumeEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'volume_path' })
     volumePath: string;
 
+
+    @ApiProperty({ description: 'reachable worker Count' })
+    @Column({ type: 'int', nullable: true,  name:'reachable_count' })
+    reachableCount: number;
+
+
     @ApiProperty({ description: 'fileServerId' })
     @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
     fileServerId: string;
 
+    
+
     @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
- 
+
     @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: true})
     inventory: InventoryEntity[]
 }

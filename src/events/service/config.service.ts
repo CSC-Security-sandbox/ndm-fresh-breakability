@@ -26,14 +26,20 @@ export class FileConfigService {
 
     async updatePathToConfig(payload: any) {
         const pathAck: PathsAck = payload as PathsAck
+        const fileServer = await this.fileServerEntity.findOne({where: {configId: pathAck.config.configId,}})
 
-        const fileServer = await this.fileServerEntity.findOne({where: {configId: pathAck.config.configId, protocol: pathAck.config.protocol}})
-        const exiting = new Set<string>();
-        fileServer.volumes.forEach(vol=> exiting.add(vol.volumePath))
+        const exiting = new Map<string, VolumeEntity>();
+        fileServer.volumes.forEach(vol=> exiting.set(vol.volumePath, vol))
         
         pathAck.path.forEach(async (path)=> {
-            const pathEntity = this.volumeEntity.create({fileServerId: fileServer.id, volumePath: path.mountPath})
-            await this.volumeEntity.save(pathEntity)
+            if(!exiting.has(path.mountPath)) {
+                const pathEntity = this.volumeEntity.create({fileServerId: fileServer.id, volumePath: path.mountPath, createdBy: pathAck.config.configId, reachableCount: 1})
+                await this.volumeEntity.save(pathEntity)
+            }else {
+                const pre:VolumeEntity = exiting.get(path.mountPath)
+                this.logger.log(`Updating Path reach count for ${path.mountPath}`)
+                await this.volumeEntity.update({id: pre.id},{reachableCount: pre.reachableCount+1})
+            }
         })
 
         await this.configEntity.update({id: pathAck.config.configId}, {refreshedOn: new Date()})
@@ -45,6 +51,11 @@ export class FileConfigService {
                 workers: true
             }
         }})
+    }
+
+    async resetReachableWorkerCount(fileServerId: string) {
+        this.logger.log(fileServerId)
+        return await this.volumeEntity.update({fileServerId: fileServerId}, {reachableCount: 0})
     }
 }
 

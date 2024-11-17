@@ -109,10 +109,13 @@ export class EventsService {
       async fetchPaths(configId: string) {
         const config =  await this.fileConfigService.getPathConfig(configId)
         if(config) {
-          config.fileServers.forEach(async server=> {
-            if(server.workers.length > 0)
-                await this.notifyEventToWorker(server.workers[0].workerId, SocketEvents.Volumes, server.protocol)
-          })
+            config.fileServers.forEach(async server=> {
+                const payload = {configId: config.id, protocol: server.protocol}
+                server.workers.forEach(async worker=> {
+                    await this.notifyEventToWorker(worker.workerId, SocketEvents.Volumes, payload)
+                })
+                await this.fileConfigService.resetReachableWorkerCount(server.id)
+            })
         }
       }
 }
