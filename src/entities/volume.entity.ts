@@ -14,9 +14,9 @@ export class VolumeEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'volume_path' })
     volumePath: string;
 
-    @ApiProperty({ description: 'data' })
-    @Column({ type: 'boolean', nullable: true,  name:'included' })
-    isIncluded: boolean;
+    @ApiProperty({ description: 'reachable worker Count' })
+    @Column({ type: 'int', nullable: true,  name:'reachable_count' })
+    reachableCount: number;
 
     @ApiProperty({ description: 'fileServerId' })
     @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})

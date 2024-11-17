@@ -7,6 +7,8 @@ import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { ConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
+import { Rabbitmq } from 'src/constants/enums';
 
 
 @Injectable()
@@ -19,6 +21,8 @@ export class ConfigurationService {
         private readonly fileServerEntity: Repository<FileServerEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
+        private rabbitMQService: RabbitMQService
+        
     ) {}
 
     async getAllConfig(findallConfigPageDto: FindallConfigPageDto) {
@@ -85,7 +89,10 @@ export class ConfigurationService {
             createdBy: userId
         });
     
-        return await this.configEntity.save(config);
+        const update = await this.configEntity.save(config).then(()=>{
+            this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
+        })
+        return update
     }
 
     async updateConfiguration(id: string, updateConfig: ConfigDTO) {
@@ -130,7 +137,10 @@ export class ConfigurationService {
         })
 
         config.fileServers = await Promise.all(fileServerPromises);
-        return await this.configEntity.save(config);
+        const update = await this.configEntity.save(config).then(()=>{
+            this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
+        })
+        return update
     }
     
 

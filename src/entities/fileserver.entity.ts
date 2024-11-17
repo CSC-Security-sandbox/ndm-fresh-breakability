@@ -27,8 +27,8 @@ export class FileServerEntity extends Base {
     @Column({ type: 'enum', enum: ServerType, name:'server_type' })
     serverType: ServerType;
 
-    @ApiProperty({ description: 'projectId' })
-    @Column({ type: 'uuid', nullable:true,  name: 'file_server_id'})
+    @ApiProperty({ description: 'configId' })
+    @Column({ type: 'uuid', nullable:true,  name: 'config_id'})
     configId: string;
 
     @ManyToOne(() => ConfigEntity, config => config.fileServers,{ onDelete:'CASCADE', orphanedRowAction : 'delete'})

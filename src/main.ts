@@ -6,21 +6,8 @@ import { AppModule } from './app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule,);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [process.env.RABBITMQ_URL],
-      queue: `${process.env.SERVICE}_queue`,
-      noAck: false,
-      queueOptions: {
-        durable: true,
-      },
-    },
-  });
-
-  await app.startAllMicroservices();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   

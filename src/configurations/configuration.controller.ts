@@ -3,12 +3,13 @@ import { ApiBadRequestResponse, ApiBody, ApiCreatedResponse, ApiNotFoundResponse
 import { ConfigurationService } from "./configuration.service";
 import { ConfigResponseDto, FindallConfigPageDto } from "./dto/findallconfig.dto";
 import { ConfigDTO } from "./dto/config.dto";
+import { RabbitMQService } from "src/rabbitmq/rabbitmq.service";
 
 @ApiTags("Configuration")
 @Controller('servers')
 export class ConfigurationController{
     constructor(
-        private configurationService: ConfigurationService
+        private configurationService: ConfigurationService,
     ){}
 
     @ApiOperation({ summary: 'Create Configuration' })
@@ -31,6 +32,7 @@ export class ConfigurationController{
     })
     @Get('/')
     async getAllConfiguration(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findallConfigPageDto: FindallConfigPageDto) {
+        
         return await this.configurationService.getAllConfig(findallConfigPageDto);
     }
 
@@ -62,4 +64,5 @@ export class ConfigurationController{
     async remove(@Param('id') id: string) {
         return await this.configurationService.remove(id);
     }
+
 }
