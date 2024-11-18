@@ -32,18 +32,20 @@ export class EventsController {
         return this.eventsService.processWorkerResponses(responsePageFilterDto)
     }
 
-    @Post('/event/mounts')
-    @ApiOperation({ summary: 'Test Worker mounts ' })
-    @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
-    async fetchExportPath(@Body() mountConnectionsDTO: MountConnectionsDTO) {
-        return this.eventsService.mountWorkerConnections(mountConnectionsDTO)
-    }
+
+    // @depricated
+    // @Post('/event/mounts')
+    // @ApiOperation({ summary: 'Test Worker mounts ' })
+    // @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
+    // async fetchExportPath(@Body() mountConnectionsDTO: MountConnectionsDTO) {
+    //     return this.eventsService.mountWorkerConnections(mountConnectionsDTO)
+    // }
 
     @Get('/event/refetch-paths/:configId')
     @ApiOperation({ summary: 'Refetch Config paths' })
     @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
     async refetchExportPath(@Param('configId') configId: string) {
-        this.eventsService.fetchPaths(configId)
+        return this.eventsService.fetchPaths(configId)
     }
 
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
 import { WorkerCommand, ResponseStatus, SocketEvents } from 'src/constants/status';
@@ -108,14 +108,14 @@ export class EventsService {
 
       async fetchPaths(configId: string) {
         const config =  await this.fileConfigService.getPathConfig(configId)
-        if(config) {
-            config.fileServers.forEach(async server=> {
-                const payload = {configId: config.id, protocol: server.protocol}
-                server.workers.forEach(async worker=> {
-                    await this.notifyEventToWorker(worker.workerId, SocketEvents.Volumes, payload)
-                })
-                await this.fileConfigService.resetReachableWorkerCount(server.id)
+        if(!config) 
+            throw new NotFoundException(`Config with ${configId} configId does not exists.`)
+        config.fileServers.forEach(async server=> {
+            const payload = {configId: config.id, protocol: server.protocol}
+            server.workers.forEach(async worker=> {
+                await this.notifyEventToWorker(worker.workerId, SocketEvents.Volumes, payload)
             })
-        }
+        })
+        return await this.fileConfigService.updateRefetchingConfig(config)
       }
 }

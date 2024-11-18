@@ -10,7 +10,9 @@ export enum WorkerCommand {
 }
 
 export enum SocketEvents{
-    TestConnection = 'TestConnection',
-    Volumes = 'Volumes',
-    Error = 'Error'
+    TestConnection = 'test-connection',
+    Volumes = 'volumes',
+    Error = 'error',
+    Acknowledgement = 'acknowledgement',
+    VolumesAck = 'volumes-ack'
 }

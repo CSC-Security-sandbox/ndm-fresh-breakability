@@ -30,7 +30,7 @@ export class ConfigEntity extends Base {
     project: ProjectEntity;
 
     @ApiProperty({ description: 'refreshedOn' })
-    @Column({ name: 'refreshed_on' , nullable : true, type : 'date'})
+    @Column({ name: 'refreshed_on' , nullable : true, type : 'timestamp without time zone'})
     refreshedOn: Date;
 
 }

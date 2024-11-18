@@ -93,7 +93,7 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
-  @SubscribeMessage('acknowledgement')
+  @SubscribeMessage(SocketEvents.Acknowledgement)
   async handleAcknowledgementMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
     try{
@@ -107,7 +107,7 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
-  @SubscribeMessage('volumes-ack')
+  @SubscribeMessage(SocketEvents.VolumesAck)
   async handleVolumeMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
     try{
@@ -117,7 +117,7 @@ export class EventsGateway implements OnGatewayInit{
         await this.fileConfigService.updatePathToConfig(workerAckResponse.result)
       this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
     }catch(e) {
-      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
+      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`,e )
     }
   }
 

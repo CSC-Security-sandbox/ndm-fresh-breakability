@@ -31,6 +31,10 @@ export class FileServerEntity extends Base {
     @Column({ type: 'uuid', nullable:true,  name: 'config_id'})
     configId: string;
 
+    @ApiProperty({ description: 'is Refreshed Config' })
+    @Column({ name: 'is_refreshed' , nullable : true, type : 'boolean'})
+    isRefreshed: boolean;
+
     @ManyToOne(() => ConfigEntity, config => config.fileServers,{ onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;

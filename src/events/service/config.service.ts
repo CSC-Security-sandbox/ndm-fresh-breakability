@@ -26,11 +26,18 @@ export class FileConfigService {
 
     async updatePathToConfig(payload: any) {
         const pathAck: PathsAck = payload as PathsAck
-        const fileServer = await this.fileServerEntity.findOne({where: {configId: pathAck.config.configId,}})
-
+        const fileServer = await this.fileServerEntity.findOne({
+            where: {configId: pathAck.config.configId, protocol: pathAck.config.protocol},
+            relations: {
+                workers: true,
+                 volumes: true
+            }
+        })
+        
         const exiting = new Map<string, VolumeEntity>();
         fileServer.volumes.forEach(vol=> exiting.set(vol.volumePath, vol))
         
+        let mxCnt = 1;
         pathAck.path.forEach(async (path)=> {
             if(!exiting.has(path.mountPath)) {
                 const pathEntity = this.volumeEntity.create({fileServerId: fileServer.id, volumePath: path.mountPath, createdBy: pathAck.config.configId, reachableCount: 1})
@@ -39,9 +46,14 @@ export class FileConfigService {
                 const pre:VolumeEntity = exiting.get(path.mountPath)
                 this.logger.log(`Updating Path reach count for ${path.mountPath}`)
                 await this.volumeEntity.update({id: pre.id},{reachableCount: pre.reachableCount+1})
+                mxCnt = Math.max(mxCnt, pre.reachableCount+1);
             }
         })
 
+        const isRefreshed = mxCnt === fileServer.workers.length;
+        if(isRefreshed) 
+            await this.fileServerEntity.update({id: fileServer.id}, {isRefreshed: true})
+        
         await this.configEntity.update({id: pathAck.config.configId}, {refreshedOn: new Date()})
     }
 
@@ -53,9 +65,11 @@ export class FileConfigService {
         }})
     }
 
-    async resetReachableWorkerCount(fileServerId: string) {
-        this.logger.log(fileServerId)
-        return await this.volumeEntity.update({fileServerId: fileServerId}, {reachableCount: 0})
+    async updateRefetchingConfig(config: ConfigEntity) {
+        config.fileServers.forEach(async server=> {
+            await this.volumeEntity.update({fileServerId: server.id}, {reachableCount: 0})
+        })
+        return this.fileServerEntity.update({configId: config.id}, {isRefreshed: false})
     }
 }
 
