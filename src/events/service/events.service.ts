@@ -106,6 +106,7 @@ export class EventsService {
         return { data, total };
       }
 
+      // Send fetch path event to worker
       async fetchPaths(configId: string) {
         const config =  await this.fileConfigService.getPathConfig(configId)
         if(!config) 

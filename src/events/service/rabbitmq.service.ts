@@ -17,6 +17,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     this.channelWrapper = connection.createChannel();
   }
 
+  // Create and Attach Queue to exchange
   async onModuleInit() {
     try {
       await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
@@ -38,6 +39,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Send Message to exchange
   async publishToExchange(message: any): Promise<void> {
     try {
       await this.channelWrapper.publish(this.exchange, this.routingKey, Buffer.from(JSON.stringify(message)), { persistent: true } as any);
@@ -47,6 +49,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Unbind and delete Queue
   async onModuleDestroy() {
     Logger.debug('Module destroyed called!');
     try {

@@ -40,6 +40,7 @@ export class EventsGateway implements OnGatewayInit{
     client.use(SockateAuthMiddleware() as any);
   }
 
+  // worker connected to socket
   async handleConnection(client: Socket) {
     const workerId : string = client.handshake.query.agentId as string
     const workerName : string = client.handshake.query.agentName as string
@@ -57,7 +58,7 @@ export class EventsGateway implements OnGatewayInit{
 
     const worker = await this.workerEntity.findOne({where: {workerId: workerId}})
     if(worker) {
-      try{
+      try{ // update existing worker
         this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
         await this.workerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
         this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
@@ -66,7 +67,7 @@ export class EventsGateway implements OnGatewayInit{
       }
       return
     }
-    
+     // validate worker respective to project
     const project = await this.projectEntity.findOneBy({id: projectId})
     if(!project) {
       this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register worker`)
@@ -74,7 +75,7 @@ export class EventsGateway implements OnGatewayInit{
       client.disconnect()
       return
     }
-    try{
+    try{ // Add new worker
       const registerWorker =  this.workerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
       await this.workerEntity.save(registerWorker)
     }
@@ -83,6 +84,7 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
+  // worker disconnected
   async handleDisconnect(client: Socket) {
     const workerId : string = client.handshake.query.agentId as string
     const projectId : string = client.handshake.query.projectId as string
@@ -93,6 +95,7 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
+  // worker Ack
   @SubscribeMessage(SocketEvents.Acknowledgement)
   async handleAcknowledgementMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
@@ -101,12 +104,13 @@ export class EventsGateway implements OnGatewayInit{
         await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
       else
         await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
-      this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
+      this.logger.log(`Received Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
     }catch(e) {
       this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
     }
   }
 
+  // worker Volume - Ack
   @SubscribeMessage(SocketEvents.VolumesAck)
   async handleVolumeMessage(client: Socket, message: WorkerAckResponse) {
     const workerAckResponse:WorkerAckResponse = message
@@ -115,17 +119,19 @@ export class EventsGateway implements OnGatewayInit{
         this.logger.error(workerAckResponse.error)
       else
         await this.fileConfigService.updatePathToConfig(workerAckResponse.result)
-      this.logger.log(`Recived Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
+      this.logger.log(`Received Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
     }catch(e) {
       this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`,e )
     }
   }
 
+  // Send Message to All workers
   sendMessage(eventName: string, payload: any) {
     this.logger.log(`Sending message: ${eventName} with payload: ${JSON.stringify(payload)}`);
     this.server.emit(eventName, payload);
   }
 
+  // Send Message to workers by worker Id
   sendToClient(workerId: string, eventType: string, message: any,) {
     this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}`)
     const clientId = this.clients.get(workerId);

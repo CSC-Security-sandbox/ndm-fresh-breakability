@@ -8,6 +8,7 @@ export class RabbiMqController {
     
     constructor(private eventsService: EventsService){}
 
+    // fetch mount event
     @MessagePattern(RabbitMq.FetchMount)
     public async handleMessage(@Payload() data: any, @Ctx() context: RmqContext) {
         const channel = context.getChannelRef();

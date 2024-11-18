@@ -24,6 +24,7 @@ export class FileConfigService {
     ) {}
 
 
+    // update or add path corresponding to fileserver
     async updatePathToConfig(payload: any) {
         const pathAck: PathsAck = payload as PathsAck
         const fileServer = await this.fileServerEntity.findOne({
@@ -33,7 +34,6 @@ export class FileConfigService {
                  volumes: true
             }
         })
-        
         const exiting = new Map<string, VolumeEntity>();
         fileServer.volumes.forEach(vol=> exiting.set(vol.volumePath, vol))
         
@@ -57,6 +57,7 @@ export class FileConfigService {
         await this.configEntity.update({id: pathAck.config.configId}, {refreshedOn: new Date()})
     }
 
+    // get config
     async getPathConfig(configId: string) {
         return await this.configEntity.findOne({where: {id: configId}, relations : {
             fileServers: {
@@ -65,6 +66,7 @@ export class FileConfigService {
         }})
     }
 
+    // set reset worker reach count and refreshed flag
     async updateRefetchingConfig(config: ConfigEntity) {
         config.fileServers.forEach(async server=> {
             await this.volumeEntity.update({fileServerId: server.id}, {reachableCount: 0})
