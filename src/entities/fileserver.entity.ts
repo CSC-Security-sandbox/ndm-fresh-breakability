@@ -38,6 +38,10 @@ export class FileServerEntity extends Base {
     @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
     volumes: VolumeEntity[]
 
+    @ApiProperty({ description: 'is Refreshed Config' })
+    @Column({ name: 'is_refreshed' , nullable : true, type : 'boolean'})
+    isRefreshed: boolean;
+
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
         name: 'file_server_worker',

@@ -23,6 +23,11 @@ export class ConfigEntity extends Base {
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
 
+    @ApiProperty({ description: 'refreshedOn' })
+    @Column({ name: 'refreshed_on' , nullable : true, type : 'timestamp without time zone'})
+    refreshedOn: Date;
+
+
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 

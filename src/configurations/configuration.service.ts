@@ -77,6 +77,7 @@ export class ConfigurationService {
                 createdBy: userId,
                 protocol: fileServer.protocol,  
                 userName: fileServer.userName,
+                isRefreshed: false,
                 volumes: []
             });
         });
@@ -89,9 +90,8 @@ export class ConfigurationService {
             createdBy: userId
         });
     
-        const update = await this.configEntity.save(config).then(()=>{
-            this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
-        })
+        const update = await this.configEntity.save(config)
+        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: update.id})
         return update
     }
 
@@ -132,7 +132,8 @@ export class ConfigurationService {
                 protocol: fileServer.protocol,  
                 userName: update.userName || update.userName,
                 volumes: fileServer.volumes,
-                updatedBy: userId
+                updatedBy: userId,
+                isRefreshed: false
             });
         })
 
