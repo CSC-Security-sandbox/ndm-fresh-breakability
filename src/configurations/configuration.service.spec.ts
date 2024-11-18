@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigurationService } from './configuration.service';
 import { ConfigDTO } from './dto/config.dto';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 
 // Mock data for entities
@@ -45,6 +46,7 @@ const mockWorkerRepository = {
 describe('ConfigurationService', () => {
   let service: ConfigurationService;
   let configRepository: Repository<ConfigEntity>;
+  let rabbitMqService: RabbitMQService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -66,6 +68,12 @@ describe('ConfigurationService', () => {
           provide: getRepositoryToken(WorkerEntity),
           useValue: mockWorkerRepository,
         },
+        {
+          provide: RabbitMQService,
+          useValue: {
+            sendMessage: jest.fn(),
+          },
+        }
       ],
     }).compile();
 
@@ -147,15 +155,12 @@ describe('ConfigurationService', () => {
   });
 
   describe('updateConfiguration', () => {
+    
     it('should update and save the configuration', async () => {
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-      mockConfigRepository.save.mockResolvedValue(mockConfig);
-      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
-      const updateConfigDTO:ConfigDTO = {
+      const config:ConfigDTO = {
         projectId:"123456",
         createdBy: "123123",
-        stage:"",
         configName: 'Updated Config',
         configType: ConfigurationType.file,
         fileServers: [{
@@ -169,9 +174,14 @@ describe('ConfigurationService', () => {
         }]
       };
 
-      const result = await service.updateConfiguration(mockConfig.id, updateConfigDTO);
+      mockConfigRepository.findOne.mockResolvedValue(config);
+      mockConfigRepository.save.mockResolvedValue(config);
+      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
-      expect(result).toEqual(mockConfig);
+    
+      const result = await service.updateConfiguration(mockConfig.id, config);
+
+      expect(result).toEqual(config);
       expect(mockConfigRepository.save).toHaveBeenCalled();
     });
 

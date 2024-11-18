@@ -138,9 +138,8 @@ export class ConfigurationService {
         })
 
         config.fileServers = await Promise.all(fileServerPromises);
-        const update = await this.configEntity.save(config).then(()=>{
-            this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
-        })
+        const update = await this.configEntity.save(config)
+        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
         return update
     }
     

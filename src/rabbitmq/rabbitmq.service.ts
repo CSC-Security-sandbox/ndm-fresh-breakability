@@ -1,4 +1,5 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ClientProxy,
   ClientProxyFactory,
@@ -11,14 +12,16 @@ export class RabbitMQService {
   private readonly client: ClientProxy;
 
   constructor(
+    @Inject(ConfigService)
+    private readonly config: ConfigService,
   ) {
     const rmqOptions: RmqOptions = {
       transport: Transport.RMQ,
       options: {
-        urls: [process.env.RABBITMQ_URL],
-        queue: 'datamigrate-queue',
+        urls: this.config.get('app.rabbitmq.urls'),
+        queue: this.config.get('app.rabbitmq.queue'),
         queueOptions: {
-          durable: true,
+          durable: this.config.get('app.rabbitmq.durable'),
           arguments: {
             'x-queue-type': 'quorum', 
           },

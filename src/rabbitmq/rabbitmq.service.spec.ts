@@ -1,39 +1,53 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RabbitMQService } from './rabbitmq.service';
-import { RabbitMQConfigService } from '../config/rabbitmq.config';
-import { ClientProxy, ClientProxyFactory } from '@nestjs/microservices';
-import { of, throwError } from 'rxjs';
+import { RabbitMQService } from './rabbitmq.service'; // Adjust the import to your file path
+import { ConfigService } from '@nestjs/config';
+import { ClientProxy, ClientProxyFactory, Transport } from '@nestjs/microservices';
+import { Logger } from '@nestjs/common';
+
+jest.mock('@nestjs/microservices', () => ({
+  ...jest.requireActual('@nestjs/microservices'),
+  ClientProxyFactory: {
+    create: jest.fn(),
+  },
+}));
 
 describe('RabbitMQService', () => {
   let service: RabbitMQService;
-  let clientProxyMock: ClientProxy;
-
-  const mockRabbitMQConfigService = {
-    uris: ['amqp://localhost:5672'],
-    queueName: 'test_queue',
-  };
+  let configService: ConfigService;
+  let mockClientProxy: ClientProxy;
 
   beforeEach(async () => {
-    clientProxyMock = {
-    connect: jest.fn().mockResolvedValue(true),
-    send: jest.fn(),
+    mockClientProxy = {
+      connect: jest.fn(),
+      send: jest.fn(() => ({
+        forEach: jest.fn((callback) => callback('Mock Result')),
+        catch: jest.fn(),
+      })),
     } as any;
 
-    jest
-      .spyOn(ClientProxyFactory, 'create')
-      .mockReturnValue(clientProxyMock);
+    (ClientProxyFactory.create as jest.Mock).mockReturnValue(mockClientProxy);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RabbitMQService,
         {
-          provide: RabbitMQConfigService,
-          useValue: mockRabbitMQConfigService,
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key) => {
+              const mockConfig = {
+                'app.rabbitmq.urls': ['amqp://localhost'],
+                'app.rabbitmq.queue': 'test-queue',
+                'app.rabbitmq.durable': true,
+              };
+              return mockConfig[key];
+            }),
+          },
         },
       ],
     }).compile();
 
     service = module.get<RabbitMQService>(RabbitMQService);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   afterEach(() => {
@@ -44,12 +58,12 @@ describe('RabbitMQService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should create a ClientProxy on initialization', () => {
-    expect(ClientProxyFactory.create).toHaveBeenCalledWith({
-      transport: expect.any(Number), // Transport.RMQ is a number internally
+  it('should initialize the RabbitMQ client with correct options', () => {
+    const expectedOptions = {
+      transport: Transport.RMQ,
       options: {
-        urls: mockRabbitMQConfigService.uris,
-        queue: mockRabbitMQConfigService.queueName,
+        urls: ['amqp://localhost'],
+        queue: 'test-queue',
         queueOptions: {
           durable: true,
           arguments: {
@@ -57,84 +71,32 @@ describe('RabbitMQService', () => {
           },
         },
       },
-    });
+    };
+
+    expect(ClientProxyFactory.create).toHaveBeenCalledWith(expectedOptions);
   });
 
-  describe('sendMessage', () => {
-    it('should call client.connect and client.send', async () => {
-      const message = 'test message';
-  
-      jest.spyOn(clientProxyMock, 'send').mockReturnValueOnce(of('Result')); // Simulate successful send
-  
-      await service.sendMessage(message);
-  
-      // Check if the client is connected
-      expect(clientProxyMock.connect).toHaveBeenCalled();
-  
-      // Check if the send method was called with the correct pattern and message
-      expect(clientProxyMock.send).toHaveBeenCalledWith('createInventory', message);
-    });
-  
-    it('should log the correct message on successful send', async () => {
-      const message = 'test message';
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-  
-      jest.spyOn(clientProxyMock, 'send').mockReturnValueOnce(of('Result')); // Simulate successful send
-  
-      await service.sendMessage(message);
-  
-      // Check that the message was logged correctly
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        `Sending message: ${message} to queue: ${mockRabbitMQConfigService.queueName}`,
-      );
-      expect(consoleLogSpy).toHaveBeenCalledWith('Result:', 'Result');
-  
-      consoleLogSpy.mockRestore();
-    });
-  
-    it('should catch and log errors during message sending', async () => {
-        const message = 'test message';
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-  
-        // Simulate an error thrown during send
-        jest.spyOn(clientProxyMock, 'send').mockReturnValueOnce(
-          throwError(() => new Error('Test Error'))
-        );
-  
-        await service.sendMessage(message);
-  
-        // Ensure async processes complete
-        await new Promise(setImmediate);
-  
-        // Check that the error was logged correctly
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Send error: Error: Test Error');
-  
-        consoleErrorSpy.mockRestore();
-    });
-  
-    it('should catch and log errors during client.connect', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+  it('should send a message successfully', async () => {
+    jest.spyOn(mockClientProxy, 'connect').mockResolvedValueOnce(undefined);
 
-    // Simulate an error during connect
-    jest.spyOn(clientProxyMock, 'connect').mockRejectedValueOnce(
-        new Error('Connection Error')
-    );
+    const mockEvent = 'test-event';
+    const mockMessage = { key: 'value' };
 
-    const message = 'test message';
-    await service.sendMessage(message);
+    await service.sendMessage(mockEvent, mockMessage);
 
-    // Ensure async processes complete
-    await new Promise(setImmediate);
-
-    console.log("consoleErrorSpy value", consoleErrorSpy[0]);
-    
-
-    // Check that the error was logged correctly
-    expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Connection Error'));
-
-    consoleErrorSpy.mockRestore();
-    });
-
+    expect(mockClientProxy.connect).toHaveBeenCalled();
+    expect(mockClientProxy.send).toHaveBeenCalledWith(mockEvent, mockMessage);
   });
-  
+
+  it('should log an error if sending a message fails', async () => {
+    jest.spyOn(mockClientProxy, 'connect').mockRejectedValueOnce(new Error('Connection Error'));
+    const loggerErrorSpy = jest.spyOn(Logger, 'error');
+
+    const mockEvent = 'test-event';
+    const mockMessage = { key: 'value' };
+
+    await service.sendMessage(mockEvent, mockMessage);
+
+    expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error while sending message :'));
+  });
 });

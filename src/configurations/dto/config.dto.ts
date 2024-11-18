@@ -28,7 +28,7 @@ export class VolumesDTO {
 }
 
 export class FileServersDTO {
-    @ApiProperty({ description: 'UUID of fileserver', example: "true" })
+    @ApiProperty({ description: 'UUID of fileserver', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
     @IsString()
     @IsUUID()
     @IsOptional()
@@ -52,12 +52,12 @@ export class FileServersDTO {
     @IsNotEmpty()
     host: string;
 
-    @ApiProperty({ description: 'Array of Worker IDs', type: [String] })
+    @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
     @IsArray()
     @IsUUID('all', { each: true })
     workers: string[];
 
-    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
     @IsString()
     @IsUUID()
     @IsOptional()
@@ -65,14 +65,9 @@ export class FileServersDTO {
 }
 
 export class ConfigDTO {
-    @ApiProperty({ description: 'Project Id', example: '66ce0b1d79db96d54332af29' })
+    @ApiProperty({ description: 'Project Id', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
     @IsNotEmpty()
     projectId: string;
-
-    @ApiProperty({ description: 'stage', example: 'stage 1' })
-    @IsString()
-    @IsNotEmpty()
-    stage: string;
 
     @ApiProperty({ description: 'Name', example: 'Config 1' })
     @IsString()
@@ -90,7 +85,7 @@ export class ConfigDTO {
     @Type(() => FileServersDTO)
     fileServers: FileServersDTO[];
 
-    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
+    @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
     @IsString()
     @IsUUID()
     @IsOptional()

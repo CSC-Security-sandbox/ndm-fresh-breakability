@@ -45,7 +45,6 @@ describe('ConfigurationController', () => {
         configType: ConfigurationType.file,
         fileServers: [],
         projectId: "2345678",
-        stage: "212"
       };
       const createdConfig = {
         configName: "testConfig",
@@ -99,7 +98,6 @@ describe('ConfigurationController', () => {
         configType: ConfigurationType.file,
         fileServers: [],
         projectId: "2345678",
-        stage: "212",
         createdBy: "1234"
       };
       const updatedConfig = {
