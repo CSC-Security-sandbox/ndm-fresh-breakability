@@ -13,7 +13,6 @@ export class JobService {
   ) {}
 
   async createJob(jobData: JobDTO): Promise<JobEntity> {
-    console.log(`Data to job - ${JSON.stringify(jobData)}`);
     const jobRecord = this.jobRepo.create({
         source_config_id: jobData?.source_config_id,
         target_config_id: jobData?.target_config_id,

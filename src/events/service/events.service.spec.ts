@@ -11,6 +11,7 @@ import { MountConnectionsDTO } from '../dto/workermounts.dto';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { EventsService } from './events.service';
 import { RabbitMqService } from './rabbitmq.service';
+import { FileConfigService } from './config.service';
 
 class MockRepositor<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -25,6 +26,7 @@ describe('EventsService', () => {
   let service: EventsService;
   let repository: MockRepositor<RequestTrackEntity>;
   let rabbitMqService: RabbitMqService;
+  let fileConfigService: FileConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -43,6 +45,14 @@ describe('EventsService', () => {
           provide: RabbitMqService,
           useValue: {
             publishToExchange: jest.fn(),
+          },
+        },
+        {
+          provide: FileConfigService,
+          useValue: {
+            updatePathToConfig: jest.fn(),
+            getPathConfig: jest.fn(),
+            updateRefetchingConfig: jest.fn(),
           },
         },
       ],

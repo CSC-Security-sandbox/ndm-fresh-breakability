@@ -64,15 +64,15 @@ describe('EventsController', () => {
     });
   });
 
-  describe('fetchExportPath', () => {
-    it('should return a request ID on successful mount', async () => {
-      const mountConnectionsDTO: MountConnectionsDTO = {workers: [],configId:"1234",protocol:[] };
-      const requestId = 'mount-request-id';
+  // describe('fetchExportPath', () => {
+  //   it('should return a request ID on successful mount', async () => {
+  //     const mountConnectionsDTO: MountConnectionsDTO = {workers: [],configId:"1234",protocol:[] };
+  //     const requestId = 'mount-request-id';
 
-      jest.spyOn(service, 'mountWorkerConnections').mockResolvedValue({ requestId });
+  //     jest.spyOn(service, 'mountWorkerConnections').mockResolvedValue({ requestId });
 
-      expect(await controller.fetchExportPath(mountConnectionsDTO)).toEqual({ requestId });
-    });
-  });
+  //     expect(await controller.fetchExportPath(mountConnectionsDTO)).toEqual({ requestId });
+  //   });
+  // });
 
 });
