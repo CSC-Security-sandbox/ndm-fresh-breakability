@@ -10,27 +10,18 @@ services:
     ports:
       - "5432:5432"
 
-  postgres-keycloak:
-    image: postgres:latest
-    environment:
-      POSTGRES_DB: datamigrate
-      POSTGRES_USER: dmadmin
-      POSTGRES_PASSWORD: dmadmin
-    ports:
-      - "1543:5432"
-
   custom-keycloak:
     build:
       context: .
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/datamigrate
+      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/datamigrate?currentSchema=migrateadmin
       KC_DB_USERNAME: dmadmin
       KC_DB_PASSWORD: dmadmin
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     depends_on:
-      - postgres
+     - postgres
     ports:
       - "8080:8080"  # HTTP port for Keycloak
       - "8443:8443"  # HTTPS port for Keycloak, if you need SSL
