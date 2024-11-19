@@ -1,59 +1,41 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JobController } from './job.controller';
-import { JobService } from './job.service';
-import { JobDTO } from '../dto/job.dto';
-import { JobEntity } from '../entities/job.entity';
+import { JobConfigController } from './jobconfig.controller';
+import { JobConfigService } from './jobconfig.service';
+import { JobConfigDTO } from '../dto/jobconfig.dto';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 
-const mockJobEntity: JobEntity = {
+const mockJobEntity: JobConfigEntity = {
   id: 'uuid1',
-  source_config_id: 'uuid-source',
-  target_config_id: 'uuid-target',
-  file_filters: '*.txt',
-  recursive_flag: true,
-  timeout: 300,
-  retries: 3,
-  network_throtlling: 200,
-  overwrite_policy: false,
-  file_permissions: '755',
-  cron_settings: true,
-  integrative_algorithms: 'alg-1',
-  notification: 'email',
-  chunk_size: 1024,
   createdAt: new Date(),
   updatedAt: new Date(),
   createdBy: '',
   updatedBy: '',
-  project: null
+  job_type: 'discover',
+  file_server_id: '',
+  path_id: '',
+  schedule_time: new Date(),
+  status: ''
 };
 
-const mockJobDto: JobDTO = {
-  source_config_id: 'uuid-source',
-  target_config_id: 'uuid-target',
-  file_filters: '*.txt',
-  recursive_flag: true,
-  timeout: 300,
-  retries: 3,
-  network_throtlling: 200,
-  overwrite_policy: false,
-  file_permissions: '755',
-  cron_settings: true,
-  integrative_algorithms: 'alg-1',
-  notification: 'email',
-  chunk_size: 1024,
+const mockJobDto: JobConfigDTO = {
   created_by: '',
-  updated_by: ''
+  updated_by: '',
+  jobType: 'discover',
+  fileServerId: '',
+  pathList: [],
+  jobSchedule: new Date()
 };
 
-describe('JobController', () => {
-  let controller: JobController;
-  let service: JobService;
+describe('JobConfigController', () => {
+  let controller: JobConfigController;
+  let service: JobConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [JobController],
+      controllers: [JobConfigController],
       providers: [
         {
-          provide: JobService,
+          provide: JobConfigService,
           useValue: {
             createJob: jest.fn().mockResolvedValue(mockJobEntity),
             getJobById: jest.fn().mockResolvedValue(mockJobEntity),
@@ -65,8 +47,8 @@ describe('JobController', () => {
       ],
     }).compile();
 
-    controller = module.get<JobController>(JobController);
-    service = module.get<JobService>(JobService);
+    controller = module.get<JobConfigController>(JobConfigController);
+    service = module.get<JobConfigService>(JobConfigService);
   });
 
   it('should be defined', () => {

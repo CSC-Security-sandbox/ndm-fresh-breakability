@@ -1,60 +1,42 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JobService } from './job.service';
-import { JobEntity } from '../entities/job.entity';
+import { JobConfigService } from './jobconfig.service';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JobDTO } from '../dto/job.dto';
+import { JobConfigDTO } from '../dto/jobconfig.dto';
 
-const mockJobEntity: JobEntity = {
-  id: 'uuid1',
-  source_config_id: 'uuid-source',
-  target_config_id: 'uuid-target',
-  file_filters: '*.txt',
-  recursive_flag: true,
-  timeout: 300,
-  retries: 3,
-  network_throtlling: 200,
-  overwrite_policy: false,
-  file_permissions: '755',
-  cron_settings: true,
-  integrative_algorithms: 'alg-1',
-  notification: 'email',
-  chunk_size: 1024,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+const mockJobEntity: JobConfigEntity = {
+  id: 'uuid',
+  status: 'RUNNING',
+  schedule_time: new Date(),
+  job_type: 'discovery',
+  path_id: '',
+  file_server_id: '',
   createdBy: '',
   updatedBy: '',
-  project: null
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
-const mockJobDto: JobDTO = {
-  source_config_id: 'uuid-source',
-  target_config_id: 'uuid-target',
-  file_filters: '*.txt',
-  recursive_flag: true,
-  timeout: 300,
-  retries: 3,
-  network_throtlling: 200,
-  overwrite_policy: false,
-  file_permissions: '755',
-  cron_settings: true,
-  integrative_algorithms: 'alg-1',
-  notification: 'email',
-  chunk_size: 1024,
+const mockJobDto: JobConfigDTO = {
+  jobSchedule: new Date(),
+  jobType: 'discovery',
+  pathList: [''],
+  fileServerId: '',
   created_by: '',
   updated_by: ''
 };
 
-describe('JobService', () => {
-  let service: JobService;
-  let repo: Repository<JobEntity>;
+describe('JobConfigService', () => {
+  let service: JobConfigService;
+  let repo: Repository<JobConfigEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        JobService,
+        JobConfigService,
         {
-          provide: getRepositoryToken(JobEntity),
+          provide: getRepositoryToken(JobConfigEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
@@ -66,8 +48,8 @@ describe('JobService', () => {
       ],
     }).compile();
 
-    service = module.get<JobService>(JobService);
-    repo = module.get<Repository<JobEntity>>(getRepositoryToken(JobEntity));
+    service = module.get<JobConfigService>(JobConfigService);
+    repo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
   });
 
   it('should be defined', () => {

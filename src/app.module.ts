@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
-import { JobModule } from './job/job.module';
+import { JobConfigModule } from './jobconfig/jobconfig.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from './events/events.module';
 import { WorkerModule } from './workers/workers.module';
-import { JobRunModule } from './job-run/jobrun.module';
+import { JobRunModule } from './jobrun/jobrun.module';
+import { SchedularModule } from './schedular/schedule.module';
+import { JobMappingModule } from './jobmappings/jobmapping.module';
 
 @Module({
   imports: [
@@ -16,7 +18,7 @@ import { JobRunModule } from './job-run/jobrun.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobModule, EventsModule, WorkerModule, JobRunModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule
   ],
   controllers: [],
   providers: [],

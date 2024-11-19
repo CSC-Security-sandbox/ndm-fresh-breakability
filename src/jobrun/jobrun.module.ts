@@ -3,13 +3,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobEntity } from '../entities/job.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([JobRunEntity, JobEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity]),
     ],
-    providers: [JobRunService],
+    providers: [JobRunService, JobConfigService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}
