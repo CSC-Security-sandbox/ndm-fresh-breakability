@@ -33,7 +33,7 @@ export class EventsService {
         operations: details.protocols.map((it): ValidateConnectionOptionReq => ({
             operation: it.protocol == Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.VALIDATE_SMB_CONNECTION,
             request: {
-                hostname: it.username,
+                hostname: details.hostname,
                 username: it.username,
                 password: it.password
             },

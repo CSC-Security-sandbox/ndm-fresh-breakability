@@ -15,6 +15,7 @@ export class RequestTrackService{
     ) {}
 
     async validateConnectionACk(ack: ValidateConnectionRes) {
+        this.logger.error(ack)
         try{
             ack.operations.forEach(async it=> {
                 await this.reqTackRepo.update(
