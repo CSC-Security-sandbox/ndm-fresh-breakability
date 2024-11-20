@@ -1,16 +1,16 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
-import { WorkerCommand, ResponseStatus, SocketEvents } from 'src/constants/status';
+import { Operations, ResponseStatus, SocketEvents, TaskType } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { RabbitMqService } from './rabbitmq.service';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from '../dto/workerconnection.dto';
-import { QueueEvent } from '../events.type';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
-import { MountConnectionsDTO } from '../dto/workermounts.dto';
+
+import { ValidateConnectionDto } from '../dto/validateconnection.dto';
+import { QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';
 import { FileConfigService } from './config.service';
+import { RabbitMqService } from './rabbitmq.service';
 
 
 @Injectable()
@@ -24,54 +24,42 @@ export class EventsService {
 
     ) {}
 
-    async testWorkerConnections(testConnectionsDTO: TestConnectionsDTO){
-        const requestId = uuidv4(); 
-        testConnectionsDTO.workers.forEach(async worker => {
-            if(testConnectionsDTO.nfsConnectionDetails) 
-                await this.verifyWorkerConnection(requestId, worker.workerId, testConnectionsDTO.nfsConnectionDetails, Protocol.NFS, testConnectionsDTO.configId)
-            if(testConnectionsDTO.sbmConnectionDetails) 
-                await this.verifyWorkerConnection(requestId, worker.workerId, testConnectionsDTO.sbmConnectionDetails, Protocol.SMB, testConnectionsDTO.configId)
+    baseValidateConnectionReq = (details: ValidateConnectionDto, transactionId: string):ValidateConnectionReq => ({
+        id: transactionId,
+        status: ResponseStatus.PENDING,
+        taskType: TaskType.VALIDATE_CONNECTION,
+        transactionId: transactionId,
+        workerId: '',
+        operations: details.protocols.map((it): ValidateConnectionOptionReq => ({
+            operation: it.protocol == Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.VALIDATE_SMB_CONNECTION,
+            request: {
+                hostname: it.username,
+                username: it.username,
+                password: it.password
+            },
+            status: ResponseStatus.PENDING,
+        }))
+    })
+
+    async validateWorkerConnection(details: ValidateConnectionDto) {
+        const transactionId = uuidv4(); 
+        const base = this.baseValidateConnectionReq(details, transactionId);
+        details.workers.forEach(async (worker)=> {
+            details.protocols.forEach(async (protocolInfo)=> {
+                const requestTrack = this.requestTrackEntity.create({
+                    transactionId, status: ResponseStatus.PENDING,  
+                    taskType: TaskType.VALIDATE_CONNECTION,
+                    workerId: worker, createdBy: transactionId,
+                    operation: protocolInfo.protocol == Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.VALIDATE_SMB_CONNECTION,
+                })
+                await this.requestTrackEntity.save(requestTrack)
+            })
+            this.notifyEventToWorker(worker, SocketEvents.VALIDATE_CONNECTION, {...base, workerId: worker})
         })
-        return {requestId}
+        return {requestId: transactionId}
     }
 
-    async  verifyWorkerConnection(requestId: string, workerId:string, connection: SMBConnectionDetails | NFSConnectionDetails, protocol: Protocol, configId?: string | undefined) {
-        const requestTrack = this.requestTrackEntity.create({
-            requestType: WorkerCommand.TestConnection,
-            status: ResponseStatus.Pending,
-            requestId: requestId,
-            workerId: workerId,
-            protocol: protocol,
-            createdBy: uuidv4()
-        })
-        const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.id?.toString(), connectionDetails: connection, configId: configId }
-        this.notifyEventToWorker(workerId, SocketEvents.TestConnection, payload)
-    }
 
-    async mountWorkerConnections(mountConnectionsDTO: MountConnectionsDTO){
-        const requestId = uuidv4(); 
-        mountConnectionsDTO.workers.forEach(async worker => {
-            mountConnectionsDTO.protocol.forEach(protocol => {
-                this.fetchExportPath(requestId, worker.workerId, protocol, mountConnectionsDTO.configId)
-            });
-        })
-        return {requestId}
-    }
-
-    async fetchExportPath(requestId: string, workerId:string,  protocol: Protocol, configId?: string | undefined) {
-        const requestTrack = this.requestTrackEntity.create({
-            requestType: WorkerCommand.Volumes,
-            status: ResponseStatus.Pending,
-            requestId: requestId,
-            workerId: workerId,
-            protocol: protocol,
-            createdBy: uuidv4()
-        })
-        const requestTrackSave = await this.requestTrackEntity.save(requestTrack)
-        const payload = {requestId: requestTrackSave.id?.toString(), configId: configId, protocol}
-        this.notifyEventToWorker(workerId, SocketEvents.Volumes, payload)
-    }
 
     async notifyEventToWorker(workerId:string, socketEvents: SocketEvents, payload: any) {
         const queueEvent:QueueEvent = {

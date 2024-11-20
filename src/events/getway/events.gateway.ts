@@ -5,15 +5,13 @@ import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
 import { WorkerStatus } from 'src/constants/enums';
-import { ResponseStatus, SocketEvents } from 'src/constants/status';
-
-import { Repository } from 'typeorm';
-import { WorkerAckResponse } from '../events.type';
-import { v4 as uuidv4 } from 'uuid';
-import { WorkerEntity } from 'src/entities/worker.entity';
-import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
+import { SocketEvents } from 'src/constants/status';
 import { ProjectEntity } from 'src/entities/project.entity';
-import { FileConfigService } from '../service/config.service';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import { ValidateConnectionRes } from '../events.type';
+import { RequestTrackService } from '../service/requesttrack.service';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -26,11 +24,9 @@ export class EventsGateway implements OnGatewayInit{
   constructor(
     @InjectRepository(WorkerEntity) 
     private readonly workerEntity: Repository<WorkerEntity>,
-    @InjectRepository(RequestTrackEntity) 
-    private readonly requestTrackEntity: Repository<RequestTrackEntity>,
     @InjectRepository(ProjectEntity) 
     private readonly projectEntity: Repository<ProjectEntity>,
-    private readonly fileConfigService:FileConfigService
+    private readonly requestTrackService: RequestTrackService
   ){}
   
 
@@ -42,14 +38,15 @@ export class EventsGateway implements OnGatewayInit{
 
   // worker connected to socket
   async handleConnection(client: Socket) {
-    const workerId : string = client.handshake.query.agentId as string
-    const workerName : string = client.handshake.query.agentName as string
+    const workerId : string = client.handshake.query.worker as string
+    const workerName : string = client.handshake.query.workerName as string
     const projectId : string = client.handshake.query.projectId as string
     const ipAddress: string = client.handshake.address as string
     
     this.logger.log(`Client IP Address: ${ipAddress}`)
     if(!workerId || !workerName || !projectId ) {
       this.logger.error("Invalid Details",workerId)
+      client.disconnect()
       return;
     }
    
@@ -70,8 +67,8 @@ export class EventsGateway implements OnGatewayInit{
      // validate worker respective to project
     const project = await this.projectEntity.findOneBy({id: projectId})
     if(!project) {
-      this.logger.error(`Record Not Found for Project: ${projectId} Unabel to register worker`)
-      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unabel to register worker`})
+      this.logger.error(`Record Not Found for Project: ${projectId} Unable to register worker`)
+      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unable to register worker`})
       client.disconnect()
       return
     }
@@ -95,36 +92,6 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
-  // worker Ack
-  @SubscribeMessage(SocketEvents.Acknowledgement)
-  async handleAcknowledgementMessage(client: Socket, message: WorkerAckResponse) {
-    const workerAckResponse:WorkerAckResponse = message
-    try{
-      if(workerAckResponse.error) 
-        await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Error, response: JSON.stringify(workerAckResponse.error)})
-      else
-        await this.requestTrackEntity.update({id:workerAckResponse.requestId}, {status: ResponseStatus.Completed, response: JSON.stringify(workerAckResponse.result)})
-      this.logger.log(`Received Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
-    }catch(e) {
-      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`)
-    }
-  }
-
-  // worker Volume - Ack
-  @SubscribeMessage(SocketEvents.VolumesAck)
-  async handleVolumeMessage(client: Socket, message: WorkerAckResponse) {
-    const workerAckResponse:WorkerAckResponse = message
-    try{
-      if(workerAckResponse.error) 
-        this.logger.error(workerAckResponse.error)
-      else
-        await this.fileConfigService.updatePathToConfig(workerAckResponse.result)
-      this.logger.log(`Received Ack for ${workerAckResponse.requestId} from ${client.handshake.query?.workerId}`)
-    }catch(e) {
-      this.logger.error(`Error occurred during worker acknowledgement for ${workerAckResponse?.requestId}`,e )
-    }
-  }
-
   // Send Message to All workers
   sendMessage(eventName: string, payload: any) {
     this.logger.log(`Sending message: ${eventName} with payload: ${JSON.stringify(payload)}`);
@@ -140,6 +107,15 @@ export class EventsGateway implements OnGatewayInit{
       this.server.to(clientId).emit(eventType, message);
     }
   }
+
+
+
+  // worker Ack
+  @SubscribeMessage(SocketEvents.VALIDATE_CONNECTION_ACK)
+  async handleAcknowledgementMessage(client: Socket, ack: ValidateConnectionRes) {
+    await this.requestTrackService.validateConnectionACk(ack)
+  }
+
 
 }
 

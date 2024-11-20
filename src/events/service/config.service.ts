@@ -6,9 +6,6 @@ import { PathsAck } from "./service.type";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 
-
-
-
 @Injectable()
 export class FileConfigService {
     private logger : Logger = new Logger(FileConfigService.name);

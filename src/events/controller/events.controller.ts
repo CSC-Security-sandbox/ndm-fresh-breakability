@@ -1,9 +1,8 @@
 import { Body, Controller, Get, Logger, Param, Post, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { EventsService } from '../service/events.service';
-import { TestConnectionsDTO } from '../dto/workerconnection.dto';
 import { WorkerRequestDTO, WorkerResponseDto } from '../dto/responsefilter.dto';
-import { MountConnectionsDTO } from '../dto/workermounts.dto';
+import { EventsService } from '../service/events.service';
+import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 
 
 
@@ -18,8 +17,9 @@ export class EventsController {
     @Post('/event/validate-connection')
     @ApiOperation({ summary: 'Test Worker Connections ' })
     @ApiCreatedResponse({ description: 'Test Worker Connection Request Created Successfully.', type: String })
-    async testWorkerConnections(@Body() testConnectionsDTO: TestConnectionsDTO) {
-        return this.eventsService.testWorkerConnections(testConnectionsDTO)
+    async testWorkerConnections(@Body() validateConnectionDto: ValidateConnectionDto) {
+        //return this.eventsService.testWorkerConnections(testConnectionsDTO)
+        return this.eventsService.validateWorkerConnection(validateConnectionDto);
     }
 
     @Get('/response')
@@ -32,14 +32,6 @@ export class EventsController {
         return this.eventsService.processWorkerResponses(responsePageFilterDto)
     }
 
-
-    // @depricated
-    // @Post('/event/mounts')
-    // @ApiOperation({ summary: 'Test Worker mounts ' })
-    // @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
-    // async fetchExportPath(@Body() mountConnectionsDTO: MountConnectionsDTO) {
-    //     return this.eventsService.mountWorkerConnections(mountConnectionsDTO)
-    // }
 
     @Get('/event/refetch-paths/:configId')
     @ApiOperation({ summary: 'Refetch Config paths' })

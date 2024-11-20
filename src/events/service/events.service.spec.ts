@@ -6,7 +6,7 @@ import { SocketEvents } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from '../dto/workerconnection.dto';
+import { NFSConnectionDetails, SMBConnectionDetails, TestConnectionsDTO } from '../dto/validateconnection.dto';
 import { MountConnectionsDTO } from '../dto/workermounts.dto';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { EventsService } from './events.service';

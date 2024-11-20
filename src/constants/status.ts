@@ -1,18 +1,27 @@
 export enum ResponseStatus {
-    Pending = 'Pending',
-    Completed = 'Completed',
-    Error = 'Error'
-}
-
-export enum WorkerCommand {
-    TestConnection = 'TestConnection',
-    Volumes = 'Volumes'
+    PENDING = 'PENDING',
+    COMPLETED = 'COMPLETED',
+    ERROR = 'ERROR'
 }
 
 export enum SocketEvents{
-    TestConnection = 'test-connection',
+    VALIDATE_CONNECTION = 'VALIDATE_CONNECTION',
+    VALIDATE_CONNECTION_ACK='VALIDATE_CONNECTION_ACK',
     Volumes = 'volumes',
     Error = 'error',
     Acknowledgement = 'acknowledgement',
     VolumesAck = 'volumes-ack'
+}
+
+
+export enum TaskType {
+    VALIDATE_CONNECTION = 'VALIDATE_CONNECTION',
+    LIST_PATHS='LIST_PATHS',
+}
+
+export enum Operations {
+    VALIDATE_NFS_CONNECTION='VALIDATE_NFS_CONNECTION',
+    VALIDATE_SMB_CONNECTION='VALIDATE_SMB_CONNECTION',
+    LIST_NFS_PATHS='LIST_NFS_PATHS',
+    LIST_SMB_PATHS='LIST_SMB_PATHS'
 }

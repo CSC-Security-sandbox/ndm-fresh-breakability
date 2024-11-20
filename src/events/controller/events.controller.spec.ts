@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TestConnectionsDTO } from '../dto/workerconnection.dto';
+import { TestConnectionsDTO } from '../dto/validateconnection.dto';
 import { MountConnectionsDTO } from '../dto/workermounts.dto';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { EventsController } from './events.controller';
