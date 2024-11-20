@@ -20,16 +20,13 @@ public class UserProfileEventListenerFactory implements EventListenerProviderFac
 
     @Override
     public void init(Config.Scope config) {
-        // No-op implementation
     }
  
     @Override
     public void postInit(KeycloakSessionFactory factory) {
-        // No-op implementation
     }
  
     @Override
     public void close() {
-        // Clean up resources if necessary
     }
 }

@@ -5,6 +5,7 @@ import org.keycloak.events.admin.AdminEvent;
 import org.keycloak.events.EventListenerProvider;
 import org.keycloak.events.EventType;
 import org.keycloak.models.KeycloakSession;
+import com.netapp.datamigrate.utils.DatabaseConnectionUtil;
  
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -15,9 +16,6 @@ import java.util.logging.Logger;
 public class UserProfileEventListener implements EventListenerProvider {
  
     private final KeycloakSession session;
-    private static final String JDBC_URL = System.getenv("KC_DB_URL");
-    private static final String DB_USER = System.getenv("KC_DB_USERNAME");
-    private static final String DB_PASSWORD = System.getenv("KC_DB_PASSWORD");
     private static final Logger logger = Logger.getLogger(UserProfileEventListener.class.getName());
  
     public UserProfileEventListener(KeycloakSession session) {
@@ -50,14 +48,14 @@ public class UserProfileEventListener implements EventListenerProvider {
  
     private void updateUserEmailInDatabase(String username, String updatedEmail) {
         String query = "UPDATE migrateadmin.\"user\" SET email = ? WHERE email = ?";
- 
-        try (Connection connection = DriverManager.getConnection(JDBC_URL, DB_USER, DB_PASSWORD);
+     
+        try (Connection connection = DatabaseConnectionUtil.getConnection();
              PreparedStatement statement = connection.prepareStatement(query)) {
- 
-            statement.setString(1, updatedEmail); 
+     
+            statement.setString(1, updatedEmail);
             statement.setString(2, username);
             int rowsAffected = statement.executeUpdate();
- 
+     
             if (rowsAffected > 0) {
                 logger.info("User email updated successfully in the database for username: " + username);
             } else {
@@ -71,6 +69,5 @@ public class UserProfileEventListener implements EventListenerProvider {
  
     @Override
     public void close() {
-        // Clean up resources if necessary
     }
 }
