@@ -23,12 +23,4 @@ export class JobMappingEntity extends Base {
   @ApiProperty({ description: 'destination' })
   @Column({ name: 'destination_id', nullable: false })
   destination_id: string;
-
-  @ApiProperty({ description: 'Timestamp when the entity was created' })
-  @CreateDateColumn({ name: 'created_at' })
-  created_at: Date;
-
-  @ApiProperty({ description: 'Timestamp when the entity was last updated' })
-  @UpdateDateColumn({ name: 'updated_at' })
-  updated_at: Date;
 }
