@@ -104,11 +104,11 @@ export class EventsService {
         transactionId: transactionId,
         workerId: worker,
         operations:  cred.map((it):ListPathOptionReq=> ({
-            operation: it.protocol === Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.LIST_SMB_PATHS,
+            operation: it.protocol === Protocol.NFS ? Operations.LIST_NFS_PATHS : Operations.LIST_SMB_PATHS,
             request: {
                 hostname: it.details?.hostname,
                 password: it.details?.password,
-                username: it.details?.username
+                username: it.details?.username,
             },
             status: ResponseStatus.PENDING,
             }))
@@ -126,11 +126,11 @@ export class EventsService {
                 else map.set(worker, [cred])
             })
         })
-        await this.fetchPathNotify(map, transactionId)
+        await this.fetchPathNotify(map, transactionId, details.configId)
     }
 
 
-    async fetchPaths(configId: string, ) {
+    async fetchPaths(configId: string) {
         const config =  await this.fileConfigService.getPathConfig(configId)
         
         if(!config) 
@@ -155,11 +155,11 @@ export class EventsService {
                 
             })
         })
-        await this.fetchPathNotify(map, transactionId)
+        await this.fetchPathNotify(map, transactionId, configId)
         return await this.fileConfigService.updateRefetchingConfig(config)
     }
       
-    async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string){
+    async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string, configId: string){
         map.forEach(async (credentials, worker)=>{
             const payload = this.baseListPathReqByDetails(credentials, transactionId, worker)
             credentials.forEach(async cred=> {
@@ -168,6 +168,7 @@ export class EventsService {
                     taskType: TaskType.LIST_PATHS,
                     workerId: worker, createdBy: transactionId,
                     operation: cred.protocol == Protocol.NFS ? Operations.LIST_NFS_PATHS : Operations.LIST_SMB_PATHS,
+                    configId: configId
                 })
                 await this.requestTrackEntity.save(requestTrack)
             })

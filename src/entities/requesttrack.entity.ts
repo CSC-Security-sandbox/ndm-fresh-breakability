@@ -35,6 +35,10 @@ export class RequestTrackEntity extends Base {
   @Column({ type: 'uuid', nullable: false,  name: 'transaction_id'  })
   transactionId: string;
 
+  @ApiProperty({ description: 'configId' })
+  @Column({ type: 'uuid', nullable: true,  name: 'config_id'  })
+  configId: string;
+
   @ManyToOne(() => WorkerEntity)
   @JoinColumn({ name: 'worker_id' }) 
   WorkerEntity: WorkerEntity;

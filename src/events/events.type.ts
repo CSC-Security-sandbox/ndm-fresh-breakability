@@ -78,6 +78,7 @@ export interface ListPathRes{
     operations: [{
         operation: Operations;
         response: {
+            paths?: string[]
             errors?: [{
                 errorCode: string,
                 errorMessage: string

@@ -10,7 +10,7 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { ValidateConnectionRes } from '../events.type';
+import { ListPathRes, ValidateConnectionRes } from '../events.type';
 import { RequestTrackService } from '../service/requesttrack.service';
 
 @WebSocketGateway({namespace: 'event'})
@@ -108,12 +108,16 @@ export class EventsGateway implements OnGatewayInit{
     }
   }
 
-
-
-  // worker Ack
+  // --------------------- VALIDATE CONNECTION ACK --------------------- //
   @SubscribeMessage(SocketEvents.VALIDATE_CONNECTION_ACK)
-  async handleAcknowledgementMessage(client: Socket, ack: ValidateConnectionRes) {
+  async handleValidateConnectionACk(client: Socket, ack: ValidateConnectionRes) {
     await this.requestTrackService.validateConnectionACk(ack)
+  }
+
+  // --------------------- LIST PATH ACK --------------------- //
+  @SubscribeMessage(SocketEvents.LIST_PATH_ACK)
+  async handleListPathAck(client: Socket, ack: ListPathRes) {
+    await this.requestTrackService.listPathAck(ack)
   }
 
 }
