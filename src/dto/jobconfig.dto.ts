@@ -1,29 +1,39 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
-  IsBoolean,
-  IsUUID,
   IsIn,
+  IsArray,
+  IsUUID,
+  IsDateString,
 } from 'class-validator';
+
+export enum JobType {
+  Discovery = 'DISCOVERY',
+  Migrate = 'MIGRATE',
+  CutOver = 'CUTOVER',
+  SpeedTest = 'SPEEDTEST'
+}
 
 export class JobConfigDTO {
   @ApiProperty({
-    example: 'Discover',
+    example: 'DISCOVERY',
     description: 'Type of the job',
-    enum: ['discover', 'migrate', 'cutover', 'speedtest'],
+    default: JobType.Discovery,
+    enum: JobType,
   })
-  @IsIn(['discover', 'migrate', 'cutover', 'speedtest'])
-  jobType: string;
+  @IsIn(Object.values(JobType))
+  jobType: JobType;
 
   @ApiProperty({ example: '1234', description: 'Unique identifier for the file server' })
-  @IsString()
+  @IsUUID()
   fileServerId: string;
 
   @ApiProperty({ example: ['path/to/source1', 'path/to/source2'], description: 'Array of paths to be discovered/migrated' })
-  @IsString()
+  @IsArray()
   pathList: string[];
 
   @ApiProperty({ description: 'Schedule configuration for the job' })
+  @IsDateString()
   jobSchedule: Date;
 
   @ApiProperty({ description: 'Created by user' })

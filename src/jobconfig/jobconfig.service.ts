@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { v4 as uuid } from 'uuid';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
+import { Injectable, Logger } from '@nestjs/common';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDTO } from '../dto/jobconfig.dto';
 
@@ -15,9 +16,13 @@ export class JobConfigService {
   async createJob(jobData: JobConfigDTO): Promise<JobConfigEntity> {
     this.logger.log(`Data to job - ${JSON.stringify(jobData)}`);
     const jobRecord = this.jobConfigRepo.create({
-        schedule_time: jobData?.jobSchedule,
-        createdBy: jobData?.created_by,
-        updatedBy: jobData?.updated_by
+      status: 'ACTIVE',
+      job_type: jobData.jobType,
+      path_id: uuid(),
+      file_server_id: jobData.fileServerId,
+      schedule_time: jobData?.jobSchedule,
+      createdBy: jobData?.created_by,
+      updatedBy: jobData?.updated_by
     });
     return this.jobConfigRepo.save(jobRecord);
   }
