@@ -1,6 +1,9 @@
 # Compiled class file
 *.class
 
+.gitignore
+create-cru.sh
+
 # Log file
 *.log
 
