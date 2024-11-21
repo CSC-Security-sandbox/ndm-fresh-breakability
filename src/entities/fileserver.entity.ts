@@ -13,19 +13,23 @@ export class FileServerEntity extends Base {
     id: string;
 
     @ApiProperty({ description: 'data' })
-    @Column({ type: 'text', nullable: true,  name:'config_name' })
+    @Column({ type: 'text', nullable: true,  name:'hostname' })
     host: string;
 
     @ApiProperty({ description: 'data' })
-    @Column({ type: 'text', nullable: true,  name:'config_type' })
+    @Column({ type: 'text', nullable: true,  name:'username' })
     userName: string;
 
     @ApiProperty({ description: 'protocol' })
-    @Column({ type: 'enum', enum: Protocol, name:'protocol' })
+    @Column({ type: 'text', name:'protocol', nullable: true})
     protocol: Protocol;
 
     @Column({ type: 'enum', enum: ServerType, name:'server_type' })
     serverType: ServerType;
+
+    @ApiProperty({ description: 'password' })
+    @Column({ type: 'text', nullable: true,  name:'password' })
+    password: string;
 
     @ApiProperty({ description: 'configId' })
     @Column({ type: 'uuid', nullable:true,  name: 'config_id'})

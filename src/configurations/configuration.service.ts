@@ -8,7 +8,8 @@ import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { ConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
-import { Rabbitmq } from 'src/constants/enums';
+import { Protocol, Rabbitmq } from 'src/constants/enums';
+import { Credentials } from './configuration.types';
 
 
 @Injectable()
@@ -66,10 +67,19 @@ export class ConfigurationService {
 
     async createConfiguration(createConfig: ConfigDTO) {
         const userId = uuidv4();
-    
+        const credentials:Credentials[] = []
+
         const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
             const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
-
+            credentials.push({
+                details: {
+                    hostname: fileServer.host,
+                    username: fileServer.userName,
+                    password: fileServer?.password
+                },
+                protocol: fileServer.protocol,
+                workers: workers.map(it=>it.workerId)
+            })
             return this.fileServerEntity.create({
                 host: fileServer.host,
                 serverType: fileServer.serverType,
@@ -77,6 +87,7 @@ export class ConfigurationService {
                 createdBy: userId,
                 protocol: fileServer.protocol,  
                 userName: fileServer.userName,
+                password: fileServer?.password,
                 isRefreshed: false,
                 volumes: []
             });
@@ -91,7 +102,7 @@ export class ConfigurationService {
         });
     
         const update = await this.configEntity.save(config)
-        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: update.id})
+        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: update.id, credentials})
         return update
     }
 
@@ -113,6 +124,8 @@ export class ConfigurationService {
         if (!config) 
             throw new NotFoundException(`Config for id ${id} not found.`);
 
+        const credentials:Credentials[] = []
+
         config.configName = updateConfig.configName;
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
@@ -122,6 +135,16 @@ export class ConfigurationService {
             const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
 
             const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
+
+            credentials.push({
+                details: {
+                    hostname: update.host,
+                    username: update.userName,
+                    password: update?.password
+                },
+                protocol: fileServer.protocol,
+                workers: workers.map(it=>it.workerId)
+            })
             
             return this.fileServerEntity.create({
                 id: fileServer.id,
@@ -130,8 +153,9 @@ export class ConfigurationService {
                 workers: workers,
                 createdBy: fileServer.createdBy,
                 protocol: fileServer.protocol,  
-                userName: update.userName || update.userName,
+                userName: update.userName || fileServer.userName,
                 volumes: fileServer.volumes,
+                password: update.password,
                 updatedBy: userId,
                 isRefreshed: false
             });

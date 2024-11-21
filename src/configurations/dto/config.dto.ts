@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, isString, IsString, IsUUID, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { ConfigurationType, Protocol, ServerType } from "src/constants/enums";
@@ -51,6 +51,11 @@ export class FileServersDTO {
     @IsString()
     @IsNotEmpty()
     host: string;
+
+    @ApiPropertyOptional({ description: 'password', example: '***' })
+    @IsString()
+    @IsNotEmpty()
+    password?: string;
 
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
     @IsArray()

@@ -6,11 +6,11 @@ import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigurationService } from './configuration.service';
 import { ConfigDTO } from './dto/config.dto';
-import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 
 // Mock data for entities
