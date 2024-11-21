@@ -116,6 +116,5 @@ export class EventsGateway implements OnGatewayInit{
     await this.requestTrackService.validateConnectionACk(ack)
   }
 
-
 }
 

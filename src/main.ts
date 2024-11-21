@@ -19,6 +19,7 @@ async function bootstrap() {
     options: {
       urls: configService.get('app.rabbitmq.urls'),
       queue: configService.get('app.rabbitmq.queue'),
+      noAck: false,
       queueOptions: {
         durable: configService.get('app.rabbitmq.durable'),
         arguments: {

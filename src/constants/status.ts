@@ -7,6 +7,8 @@ export enum ResponseStatus {
 export enum SocketEvents{
     VALIDATE_CONNECTION = 'VALIDATE_CONNECTION',
     VALIDATE_CONNECTION_ACK='VALIDATE_CONNECTION_ACK',
+    LIST_PATH='LIST_PATH',
+    LIST_PATH_ACK='LIST_PATH_ACK',
     Volumes = 'volumes',
     Error = 'error',
     Acknowledgement = 'acknowledgement',

@@ -7,8 +7,9 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 
+import { Credentials, FetchMountMsg } from '../controller/rabbitmq.types';
 import { ValidateConnectionDto } from '../dto/validateconnection.dto';
-import { QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';
+import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';
 import { FileConfigService } from './config.service';
 import { RabbitMqService } from './rabbitmq.service';
 
@@ -24,6 +25,40 @@ export class EventsService {
 
     ) {}
 
+    async notifyEventToWorker(workerId:string, socketEvents: SocketEvents, payload: any) {
+        const queueEvent:QueueEvent = {
+            workerId: workerId,
+            action: {
+                eventType: socketEvents,
+                message: payload
+            }
+        }
+        this.rabbitMqService.publishToExchange(queueEvent)
+        this.logger.log(`${socketEvents} is published for ${workerId}`)
+    }
+
+    async processWorkerResponses(workerRequestDTO: WorkerRequestDTO) {
+        const { page, limit, sort = 'createdAt', order = 'ASC', deserialize , ...filter } = workerRequestDTO;
+        
+        const findOptions: FindManyOptions<RequestTrackEntity> = {
+          where: filter, order: { [sort]: order }, 
+        };
+        let data = [], total = 0;
+        if (page && limit) {
+          findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+          findOptions.take = parseInt(limit); 
+          data = await this.requestTrackEntity.find(findOptions);
+          total = await this.requestTrackEntity.count({ where: filter });
+        } else {
+          data = await this.requestTrackEntity.find(findOptions);
+          total = await this.requestTrackEntity.count();
+        }
+        if(deserialize) 
+            data = data.map((it:RequestTrackEntity) => ({...it, response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
+        return { data, total };
+      }
+
+    // ------------------------------ Validate Connection ----------------------------- //
     baseValidateConnectionReq = (details: ValidateConnectionDto, transactionId: string):ValidateConnectionReq => ({
         id: transactionId,
         status: ResponseStatus.PENDING,
@@ -61,50 +96,77 @@ export class EventsService {
 
 
 
-    async notifyEventToWorker(workerId:string, socketEvents: SocketEvents, payload: any) {
-        const queueEvent:QueueEvent = {
-            workerId: workerId,
-            action: {
-                eventType: socketEvents,
-                message: payload
-            }
-        }
-        this.rabbitMqService.publishToExchange(queueEvent)
-        this.logger.log(`${socketEvents} is published for ${workerId}`)
-    }
 
-    async processWorkerResponses(workerRequestDTO: WorkerRequestDTO) {
-        const { page, limit, sort = 'createdAt', order = 'ASC', deserialize , ...filter } = workerRequestDTO;
-        
-        const findOptions: FindManyOptions<RequestTrackEntity> = {
-          where: filter, order: { [sort]: order }, 
-        };
-        let data = [], total = 0;
-        if (page && limit) {
-          findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
-          findOptions.take = parseInt(limit); 
-          data = await this.requestTrackEntity.find(findOptions);
-          total = await this.requestTrackEntity.count({ where: filter });
-        } else {
-          data = await this.requestTrackEntity.find(findOptions);
-          total = await this.requestTrackEntity.count();
-        }
-        if(deserialize) 
-            data = data.map((it:RequestTrackEntity) => ({...it, response: it?.response ? JSON.parse(it?.response ?? "") : ""}))
-        return { data, total };
-      }
+    // ------------------------------ List Path ----------------------------- //
+    baseListPathReqByDetails = (cred:  Omit<Credentials,'workers'>[], transactionId: string, worker: string, configId: string): ListPathReq => ({
+        id: transactionId,
+        status: ResponseStatus.PENDING,
+        taskType: TaskType.LIST_PATHS,
+        transactionId: transactionId,
+        workerId: worker,
+        operations:  cred.map((it):ListPathOptionReq=> ({
+            operation: it.protocol === Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.LIST_SMB_PATHS,
+            request: {
+                configId: configId,
+                hostname: it.details?.hostname,
+                password: it.details?.password,
+                username: it.details?.username
+            },
+            status: ResponseStatus.PENDING,
+            }))
+        })
+    
 
-      // Send fetch path event to worker
-      async fetchPaths(configId: string) {
-        const config =  await this.fileConfigService.getPathConfig(configId)
-        if(!config) 
-            throw new NotFoundException(`Config with ${configId} configId does not exists.`)
-        config.fileServers.forEach(async server=> {
-            const payload = {configId: config.id, protocol: server.protocol}
-            server.workers.forEach(async worker=> {
-                await this.notifyEventToWorker(worker.workerId, SocketEvents.Volumes, payload)
+    async fetchPathsByCred(details: FetchMountMsg) {
+        const transactionId = uuidv4(); 
+        const map = new Map<string, Omit<Credentials,'workers'>[]>()
+
+        details.credentials.forEach(async cred=>{
+            cred.workers.forEach(worker=>{
+                if(map.has(worker)) 
+                    map.set(worker, [...map.get(worker), cred])
+                else map.set(worker, [cred])
             })
         })
+        await this.fetchPathNotify(map, transactionId, details.configId)
+    }
+
+
+    async fetchPaths(configId: string, ) {
+        const config =  await this.fileConfigService.getPathConfig(configId)
+        
+        if(!config) 
+            throw new NotFoundException(`Config with ${configId} configId does not exists.`)
+
+        const transactionId = uuidv4(); 
+
+        const map = new Map<string, Omit<Credentials,'workers'>[]>()
+        config.fileServers.forEach(async server=> {
+            server.workers.forEach(async worker=> {
+                if(map.has(worker.workerId))
+                    map.set(worker.workerId, [...map.get(worker.workerId), { protocol: server.protocol, details: {}}])
+                else map.set(worker.workerId, [{ protocol: server.protocol, details: {}}])
+                
+            })
+        })
+        await this.fetchPathNotify(map, transactionId, config.id)
         return await this.fileConfigService.updateRefetchingConfig(config)
-      }
+    }
+      
+    async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string, configId: string){
+        map.forEach(async (credentials, worker)=>{
+            const payload = this.baseListPathReqByDetails(credentials, transactionId, worker, configId)
+            credentials.forEach(async cred=> {
+                const requestTrack = this.requestTrackEntity.create({
+                    transactionId, status: ResponseStatus.PENDING,  
+                    taskType: TaskType.LIST_PATHS,
+                    workerId: worker, createdBy: transactionId,
+                    operation: cred.protocol == Protocol.NFS ? Operations.LIST_NFS_PATHS : Operations.LIST_SMB_PATHS,
+                })
+                await this.requestTrackEntity.save(requestTrack)
+            })
+            await this.notifyEventToWorker(worker, SocketEvents.LIST_PATH, payload)
+
+        })
+    }
 }
