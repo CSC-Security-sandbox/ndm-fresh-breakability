@@ -53,10 +53,9 @@ export interface ValidateConnectionRes{
 export interface ListPathOptionReq{
     operation: Operations;
     request:  {
-        hostname?: string
-        username?: string;
+        hostname: string
+        username: string;
         password?: string
-        configId?: string
     }
     status: ResponseStatus
 }
@@ -87,3 +86,4 @@ export interface ListPathRes{
         status: ResponseStatus
     }]
 }
+

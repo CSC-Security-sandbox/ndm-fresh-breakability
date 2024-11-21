@@ -96,9 +96,8 @@ export class EventsService {
 
 
 
-
     // ------------------------------ List Path ----------------------------- //
-    baseListPathReqByDetails = (cred:  Omit<Credentials,'workers'>[], transactionId: string, worker: string, configId: string): ListPathReq => ({
+    baseListPathReqByDetails = (cred:  Omit<Credentials,'workers'>[], transactionId: string, worker: string): ListPathReq => ({
         id: transactionId,
         status: ResponseStatus.PENDING,
         taskType: TaskType.LIST_PATHS,
@@ -107,7 +106,6 @@ export class EventsService {
         operations:  cred.map((it):ListPathOptionReq=> ({
             operation: it.protocol === Protocol.NFS ? Operations.VALIDATE_NFS_CONNECTION : Operations.LIST_SMB_PATHS,
             request: {
-                configId: configId,
                 hostname: it.details?.hostname,
                 password: it.details?.password,
                 username: it.details?.username
@@ -128,7 +126,7 @@ export class EventsService {
                 else map.set(worker, [cred])
             })
         })
-        await this.fetchPathNotify(map, transactionId, details.configId)
+        await this.fetchPathNotify(map, transactionId)
     }
 
 
@@ -143,19 +141,27 @@ export class EventsService {
         const map = new Map<string, Omit<Credentials,'workers'>[]>()
         config.fileServers.forEach(async server=> {
             server.workers.forEach(async worker=> {
+                const cred :Omit<Credentials,'workers'>= {
+                    protocol: server.protocol, 
+                    details: {
+                        hostname: server.host,
+                        username: server.userName,
+                        password: server.password
+                    }
+                } 
                 if(map.has(worker.workerId))
-                    map.set(worker.workerId, [...map.get(worker.workerId), { protocol: server.protocol, details: {}}])
-                else map.set(worker.workerId, [{ protocol: server.protocol, details: {}}])
+                    map.set(worker.workerId, [...map.get(worker.workerId), cred])
+                else map.set(worker.workerId, [cred])
                 
             })
         })
-        await this.fetchPathNotify(map, transactionId, config.id)
+        await this.fetchPathNotify(map, transactionId)
         return await this.fileConfigService.updateRefetchingConfig(config)
     }
       
-    async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string, configId: string){
+    async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string){
         map.forEach(async (credentials, worker)=>{
-            const payload = this.baseListPathReqByDetails(credentials, transactionId, worker, configId)
+            const payload = this.baseListPathReqByDetails(credentials, transactionId, worker)
             credentials.forEach(async cred=> {
                 const requestTrack = this.requestTrackEntity.create({
                     transactionId, status: ResponseStatus.PENDING,  
