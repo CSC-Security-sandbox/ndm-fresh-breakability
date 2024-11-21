@@ -6,7 +6,6 @@ import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
-
 import { Credentials, FetchMountMsg } from '../controller/rabbitmq.types';
 import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';

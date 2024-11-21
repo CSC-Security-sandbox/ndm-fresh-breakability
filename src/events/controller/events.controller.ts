@@ -18,7 +18,6 @@ export class EventsController {
     @ApiOperation({ summary: 'Test Worker Connections ' })
     @ApiCreatedResponse({ description: 'Test Worker Connection Request Created Successfully.', type: String })
     async testWorkerConnections(@Body() validateConnectionDto: ValidateConnectionDto) {
-        //return this.eventsService.testWorkerConnections(testConnectionsDTO)
         return this.eventsService.validateWorkerConnection(validateConnectionDto);
     }
 

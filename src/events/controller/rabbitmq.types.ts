@@ -10,7 +10,7 @@ export type Credentials= {
     workers: string[]
 }
 
-export type FetchMountMsg ={
+export type FetchMountMsg = {
     configId: string;
     credentials: Credentials[]
 }
