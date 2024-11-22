@@ -68,7 +68,7 @@ export class EventsGateway implements OnGatewayInit{
     const project = await this.projectEntity.findOneBy({id: projectId})
     if(!project) {
       this.logger.error(`Record Not Found for Project: ${projectId} Unable to register worker`)
-      client.emit(SocketEvents.Error, {error:`Record Not Found for Project: ${projectId} Unable to register worker`})
+      client.emit(SocketEvents.ERROR, {error:`Record Not Found for Project: ${projectId} Unable to register worker`})
       client.disconnect()
       return
     }

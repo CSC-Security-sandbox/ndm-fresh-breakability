@@ -23,7 +23,7 @@ export class FileConfigService {
     ) {}
 
 
-    // Update or add path corresponding to fileserver
+    // Update or add path corresponding to fileServer
     async updatePathToConfig(configId: string, ack: ListPathRes) {
 
         const config = await this.configEntity.findOne({
@@ -42,6 +42,10 @@ export class FileConfigService {
         }
 
         ack.operations.forEach(async operation => {
+            if(operation.response.errors) {
+                this.logger.error(`Error on worker ${ack.workerId} for ${operation.operation} `)
+                return
+            }
             const protocol =  OperationToProtocol(operation.operation)
             const fileServer = config.fileServers.find(it=>it.protocol === protocol)
             if(fileServer) {

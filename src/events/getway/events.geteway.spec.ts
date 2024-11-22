@@ -194,7 +194,7 @@ describe('EventsGateway', () => {
       const result = { key: 'value' };
       const message = { requestId, result };
 
-      await gateway.handleAcknowledgementMessage(mockSocket as Socket, message);
+      await gateway.handleValidateConnectionACk(mockSocket as Socket, message);
 
       expect(mockRequestTrackRepository.update).toHaveBeenCalledWith({ id: requestId }, { status: ResponseStatus.Completed, response: JSON.stringify(result) });
     });
@@ -204,7 +204,7 @@ describe('EventsGateway', () => {
       const error = 'Some error';
       const message = { requestId, error };
 
-      await gateway.handleAcknowledgementMessage(mockSocket as Socket, message);
+      await gateway.handleValidateConnectionACk(mockSocket as Socket, message);
 
       expect(mockRequestTrackRepository.update).toHaveBeenCalledWith({ id: requestId }, { status: ResponseStatus.Error, response: JSON.stringify(error) });
     });
