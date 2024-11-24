@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
-import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 
 @Injectable()
 export class JobRunService {
@@ -79,7 +79,7 @@ export class JobRunService {
       const job = await this.jobService.getJobById(jobId);
       if (!job) throw new Error(`Job with id ${jobId} not found`);
       const jobRun: Partial<JobRunDto> = {
-        status: 'READY',
+        status: JobRunStatus.Ready,
         start_time: new Date(),
         iteration_number: 1,
         job_id: job.id,

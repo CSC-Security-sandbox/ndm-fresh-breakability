@@ -19,6 +19,12 @@ export enum TaskStatus {
     Completed = 'COMPLETED',
 }
 
+export enum TaskOperation {
+    ScanPath = 'SCAN_PATH',
+    CopyFile = 'COPY_FILR',
+    MetaStamp = 'META_STAMP'
+}
+
 @Entity({ name: 'tasks' })
 export class TaskEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })

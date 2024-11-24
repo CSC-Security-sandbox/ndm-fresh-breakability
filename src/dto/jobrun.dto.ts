@@ -1,3 +1,4 @@
+import { JobRunStatus } from './../entities/jobrun.entity';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
 
@@ -8,7 +9,7 @@ export class JobRunDto {
 
   @ApiProperty({ description: 'Job run status' })
   @IsString()
-  status: string;
+  status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
   @IsDateString()

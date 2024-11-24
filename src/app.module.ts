@@ -8,6 +8,7 @@ import { WorkerModule } from './workers/workers.module';
 import { JobRunModule } from './jobrun/jobrun.module';
 import { SchedularModule } from './schedular/schedule.module';
 import { JobMappingModule } from './jobmappings/jobmapping.module';
+import { TaskModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { JobMappingModule } from './jobmappings/jobmapping.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule, TaskModule
   ],
   controllers: [],
   providers: [],

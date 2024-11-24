@@ -118,5 +118,4 @@ export class EventsGateway implements OnGatewayInit{
       this.server.to(clientId).emit(eventType, message);
     }
   }
-  
 }

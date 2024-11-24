@@ -1,7 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
-import { JobConfigEntity } from './jobconfig.entity';
+
+export enum JobRunStatus {
+  Ready = 'READY',
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Paused = 'PAUSED',
+  Stopped = 'STOPPED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Errored = 'ERRORED'
+}
 
 @Entity({ name: 'job_run' })
 export class JobRunEntity extends Base {
@@ -9,9 +19,9 @@ export class JobRunEntity extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ApiProperty({ description: 'Job run status' })
-  @Column({ name: 'status' })
-  status: string;
+  @ApiProperty({ description: 'Job Run status' })
+  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
   @Column({ name: 'chunk_size' })
