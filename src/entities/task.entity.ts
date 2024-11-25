@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 
 export enum TaskType {
@@ -21,11 +21,14 @@ export enum TaskStatus {
 
 export enum TaskOperation {
     ScanPath = 'SCAN_PATH',
-    CopyFile = 'COPY_FILR',
+    CopyFile = 'COPY_FILE',
     MetaStamp = 'META_STAMP'
 }
 
 @Entity({ name: 'tasks' })
+@Index('idx_job_run_id', ['job_run_id'])
+@Index('idx_job_run_status', ['job_run_id', 'status'])
+@Index('idx_status', ['status'])
 export class TaskEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')

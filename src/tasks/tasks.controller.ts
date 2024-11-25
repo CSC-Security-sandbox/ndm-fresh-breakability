@@ -8,15 +8,20 @@ import {
     Body,
     HttpException,
     HttpStatus,
+    NotFoundException,
   } from '@nestjs/common';
   import { ApiTags, ApiResponse } from '@nestjs/swagger';
   import { TaskService } from './tasks.service';
   import { TaskEntity } from '../entities/task.entity';
+import { EventsGateway } from '../events/events.gateway';
   
   @ApiTags('Tasks')
   @Controller('tasks')
   export class TaskController {
-    constructor(private readonly taskService: TaskService) {}
+    constructor(
+      private readonly taskService: TaskService,
+      private readonly eventsGateway: EventsGateway
+    ) {}
   
     @ApiResponse({ status: 200, description: 'Returns all tasks.' })
     @Get()
@@ -66,14 +71,27 @@ import {
     }
 
     // Worker will call this api to get the list of tasks that can be picked
-    @ApiResponse({ status: 200, description: 'Deletes a task.' })
-    @ApiResponse({ status: 404, description: 'Task not found.' })
+    @ApiResponse({ status: 200, description: 'Returns tasks assigned to a worker for processing.' })
+    @ApiResponse({ status: 404, description: 'No tasks found for the worker.' })
     @Get('/worker/:workerId/:jobRunId')
     async getTaskForWorker(
       @Param('workerId') workerId: string, 
-      @Param('jobRunId') jobRunId: string, 
+      @Param('jobRunId') jobRunId: string
     ) {
-      // tasks will be assigned to worker with this API.
+      const tasks = await this.taskService.assignTasksToWorker(jobRunId, 1000);
+
+      if (!tasks || tasks.length === 0) {
+        throw new NotFoundException('No tasks available for the worker.');
+      }
+
+      // Send tasks to the worker
+      const result = await this.eventsGateway.sendToClient(workerId, 'taskAssigned', tasks);
+          
+      return {
+        message: 'Tasks assigned to worker for processing.',
+        tasks,
+        sentToWorker: result,
+      };
     }
   }
   

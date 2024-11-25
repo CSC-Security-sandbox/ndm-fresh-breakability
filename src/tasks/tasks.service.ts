@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, FindOneOptions, Repository } from 'typeorm';
-import { TaskEntity } from '../entities/task.entity';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { TaskEntity, TaskStatus } from '../entities/task.entity';
 
 @Injectable()
 export class TaskService {
@@ -33,6 +33,59 @@ export class TaskService {
     }
     const updatedTask = this.taskRepository.merge(existingTask, taskData);
     return this.taskRepository.save(updatedTask);
+  }
+
+  async updateTasksByIds(ids: string[], updateData: Partial<TaskEntity>) {
+    return await this.taskRepository
+      .createQueryBuilder()
+      .update(TaskEntity)
+      .set(updateData)
+      .whereInIds(ids)
+      .execute();
+  }
+
+  async assignTasksToWorker(jobRunId: string, limit: number) {
+    const queryRunner = this.taskRepository.queryRunner;
+  
+    try {
+      // Start transaction
+      await queryRunner.startTransaction();
+  
+      // Step 1: Select and lock tasks
+      const tasks = await queryRunner.manager
+        .createQueryBuilder(TaskEntity, 'task')
+        .setLock('pessimistic_write') // Lock rows to prevent other workers from accessing them
+        .where('task.job_run_id = :jobRunId', { jobRunId })
+        .andWhere('task.status = :status', { status: TaskStatus.Pending })
+        .limit(limit)
+        .getMany();
+  
+      if (!tasks || tasks.length === 0) {
+        await queryRunner.rollbackTransaction();
+        return [];
+      }
+  
+      // Step 2: Update tasks to "Running" status
+      const taskIds = tasks.map(task => task.id);
+      await queryRunner.manager
+        .createQueryBuilder()
+        .update(TaskEntity)
+        .set({ status: TaskStatus.Running })
+        .whereInIds(taskIds)
+        .execute();
+  
+      // Commit transaction
+      await queryRunner.commitTransaction();
+  
+      return tasks;
+    } catch (error) {
+      // Rollback transaction on error
+      await queryRunner.rollbackTransaction();
+      throw new ConflictException('Failed to assign tasks to the worker.');
+    } finally {
+      // Release query runner
+      await queryRunner.release();
+    }
   }
 
   async delete(id: string): Promise<boolean> {

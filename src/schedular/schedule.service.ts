@@ -70,7 +70,7 @@ export class SchedularService {
       const workers = await this.workerService.findAllWorkers({  });
 
       for (let index = 0; index < workers.total; index++) {
-        await this.eventsGateway.sendToClient(workers.data[index], 'WAKE_UP', { message: 'wakeup' });
+        await this.eventsGateway.sendToClient(workers.data[index], 'WAKE_UP', { message: 'wakeup', jobRunId: jobRun.id });
       }
     }
     return 'success';
