@@ -1,6 +1,6 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { WorkerCommand, ResponseStatus } from 'src/constants/status';
+import {  Operations, ResponseStatus, TaskType } from 'src/constants/status';
 import { Protocol } from 'src/constants/enums';
 import { WorkerRequestDTO } from './responsefilter.dto';
 
@@ -11,10 +11,10 @@ describe('WorkerRequestDTO', () => {
       limit: '10',
       sort: 'createdAt',
       order: 'asc',
-      requestType: WorkerCommand.TestConnection,
-      status: ResponseStatus.Pending,
-      protocol: Protocol.NFS,
-      requestId: 'req123',
+      transactionId: '1234',
+      status: ResponseStatus.PENDING,
+      taskType: TaskType.LIST_PATHS,
+      operation: Operations.LIST_NFS_PATHS,
       workerId: 'worker456',
     };
 
@@ -95,7 +95,7 @@ describe('WorkerRequestDTO', () => {
 
   it('should correctly fail when requestId is not a string', async () => {
     const invalidData = {
-      requestId: 12345, 
+      transactionId: 12345, 
     };
 
     const dto = plainToInstance(WorkerRequestDTO, invalidData);

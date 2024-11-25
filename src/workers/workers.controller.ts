@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkersStatusPageDto, WorkerStatusPageResponseDto } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
+import { Ctx, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
 
 
 
@@ -20,5 +21,5 @@ export class WorkersController {
     async getWorkers(@Query(new ValidationPipe({ transform: false, whitelist: true }))  workerStatusPageDto: WorkersStatusPageDto) {
         return await this.workersService.findAllWorkers(workerStatusPageDto);
     }
-
 }
+

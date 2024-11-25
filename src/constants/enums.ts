@@ -18,3 +18,7 @@ export enum ConfigurationType {
     file = 'FILE',
     objectStorage = 'OBJECT_STORAGE'
 }
+
+export enum RabbitMq {
+    ListPaths ='ListPaths'
+}
