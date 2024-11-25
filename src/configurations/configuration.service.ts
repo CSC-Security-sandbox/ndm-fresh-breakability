@@ -1,6 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
@@ -69,42 +68,46 @@ export class ConfigurationService {
     async createConfiguration(createConfig: ConfigDTO) {
         const userId = uuidv4();
         const credentials:Credentials[] = []
-
-        const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
-            const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
-            credentials.push({
-                details: {
-                    hostname: fileServer.host,
-                    username: fileServer.userName,
-                    password: fileServer?.password
-                },
-                protocol: fileServer.protocol,
-                workers: workers.map(it=>it.workerId)
-            })
-            return this.fileServerEntity.create({
-                host: fileServer.host,
-                serverType: fileServer.serverType,
-                workers: workers,
-                createdBy: userId,
-                protocol: fileServer.protocol,  
-                userName: fileServer.userName,
-                password: fileServer?.password,
-                isRefreshed: false,
-                volumes: []
+        try {
+            const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
+                const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
+                credentials.push({
+                    details: {
+                        hostname: fileServer.host,
+                        username: fileServer.userName,
+                        password: fileServer?.password
+                    },
+                    protocol: fileServer.protocol,
+                    workers: workers.map(it=>it.workerId)
+                })
+                return this.fileServerEntity.create({
+                    host: fileServer.host,
+                    serverType: fileServer.serverType,
+                    workers: workers,
+                    createdBy: userId,
+                    protocol: fileServer.protocol,  
+                    userName: fileServer.userName,
+                    password: fileServer?.password,
+                    isRefreshed: false,
+                    volumes: []
+                });
             });
-        });
 
-        const config = this.configEntity.create({
-            configName: createConfig.configName,
-            configType: createConfig.configType,
-            projectId: createConfig.projectId,
-            fileServers:  await Promise.all(fileServerPromises),
-            createdBy: userId
-        });
-    
-        const update = await this.configEntity.save(config)
-        await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials})
-        return update
+            const config = this.configEntity.create({
+                configName: createConfig.configName,
+                configType: createConfig.configType,
+                projectId: createConfig.projectId,
+                fileServers:  await Promise.all(fileServerPromises),
+                createdBy: userId
+            });
+        
+            const update = await this.configEntity.save(config)
+            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials})
+            return update
+        }catch(error) {
+            this.logger.error(`Error Occurred during creating Config ${error}`)
+            throw new InternalServerErrorException('Error Occurred during creating Config')
+        }
     }
 
     async updateConfiguration(id: string, updateConfig: ConfigDTO) {
@@ -132,40 +135,45 @@ export class ConfigurationService {
         config.createdBy = updateConfig.createdBy || userId
         config.updatedBy = userId
 
-        const fileServerPromises = config.fileServers.map(async (fileServer)=> {
-            const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
+        try {
+            const fileServerPromises = config.fileServers.map(async (fileServer)=> {
+                const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
 
-            const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
+                const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
 
-            credentials.push({
-                details: {
-                    hostname: update.host,
-                    username: update.userName,
-                    password: update?.password
-                },
-                protocol: fileServer.protocol,
-                workers: workers.map(it=>it.workerId)
+                credentials.push({
+                    details: {
+                        hostname: update.host,
+                        username: update.userName,
+                        password: update?.password
+                    },
+                    protocol: fileServer.protocol,
+                    workers: workers.map(it=>it.workerId)
+                })
+                
+                return this.fileServerEntity.create({
+                    id: fileServer.id,
+                    host: fileServer.host,
+                    serverType: fileServer.serverType,
+                    workers: workers,
+                    createdBy: fileServer.createdBy,
+                    protocol: fileServer.protocol,  
+                    userName: update.userName || fileServer.userName,
+                    volumes: fileServer.volumes,
+                    password: update.password,
+                    updatedBy: userId,
+                    isRefreshed: false
+                });
             })
-            
-            return this.fileServerEntity.create({
-                id: fileServer.id,
-                host: fileServer.host,
-                serverType: fileServer.serverType,
-                workers: workers,
-                createdBy: fileServer.createdBy,
-                protocol: fileServer.protocol,  
-                userName: update.userName || fileServer.userName,
-                volumes: fileServer.volumes,
-                password: update.password,
-                updatedBy: userId,
-                isRefreshed: false
-            });
-        })
 
-        config.fileServers = await Promise.all(fileServerPromises);
-        const update = await this.configEntity.save(config)
-        await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: config.id})
-        return update
+            config.fileServers = await Promise.all(fileServerPromises);
+            const update = await this.configEntity.save(config)
+            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: config.id})
+            return update
+        }catch(error) {
+            this.logger.error(`Error Occurred during updating Config ${error}`)
+            throw new InternalServerErrorException('Error Occurred during updating Config')
+        }
     }
     
 
