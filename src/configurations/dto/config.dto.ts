@@ -1,31 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, isString, IsString, IsUUID, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
 import { ConfigurationType, Protocol, ServerType } from "src/constants/enums";
-
-export class VolumesDTO {
-
-    @ApiProperty({ description: 'UUID of Volume', example: "66ce0b1d79db96d54332af29" })
-    @IsString()
-    @IsUUID()
-    @IsOptional()
-    id?: string;
-
-    @ApiProperty({ description: 'Volume path', example: '/dir' })
-    @IsString()
-    volumePath: string;
-
-    @ApiProperty({ description: 'Is path included', example: "true" })
-    @IsBoolean()
-    isIncluded: boolean;
-
-    @ApiProperty({ description: 'UUID of createdBy', example: "66ce0b1d79db96d54332af29" })
-    @IsString()
-    @IsUUID()
-    @IsOptional()
-    createdBy?: string;
-
-}
 
 export class FileServersDTO {
     @ApiProperty({ description: 'UUID of fileserver', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })

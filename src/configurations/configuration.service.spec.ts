@@ -89,7 +89,7 @@ describe('ConfigurationService', () => {
       const result = await service.getAllConfig({ page: '1', limit: '10', sort: 'createdAt', order: 'asc' });
       
       expect(mockConfigRepository.find).toHaveBeenCalled();
-      expect(result.data).toEqual([mockConfig]);
+      expect(result.serverConfig).toEqual([mockConfig]);
       expect(result.total).toBe(1);
     });
 
@@ -100,7 +100,7 @@ describe('ConfigurationService', () => {
       const result = await service.getAllConfig({});
       
       expect(mockConfigRepository.find).toHaveBeenCalled();
-      expect(result.data).toEqual([mockConfig]);
+      expect(result.serverConfig).toEqual([mockConfig]);
       expect(result.total).toBe(1);
     });
   });

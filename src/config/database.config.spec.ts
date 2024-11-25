@@ -1,7 +1,5 @@
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { JobEntity } from "src/entities/job.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { DataSourceOptions } from 'typeorm';
@@ -48,11 +46,9 @@ describe('TypeORM Config', () => {
         WorkerEntity,
 
         ConfigEntity,
-        InventoryEntity,
         FileServerEntity,
         VolumeEntity,
         ProjectEntity,
-        JobEntity,
       ],
       migrations: []
     };

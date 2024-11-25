@@ -19,6 +19,6 @@ export enum ConfigurationType {
     objectStorage = 'OBJECT_STORAGE'
 }
 
-export enum Rabbitmq {
-    FetchMount ='FetchMount'
+export enum RabbitMq {
+    ListPaths ='ListPaths'
 }

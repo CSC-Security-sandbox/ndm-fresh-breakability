@@ -1,15 +1,16 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
+import { Credentials } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
-import { Protocol, Rabbitmq } from 'src/constants/enums';
-import { Credentials } from './configuration.types';
+import { RabbitMq } from 'src/constants/enums';
 
 
 @Injectable()
@@ -35,17 +36,17 @@ export class ConfigurationService {
             fileServers: true
           }
         };
-        let data = [], total = 0;
+        let serverConfig = [], total = 0;
         if (page && limit) {
-          findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
-          findOptions.take = parseInt(limit); 
-          data = await this.configEntity.find(findOptions);
-          total = await this.configEntity.count({ where: filter });
+            findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+            findOptions.take = parseInt(limit); 
+            serverConfig = await this.configEntity.find(findOptions);
+            total = await this.configEntity.count({ where: filter });
         } else {
-          data = await this.configEntity.find(findOptions);
-          total = await this.configEntity.count();
+            serverConfig = await this.configEntity.find(findOptions);
+            total = await this.configEntity.count();
         }
-        return { data, total };
+        return { serverConfig, total };
     }
 
     async getConfigById(id: string) {
@@ -102,7 +103,7 @@ export class ConfigurationService {
         });
     
         const update = await this.configEntity.save(config)
-        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: update.id, credentials})
+        await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials})
         return update
     }
 
@@ -163,7 +164,7 @@ export class ConfigurationService {
 
         config.fileServers = await Promise.all(fileServerPromises);
         const update = await this.configEntity.save(config)
-        await this.rabbitMQService.sendMessage(Rabbitmq.FetchMount,  {configId: config.id})
+        await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: config.id})
         return update
     }
     
