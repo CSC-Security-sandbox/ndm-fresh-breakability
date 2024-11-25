@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from 'src/events/service/events.service';
 import { RmqContext } from '@nestjs/microservices';
 import { RabbiMqController } from './rabbimq.controller';
-import { FetchMountMsg } from './rabbitmq.types';
+import { ListPathsMsg } from './rabbitmq.types';
 import { Protocol } from 'src/constants/enums';
 
 const mockEventsService = {
@@ -22,7 +22,7 @@ const mockRmqContext = {
 
 describe('RabbiMqController', () => {
 
-  const fetchMountMsg: FetchMountMsg = {
+  const ListPathsMsg: ListPathsMsg = {
     configId: 'config-123',
     credentials: [
       {
@@ -56,9 +56,9 @@ describe('RabbiMqController', () => {
       const data = { configId: 'test-config-id' };
       const context = mockRmqContext as unknown as RmqContext;
 
-      await controller.handleMessage(fetchMountMsg, context);
+      await controller.handleMessage(ListPathsMsg, context);
 
-      expect(mockEventsService.fetchPathsByCred).toHaveBeenCalledWith(fetchMountMsg);
+      expect(mockEventsService.fetchPathsByCred).toHaveBeenCalledWith(ListPathsMsg);
       expect(context.getChannelRef().ack).toHaveBeenCalledWith(context.getMessage());
     });
 
@@ -68,9 +68,9 @@ describe('RabbiMqController', () => {
       mockEventsService.fetchPathsByCred.mockRejectedValueOnce(new Error('Fetch error'));
 
       try {
-        await controller.handleMessage(fetchMountMsg, context);
+        await controller.handleMessage(ListPathsMsg, context);
       } catch (err) {
-        expect(mockEventsService.fetchPathsByCred).toHaveBeenCalledWith(fetchMountMsg);
+        expect(mockEventsService.fetchPathsByCred).toHaveBeenCalledWith(ListPathsMsg);
         expect(context.getChannelRef().ack).not.toHaveBeenCalled();
       }
     });

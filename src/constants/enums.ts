@@ -20,5 +20,5 @@ export enum ConfigurationType {
 }
 
 export enum RabbitMq {
-    FetchMount ='FetchMount'
+    ListPaths ='ListPaths'
 }

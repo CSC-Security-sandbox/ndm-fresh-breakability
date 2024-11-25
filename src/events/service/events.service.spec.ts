@@ -10,7 +10,7 @@ import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 import { FileConfigService } from './config.service';
 import { EventsService } from './events.service';
 import { RabbitMqService } from './rabbitmq.service';
-import { FetchMountMsg } from '../controller/rabbitmq.types';
+import { ListPathsMsg } from '../controller/rabbitmq.types';
 
 class MockRepositor<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -142,7 +142,7 @@ describe('EventsService', () => {
 
   describe('fetchPathsByCred', () => {
     it('should map credentials to workers correctly and notify workers', async () => {
-      const details: FetchMountMsg = {
+      const details: ListPathsMsg = {
         credentials: [
           {
             protocol: Protocol.NFS,

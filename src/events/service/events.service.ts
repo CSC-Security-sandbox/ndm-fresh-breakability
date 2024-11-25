@@ -6,7 +6,7 @@ import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
-import { Credentials, FetchMountMsg } from '../controller/rabbitmq.types';
+import { Credentials, ListPathsMsg } from '../controller/rabbitmq.types';
 import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';
 import { FileConfigService } from './config.service';
@@ -114,7 +114,7 @@ export class EventsService {
         })
     
 
-    async fetchPathsByCred(details: FetchMountMsg) {
+    async fetchPathsByCred(details: ListPathsMsg) {
         const transactionId = uuidv4(); 
         const map = new Map<string, Omit<Credentials,'workers'>[]>()
 
@@ -161,7 +161,7 @@ export class EventsService {
     async fetchPathNotify(map: Map<string, Omit<Credentials,'workers'>[]>, transactionId:string, configId: string){
         map.forEach(async (credentials, worker)=>{
             const payload = this.baseListPathReqByDetails(credentials, transactionId, worker)
-            credentials.forEach(async cred=> {
+            const promise = credentials.map(async cred=> {
                 const requestTrack = this.requestTrackEntity.create({
                     transactionId, status: ResponseStatus.PENDING,  
                     taskType: TaskType.LIST_PATHS,
@@ -171,8 +171,11 @@ export class EventsService {
                 })
                 await this.requestTrackEntity.save(requestTrack)
             })
+            await Promise.all(promise)
             await this.notifyEventToWorker(worker, SocketEvents.LIST_PATH, payload)
 
         })
     }
+
+    
 }

@@ -3,14 +3,14 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Server, Socket } from 'socket.io';
 import { SockateAuthMiddleware } from 'src/auth/ws-jwt.middleware';
 import { WorkerStatus } from 'src/constants/enums';
-import { ResponseStatus, SocketEvents } from 'src/constants/status';
+import { SocketEvents } from 'src/constants/status';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
-import { EventsGateway } from './events.gateway';
 import { FileConfigService } from '../service/config.service';
 import { RequestTrackService } from '../service/requesttrack.service';
+import { EventsGateway } from './events.gateway';
 
 jest.mock('src/auth/ws-jwt.middleware');
 jest.mock('src/auth/ws-jwt/ws-jwt.guard');
