@@ -10,6 +10,7 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { EventsGateway } from './events.gateway';
 import { FileConfigService } from '../service/config.service';
+import { RequestTrackService } from '../service/requesttrack.service';
 
 jest.mock('src/auth/ws-jwt.middleware');
 jest.mock('src/auth/ws-jwt/ws-jwt.guard');
@@ -50,6 +51,7 @@ describe('EventsGateway', () => {
   let mockRequestTrackRepository: MockRepositor<RequestTrackEntity>
   let mockProjectRepository: MockRepositor<ProjectEntity>
   let fileConfigService: FileConfigService;
+  let requestTrackService: RequestTrackService
 
   beforeEach(async () => {
     mockSocket = {
@@ -104,6 +106,12 @@ describe('EventsGateway', () => {
             updateRefetchingConfig: jest.fn(),
           },
         },
+        {
+          provide: RequestTrackService,
+          useValue : {
+            validateConnectionACk: jest.fn()
+          }
+        }
       ],
     }).compile();
 
@@ -130,7 +138,7 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
+      mockSocket.handshake.query = {worker: workerId, workerName, projectId };
 
       const mockWorker = { workerId, projectId, workerName, ipAddress: '127.0.0.1', status: WorkerStatus.Online, clientId: 'socket-id' };
       (mockWorkerRepository.findOne as jest.Mock).mockResolvedValue(mockWorker);
@@ -148,7 +156,7 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
+      mockSocket.handshake.query = {worker: workerId, workerName, projectId };
 
       (mockProjectRepository.findOne as jest.Mock).mockResolvedValue(null);
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue({ id: projectId } as any);
@@ -163,13 +171,13 @@ describe('EventsGateway', () => {
       const workerId = 'worker-id';
       const workerName = 'worker-name';
       const projectId = 'invalid-project-id';
-      mockSocket.handshake.query = { agentId:workerId, agentName:workerName, projectId };
+      mockSocket.handshake.query = { worker:workerId, workerName, projectId };
 
       (mockProjectRepository.findOneBy as jest.Mock).mockResolvedValue(null);
 
       await gateway.handleConnection(mockSocket as Socket);
 
-      expect(mockSocket.emit).toHaveBeenCalledWith(SocketEvents.Error, { error: `Record Not Found for Project: ${projectId} Unabel to register worker` });
+      expect(mockSocket.emit).toHaveBeenCalledWith(SocketEvents.ERROR, { error: `Record Not Found for Project: ${projectId} Unable to register worker` });
       expect(mockSocket.disconnect).toHaveBeenCalled();
     });
   });
@@ -178,35 +186,13 @@ describe('EventsGateway', () => {
     it('should handle disconnection and update worker status', async () => {
       const workerId = 'worker-id';
       const projectId = 'project-id';
-      mockSocket.handshake.query = { agentId:workerId, projectId };
+      mockSocket.handshake.query = { worker:workerId, projectId };
 
       (mockWorkerRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
       await gateway.handleDisconnect(mockSocket as Socket);
 
       expect(mockWorkerRepository.update).toHaveBeenCalledWith({ projectId, workerId }, { status: WorkerStatus.Offline });
-    });
-  });
-
-  describe('handleMessage', () => {
-    it('should handle acknowledgement message', async () => {
-      const requestId = 'request-id';
-      const result = { key: 'value' };
-      const message = { requestId, result };
-
-      await gateway.handleValidateConnectionACk(mockSocket as Socket, message);
-
-      expect(mockRequestTrackRepository.update).toHaveBeenCalledWith({ id: requestId }, { status: ResponseStatus.Completed, response: JSON.stringify(result) });
-    });
-
-    it('should handle error in acknowledgement message', async () => {
-      const requestId = 'request-id';
-      const error = 'Some error';
-      const message = { requestId, error };
-
-      await gateway.handleValidateConnectionACk(mockSocket as Socket, message);
-
-      expect(mockRequestTrackRepository.update).toHaveBeenCalledWith({ id: requestId }, { status: ResponseStatus.Error, response: JSON.stringify(error) });
     });
   });
 

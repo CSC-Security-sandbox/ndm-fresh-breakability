@@ -1,12 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
-import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { EventsController } from './events.controller';
 import { EventsService } from '../service/events.service';
+import { ValidateConnectionDto } from '../dto/validateconnection.dto';
+import { WorkerRequestDTO } from '../dto/responsefilter.dto';
+import { Protocol } from 'src/constants/enums';
 
 describe('EventsController', () => {
   let controller: EventsController;
-  let service: EventsService;
+  let eventsService: EventsService;
+
+  const mockEventsService = {
+    validateWorkerConnection: jest.fn(),
+    processWorkerResponses: jest.fn(),
+    fetchPaths: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -14,19 +21,13 @@ describe('EventsController', () => {
       providers: [
         {
           provide: EventsService,
-          useValue: {
-            testWorkerConnections: jest.fn(),
-            processWorkerResponses: jest.fn(),
-            mountWorkerConnections: jest.fn(),
-            deleteWorkerConnections: jest.fn(),
-            fetchExportPath: jest.fn(),
-          },
+          useValue: mockEventsService,
         },
       ],
     }).compile();
 
     controller = module.get<EventsController>(EventsController);
-    service = module.get<EventsService>(EventsService);
+    eventsService = module.get<EventsService>(EventsService);
   });
 
   it('should be defined', () => {
@@ -34,44 +35,52 @@ describe('EventsController', () => {
   });
 
   describe('testWorkerConnections', () => {
-    it('should return a request ID on successful connection test', async () => {
-      const testConnectionsDTO: TestConnectionsDTO = { workers: [], configId: "2345", validateConnection: false};
-      const requestId = 'test-request-id';
-      
-      jest.spyOn(service, 'testWorkerConnections').mockResolvedValue({ requestId });
+    it('should call validateWorkerConnection with correct parameters', async () => {
+      const dto: ValidateConnectionDto = {
+        hostname: 'localhost',
+        protocols: [{ protocol: Protocol.NFS, username: 'user', password: 'pass' }],
+        workers: ['worker-1'],
+      };
 
-      expect(await controller.testWorkerConnections(testConnectionsDTO)).toEqual({ requestId });
+      mockEventsService.validateWorkerConnection.mockResolvedValue('RequestId123');
+
+      const result = await controller.testWorkerConnections(dto);
+
+      expect(mockEventsService.validateWorkerConnection).toHaveBeenCalledWith(dto);
+      expect(result).toBe('RequestId123');
     });
   });
 
   describe('getWorkerResponse', () => {
-    it('should return a list of responses', async () => {
-      const query: WorkerRequestDTO = {};
-      const response= { data: [], total: 0 };
+    it('should call processWorkerResponses with correct parameters', async () => {
+      const filterDto: WorkerRequestDTO = {
+        page: '1',
+        limit: '10',
+        sort: 'createdAt',
+        order: 'asc',
+        deserialize: false,
+      };
 
-      jest.spyOn(service, 'processWorkerResponses').mockResolvedValue(response);
+      const response = { data: [], total: 0 };
+      mockEventsService.processWorkerResponses.mockResolvedValue(response);
 
-      expect(await controller.getWorkerResponse(query)).toEqual(response);
-    });
+      const result = await controller.getWorkerResponse(filterDto);
 
-    it('should handle invalid query parameters', async () => {
-      const query: any = {  };
-
-      jest.spyOn(service, 'processWorkerResponses').mockRejectedValue(new Error('Invalid parameters'));
-
-      await expect(controller.getWorkerResponse(query)).rejects.toThrow('Invalid parameters');
+      expect(mockEventsService.processWorkerResponses).toHaveBeenCalledWith(filterDto);
+      expect(result).toEqual(response);
     });
   });
 
-  // describe('fetchExportPath', () => {
-  //   it('should return a request ID on successful mount', async () => {
-  //     const mountConnectionsDTO: MountConnectionsDTO = {workers: [],configId:"1234",protocol:[] };
-  //     const requestId = 'mount-request-id';
+  describe('refetchExportPath', () => {
+    it('should call fetchPaths with correct parameters', async () => {
+      const configId = 'config-123';
 
-  //     jest.spyOn(service, 'mountWorkerConnections').mockResolvedValue({ requestId });
+      mockEventsService.fetchPaths.mockResolvedValue('Success');
 
-  //     expect(await controller.fetchExportPath(mountConnectionsDTO)).toEqual({ requestId });
-  //   });
-  // });
+      const result = await controller.refetchExportPath(configId);
 
+      expect(mockEventsService.fetchPaths).toHaveBeenCalledWith(configId);
+      expect(result).toBe('Success');
+    });
+  });
 });

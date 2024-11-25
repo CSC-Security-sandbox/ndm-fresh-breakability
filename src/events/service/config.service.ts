@@ -1,12 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ConfigEntity } from "src/entities/config.entity";
-import { Repository } from "typeorm";
-import { PathsAck } from "./service.type";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
-import { ListPathRes } from "../events.type";
 import { OperationToProtocol } from "src/utils/mapper";
+import { Repository } from "typeorm";
+import { ListPathRes } from "../events.type";
 
 @Injectable()
 export class FileConfigService {
@@ -41,11 +40,14 @@ export class FileConfigService {
             return
         }
 
+       
         ack.operations.forEach(async operation => {
+
             if(operation.response.errors) {
                 this.logger.error(`Error on worker ${ack.workerId} for ${operation.operation} `)
                 return
             }
+            
             const protocol =  OperationToProtocol(operation.operation)
             const fileServer = config.fileServers.find(it=>it.protocol === protocol)
             if(fileServer) {

@@ -12,7 +12,6 @@ export class RabbiMqController {
     // fetch mount event
     @MessagePattern(RabbitMq.FetchMount)
     public async handleMessage(@Payload() data: FetchMountMsg, @Ctx() context: RmqContext) {
-        console.log(data)
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
         await this.eventsService.fetchPathsByCred(data)

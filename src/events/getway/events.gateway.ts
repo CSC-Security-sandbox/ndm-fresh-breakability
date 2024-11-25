@@ -83,7 +83,7 @@ export class EventsGateway implements OnGatewayInit{
 
   // worker disconnected
   async handleDisconnect(client: Socket) {
-    const workerId : string = client.handshake.query.agentId as string
+    const workerId : string = client.handshake.query.worker as string
     const projectId : string = client.handshake.query.projectId as string
     if(workerId) {
       this.logger.log(`Client disconnected: ${workerId}`);
