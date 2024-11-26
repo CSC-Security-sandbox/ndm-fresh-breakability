@@ -1,0 +1,44 @@
+import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, ManyToMany } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+import { WorkerStatus } from 'src/constants/enums';
+
+import { Base } from './base.entity';
+import { ProjectEntity } from './project.entity';
+import { FileServerEntity } from './fileserver.entity';
+
+
+@Entity({name:'worker', schema:'migrate'})
+export class WorkerEntity extends Base  {
+  @ApiProperty({ description: 'workerId' })
+  @PrimaryColumn({ type: 'uuid', name: 'id' })
+  workerId: string;
+
+  @ApiProperty({ description: 'projectId' })
+  @Column({ type: 'uuid', nullable: false , name: 'project_id'})
+  projectId: string;
+
+
+  @ApiProperty({ description: 'clientId' })
+  @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
+  clientId: string;
+
+  @ApiProperty({ description: 'workerName' })
+  @Column({ type: 'varchar', length: 255, nullable: false, name:'worker_name' })
+  workerName: string;
+
+  @ApiProperty({ description: 'ipAddress' })
+  @Column({ type: 'varchar', length: 255, nullable: false , name: 'ip_address' })
+  ipAddress: string;
+
+  @ManyToOne(() => ProjectEntity, project => project.workers)
+  @JoinColumn({ name: 'project_id' }) 
+  project: ProjectEntity;
+
+  @ApiProperty({ description: 'status' })
+  @Column({ type: 'enum', enum: WorkerStatus, default: WorkerStatus.Offline, name:'status' })
+  status: WorkerStatus;
+
+  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+  fileServers: FileServerEntity[];
+
+}
