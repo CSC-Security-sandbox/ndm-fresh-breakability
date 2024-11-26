@@ -2,7 +2,7 @@ import { Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
-import { SocketEvents } from 'src/constants/status';
+import { Operations, ResponseStatus, SocketEvents, TaskType } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
@@ -10,7 +10,7 @@ import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 import { FileConfigService } from './config.service';
 import { EventsService } from './events.service';
 import { RabbitMqService } from './rabbitmq.service';
-import { ListPathsMsg } from '../controller/rabbitmq.types';
+import { Credentials, ListPathsMsg } from '../controller/rabbitmq.types';
 
 class MockRepositor<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -172,6 +172,7 @@ describe('EventsService', () => {
       );
     });
 
+
     it('should process and notify workers when config exists', async () => {
       const configId = 'config1';
       const config = {
@@ -200,5 +201,305 @@ describe('EventsService', () => {
       ]);
       await service.fetchPaths(configId);
     });
+  });
+
+  it('should handle fetchPathNotify correctly', async () => {
+    const map = new Map<string, Omit<Credentials, 'workers'>[]>();
+    const transactionId = 'test-transaction-id';
+    const configId = 'test-config-id';
+
+    const worker1 = 'worker-1';
+    const credentials1= [
+      { protocol: Protocol.NFS, details: {}, worker: [] },
+      { protocol: Protocol.SMB, details: {}, worker: []  },
+    ];
+
+    map.set(worker1, credentials1);
+
+    const baseListPathReqByDetailsSpy = jest
+      .spyOn(service, 'baseListPathReqByDetails')
+      .mockReturnValue({} as any) ;
+
+    const notifyEventToWorkerSpy = jest
+      .spyOn(service, 'notifyEventToWorker')
+      .mockImplementation(async () => {}); 
+
+    await service.fetchPathNotify(map, transactionId, configId);
+
+    expect(baseListPathReqByDetailsSpy).toHaveBeenCalledWith(
+      credentials1,
+      transactionId,
+      worker1,
+    );
+
+    expect(repository.create).toHaveBeenCalledTimes(2); 
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionId,
+        status: ResponseStatus.PENDING,
+        taskType: TaskType.LIST_PATHS,
+        workerId: worker1,
+        operation: Operations.LIST_NFS_PATHS,
+        configId,
+      }),
+    );
+
+    expect(repository.save).toHaveBeenCalledTimes(2); 
+  });
+
+  it('should generate the correct ListPathReq payload', () => {
+    const transactionId = 'test-transaction-id';
+    const worker = 'worker-1';
+    const credentials = [
+      {
+        protocol: Protocol.NFS,
+        details: { hostname: 'host1', username: 'user1', password: 'pass1' },
+      },
+      {
+        protocol: Protocol.SMB,
+        details: { hostname: 'host2', username: 'user2', password: 'pass2' },
+      },
+    ];
+
+    const expectedPayload = {
+      id: transactionId,
+      status: ResponseStatus.PENDING,
+      taskType: TaskType.LIST_PATHS,
+      transactionId,
+      workerId: worker,
+      operations: [
+        {
+          operation: Operations.LIST_NFS_PATHS,
+          request: { hostname: 'host1', username: 'user1', password: 'pass1' },
+          status: ResponseStatus.PENDING,
+        },
+        {
+          operation: Operations.LIST_SMB_PATHS,
+          request: { hostname: 'host2', username: 'user2', password: 'pass2' },
+          status: ResponseStatus.PENDING,
+        },
+      ],
+    };
+
+    const result = service.baseListPathReqByDetails(credentials, transactionId, worker);
+
+    expect(result).toEqual(expectedPayload);
+  });
+
+  it('should handle empty credentials array', () => {
+    const transactionId = 'test-transaction-id';
+    const worker = 'worker-1';
+    const credentials = [];
+
+    const expectedPayload = {
+      id: transactionId,
+      status: ResponseStatus.PENDING,
+      taskType: TaskType.LIST_PATHS,
+      transactionId,
+      workerId: worker,
+      operations: [],
+    };
+
+    const result = service.baseListPathReqByDetails(credentials, transactionId, worker);
+
+    expect(result).toEqual(expectedPayload);
+  });
+
+  it('should handle empty protocols array', () => {
+    const transactionId = 'test-transaction-id';
+    const details = {
+      hostname: 'host1',
+      protocols: [],
+    };
+
+    const expectedPayload = {
+      id: transactionId,
+      status: ResponseStatus.PENDING,
+      taskType: TaskType.VALIDATE_CONNECTION,
+      transactionId,
+      workerId: '',
+      operations: [],
+    };
+
+    const result = service.baseValidateConnectionReq(details as any, transactionId);
+
+    expect(result).toEqual(expectedPayload);
+  });
+
+  it('should handle single protocol correctly', () => {
+    const transactionId = 'test-transaction-id';
+    const details = {
+      hostname: 'host1',
+      protocols: [{ protocol: Protocol.NFS, username: 'user1', password: 'pass1' }],
+    };
+
+    const expectedPayload = {
+      id: transactionId,
+      status: ResponseStatus.PENDING,
+      taskType: TaskType.VALIDATE_CONNECTION,
+      transactionId,
+      workerId: '',
+      operations: [
+        {
+          operation: Operations.VALIDATE_NFS_CONNECTION,
+          request: { hostname: 'host1', username: 'user1', password: 'pass1' },
+          status: ResponseStatus.PENDING,
+        },
+      ],
+    };
+
+    const result = service.baseValidateConnectionReq(details as any, transactionId);
+
+    expect(result).toEqual(expectedPayload);
+  });
+
+  it('should throw NotFoundException if config does not exist', async () => {
+    (fileConfigService.getPathConfig as jest.Mock).mockResolvedValue(null);
+
+    const configId = 'non-existent-config';
+
+    await expect(service.fetchPaths(configId)).rejects.toThrow(
+      NotFoundException,
+    );
+
+    expect(fileConfigService.getPathConfig).toHaveBeenCalledWith(configId);
+  });
+
+  it('should handle fetchPaths correctly', async () => {
+    const configId = 'test-config-id';
+    const transactionId = 'test-transaction-id';
+    const config = {
+      fileServers: [
+        {
+          protocol: 'NFS',
+          host: 'host1',
+          userName: 'user1',
+          password: 'pass1',
+          workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }],
+        },
+        {
+          protocol: 'SMB',
+          host: 'host2',
+          userName: 'user2',
+          password: 'pass2',
+          workers: [{ workerId: 'worker1' }],
+        },
+      ],
+    };
+
+    const expectedMap = new Map<string, Omit<Credentials, 'workers'>[]>();
+    expectedMap.set('worker1', [
+      {
+        protocol: Protocol.NFS,
+        details: { hostname: 'host1', username: 'user1', password: 'pass1' },
+      },
+      {
+        protocol: Protocol.SMB,
+        details: { hostname: 'host2', username: 'user2', password: 'pass2' },
+      },
+    ]);
+    expectedMap.set('worker2', [
+      {
+        protocol: Protocol.NFS,
+        details: { hostname: 'host1', username: 'user1', password: 'pass1' },
+      },
+    ]);
+
+    (fileConfigService.getPathConfig as jest.Mock).mockResolvedValue(config);
+    jest.spyOn(service, 'fetchPathNotify').mockImplementation(async () => {});
+    (fileConfigService.updateRefetchingConfig as jest.Mock).mockResolvedValue(
+      true,
+    );
+
+    const result = await service.fetchPaths(configId);
+
+    expect(fileConfigService.getPathConfig).toHaveBeenCalledWith(configId);
+    expect(service.fetchPathNotify).toHaveBeenCalled();
+    expect(fileConfigService.updateRefetchingConfig).toHaveBeenCalledWith(
+      config,
+    );
+    expect(result).toBe(true);
+  });
+
+  it('should return paginated results', async () => {
+    const requestDTO: WorkerRequestDTO = {
+      page: '1',
+      limit: '2',
+      sort: 'createdAt',
+      order: 'asc',
+    };
+
+    const mockData = [
+      { id: 1, response: '{"key":"value"}', createdAt: new Date() },
+      { id: 2, response: '{"key":"value2"}', createdAt: new Date() },
+    ];
+
+    const total = 10;
+
+    (repository.find as jest.Mock).mockResolvedValue(mockData);
+    (repository.count as jest.Mock).mockResolvedValue(total);
+
+    const result = await service.processWorkerResponses(requestDTO);
+
+    expect(repository.find).toHaveBeenCalledWith({
+      where: {},
+      order: { createdAt: 'asc' },
+      skip: 0,
+      take: 2,
+    });
+    expect(repository.count).toHaveBeenCalledWith({ where: {} });
+    expect(result).toEqual({ data: mockData, total });
+  });
+
+  it('should handle filtering and deserialization correctly', async () => {
+    const requestDTO: WorkerRequestDTO = {
+      deserialize: true,
+      taskType: TaskType.LIST_PATHS,
+      status: ResponseStatus.COMPLETED,
+    };
+
+    const mockData = [
+      { id: 1, response: '{"key":"value"}', createdAt: new Date() },
+      { id: 2, response: null, createdAt: new Date() },
+    ];
+
+    const total = 2;
+
+    (repository.find as jest.Mock).mockResolvedValue(mockData);
+    (repository.count as jest.Mock).mockResolvedValue(total);
+
+    const result = await service.processWorkerResponses(requestDTO);
+
+    expect(repository.find).toHaveBeenCalledWith({
+      where: { taskType:  TaskType.LIST_PATHS, status: ResponseStatus.COMPLETED},
+      order: { createdAt: 'ASC' },
+    });
+    expect(result.data).toEqual([
+      { ...mockData[0], response: { key: 'value' } },
+      { ...mockData[1], response: '' },
+    ]);
+    expect(result.total).toEqual(total);
+  });
+
+  it('should return all data when no pagination is provided', async () => {
+    const requestDTO: WorkerRequestDTO = {};
+
+    const mockData = [
+      { id: 1, response: '{"key":"value"}', createdAt: new Date() },
+      { id: 2, response: '{"key":"value2"}', createdAt: new Date() },
+    ];
+
+    const total = 2;
+
+    (repository.find as jest.Mock).mockResolvedValue(mockData);
+    (repository.count as jest.Mock).mockResolvedValue(total);
+
+    const result = await service.processWorkerResponses(requestDTO);
+
+    expect(repository.find).toHaveBeenCalledWith({
+      where: {},
+      order: { createdAt: 'ASC' },
+    });
+
   });
 });
