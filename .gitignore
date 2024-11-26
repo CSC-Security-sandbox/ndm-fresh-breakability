@@ -128,3 +128,9 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# test coverage report xml file
+test/unit/test-results/junit.xml
+
+package-lock.json
+junit.xml
