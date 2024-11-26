@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobRunController } from './jobrun.controller';
 import { JobRunService } from './jobrun.service';
-import { JobRunEntity } from './../entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from './../entities/jobrun.entity';
 import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
 
 describe('JobRunController', () => {
@@ -37,11 +37,11 @@ describe('JobRunController', () => {
     it('should create a new job run', async () => {
       const jobRunData: JobRunDto = {
         id: '123',
-        status: 'Active',
-        start_time: new Date(),
-        end_time: new Date(),
-        iteration_number: 1,
-        job_id: 'job-id-123',
+        status: JobRunStatus.Running,
+        startTime: new Date(),
+        endTime: new Date(),
+        iterationNumber: 1,
+        jobConfigId: 'job-id-123',
       };
       const createdJobRun: JobRunEntity = { ...jobRunData, id: 'jobrun-id-123' } as JobRunEntity;
 
@@ -60,7 +60,7 @@ describe('JobRunController', () => {
       const limit = 10;
       const sortField = 'start_time';
       const sortOrder = 'ASC';
-      const filter: JobRunFilterDto = { status: 'Active' };
+      const filter: JobRunFilterDto = { status: JobRunStatus.Running };
       const jobRuns = [
         { id: 'jobrun-id-1', status: 'Active' },
         { id: 'jobrun-id-2', status: 'Active' },

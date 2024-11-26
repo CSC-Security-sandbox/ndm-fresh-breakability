@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
-import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 
 @Injectable()
 export class JobRunService {
@@ -13,7 +13,7 @@ export class JobRunService {
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
 
-    private readonly jobService: JobConfigService
+    private readonly jobConfigService: JobConfigService
   ) { }
 
   async createJobRun(jobRunData: JobRunDto): Promise<JobRunEntity> {
@@ -73,22 +73,20 @@ export class JobRunService {
     await this.jobRunRepo.remove(jobRun);
     return { message: `Job run with id ${id} has been deleted` };
   }
-
+  
   async scheduleAJobRun(jobId: string) {
-    try {
-      const job = await this.jobService.getJobById(jobId);
-      if (!job) throw new Error(`Job with id ${jobId} not found`);
-      const jobRun: Partial<JobRunDto> = {
-        status: 'READY',
-        start_time: new Date(),
-        iteration_number: 1,
-        job_id: job.id,
-      }
-      this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
-      const createdJobRun = this.jobRunRepo.create(jobRun);
-      return await this.jobRunRepo.save(createdJobRun);
-    } catch (error) {
-      throw new Error(error);
+    const job = await this.jobConfigService.getJobConfigById(jobId);
+    if (!job) {
+      throw new Error(`Job with id ${jobId} not found`);
     }
+    const jobRun: Partial<JobRunDto> = {
+      status: JobRunStatus.Ready,
+      startTime: new Date(),
+      iterationNumber: 1,
+      jobConfigId: job.id,
+    };
+    this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
+    const createdJobRun = this.jobRunRepo.create(jobRun);
+    return this.jobRunRepo.save(createdJobRun);
   }
 }

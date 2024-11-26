@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { Injectable, Logger } from '@nestjs/common';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobConfigDTO } from '../dto/jobconfig.dto';
+import { CreateJobConfigDto } from '../dto/jobconfig.dto';
 
 @Injectable()
 export class JobConfigService {
@@ -13,21 +13,23 @@ export class JobConfigService {
     private jobConfigRepo: Repository<JobConfigEntity>,
   ) {}
 
-  async createJob(jobData: JobConfigDTO): Promise<JobConfigEntity> {
-    this.logger.log(`Data to job - ${JSON.stringify(jobData)}`);
+  async createJobConfig(jobConfigData: CreateJobConfigDto): Promise<JobConfigEntity> {
+    this.logger.log(`Data to job - ${JSON.stringify(jobConfigData)}`);
     const jobRecord = this.jobConfigRepo.create({
-      status: 'ACTIVE',
-      job_type: jobData.jobType,
-      path_id: uuid(),
-      file_server_id: jobData.fileServerId,
-      schedule_time: jobData?.jobSchedule,
-      createdBy: jobData?.created_by,
-      updatedBy: jobData?.updated_by
+      jobType: jobConfigData.jobType,
+      status: jobConfigData.status,
+      jobSchedule: jobConfigData.jobSchedule,
+      excludeOlderThan: jobConfigData.excludeOlderThan,
+      preserveAccessTime: jobConfigData.preserveAccessTime,
+      sourcePathId: jobConfigData.sourcePathId,
+      targetPathId: jobConfigData.targetPathId,
+      createdBy: jobConfigData?.createdBy,
+      updatedBy: jobConfigData?.updatedBy
     });
     return this.jobConfigRepo.save(jobRecord);
   }
 
-  async getJobById(id: string): Promise<JobConfigEntity> {
+  async getJobConfigById(id: string): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
@@ -35,11 +37,11 @@ export class JobConfigService {
     return job;
   }
 
-  async getJobs(condition: FindManyOptions<JobConfigEntity>): Promise<JobConfigEntity[]> {
+  async getJobConfigs(condition: FindManyOptions<JobConfigEntity>): Promise<JobConfigEntity[]> {
     return await this.jobConfigRepo.find(condition);
   }
   
-  async updateJob(id: string, data: JobConfigDTO): Promise<JobConfigEntity> {
+  async updateJobConfig(id: string, data: Partial<CreateJobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
@@ -50,7 +52,7 @@ export class JobConfigService {
     return this.jobConfigRepo.save(job);
   }
   
-  async deleteJob(id: string): Promise<{ message: string }> {
+  async deleteJobConfig(id: string): Promise<{ message: string }> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
@@ -60,7 +62,7 @@ export class JobConfigService {
     return { message: `Job with id ${id} has been deleted` };
   }
   
-  async getAllJob(): Promise<JobConfigEntity[]> {
+  async getAllJobConfig(): Promise<JobConfigEntity[]> {
     return await this.jobConfigRepo.find();
   }
 }

@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsUUID, IsString, IsOptional } from 'class-validator';
+import { JobIdMappingType } from 'src/entities/jobmapping.entity';
 
-export class CreateJobMappingDto {
+export class AccessControlMapping {
   @ApiProperty({ description: 'UUID of the file server' })
   @IsUUID()
   @IsNotEmpty()
@@ -10,7 +11,7 @@ export class CreateJobMappingDto {
   @ApiProperty({ description: 'Type of mapping, e.g. GID' })
   @IsString()
   @IsNotEmpty()
-  type: string;
+  type: JobIdMappingType;
 
   @ApiProperty({ description: 'Source ID' })
   @IsString()
@@ -32,7 +33,7 @@ export class UpdateJobMappingDto {
   @ApiProperty({ description: 'Type of mapping, e.g. GID', required: false })
   @IsString()
   @IsOptional()
-  type?: string;
+  type?: JobIdMappingType;
 
   @ApiProperty({ description: 'Source ID', required: false })
   @IsString()

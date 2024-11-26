@@ -3,7 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 import { JobConfigService } from '../jobconfig/jobconfig.service';
 import { JobRunService } from '../jobrun/jobrun.service';
-import { RabbitMqService } from '../events/rabbitmq.service';
+import { RabbitMqService } from '../events/service/rabbitmq.service';
+import { JobStatus } from 'src/entities/jobconfig.entity';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class SchedularService {
@@ -17,19 +19,16 @@ export class SchedularService {
 
   async handleCron(): Promise<string> {
     const currentTime = new Date();
-    const timeWindow = 5 * 60 * 1000;
-    const windowStart = new Date(currentTime.getTime() - timeWindow);
-    const windowEnd = new Date(currentTime.getTime() + timeWindow);
-    const jobs = await this.jobConfigService.getJobs({ where: { status: 'Active', schedule_time: Between(windowStart, windowEnd) }});
+    const jobs = await this.jobConfigService.getJobConfigs({ where: { status: JobStatus.Active }});
 
     for (const job of jobs) {
       const jobRun = await this.jobRunService.createJobRun({
         id: uuid(),
-        status: 'RUNNING',
-        start_time: currentTime,
-        end_time: null,
-        iteration_number: 1,
-        job_id: job.id
+        status: JobRunStatus.Running,
+        startTime: currentTime,
+        endTime: null,
+        iterationNumber: 1,
+        jobConfigId: job.id
       });
       this.logger.log(`Job run created for job ID: ${job.id} at ${currentTime}`);
       this.rabbitMqService.publishToExchange({
@@ -38,11 +37,10 @@ export class SchedularService {
         taskType: 'SCAN',
         status: 'PENDING',
         transactionId: '',
-        fileServerId: job.file_server_id,
         operations: [{
           operation: 'SCAN_PATH',
           request: {
-            pathId: job.path_id,
+            pathId: job.sourcePathId,
             folder: ''
           },
           status: 'PENDING'

@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobMappingService } from './jobmapping.service';
-import { JobMappingEntity } from '../entities/jobmapping.entity';
+import { JobIdMappingEntity } from '../entities/jobmapping.entity';
 
 const mockJobMappingRepository = {
   find: jest.fn(),
@@ -15,21 +15,21 @@ const mockJobMappingRepository = {
 
 describe('JobMappingService', () => {
   let service: JobMappingService;
-  let repo: Repository<JobMappingEntity>;
+  let repo: Repository<JobIdMappingEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobMappingService,
         {
-          provide: getRepositoryToken(JobMappingEntity),
+          provide: getRepositoryToken(JobIdMappingEntity),
           useValue: mockJobMappingRepository, // Use the mock repository here
         },
       ],
     }).compile();
 
     service = module.get<JobMappingService>(JobMappingService);
-    repo = module.get<Repository<JobMappingEntity>>(getRepositoryToken(JobMappingEntity));
+    repo = module.get<Repository<JobIdMappingEntity>>(getRepositoryToken(JobIdMappingEntity));
   });
 
   it('should be defined', () => {

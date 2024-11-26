@@ -9,6 +9,8 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { RequestTrackEntity } from "src/entities/requesttrack.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { DataSourceOptions } from "typeorm";
+import { JobIdMappingEntity } from "../entities/jobmapping.entity";
+import { JobRunEntity } from "../entities/jobrun.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -24,6 +26,6 @@ export default registerAs('typeorm', (): DataSourceOptions => (
             rejectUnauthorized: false, 
         },
         logging: true,
-        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity],
+        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity],
         migrations: []
 }))

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobMappingController } from './jobmapping.controller';
 import { JobMappingService } from './jobmapping.service';
+import { JobIdMappingType } from 'src/entities/jobmapping.entity';
 
 const mockJobMappingService = {
   findAll: jest.fn(),
@@ -35,7 +36,7 @@ describe('JobMappingController', () => {
 
   describe('getAll', () => {
     it('should return all job mappings', async () => {
-      const jobMappings = [{ id: '1', job_config_id: 'uuid1', type: 'GID', source_id: 'src1', destination_id: 'dst1' }];
+      const jobMappings = [{ id: '1', job_config_id: 'uuid1', type: JobIdMappingType.Uid, source_id: 'src1', destination_id: 'dst1' }];
       mockJobMappingService.findAll.mockResolvedValue(jobMappings);
 
       const result = await controller.getAll();
@@ -46,7 +47,7 @@ describe('JobMappingController', () => {
 
   describe('getById', () => {
     it('should return a job mapping by ID', async () => {
-      const jobMapping = { id: '1', job_config_id: 'uuid1', type: 'GID', source_id: 'src1', destination_id: 'dst1' };
+      const jobMapping = { id: '1', job_config_id: 'uuid1', type: JobIdMappingType.Uid, source_id: 'src1', destination_id: 'dst1' };
       mockJobMappingService.findOne.mockResolvedValue(jobMapping);
 
       const result = await controller.getById('1');
@@ -62,7 +63,7 @@ describe('JobMappingController', () => {
 
   describe('create', () => {
     it('should create a new job mapping', async () => {
-      const createDto = { job_config_id: 'uuid1', type: 'GID', source_id: 'src1', destination_id: 'dst1' };
+      const createDto = { job_config_id: 'uuid1', type: JobIdMappingType.Uid, source_id: 'src1', destination_id: 'dst1' };
       const jobMapping = { id: '1', ...createDto };
 
       mockJobMappingService.create.mockResolvedValue(jobMapping);
@@ -74,8 +75,8 @@ describe('JobMappingController', () => {
 
   describe('update', () => {
     it('should update an existing job mapping', async () => {
-      const updateDto = { type: 'NewType' };
-      const updatedJobMapping = { id: '1', job_config_id: 'uuid1', type: 'NewType', source_id: 'src1', destination_id: 'dst1' };
+      const updateDto = { type: JobIdMappingType.Gid };
+      const updatedJobMapping = { id: '1', job_config_id: 'uuid1', type: JobIdMappingType.Uid, source_id: 'src1', destination_id: 'dst1' };
 
       mockJobMappingService.update.mockResolvedValue(updatedJobMapping);
 
@@ -86,7 +87,7 @@ describe('JobMappingController', () => {
     it('should throw an error if the job mapping is not found', async () => {
       mockJobMappingService.update.mockResolvedValue(null);
 
-      await expect(controller.update('1', { type: 'NewType' })).rejects.toThrow('Job mapping not found');
+      await expect(controller.update('1', { type: JobIdMappingType.Uid })).rejects.toThrow('Job mapping not found');
     });
   });
 

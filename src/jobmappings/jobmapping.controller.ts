@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JobMappingService } from './jobmapping.service';
-import { JobMappingEntity } from '../entities/jobmapping.entity';
-import { CreateJobMappingDto } from '../dto/rolemapping.dto';
+import { JobIdMappingEntity } from '../entities/jobmapping.entity';
+import { AccessControlMapping } from '../dto/rolemapping.dto';
 
 @ApiTags('Job Mapping')
 @Controller('job-mapping')
@@ -10,17 +10,17 @@ export class JobMappingController {
   constructor(private readonly jobMappingService: JobMappingService) {}
 
   @ApiOperation({ summary: 'Get all job mappings' })
-  @ApiResponse({ status: 200, description: 'List of job mappings', type: [JobMappingEntity] })
+  @ApiResponse({ status: 200, description: 'List of job mappings', type: [JobIdMappingEntity] })
   @Get()
-  async getAll(): Promise<JobMappingEntity[]> {
+  async getAll(): Promise<JobIdMappingEntity[]> {
     return this.jobMappingService.findAll();
   }
 
   @ApiOperation({ summary: 'Get a job mapping by ID' })
-  @ApiResponse({ status: 200, description: 'Job mapping found', type: JobMappingEntity })
+  @ApiResponse({ status: 200, description: 'Job mapping found', type: JobIdMappingEntity })
   @ApiResponse({ status: 404, description: 'Job mapping not found' })
   @Get(':id')
-  async getById(@Param('id') id: string): Promise<JobMappingEntity> {
+  async getById(@Param('id') id: string): Promise<JobIdMappingEntity> {
     const jobMapping = await this.jobMappingService.findOne(id);
     if (!jobMapping) {
       throw new HttpException('Job mapping not found', HttpStatus.NOT_FOUND);
@@ -29,17 +29,17 @@ export class JobMappingController {
   }
 
   @ApiOperation({ summary: 'Create a new job mapping' })
-  @ApiResponse({ status: 201, description: 'Job mapping created', type: JobMappingEntity })
+  @ApiResponse({ status: 201, description: 'Job mapping created', type: JobIdMappingEntity })
   @Post()
-  async create(@Body() data: CreateJobMappingDto): Promise<JobMappingEntity> {
+  async create(@Body() data: AccessControlMapping): Promise<JobIdMappingEntity> {
     return this.jobMappingService.create(data);
   }
 
   @ApiOperation({ summary: 'Update an existing job mapping' })
-  @ApiResponse({ status: 200, description: 'Job mapping updated', type: JobMappingEntity })
+  @ApiResponse({ status: 200, description: 'Job mapping updated', type: JobIdMappingEntity })
   @ApiResponse({ status: 404, description: 'Job mapping not found' })
   @Put(':id')
-  async update(@Param('id') id: string, @Body() data: Partial<JobMappingEntity>): Promise<JobMappingEntity> {
+  async update(@Param('id') id: string, @Body() data: Partial<JobIdMappingEntity>): Promise<JobIdMappingEntity> {
     const updatedJobMapping = await this.jobMappingService.update(id, data);
     if (!updatedJobMapping) {
       throw new HttpException('Job mapping not found', HttpStatus.NOT_FOUND);

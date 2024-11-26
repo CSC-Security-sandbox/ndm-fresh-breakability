@@ -1,48 +1,79 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsString,
-  IsIn,
-  IsArray,
-  IsUUID,
-  IsDateString,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, IsBoolean, IsDate, IsObject, IsArray } from 'class-validator';
+import { JobType, JobStatus, JobSchedule, IncrementalSchedule } from '../entities/jobconfig.entity';
 
-export enum JobType {
-  Discovery = 'DISCOVERY',
-  Migrate = 'MIGRATE',
-  CutOver = 'CUTOVER',
-  SpeedTest = 'SPEEDTEST'
+export class IdMapping {
+  @ApiProperty({ description: 'UUID of the source mapping' })
+  @IsUUID()
+  sourceId: number;
+
+  @ApiProperty({ description: 'UUID of the destination mapping' })
+  @IsUUID()
+  destinationId: number;
 }
-
-export class JobConfigDTO {
-  @ApiProperty({
-    example: 'DISCOVERY',
-    description: 'Type of the job',
-    default: JobType.Discovery,
-    enum: JobType,
-  })
-  @IsIn(Object.values(JobType))
+export class CreateJobConfigDto {
+  @ApiProperty({ description: 'Job type, e.g., discovery', enum: JobType })
+  @IsEnum(JobType)
   jobType: JobType;
 
-  @ApiProperty({ example: '1234', description: 'Unique identifier for the file server' })
+  @ApiProperty({ description: 'Status of the job', enum: JobStatus })
+  @IsEnum(JobStatus)
+  status: JobStatus;
+
+  @ApiProperty({ description: 'Exclude files older than this date', required: false })
+  @IsOptional()
+  @IsDate()
+  excludeOlderThan?: Date;
+
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ description: 'Preserve access time flag', default: false })
+  @IsOptional()
+  @IsBoolean()
+  preserveAccessTime: boolean;
+
+  @ApiProperty({ description: 'Job schedule configuration' })
+  @IsObject()
+  jobSchedule: JobSchedule;
+
+  @ApiProperty({ description: 'Incremental job schedule configuration' })
+  @IsObject()
+  incrementalSchedule: IncrementalSchedule;
+
+  @ApiProperty({ description: 'UUID of the source path configuration' })
   @IsUUID()
-  fileServerId: string;
+  sourcePathId: string;
 
-  @ApiProperty({ example: ['path/to/source1', 'path/to/source2'], description: 'Array of paths to be discovered/migrated' })
+  @ApiProperty({ description: 'UUID of the target path configuration' })
+  @IsOptional()
+  @IsUUID()
+  targetPathId: string;
+
+  @ApiProperty({ description: 'SID Mapping', type: [IdMapping], required: false })
+  @IsOptional()
   @IsArray()
-  pathList: string[];
+  sidMapping?: IdMapping[];
 
-  @ApiProperty({ description: 'Schedule configuration for the job' })
-  @IsDateString()
-  jobSchedule: Date;
+  @ApiProperty({ description: 'GID Mapping', type: [IdMapping], required: false })
+  @IsOptional()
+  @IsArray()
+  gidMapping?: IdMapping[];
 
-  @ApiProperty({ description: 'Created by user' })
+  @ApiProperty({ description: 'UID Mapping', type: [IdMapping], required: false })
+  @IsOptional()
+  @IsArray()
+  uidMapping?: IdMapping[];
+
+  @ApiProperty({ description: 'Created by user ID', required: false })
+  @IsOptional()
   @IsString()
-  created_by: string;
+  createdBy?: string;
 
-  @ApiProperty({ description: 'Updated by user' })
+  @ApiProperty({ description: 'Updated by user ID', required: false })
+  @IsOptional()
   @IsString()
-  updated_by: string;
+  updatedBy?: string;
 }
-
-
