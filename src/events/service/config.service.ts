@@ -73,7 +73,7 @@ export class FileConfigService {
             }
             else this.logger.error(`${protocol} fileServer does not exist for ${configId}`)
         })
-        await this.configEntity.update({id: configId}, {refreshedOn: new Date()})
+        await this.configEntity.update({id: configId}, {scannedDate: new Date()})
     }
 
     // Get config
