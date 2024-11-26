@@ -9,13 +9,6 @@ import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
 export class JobRunController {
   constructor(private readonly jobRunService: JobRunService) {}
 
-  @ApiOperation({ summary: 'Create a new job run' })
-  @ApiResponse({ status: 201, description: 'The job run has been successfully created.' })
-  @Post()
-  async createJob(@Body() jobRunData: JobRunDto): Promise<JobRunEntity> {
-    return await this.jobRunService.createJobRun(jobRunData);
-  }
-
   @Get()
   @ApiOperation({ summary: 'Get all job runs with pagination, sorting, and filtering' })
   @ApiQuery({ name: 'page', type: Number, required: false, example: 1, description: 'Page number for pagination' })

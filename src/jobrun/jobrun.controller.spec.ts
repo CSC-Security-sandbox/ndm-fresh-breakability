@@ -33,27 +33,6 @@ describe('JobRunController', () => {
     expect(jobRunController).toBeDefined();
   });
 
-  describe('createJob', () => {
-    it('should create a new job run', async () => {
-      const jobRunData: JobRunDto = {
-        id: '123',
-        status: JobRunStatus.Running,
-        startTime: new Date(),
-        endTime: new Date(),
-        iterationNumber: 1,
-        jobConfigId: 'job-id-123',
-      };
-      const createdJobRun: JobRunEntity = { ...jobRunData, id: 'jobrun-id-123' } as JobRunEntity;
-
-      mockJobRunService.createJobRun.mockResolvedValue(createdJobRun);
-
-      const result = await jobRunController.createJob(jobRunData);
-
-      expect(result).toEqual(createdJobRun);
-      expect(mockJobRunService.createJobRun).toHaveBeenCalledWith(jobRunData);
-    });
-  });
-
   describe('getJobRuns', () => {
     it('should return paginated, sorted, and filtered job runs', async () => {
       const page = 1;
