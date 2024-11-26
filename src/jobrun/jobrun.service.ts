@@ -66,13 +66,6 @@ export class JobRunService {
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
-
-  async deleteJobRun(id: string): Promise<{ message: string }> {
-    const jobRun = await this.jobRunRepo.findOne({ where: { id } });
-    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
-    await this.jobRunRepo.remove(jobRun);
-    return { message: `Job run with id ${id} has been deleted` };
-  }
   
   async scheduleAJobRun(jobId: string) {
     const job = await this.jobConfigService.getJobConfigById(jobId);

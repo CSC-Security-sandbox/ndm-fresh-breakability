@@ -24,28 +24,28 @@ export class SchedularService {
     for (const job of jobs) {
       const jobRun = await this.jobRunService.createJobRun({
         id: uuid(),
-        status: JobRunStatus.Running,
+        status: JobRunStatus.Ready,
         startTime: currentTime,
         endTime: null,
         iterationNumber: 1,
         jobConfigId: job.id
       });
-      this.logger.log(`Job run created for job ID: ${job.id} at ${currentTime}`);
-      this.rabbitMqService.publishToExchange({
-        id: uuid(),
-        jobRunId: jobRun.id,
-        taskType: 'SCAN',
-        status: 'PENDING',
-        transactionId: '',
-        operations: [{
-          operation: 'SCAN_PATH',
-          request: {
-            pathId: job.sourcePathId,
-            folder: ''
-          },
-          status: 'PENDING'
-        }]
-      });
+      // this.logger.log(`Job run created for job ID: ${job.id} at ${currentTime}`);
+      // this.rabbitMqService.publishToExchange({
+      //   id: uuid(),
+      //   jobRunId: jobRun.id,
+      //   taskType: 'SCAN',
+      //   status: 'PENDING',
+      //   transactionId: '',
+      //   operations: [{
+      //     operation: 'SCAN_PATH',
+      //     request: {
+      //       pathId: job.sourcePathId,
+      //       folder: ''
+      //     },
+      //     status: 'PENDING'
+      //   }]
+      // });
     }
     return 'success';
   }
