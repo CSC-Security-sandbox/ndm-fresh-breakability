@@ -1,106 +1,137 @@
-import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
-import { WorkerCommand, ResponseStatus } from 'src/constants/status';
-import { Protocol } from 'src/constants/enums';
-import { WorkerRequestDTO } from './responsefilter.dto';
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
+import { WorkerRequestDTO } from "./responsefilter.dto";
 
-describe('WorkerRequestDTO', () => {
-  it('should succeed when all valid fields are provided', async () => {
-    const validData: WorkerRequestDTO = {
+describe('WorkerRequestDTO - Branch Coverage', () => {
+  it('should validate a valid DTO with all optional fields', async () => {
+    const input = {
       page: '1',
       limit: '10',
       sort: 'createdAt',
       order: 'asc',
-      requestType: WorkerCommand.TestConnection,
-      status: ResponseStatus.Pending,
-      protocol: Protocol.NFS,
-      requestId: 'req123',
-      workerId: 'worker456',
-    };
-
-    const dto = plainToInstance(WorkerRequestDTO, validData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBe(0);
-  });
-
-  it('should fail when page is not a number string', async () => {
-    const invalidData = {
-      page: 'abc',
-    };
-
-    const dto = plainToInstance(WorkerRequestDTO, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isNumberString');
-  });
-
-  it('should fail when limit is not a number string', async () => {
-    const invalidData = {
-      limit: 'xyz',
-    };
-
-    const dto = plainToInstance(WorkerRequestDTO, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isNumberString');
-  });
-
-  it('should fail when sort is not one of the allowed values', async () => {
-    const invalidData = {
-      sort: 'invalidField',
-    };
-
-    const dto = plainToInstance(WorkerRequestDTO, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isIn');
-  });
-
-  it('should fail when order is not either "asc" or "desc"', async () => {
-    const invalidData = {
-      order: 'invalidOrder',
-    };
-
-    const dto = plainToInstance(WorkerRequestDTO, invalidData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isIn');
-  });
-
-  it('should succeed when optional fields are not provided', async () => {
-    const validData = {};
-
-    const dto = plainToInstance(WorkerRequestDTO, validData);
-    const errors = await validate(dto as any);
-
-    expect(errors.length).toBe(0); // Validation should pass
-  });
-
-  it('should correctly transform string to boolean for deserialize', async () => {
-    const validData = {
+      taskType: 'VALIDATE_CONNECTION',
+      status: 'PENDING',
+      operation: 'VALIDATE_NFS_CONNECTION',
+      transactionId: 'transaction123',
+      workerId: 'worker123',
       deserialize: 'true',
     };
 
-    const dto = plainToInstance(WorkerRequestDTO, validData);
-    const errors = await validate(dto as any);
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
 
-    expect(errors.length).toBe(0);
-
+    expect(errors).toHaveLength(0);
   });
 
-  it('should correctly fail when requestId is not a string', async () => {
-    const invalidData = {
-      requestId: 12345, 
+  it('should validate a DTO with minimal fields (optional fields omitted)', async () => {
+    const input = {};
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0); 
+  });
+
+  it('should validate `deserialize` transformation for `true` and `false`', async () => {
+    const trueInput = { deserialize: 'true' };
+    const falseInput = { deserialize: 'false' };
+
+    const trueDto = plainToInstance(WorkerRequestDTO, trueInput);
+    const falseDto = plainToInstance(WorkerRequestDTO, falseInput);
+
+    expect(trueDto.deserialize).toBe(true);
+    expect(falseDto.deserialize).toBe(false);
+  });
+
+  it('should validate `deserialize` with no transformation', async () => {
+    const input = { deserialize: true };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.deserialize).toBe(true);
+  });
+
+  it('should fail validation for invalid enum values', async () => {
+    const input = {
+      taskType: 'INVALID_TASK',
+      status: 'INVALID_STATUS',
+      operation: 'INVALID_OPERATION',
     };
 
-    const dto = plainToInstance(WorkerRequestDTO, invalidData);
-    const errors = await validate(dto as any);
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].constraints).toHaveProperty('isString');
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(3);
+    expect(errors.map((err) => err.property)).toEqual(['taskType', 'status', 'operation']);
+  });
+
+  it('should validate with only `page` and `limit` fields', async () => {
+    const input = {
+      page: '2',
+      limit: '5',
+    };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.page).toBe('2');
+    expect(dto.limit).toBe('5');
+  });
+
+  it('should fail validation for invalid `page` and `limit`', async () => {
+    const input = {
+      page: '-1',
+      limit: 'notANumber',
+    };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].property).toBe('limit');
+  });
+
+  it('should validate `sort` and `order` with valid values', async () => {
+    const input = {
+      sort: 'workerId',
+      order: 'desc',
+    };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.sort).toBe('workerId');
+    expect(dto.order).toBe('desc');
+  });
+
+  it('should fail validation for invalid `sort` and `order` values', async () => {
+    const input = {
+      sort: 'invalidSort',
+      order: 'invalidOrder',
+    };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(2);
+    expect(errors[0].property).toBe('sort');
+    expect(errors[1].property).toBe('order');
+  });
+
+  it('should fail validation for invalid `transactionId` and `workerId`', async () => {
+    const input = {
+      transactionId: 123, 
+      workerId: false,    
+    };
+
+    const dto = plainToInstance(WorkerRequestDTO, input);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(2);
+    expect(errors.map((err) => err.property)).toEqual(['transactionId', 'workerId']);
   });
 });

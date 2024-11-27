@@ -1,9 +1,9 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, JoinColumn, ManyToOne } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
-import { WorkerCommand, ResponseStatus } from 'src/constants/status';
-import { WorkerEntity } from './worker.entity';
+import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { WorkerEntity } from './worker.entity';
 
 @Entity({name:'request_track', schema:'migrate'})
 export class RequestTrackEntity extends Base {
@@ -12,28 +12,32 @@ export class RequestTrackEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Type of the request' })
-  @Column({ type: 'enum', enum: WorkerCommand, nullable: false, name:'request_type' })
-  requestType: WorkerCommand;
+  @Column({ type: 'text', name:'task_type',  nullable: false})
+  taskType: TaskType;
 
-  @ApiProperty({ description: 'data' })
+  @ApiProperty({ description: 'Data' })
   @Column({ type: 'text', nullable: true,  name:'response' })
   response: string;
 
   @ApiProperty({ description: 'Status of the request', name:'status'  })
-  @Column({ type: 'enum', enum: ResponseStatus, default: ResponseStatus.Pending })
+  @Column({ type: 'text', name:'status',  nullable: false})
   status: ResponseStatus;
 
-  @ApiProperty({ description: 'Protocol of the request',  name:'protocol'  })
-  @Column({ type: 'enum', enum: Protocol, nullable: false })
-  protocol: Protocol;
+  @ApiProperty({ description: 'Operation of the request',  name:'operation'  })
+  @Column({ type: 'text', enum: Protocol, nullable: false })
+  operation: Operations;
 
   @ApiProperty({ description: 'Worker ID' })
-  @Column({ type: 'uuid', nullable: false,  name: 'worker_id'  })
+  @Column({ type: 'text', nullable: false, name: 'worker_id'  })
   workerId: string;
 
-  @ApiProperty({ description: 'requestId' })
-  @Column({ type: 'uuid', nullable: false,  name: 'request_id'  })
-  requestId: string;
+  @ApiProperty({ description: 'transactionId' })
+  @Column({ type: 'uuid', nullable: false,  name: 'transaction_id'  })
+  transactionId: string;
+
+  @ApiProperty({ description: 'configId' })
+  @Column({ type: 'uuid', nullable: true,  name: 'config_id'  })
+  configId: string;
 
   @ManyToOne(() => WorkerEntity)
   @JoinColumn({ name: 'worker_id' }) 

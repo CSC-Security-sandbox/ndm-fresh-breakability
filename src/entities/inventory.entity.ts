@@ -21,7 +21,7 @@ export class InventoryEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'permission' })
     permission: string;
 
-    @ManyToOne(() => VolumeEntity, volume => volume.inventory, { onDelete:'CASCADE', onUpdate:'CASCADE', orphanedRowAction : 'delete'})
+    @ManyToOne(() => VolumeEntity, volume => volume.inventory, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'volume_id' }) 
     volume: VolumeEntity;
 

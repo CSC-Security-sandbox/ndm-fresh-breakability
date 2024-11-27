@@ -5,7 +5,7 @@ export default registerAs(
   (): Record<string, any> => ({
     http: {
       host: process.env.APP_HOST || '0.0.0.0',
-      port: parseInt(process.env.APP_PORT) || 3040,
+      port: parseInt(process.env.APP_PORT) || 3000,
     },
     rabbitmq: {
         urls: process.env.RABBITMQ_URL?.split(',') || [],

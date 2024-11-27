@@ -1,25 +1,24 @@
-import { Body, Controller, Get, Logger, Post, Query, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { TestConnectionsDTO } from './dto/workerconnection.dto';
-import { MountConnectionsDTO } from './dto/workermounts.dto';
-import { WorkerRequestDTO, WorkerResponseDto } from './dto/responsefilter.dto';
-import { EventsService } from './events.service';
-import { RabbitMqService } from './rabbitmq.service';
+import { WorkerRequestDTO, WorkerResponseDto } from '../dto/responsefilter.dto';
+import { EventsService } from '../service/events.service';
+import { ValidateConnectionDto } from '../dto/validateconnection.dto';
+
+
 
 @ApiTags("SocketEvents")
 @Controller('workers')
 export class EventsController {
     private logger: Logger =  new  Logger (EventsController.name)
     constructor(
-        // private rabbitMqService: RabbitMqService,
         private eventsService: EventsService
     ) {}
 
-    @Post('/event/test-connection')
+    @Post('/event/validate-connection')
     @ApiOperation({ summary: 'Test Worker Connections ' })
     @ApiCreatedResponse({ description: 'Test Worker Connection Request Created Successfully.', type: String })
-    async testWorkerConnections(@Body() testConnectionsDTO: TestConnectionsDTO) {
-        return this.eventsService.testWorkerConnections(testConnectionsDTO)
+    async testWorkerConnections(@Body() validateConnectionDto: ValidateConnectionDto) {
+        return this.eventsService.validateWorkerConnection(validateConnectionDto);
     }
 
     @Get('/response')
@@ -32,18 +31,14 @@ export class EventsController {
         return this.eventsService.processWorkerResponses(responsePageFilterDto)
     }
 
-    @Post('/event/mounts')
-    @ApiOperation({ summary: 'Test Worker mounts ' })
+
+    @Get('/event/refetch-paths/:configId')
+    @ApiOperation({ summary: 'Refetch Config paths' })
     @ApiCreatedResponse({ description: 'Test Worker mounts Request Created Successfully.', type: String })
-    async fetchExportPath(@Body() mountConnectionsDTO: MountConnectionsDTO) {
-        return this.eventsService.mountWorkerConnections(mountConnectionsDTO)
+    async refetchExportPath(@Param('configId') configId: string) {
+        return this.eventsService.fetchPaths(configId)
     }
 
-    // @Post('/test')
-    // async sendMessage(@Body() testConnectionDTO: WorkerConnectionDTO) {
-    //     this.logger.debug(testConnectionDTO)
-    //     this.rabbitMqService.publishToExchange(testConnectionDTO as QueueEvent)
-    // }  
 
 }
 

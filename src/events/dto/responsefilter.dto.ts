@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
-import { Protocol } from 'src/constants/enums';
-import { WorkerCommand, ResponseStatus } from 'src/constants/status';
+import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 
 
@@ -28,17 +27,17 @@ export class WorkerRequestDTO {
   order?: 'asc' | 'desc';
 
   @ApiPropertyOptional({
-    description: 'WorkerCommand of the response',
-    example: WorkerCommand.TestConnection,
-    enum: WorkerCommand,
+    description: 'WorkerCommand of the request',
+    example: TaskType.VALIDATE_CONNECTION,
+    enum: TaskType,
   })
   @IsOptional()
-  @IsIn(Object.values(WorkerCommand))
-  requestType?: WorkerCommand;
+  @IsIn(Object.values(TaskType))
+  taskType?: TaskType;
 
   @ApiPropertyOptional({
     description: 'Status of the response',
-    example: ResponseStatus.Pending,
+    example: ResponseStatus.PENDING,
     enum: ResponseStatus,
   })
   @IsOptional()
@@ -46,19 +45,18 @@ export class WorkerRequestDTO {
   status?: ResponseStatus;
 
   @ApiPropertyOptional({
-    description: 'Protocol of the response',
-    example: Protocol.NFS,
-    enum: Protocol,
+    description: 'Operation of the request',
+    example: Operations.VALIDATE_NFS_CONNECTION,
+    enum: Operations,
   })
   @IsOptional()
-  @IsIn(Object.values(Protocol))
-  protocol?: Protocol;
+  @IsIn(Object.values(Operations))
+  operation?: Operations;
 
-
-  @ApiPropertyOptional({ description: 'Field to Filter requestId' })
+  @ApiPropertyOptional({ description: 'Field to Filter transactionId' })
   @IsOptional()
   @IsString()
-  requestId?: string;
+  transactionId?: string;
 
   @ApiPropertyOptional({ description: 'Field to Filter workerId' })
   @IsOptional()
