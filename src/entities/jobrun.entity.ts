@@ -13,7 +13,7 @@ export enum JobRunStatus {
   Errored = 'ERRORED'
 }
 
-@Entity({ name: 'job_run' })
+@Entity({ name: 'jobrun', schema: 'migrate' })
 export class JobRunEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
@@ -24,22 +24,18 @@ export class JobRunEntity extends Base {
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
-  @Column({ name: 'chunk_size' })
-  start_time: Date;
+  @Column({ name: 'start_time' })
+  startTime: Date;
 
   @ApiProperty({ description: 'End time of the job' })
-  @Column({ name: 'chunk_size' })
-  end_time: Date;
+  @Column({ name: 'end_time' })
+  endTime: Date;
 
   @ApiProperty({ description: 'Iteration number of the job' })
-  @Column({ name: 'chunk_size' })
-  iteration_number: number;
+  @Column({ name: 'iteration_number' })
+  iterationNumber: number;
 
   @ApiProperty({ description: 'Job ID associated with this run' })
-  @Column({ name: 'job_id' })
-  job_id: string;
-
-  // @ManyToOne(() => JobConfigEntity, job => job.id)
-  // @JoinColumn({ name: 'job_id' }) 
-  // job: JobConfigEntity;
+  @Column({ name: 'job_config_id' })
+  jobConfigId: string;
 }

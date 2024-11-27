@@ -1,30 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JobMappingEntity } from '../entities/jobmapping.entity';
-import { CreateJobMappingDto, UpdateJobMappingDto } from '../dto/rolemapping.dto';
+import { JobIdMappingEntity } from '../entities/jobmapping.entity';
+import { AccessControlMapping, UpdateJobMappingDto } from '../dto/rolemapping.dto';
 
 @Injectable()
 export class JobMappingService {
   constructor(
-    @InjectRepository(JobMappingEntity)
-    private readonly jobMappingRepository: Repository<JobMappingEntity>,
+    @InjectRepository(JobIdMappingEntity)
+    private jobMappingRepository: Repository<JobIdMappingEntity>,
   ) {}
 
-  async findAll(): Promise<JobMappingEntity[]> {
+  async findAll(): Promise<JobIdMappingEntity[]> {
     return this.jobMappingRepository.find();
   }
 
-  async findOne(id: string): Promise<JobMappingEntity | null> {
+  async findOne(id: string): Promise<JobIdMappingEntity | null> {
     return this.jobMappingRepository.findOne({ where: { id } });
   }
 
-  async create(createJobMappingDto: CreateJobMappingDto): Promise<JobMappingEntity> {
+  async create(createJobMappingDto: AccessControlMapping): Promise<JobIdMappingEntity> {
     const newJobMapping = this.jobMappingRepository.create(createJobMappingDto);
     return this.jobMappingRepository.save(newJobMapping);
   }
 
-  async update(id: string, updateJobMappingDto: UpdateJobMappingDto): Promise<JobMappingEntity | null> {
+  async createMany(createJobMappingDtos: AccessControlMapping[]): Promise<JobIdMappingEntity[]> {
+    const newJobMappings = createJobMappingDtos.map(dto => this.jobMappingRepository.create(dto));
+    return await this.jobMappingRepository.save(newJobMappings);
+  }
+
+  async update(id: string, updateJobMappingDto: UpdateJobMappingDto): Promise<JobIdMappingEntity | null> {
     const existingJobMapping = await this.jobMappingRepository.findOne({ where: { id } });
 
     if (!existingJobMapping) {

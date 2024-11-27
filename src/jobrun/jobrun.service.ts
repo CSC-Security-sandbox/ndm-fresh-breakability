@@ -13,7 +13,7 @@ export class JobRunService {
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
 
-    private readonly jobService: JobConfigService
+    private readonly jobConfigService: JobConfigService
   ) { }
 
   async createJobRun(jobRunData: JobRunDto): Promise<JobRunEntity> {
@@ -66,29 +66,20 @@ export class JobRunService {
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
-
-  async deleteJobRun(id: string): Promise<{ message: string }> {
-    const jobRun = await this.jobRunRepo.findOne({ where: { id } });
-    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
-    await this.jobRunRepo.remove(jobRun);
-    return { message: `Job run with id ${id} has been deleted` };
-  }
-
+  
   async scheduleAJobRun(jobId: string) {
-    try {
-      const job = await this.jobService.getJobById(jobId);
-      if (!job) throw new Error(`Job with id ${jobId} not found`);
-      const jobRun: Partial<JobRunDto> = {
-        status: JobRunStatus.Ready,
-        start_time: new Date(),
-        iteration_number: 1,
-        job_id: job.id,
-      }
-      this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
-      const createdJobRun = this.jobRunRepo.create(jobRun);
-      return await this.jobRunRepo.save(createdJobRun);
-    } catch (error) {
-      throw new Error(error);
+    const job = await this.jobConfigService.getJobConfigById(jobId);
+    if (!job) {
+      throw new Error(`Job with id ${jobId} not found`);
     }
+    const jobRun: Partial<JobRunDto> = {
+      status: JobRunStatus.Ready,
+      startTime: new Date(),
+      iterationNumber: 1,
+      jobConfigId: job.id,
+    };
+    this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
+    const createdJobRun = this.jobRunRepo.create(jobRun);
+    return this.jobRunRepo.save(createdJobRun);
   }
 }
