@@ -4,7 +4,7 @@
         <div class="min-h-full md:flex">
             <div class="md:w-8/12 flex items-center justify-center flex-col h-screen">
                 <div class="w-9/12 xl:max-w-lg mx-4 p-8 gap-8 bg-white rounded-lg">
-                    <div>Welcome to DoCUS</div>
+                    <div>Welcome to Datamigrate</div>
                     <div class="text-4xl">Forgot your password?</div>
                     <div class="text-base-secondary text-sm leading-tight py-2">
                         <#if realm.duplicateEmailsAllowed>
@@ -51,7 +51,7 @@
             <div class="md:w-4/12 relative flex flex-col justify-center items-center text-white p-4 bg-login-page-overview-bg">
                 <div class="flex flex-col justify-center items-center gap-4">
                     <div class="text-center sidebar-text">
-                        <h6 class="text-xl p-5">DoCUS</h6>
+                        <h6 class="text-xl p-5">Datamigrate</h6>
                         <div class="text-xs pl-10 pr-10 pb-10">
                             <p class="text-base">(c) Calfus, Inc. 2024</p>
                         </div>

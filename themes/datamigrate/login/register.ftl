@@ -10,7 +10,7 @@
 
             <div class="bg-white flex flex-grow items-center justify-center p-8">
                 <div class="md:w-6/12">
-                    <div class="text-4xl">Welcome to DoCUS</div>
+                    <div class="text-4xl">Welcome to Datamigrate</div>
                     <div class="text-base-secondary text-sm leading-tight py-2">Create an account to build strong connections with customers and enhance brand loyalty.</div>
                     <div>
                         <form 
