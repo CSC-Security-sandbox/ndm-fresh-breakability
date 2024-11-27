@@ -42,9 +42,9 @@ export class TaskEntity extends Base {
   @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Pending, name:'status' })
   status: TaskStatus;
 
-  @ApiProperty({ description: 'File server id' })
-  @Column({ type: 'uuid', nullable: false,  name: 'file_server_id'})
-  file_server_id: string;
+  @ApiProperty({ description: 'Task type' })
+  @Column({ type: 'enum', enum: TaskType, name:'task_type' })
+  taskType: TaskType;
 
   @ApiProperty({ description: 'Operations for the task' })
   @Column({ type: 'jsonb', nullable: false, name: 'operations' })

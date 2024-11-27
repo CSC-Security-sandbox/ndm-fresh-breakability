@@ -48,8 +48,6 @@ export class SchedularService {
         jobRunId: jobRun.id,
         taskType: TaskType.Scan, // taskType will be dynamic based on jobrun data
         status: TaskStatus.Pending,
-        transactionId: '',
-        fileServerId: job.file_server_id, // not needed
         operations: [{
           operation: TaskOperation.ScanPath, // operation will be dynamic based on jobrun data
           request: {
