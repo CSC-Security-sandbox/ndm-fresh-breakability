@@ -32,5 +32,4 @@ export class ConfigEntity extends Base {
     @ApiProperty({ description: 'scannedDate' })
     @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
     scannedDate: Date;
-
 }
