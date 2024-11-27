@@ -1,4 +1,3 @@
-import { JobRunStatus } from './../entities/jobrun.entity';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
 import { JobRunStatus } from '../entities/jobrun.entity';
