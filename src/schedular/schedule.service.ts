@@ -7,8 +7,8 @@ import { RabbitMqService } from '../events/rabbitmq.service';
 import { TaskService } from '../tasks/tasks.service';
 import { TaskOperation, TaskStatus, TaskType } from './../entities/task.entity';
 import { WorkersService } from './../workers/workers.service';
-import { JobRunStatus } from '../entities/jobrun.entity';
 import { EventsGateway } from '../events/events.gateway';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class SchedularService {
