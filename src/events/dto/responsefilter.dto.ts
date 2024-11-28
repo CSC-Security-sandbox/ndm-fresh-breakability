@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
-import { Protocol } from 'src/constants/enums';
-import {  Operations, ResponseStatus, TaskType } from 'src/constants/status';
+import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 
 

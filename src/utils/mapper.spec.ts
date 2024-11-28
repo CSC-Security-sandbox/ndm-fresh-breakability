@@ -1,27 +1,47 @@
-import { Protocol } from 'src/constants/enums';
+
 import { Operations } from 'src/constants/status';
+import { Protocol } from 'src/constants/enums';
 import { OperationToProtocol } from './mapper';
 
 describe('OperationToProtocol', () => {
-  it('should return Protocol.NFS for NFS operations', () => {
-    expect(
-      OperationToProtocol(
-        Operations.LIST_NFS_PATHS || Operations.VALIDATE_NFS_CONNECTION
-      )
-    ).toBe(Protocol.NFS);
+
+
+  it('should return NFS for LIST_NFS_PATHS', () => {
+    const result = OperationToProtocol(Operations.LIST_NFS_PATHS);
+    expect(result).toBe(Protocol.NFS);
   });
 
-  it('should return Protocol.SMB for SMB operations', () => {
-    expect(
-      OperationToProtocol(
-        Operations.LIST_SMB_PATHS || Operations.VALIDATE_SMB_CONNECTION
-      )
-    ).toBe(Protocol.SMB);
+  it('should return NFS for VALIDATE_NFS_CONNECTION', () => {
+    const result = OperationToProtocol(Operations.VALIDATE_NFS_CONNECTION);
+    expect(result).toBe(Protocol.NFS);
   });
 
-  it('should throw an error for invalid operations', () => {
-    expect(() =>
-      OperationToProtocol('INVALID_OPERATION' as Operations)
-    ).toThrow('Invalid Operation');
+
+  it('should return SMB for LIST_SMB_PATHS', () => {
+    const result = OperationToProtocol(Operations.LIST_SMB_PATHS);
+    expect(result).toBe(Protocol.SMB);
   });
+
+  it('should return SMB for VALIDATE_SMB_CONNECTION', () => {
+    const result = OperationToProtocol(Operations.VALIDATE_SMB_CONNECTION);
+    expect(result).toBe(Protocol.SMB);
+  });
+
+
+  it('should throw an error for an invalid operation', () => {
+
+    const invalidOperation = 'INVALID_OPERATION' as Operations;
+
+    expect(() => OperationToProtocol(invalidOperation)).toThrowError('Invalid Operation');
+  });
+
+
+  it('should throw an error if no operation is provided', () => {
+    // @ts-ignore: Test missing operation (undefined)
+    expect(() => OperationToProtocol(undefined)).toThrowError('Invalid Operation');
+    
+    // @ts-ignore: Test null operation
+    expect(() => OperationToProtocol(null)).toThrowError('Invalid Operation');
+  });
+
 });

@@ -29,8 +29,8 @@ export class ConfigEntity extends Base {
     @JoinColumn({ name: 'project_id' }) 
     project: ProjectEntity;
 
-    @ApiProperty({ description: 'refreshedOn' })
-    @Column({ name: 'refreshed_on' , nullable : true, type : 'timestamp without time zone'})
-    refreshedOn: Date;
+    @ApiProperty({ description: 'scannedDate' })
+    @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
+    scannedDate: Date;
 
 }
