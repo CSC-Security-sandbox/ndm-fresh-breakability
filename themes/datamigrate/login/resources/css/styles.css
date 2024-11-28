@@ -6,9 +6,16 @@
   background-color: #e5e6e7;
 }
 
+
+
 @font-face {
   font-family: "Roboto";
   src: url("../fonts/Roboto-Regular.ttf") format("truetype");
+}
+
+.eyeIconClass {
+  position: absolute; 
+  margin-left: 26rem;
 }
 
 .input-wrapper {
