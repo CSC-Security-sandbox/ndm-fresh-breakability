@@ -45,7 +45,7 @@ export class TaskService {
   }
 
   async assignTasksToWorker(jobRunId: string, limit: number) {
-    const queryRunner = this.taskRepository.queryRunner;
+    const queryRunner = this.taskRepository.manager.connection.createQueryRunner();
   
     try {
       // Start transaction
@@ -79,11 +79,9 @@ export class TaskService {
   
       return tasks;
     } catch (error) {
-      // Rollback transaction on error
       await queryRunner.rollbackTransaction();
       throw new ConflictException('Failed to assign tasks to the worker.');
     } finally {
-      // Release query runner
       await queryRunner.release();
     }
   }

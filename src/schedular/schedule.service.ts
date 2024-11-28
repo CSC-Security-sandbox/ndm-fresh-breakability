@@ -24,7 +24,7 @@ export class SchedularService {
 
   async handleCron(): Promise<string> {
     const currentTime = new Date();
-    const jobs = await this.jobConfigService.getJobConfigs({ where: { status: JobStatus.Active }});
+    const jobs = await this.jobConfigService.getJobConfigsForCreatingJobRun();
 
     for (const job of jobs) {
       // create a job run for this job configuration
@@ -37,31 +37,26 @@ export class SchedularService {
         jobConfigId: job.id
       });
       this.logger.log(`Job run created for job ID: ${job.id} at ${currentTime}`);
-
       // create a initial task data for this job.
       const task = {
-        id: uuid(),
         jobRunId: jobRun.id,
-        taskType: TaskType.Scan, // taskType will be dynamic based on jobrun data
+        taskType: job.jobType as unknown as TaskType,
         status: TaskStatus.Pending,
         operations: [{
           operation: TaskOperation.ScanPath, // operation will be dynamic based on jobrun data
           request: {
-            pathId: job.sourcePathId, // absolute path /etc/mnt/path_id/folder
-            folder: '' // relative path
+            pathId: '/etc/mnt/unique-mount-path', // absolute path /etc/mnt/path_id/folder
+            folder: '/' // relative path
           },
           status: TaskStatus.Pending
         }]
       }
-
       // save this task to database [Task Entity]
-      const taskRecord = await this.taskService.create(task);
-      
+      await this.taskService.create(task);
       // send worker wakeup command
-      const workers = await this.workerService.findAllWorkers({  });
-
+      const workers = await this.workerService.findAllWorkers({ workerId: '8a76f6a2-8c1d-4c3c-bdbc-839a5ede4587' });
       for (let index = 0; index < workers.total; index++) {
-        await this.eventsGateway.sendToClient(workers.data[index], 'WAKE_UP', { message: 'wakeup', jobRunId: jobRun.id });
+        await this.eventsGateway.sendToClient(workers.data[index].workerId, 'WAKE_UP', { message: 'wakeup', jobRunId: jobRun.id });
       }
     }
     return 'success';

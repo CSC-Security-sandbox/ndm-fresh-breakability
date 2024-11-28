@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { Injectable, Logger } from '@nestjs/common';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity, JobStatus } from '../entities/jobconfig.entity';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
 
 @Injectable()
@@ -39,6 +39,15 @@ export class JobConfigService {
 
   async getJobConfigs(condition: FindManyOptions<JobConfigEntity>): Promise<JobConfigEntity[]> {
     return await this.jobConfigRepo.find(condition);
+  }
+
+  async getJobConfigsForCreatingJobRun() {
+    return await this.jobConfigRepo
+      .createQueryBuilder('jobconfig')
+      .leftJoin('jobrun', 'jobRun', 'jobRun.jobConfigId = jobconfig.id')
+      .where('jobconfig.status = :status', { status: JobStatus.Active })
+      .andWhere('jobRun.id IS NULL')
+      .getMany();
   }
   
   async updateJobConfig(id: string, data: Partial<CreateJobConfigDto>): Promise<JobConfigEntity> {

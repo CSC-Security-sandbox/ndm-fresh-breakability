@@ -25,10 +25,10 @@ export enum TaskOperation {
     MetaStamp = 'META_STAMP'
 }
 
-@Entity({ name: 'tasks' })
-@Index('idx_job_run_id', ['job_run_id'])
-@Index('idx_job_run_status', ['job_run_id', 'status'])
-@Index('idx_status', ['status'])
+@Entity({ name: 'tasks', schema: 'migrate' })
+@Index('idx_job_run_id', ['jobRunId'])
+@Index('idx_job_run_status', ['jobRunId', 'status'])
+@Index('idx_task_type', ['taskType'])
 export class TaskEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
@@ -36,7 +36,7 @@ export class TaskEntity extends Base {
 
   @ApiProperty({ description: 'Job run id' })
   @Column({ type: 'uuid', nullable: false,  name: 'job_run_id'})
-  job_run_id: string;
+  jobRunId: string;
 
   @ApiProperty({ description: 'Task status' })
   @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Pending, name:'status' })

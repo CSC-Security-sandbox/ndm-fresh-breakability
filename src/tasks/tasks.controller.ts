@@ -13,7 +13,7 @@ import {
   import { ApiTags, ApiResponse } from '@nestjs/swagger';
   import { TaskService } from './tasks.service';
   import { TaskEntity } from '../entities/task.entity';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../events/getway/events.gateway';
   
   @ApiTags('Tasks')
   @Controller('tasks')
@@ -84,14 +84,9 @@ import { EventsGateway } from '../events/events.gateway';
         throw new NotFoundException('No tasks available for the worker.');
       }
 
-      // Send tasks to the worker
-      const result = await this.eventsGateway.sendToClient(workerId, 'taskAssigned', tasks);
-          
       return {
         message: 'Tasks assigned to worker for processing.',
-        tasks,
-        sentToWorker: result,
+        tasks
       };
     }
-  }
-  
+}
