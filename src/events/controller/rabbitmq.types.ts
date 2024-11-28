@@ -14,3 +14,9 @@ export type ListPathsMsg = {
     configId: string;
     credentials: Credentials[]
 }
+
+export type TaskMessage = {
+    jobRunId: string;
+    pathId: string;
+    folder: string
+}

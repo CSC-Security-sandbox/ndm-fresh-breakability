@@ -2,6 +2,7 @@ import { FindManyOptions, FindOneOptions, Repository } from 'typeorm';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TaskEntity, TaskStatus } from '../entities/task.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class TaskService {
@@ -65,7 +66,16 @@ export class TaskService {
         return [];
       }
   
-      // Step 2: Update tasks to "Running" status
+      // step 2: Update job run row status
+
+      await queryRunner.manager
+        .createQueryBuilder()
+        .update(JobRunEntity)
+        .set({ status: JobRunStatus.Running })
+        .where({ id: jobRunId, status: JobRunStatus.Ready })
+        .execute();
+
+      // Step 3: Update tasks to "Running" status
       const taskIds = tasks.map(task => task.id);
       await queryRunner.manager
         .createQueryBuilder()

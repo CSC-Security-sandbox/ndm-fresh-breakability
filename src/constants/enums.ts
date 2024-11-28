@@ -20,5 +20,6 @@ export enum ConfigurationType {
 }
 
 export enum RabbitMq {
-    ListPaths ='ListPaths'
+    ListPaths ='ListPaths',
+    CreateTaskList = 'createTaskList'
 }
