@@ -5,31 +5,36 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
+import { RabbitMQConfigService } from './config/rabbitmq.config';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const rabbitMQConfig = app.get(RabbitMQConfigService);
+
+  Logger.log(`RabbitMQ URIs: ${rabbitMQConfig.uris}`);
+  Logger.log(`Task Queue: ${rabbitMQConfig.taskQueueName}`);
 
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: configService.get('app.rabbitmq.urls'),
-      queue: configService.get('app.rabbitmq.queue'),
-      noAck: false,
-      queueOptions: {
-        durable: configService.get('app.rabbitmq.durable'),
-        arguments: {
-          'x-queue-type': 'quorum', 
+  const taskQueueApp = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.RMQ,
+      options: {
+        urls: rabbitMQConfig.uris,
+        queue: rabbitMQConfig.taskQueueName,
+        noAck: false,
+        queueOptions: {
+          durable: true,
+          arguments: {
+            'x-queue-type': 'quorum',
+          },
         },
       },
-    },
-  });
-
-  await app.startAllMicroservices();
+    });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   
@@ -56,6 +61,8 @@ async function bootstrap() {
   
   app.enableCors();
   
+  await taskQueueApp.listen();
+  Logger.log('Task Queue Microservice is listening...');
   await app.listen(port, '0.0.0.0');
 }
 bootstrap();

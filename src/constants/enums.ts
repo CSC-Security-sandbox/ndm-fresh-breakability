@@ -23,3 +23,7 @@ export enum RabbitMq {
     ListPaths ='ListPaths',
     CreateTaskList = 'createTaskList'
 }
+
+export enum MessagesName {
+    CREATE_TASK_LIST = 'myqueue-task-list'
+}
