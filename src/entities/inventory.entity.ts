@@ -19,10 +19,21 @@ export class InventoryEntity {
   file_name: string;
 
   @ApiProperty()
-  @Column({ name: 'folder' })
-  folder: boolean;
+  @Column({ name: 'type' })
+  type: string;
 
   @ApiProperty()
-  @Column({ name: 'metadata', type: 'text' })
-  metadata: string;
+  @Column('text', {
+    name: 'metadata',
+    transformer: {
+      to: (value: object) => JSON.stringify(value), // Save as a string in the database
+      from: (value: string) => JSON.parse(value),   // Parse it to an object when fetching from the database
+    },
+  })
+  metadata: object;
+
+  @ApiProperty()
+  @Column({ name: 'parent_path' })
+  parent_path: string;
+
 }

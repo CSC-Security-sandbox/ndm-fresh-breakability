@@ -26,33 +26,15 @@ export class metadataDTO {
     
     @IsNumber()
     blocks: number;
-
-    @IsString()
-    atime: string;
   
     @IsString()
     mtime: string;
-
-    @IsString()
-    ctime: string;
   
     @IsString()
     birthtime: string;
-   
-    @IsString()
-    fileName: string;
-  
-    @IsString()
-    filePath: string;
   
     @IsString()
     extension: string;
-
-    @IsString()
-    type: string;
-  
-    @IsBoolean()
-    folder: boolean;
 
     @IsString()
     permission: string;
@@ -68,12 +50,15 @@ export class createInventoryDTO {
     @IsString()
     fileName: string;
   
-    @IsBoolean()
-    folder: boolean;
+    @IsString()
+    type: string;
 
     @ValidateNested()
     @Type(() => metadataDTO)
-    metadata: metadataDTO
+    metadata: metadataDTO;
+
+    @IsString()
+    parentPath: string;
 }
 
 

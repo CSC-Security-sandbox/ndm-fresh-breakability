@@ -3,24 +3,30 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createInventoryDTO } from '../dto/create-inventory.dto';
 import { InventoryEntity } from '../entities/inventory.entity';
 import { Repository } from 'typeorm';
+import { TaskEntity } from 'src/entities/task.entity';
 
 @Injectable()
 export class InventoryService {
 
   constructor(
     @InjectRepository(InventoryEntity)
-    private inventoryRepo: Repository<InventoryEntity>,
+    private inventoryRepo: Repository<InventoryEntity>
   ) {}
 
   async createInventory(data: createInventoryDTO) {
-    const inventoryRecord = this.inventoryRepo.create({
-      mount_path: data?.mountPath,
-      file_server: data?.fileServer,
-      file_name: data?.fileName,
-      folder: data?.folder,
-      metadata: JSON.stringify(data?.metadata)
-    });
-    return this.inventoryRepo.save(inventoryRecord);
+    try{
+      const inventoryRecord = this.inventoryRepo.create({
+        mount_path: data?.mountPath,
+        file_server: data?.fileServer,
+        file_name: data?.fileName,
+        parent_path: data.parentPath,
+        type: data?.type,
+        metadata: data?.metadata
+      });
+      return this.inventoryRepo.save(inventoryRecord);
+    } catch(err) {
+      console.log(`Error while saving data in the db - ${err}`);
+    }
   }
 
   async getInventoryById(id: string) {
@@ -40,8 +46,8 @@ export class InventoryService {
     inventory.mount_path = data.mountPath ?? inventory.mount_path;
     inventory.file_server = data.fileServer ?? inventory.file_server;
     inventory.file_name = data.fileName ?? inventory.file_name;
-    inventory.folder = data.folder ?? inventory.folder;
-    inventory.metadata = JSON.stringify(data.metadata ?? inventory.metadata);
+    inventory.type = data.type ?? inventory.type;
+    inventory.metadata = data.metadata ?? inventory.metadata;
   
     return this.inventoryRepo.save(inventory);
   }
@@ -59,5 +65,5 @@ export class InventoryService {
   async getAllInventories() {
     return await this.inventoryRepo.find();
   }
-  
+
 }
