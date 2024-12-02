@@ -7,12 +7,6 @@ import { RequestLoggerMiddleware } from "../middleware/request-logger.middleware
 import { format, transports } from "winston";
 
 
-// const test =(cfg: ConfigService) => {
-//     console.log(cfg.get('loggerOptions'))
-//     return `${cfg.get<string>('loggerOptions.service')}/logs/%DATE%-error.log`
-// }
-
-
 @Module({})
 export class LoggerModule {
     static forRoot() : DynamicModule{
