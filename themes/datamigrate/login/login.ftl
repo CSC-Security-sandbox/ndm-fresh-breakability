@@ -33,7 +33,7 @@
                             method="post">
                             <!-- Username -->
                             <div class="w-full my-7 text-left inputClassDiv">
-                                <label class="${properties.kcLabelWrapperClass!}">Email</label>
+                                <label class="${properties.kcLabelWrapperClass!}">Email/Username</label>
                                 <div class="${properties.kcInputWrapperClass!}">
                                     <input
                                         tabindex="1"
@@ -51,7 +51,7 @@
                             <!-- Password -->
                             <div class="w-full my-4 text-left inputClassDiv">
                                 <label class="${properties.kcLabelWrapperClass!}">Password</label>
-                                <div class="${properties.kcInputWrapperClass!}">
+                                <div class="${properties.kcInputWrapperClass!} relative">
                                         <input
                                             tabindex="2"
                                             id="password"
@@ -62,11 +62,9 @@
                                             aria-invalid="<#if messagesPerField.existsError('password')>true</#if>"
                                             placeholder="Enter ${msg("password")}" />
                                         <!-- Show/Hide Password Button -->
-                                        <button type="button" id="toggle-password" class="eyeIconClass" >
+                                        <button type="button" id="toggle-password" class="eyeIconClass right-4" >
                                             <i id="eye-icon" class="fas fa-eye"></i> <!-- Show Icon -->
                                         </button>
-                                        <div>
-                                        </div>
                                         <!-- Display Password Error -->
                                         
                                     </div>
@@ -76,7 +74,7 @@
                                                 ${kcSanitize(messagesPerField.get('password'))?no_esc}
                                             </div>
                                         </#if>
-                                    <div class="my-2 w-full">
+                                    <div class="my-2 w-full mt-6">
                                         <button
                                             tabindex="4"
                                             class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!} submit-btn"

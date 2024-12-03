@@ -86,7 +86,7 @@
                                         name="email"
                                         class="${properties.kcInputClass!}"
                                         autocomplete="email"
-                                        placeholder="${msg("enterEmail")}"
+                                        placeholder="${msg("")}"
                                         aria-invalid="<#if messagesPerField.existsError('email')>true</#if>" />
                                 </div>
                                 <#if messagesPerField.existsError('email')>
