@@ -1,110 +1,112 @@
 <#import "template.ftl" as layout>
-<@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
-    
-    <#if section = "form">
-        <div class="flex justify-between">
-            <#--  Sidebar  -->
-            <div class="sidebar w-6/12 h-screen">
-            </div>
+    <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
 
-            <div class="bg-white flex flex-grow items-center justify-center p-8">
-                <div class="md:w-6/12">
-                    <div class="text-4xl">Hi! Welcome to Datamigrate</div>
-                    <div class="text-base-secondary text-sm leading-tight py-2">Build strong connections with customers to enhance brand loyalty and drive business growth.</div>
-                    <div>
-                        <form 
-                            id="kc-form-login" 
-                            onsubmit="login.disabled = true; return true;" 
-                            action="${url.loginAction}" 
-                            method="post"
-                        >
-                            <#--  username  -->
-                            <div class="w-full my-4">
-                                <div class="${properties.kcLabelWrapperClass!}">Username</div>
-                                <div class="${properties.kcInputWrapperClass!}">
-                                    <#if !usernameHidden??>
-                                        <input 
-                                            tabindex="1" 
-                                            id="username" 
-                                            class="${properties.kcInputClass!}" 
-                                            name="username" 
-                                            value="${(login.username!'')}"  
-                                            type="text" 
-                                            autofocus 
-                                            autocomplete="off"
-                                            aria-invalid="<#if messagesPerField.existsError('username','password')>true</#if>"
-                                            placeholder="Enter ${msg("username")}"
-                                        />
-                                    </#if>
-                                </div>
+        <head>
+            <!-- Add Font Awesome for icons -->
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+            <!-- Other head elements such as title, meta tags, etc. -->
+        </head>
+        <#if section="form">
+            <nav class="border-red-200 bg-red-50 dark:bg-red-800 dark:border-red-700">
+                <div class="max-w-screen-xl navbarStyles flex flex-wrap items-center justify-between mx-auto p-4">
+                    <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
+                        <div class="flex">
+                            <div class="netappNavBarLogo"></div>
+                            <div>
+                                <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">NetApp DataMigrate</span>
                             </div>
-
-                            <#--  password   -->
-                            <div class="w-full my-4">
-                                <div class="${properties.kcLabelWrapperClass!}">Password</div>
+                        </div>
+                    </a>
+                </div>
+                </div>
+            </nav>
+            <div class="flex flex-col justify-center items-center gap-3 min-h-screen bg-gray-100 customBackgroundClassColor">
+                <div class="netappLogo"></div>
+                <div class="login-card text-center bg-white shadow-md rounded-lg p-8">
+                    <div class="text-2xl mb-4">Welcome!</div>
+                    <div class="text-base-secondary text-sm leading-tight py-2 mb-4">Login To Datamigrate</div>
+                    <div>
+                        <form
+                            id="kc-form-login"
+                            onsubmit="login.disabled = true; return true;"
+                            action="${url.loginAction}"
+                            method="post">
+                            <!-- Username -->
+                            <div class="w-full my-7 text-left inputClassDiv">
+                                <label class="${properties.kcLabelWrapperClass!}">Email</label>
                                 <div class="${properties.kcInputWrapperClass!}">
-                                    <input 
-                                        tabindex="2" 
-                                        id="password" 
-                                        class="${properties.kcInputClass!}" 
-                                        name="password" 
-                                        type="password" 
+                                    <input
+                                        tabindex="1"
+                                        id="username"
+                                        class="${properties.kcInputClass!}"
+                                        name="username"
+                                        value="${(login.username!'')}"
+                                        type="text"
+                                        autofocus
                                         autocomplete="off"
                                         aria-invalid="<#if messagesPerField.existsError('username','password')>true</#if>"
-                                        placeholder="Enter ${msg("password")}"
-                                    />
+                                        placeholder="Enter ${msg("username")}" />
                                 </div>
                             </div>
-
-                            <#-- not being used at the moment, but leaving here in case we want to add in the future  -->
-                            <#if realm.resetPasswordAllowed>
-                                <div>
-                                    <a class="text-primary-main cursor-pointer text-xs mt-3" tabindex="5" href="${url.loginResetCredentialsUrl}">${msg("doForgotPassword")}</a>
-                                </div>
-                            </#if>
-
-                            <#--  Submit button  -->
-                            <div class="my-2 w-full">
-                                <div id="kc-form-buttons" class="${properties.kcFormGroupClass!}">
-                                    <input 
-                                        type="hidden" 
-                                        id="id-hidden-input" 
-                                        name="credentialId" <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>
-                                    />
-                                    <input 
-                                        tabindex="4" 
-                                        class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" 
-                                        name="login" 
-                                        id="kc-login" 
-                                        type="submit" 
-                                        value="${msg("doLogIn")}"
-                                    />
-                                </div>
-                            </div>
-
-                            <#--  error message  -->
-                            <#if messagesPerField.existsError('username','password')>
-                                <span id="input-error" class="${properties.kcInputErrorMessageClass!}" aria-live="polite">
-                                    ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
-                                </span>
-                            </#if>
-
-                            
+                            <!-- Password -->
+                            <div class="w-full my-4 text-left inputClassDiv">
+                                <label class="${properties.kcLabelWrapperClass!}">Password</label>
+                                <div class="${properties.kcInputWrapperClass!}">
+                                        <input
+                                            tabindex="2"
+                                            id="password"
+                                            class="${properties.kcInputClass!}"
+                                            name="password"
+                                            type="password"
+                                            autocomplete="off"
+                                            aria-invalid="<#if messagesPerField.existsError('password')>true</#if>"
+                                            placeholder="Enter ${msg("password")}" />
+                                        <!-- Show/Hide Password Button -->
+                                        <button type="button" id="toggle-password" class="eyeIconClass" >
+                                            <i id="eye-icon" class="fas fa-eye"></i> <!-- Show Icon -->
+                                        </button>
+                                        <div>
+                                        </div>
+                                        <!-- Display Password Error -->
+                                        
+                                    </div>
+                                    <!-- Submit Button --> 
+                                    <#if messagesPerField.existsError('password')>
+                                            <div class="text-red-500 text-sm mt-2">
+                                                ${kcSanitize(messagesPerField.get('password'))?no_esc}
+                                            </div>
+                                        </#if>
+                                    <div class="my-2 w-full">
+                                        <button
+                                            tabindex="4"
+                                            class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!} submit-btn"
+                                            name="login"
+                                            label="login"
+                                            id="kc-login"
+                                            type="submit">
+                                            ${msg("doLogIn")}
+                                        </button>
+                                    </div>
                         </form>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <script type="module" src="${url.resourcesPath}/js/passwordVisibility.js"></script>
-    <#elseif section = "info" >
-        <#--  not being used at the moment but leaving here in case we want to add in the future  -->
-        <#if realm.password && realm.registrationAllowed && !registrationDisabled??>
-            <#--  <div id="kc-registration-container">
-                <div id="kc-registration">
-                    <span>${msg("noAccount")} <a tabindex="6" href="${url.registrationUrl}">${msg("doRegister")}</a></span>
-                </div>
-            </div>  -->
+            <script type="module" src="${url.resourcesPath}/js/passwordVisibility.js"></script>
+            <script>
+            // Toggle password visibility
+            document.getElementById('toggle-password').addEventListener('click', function() {
+                const passwordField = document.getElementById('password');
+                const eyeIcon = document.getElementById('eye-icon');
+                if (passwordField.type === 'password') {
+                    passwordField.type = 'text';
+                    eyeIcon.classList.remove('fa-eye');
+                    eyeIcon.classList.add('fa-eye-slash'); // Change icon to "eye-slash"
+                } else {
+                    passwordField.type = 'password';
+                    eyeIcon.classList.remove('fa-eye-slash');
+                    eyeIcon.classList.add('fa-eye'); // Change icon back to "eye"
+                }
+            });
+            </script>
         </#if>
-    </#if>
-</@layout.registrationLayout>
+    </@layout.registrationLayout>
