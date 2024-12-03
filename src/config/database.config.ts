@@ -19,7 +19,6 @@ export default registerAs(
     entities: [
         InventoryEntity
     ],
-    migrations: [
-    ],
+    migrations: [],
   }),
 );

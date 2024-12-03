@@ -1,69 +1,77 @@
-import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsBoolean,
-  IsArray,
-  IsObject,
-  IsEmail,
-  IsOptional,
-  ValidateNested,
   IsUUID,
   IsNumber,
 } from 'class-validator';
 
-export class metadataDTO {
-    @IsNumber()
-    uid: number;
+export class CreateInventoryDto {
+  @ApiProperty()
+  // @IsUUID()
+  pathId: string;
 
-    @IsNumber()
-    gid: number;
+  @ApiProperty()
+  @IsUUID()
+  jobRunId: string;
 
-    @IsNumber()
-    blksize: number;
+  @ApiProperty()
+  @IsString()
+  path: string;
 
-    @IsNumber()
-    size: number;
-    
-    @IsNumber()
-    blocks: number;
-  
-    @IsString()
-    mtime: string;
-  
-    @IsString()
-    birthtime: string;
-  
-    @IsString()
-    extension: string;
+  @ApiProperty()
+  @IsBoolean()
+  isFolder: boolean;
 
-    @IsString()
-    permission: string;
+  @ApiProperty()
+  @IsString()
+  status: string;
+
+  @ApiProperty()
+  @IsString()
+  parentPath: string;
+
+  @ApiProperty()
+  @IsNumber()
+  depth: number;
+
+  @ApiProperty()
+  @IsString()
+  fileName: string;
+
+  @ApiProperty()
+  @IsNumber()
+  uid: number;
+
+  @ApiProperty()
+  @IsNumber()
+  gid: number;
+
+  @ApiProperty()
+  @IsNumber()
+  size: number;
+
+  @ApiProperty()
+  @IsNumber()
+  blocks: number;
+
+  @ApiProperty()
+  @IsString()
+  mtime: string;
+
+  @ApiProperty()
+  @IsString()
+  atime: string;
+
+  @ApiProperty()
+  @IsString()
+  birthtime: string;
+
+  @ApiProperty()
+  @IsString()
+  extension: string;
+
+  @ApiProperty()
+  @IsString()
+  permission: string;
 }
-
-export class createInventoryDTO {
-    @IsString()
-    mountPath: string;
-  
-    @IsString()
-    fileServer: string;
-  
-    @IsString()
-    fileName: string;
-  
-    @IsString()
-    type: string;
-
-    @ValidateNested()
-    @Type(() => metadataDTO)
-    metadata: metadataDTO;
-
-    @IsString()
-    parentPath: string;
-}
-
-
-
-
-
-
-

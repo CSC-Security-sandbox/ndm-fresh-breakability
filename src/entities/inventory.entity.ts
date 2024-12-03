@@ -1,39 +1,86 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity({ name: 'inventory' })
+@Entity({ name: 'inventory', schema: 'inventory' })
 export class InventoryEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ApiProperty()
-  @Column({ name: 'mount_path' })
-  mount_path: string;
+  // commenting because from discovery pathId comming as string instead of uuid
+  // so for testing purpose making it as string
+  // @ApiProperty()
+  // @Column({ name: 'pathId', type: 'uuid' })
+  // pathId: string;
 
   @ApiProperty()
-  @Column({ name: 'file_server' })
-  file_server: string;
+  @Column({ name: 'pathId', type: 'text' })
+  pathId: string;
 
   @ApiProperty()
-  @Column({ name: 'file_name' })
-  file_name: string;
+  @Column({ name: 'jobRunId', type: 'uuid' })
+  jobRunId: string;
 
   @ApiProperty()
-  @Column({ name: 'type' })
-  type: string;
+  @Column({ name: 'path', type: 'text' })
+  path: string;
 
   @ApiProperty()
-  @Column('text', {
-    name: 'metadata',
-    transformer: {
-      to: (value: object) => JSON.stringify(value), // Save as a string in the database
-      from: (value: string) => JSON.parse(value),   // Parse it to an object when fetching from the database
-    },
-  })
-  metadata: object;
+  @Column({ name: 'is_folder' })
+  isFolder: boolean;
 
   @ApiProperty()
-  @Column({ name: 'parent_path' })
-  parent_path: string;
+  @Column({ name: 'status' })
+  status: string;
 
+  @ApiProperty()
+  @Column({ name: 'source_checksum', type: 'text', nullable: true })
+  sourceChecksum: string | null;
+
+  @ApiProperty()
+  @Column({ name: 'target_checksum', type: 'text', nullable: true })
+  targetChecksum: string | null;
+
+  @ApiProperty()
+  @Column({ name: 'parent_path', type: 'text' })
+  parentPath: string;
+
+  @ApiProperty()
+  @Column({ name: 'depth' })
+  depth: number;
+
+  @ApiProperty()
+  @Column({ name: 'fileName', type: 'text' })
+  fileName: string;
+
+  @ApiProperty()
+  @Column({ name: 'uid' })
+  uid: number;
+
+  @ApiProperty()
+  @Column({ name: 'gid' })
+  gid: number;
+
+  @ApiProperty()
+  @Column({ name: 'size' })
+  size: number;
+
+  @ApiProperty()
+  @Column({ name: 'mtime' })
+  mtime: string;
+
+  @ApiProperty()
+  @Column({ name: 'atime' })
+  atime: string;
+
+  @ApiProperty()
+  @Column({ name: 'birthtime' })
+  birthtime: string;
+
+  @ApiProperty()
+  @Column({ name: 'extension' })
+  extension: string;
+
+  @ApiProperty()
+  @Column({ name: 'permission' })
+  permission: string;
 }
