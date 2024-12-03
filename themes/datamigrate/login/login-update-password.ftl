@@ -26,10 +26,10 @@
                 <div class="netappLogo"></div>
                 <div class="login-card text-center bg-white shadow-md rounded-lg p-8">
                     <div class="text-2xl mb-4">
-                        ${msg("updatePasswordTitle")}
+                        Create A New Password
                     </div>
                     <div class="text-base-secondary text-sm leading-tight py-2 mb-4">
-                        Please update your password to continue.
+                        Your new password must be different from <br /> previous used password.
                     </div>
                     <form
                         id="kc-passwd-update-form"
