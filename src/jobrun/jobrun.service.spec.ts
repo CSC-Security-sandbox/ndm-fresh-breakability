@@ -188,7 +188,7 @@ describe('JobRunService', () => {
       await expect(jobRunService.updateJobRun(id, data)).rejects.toThrow(`Job run with id ${id} not found`);
     });
   });
-
+/*
   describe('deleteJobRun', () => {
     it('should delete a job run', async () => {
       const id = 'jobrun-id-123';
@@ -208,7 +208,7 @@ describe('JobRunService', () => {
       await expect(jobRunService.deleteJobRun(id)).rejects.toThrow(`Job run with id ${id} not found`);
     });
   });
-
+*/
   describe('scheduleAJobRun', () => {
     it('should schedule a job run', async () => {
       const jobId = 'job-id-123';

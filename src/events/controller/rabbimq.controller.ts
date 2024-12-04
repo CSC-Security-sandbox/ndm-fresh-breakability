@@ -23,7 +23,8 @@ export class RabbiMqController {
     public async handleTasksMessage(@Payload() data: TaskMessage, @Ctx() context: RmqContext) {
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
-        await this.eventsService.createTasks(data);
+        // await this.eventsService.createTasks(data);
         channel.ack(originalMsg);
     }
+
 }

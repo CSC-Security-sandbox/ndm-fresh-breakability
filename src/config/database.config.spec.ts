@@ -10,6 +10,7 @@ import { RequestTrackEntity } from "src/entities/requesttrack.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import typeormConfig from 'src/config/database.config';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { TaskEntity } from 'src/entities/task.entity';
 
 
 describe('TypeORM Config', () => {
@@ -46,7 +47,7 @@ describe('TypeORM Config', () => {
         rejectUnauthorized: false,
       },
       logging: true,
-      entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity],
+      entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity],
       migrations: []
     };
 

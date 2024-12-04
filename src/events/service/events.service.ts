@@ -23,7 +23,7 @@ export class EventsService {
         private readonly requestTrackEntity: Repository<RequestTrackEntity>,
         private rabbitMqService: RabbitMqService,
         private readonly fileConfigService: FileConfigService,
-        private readonly taskService: TaskService
+        // private readonly taskService: TaskService
     ) { }
 
     async notifyEventToWorker(workerId: string, socketEvents: SocketEvents, payload: any) {
@@ -179,21 +179,21 @@ export class EventsService {
         })
     }
 
-    async createTasks(data) {
-        const task = {
-            jobRunId: data.jobRunId,
-            taskType: TasksType.Scan,
-            status: TaskStatus.Pending,
-            operations: [{
-                    operation: TaskOperation.ScanPath,
-                    request: {
-                        pathId: data.pathId,
-                        folder: data.folder,
-                    },
-                    status: TaskStatus.Pending,
-                },
-            ],
-        };
-        return this.taskService.create(task);
-    }
+    // async createTasks(data) {
+    //     const task = {
+    //         jobRunId: data.jobRunId,
+    //         taskType: TasksType.Scan,
+    //         status: TaskStatus.Pending,
+    //         operations: [{
+    //                 operation: TaskOperation.ScanPath,
+    //                 request: {
+    //                     pathId: data.pathId,
+    //                     folder: data.folder,
+    //                 },
+    //                 status: TaskStatus.Pending,
+    //             },
+    //         ],
+    //     };
+    //     return this.taskService.create(task);
+    // }
 }
