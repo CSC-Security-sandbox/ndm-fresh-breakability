@@ -1,0 +1,133 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Permission } from '../entities/permission.entity';
+import { PermissionController } from './permission.controller';
+import { PermissionService } from './permission.service';
+
+describe('PermissionController', () => {
+  let controller: PermissionController;
+  let service: PermissionService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [PermissionController],
+      providers: [
+        PermissionService,
+        {
+          provide: getRepositoryToken(Permission),
+          useClass: Repository,
+        },
+      ],
+    }).compile();
+
+    controller = module.get<PermissionController>(PermissionController);
+    service = module.get<PermissionService>(PermissionService);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  it('should be defined', async () => {
+    expect(service).toBeDefined();
+  });
+
+  it('should create an permission', async () => {
+    const createPermissionDto = {
+      permission_name: 'test',
+    };
+    const permission = {
+      id: '1',
+      ...createPermissionDto,
+      permission_status: 'testActive',
+      created_at: new Date(),
+      created_by: '1',
+      updated_at: new Date(),
+      updated_by: '1',
+      projects: [],
+      role_permissions: [],
+      populateWhoColumns: jest.fn(),
+    };
+
+    jest.spyOn(service, 'create').mockResolvedValue(permission);
+
+    expect(await controller.create(createPermissionDto)).toEqual(permission);
+  });
+
+  it('should find all permissions', async () => {
+    const permission = [
+      {
+        id: '1',
+        permission_name: 'test',
+        permission_status: 'testActive',
+        created_at: new Date(),
+        created_by: '1',
+        updated_at: new Date(),
+        updated_by: '1',
+        projects: [],
+        role_permissions: [],
+        populateWhoColumns: jest.fn(),
+      },
+      {
+        id: '2',
+        permission_name: 'test2',
+        permission_status: 'testActive',
+        created_at: new Date(),
+        created_by: '1',
+        updated_at: new Date(),
+        updated_by: '1',
+        projects: [],
+        role_permissions: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    jest.spyOn(service, 'findAll').mockResolvedValue(permission);
+
+    expect(await controller.findAll()).toEqual(permission);
+  });
+
+  it('should find one permission by id', async () => {
+    const permission = {
+      id: '1',
+      permission_name: 'test',
+      permission_status: 'testActive',
+      created_at: new Date(),
+      created_by: '1',
+      updated_at: new Date(),
+      updated_by: '1',
+      projects: [],
+      role_permissions: [],
+      populateWhoColumns: jest.fn(),
+    };
+
+    jest.spyOn(service, 'findOne').mockResolvedValue(permission);
+
+    expect(await controller.findOne('1')).toEqual(permission);
+  });
+
+  it('should update an permission', async () => {
+    const updatePermissionDto = {
+      permission_name: 'test',
+      permission_status: 'testActive',
+    };
+
+    jest.spyOn(service, 'update').mockResolvedValue();
+
+    expect(await controller.update('1', updatePermissionDto)).toBeUndefined();
+  });
+
+  it('should delete an permission', async () => {
+    jest.spyOn(service, 'delete').mockResolvedValue();
+
+    expect(await controller.delete('1')).toBeUndefined();
+  });
+
+  it('should call inactivate method of PermissionService with correct id', async () => {
+    const id = '123';
+    jest.spyOn(service, 'inactivate').mockResolvedValue();
+    await controller.inactivate(id);
+    expect(service.inactivate).toHaveBeenCalledWith(id);
+  });
+});

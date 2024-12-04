@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Unit Tests" tests="97" failures="0" errors="0" time="10">
+  <testsuite name="AccountService" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.4" tests="6">
+    <testcase classname="AccountService should be defined" name="AccountService should be defined" time="0.054">
+    </testcase>
+    <testcase classname="AccountService findAllAccounts should return paginated roles with the correct filtering and sorting" name="AccountService findAllAccounts should return paginated roles with the correct filtering and sorting" time="0.001">
+    </testcase>
+    <testcase classname="AccountService findAllAccounts should return all roles when no pagination parameters are provided" name="AccountService findAllAccounts should return all roles when no pagination parameters are provided" time="0.001">
+    </testcase>
+    <testcase classname="AccountService findAccountById should return a account by ID" name="AccountService findAccountById should return a account by ID" time="0.001">
+    </testcase>
+    <testcase classname="AccountService updateAccountsById should update a accounts by ID" name="AccountService updateAccountsById should update a accounts by ID" time="0.011">
+    </testcase>
+    <testcase classname="AccountService deleteAccountById should delete a account by ID" name="AccountService deleteAccountById should delete a account by ID" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="RolesService" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.54" tests="6">
+    <testcase classname="RolesService should be defined" name="RolesService should be defined" time="0.025">
+    </testcase>
+    <testcase classname="RolesService findAllRoles should return paginated roles with the correct filtering and sorting" name="RolesService findAllRoles should return paginated roles with the correct filtering and sorting" time="0.004">
+    </testcase>
+    <testcase classname="RolesService findAllRoles should return all roles when no pagination parameters are provided" name="RolesService findAllRoles should return all roles when no pagination parameters are provided" time="0.002">
+    </testcase>
+    <testcase classname="RolesService findRoleById should return a role by ID" name="RolesService findRoleById should return a role by ID" time="0.001">
+    </testcase>
+    <testcase classname="RolesService updateRoleById should update and return a role by ID" name="RolesService updateRoleById should update and return a role by ID" time="0.002">
+    </testcase>
+    <testcase classname="RolesService deleteRoleById should delete a role by ID" name="RolesService deleteRoleById should delete a role by ID" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="ProjectsService" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.578" tests="6">
+    <testcase classname="ProjectsService should be defined" name="ProjectsService should be defined" time="0.012">
+    </testcase>
+    <testcase classname="ProjectsService findAllProject should return paginated project with the correct filtering and sorting" name="ProjectsService findAllProject should return paginated project with the correct filtering and sorting" time="0.004">
+    </testcase>
+    <testcase classname="ProjectsService findAllProject should return all project when no pagination parameters are provided" name="ProjectsService findAllProject should return all project when no pagination parameters are provided" time="0.003">
+    </testcase>
+    <testcase classname="ProjectsService findProjectsById should return a project by ID" name="ProjectsService findProjectsById should return a project by ID" time="0.002">
+    </testcase>
+    <testcase classname="ProjectsService updateProjectById should update a Project by ID" name="ProjectsService updateProjectById should update a Project by ID" time="0.003">
+    </testcase>
+    <testcase classname="ProjectsService deleteProjectById should delete a project by ID" name="ProjectsService deleteProjectById should delete a project by ID" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="AccessrelationService" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.667" tests="10">
+    <testcase classname="AccessrelationService should be defined" name="AccessrelationService should be defined" time="0.013">
+    </testcase>
+    <testcase classname="AccessrelationService findAllUsers should return paginated roles with the correct filtering and sorting" name="AccessrelationService findAllUsers should return paginated roles with the correct filtering and sorting" time="0.006">
+    </testcase>
+    <testcase classname="AccessrelationService findAllUsers should return all roles when no pagination parameters are provided" name="AccessrelationService findAllUsers should return all roles when no pagination parameters are provided" time="0.003">
+    </testcase>
+    <testcase classname="AccessrelationService findByRelation should find relations based on the DTO" name="AccessrelationService findByRelation should find relations based on the DTO" time="0.003">
+    </testcase>
+    <testcase classname="AccessrelationService findByRelation should return an array of documents based on the relation" name="AccessrelationService findByRelation should return an array of documents based on the relation" time="0.004">
+    </testcase>
+    <testcase classname="AccessrelationService findByRelation should return an empty  if no documents match the relation" name="AccessrelationService findByRelation should return an empty  if no documents match the relation" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationService findRelationsById should return a relation by ID" name="AccessrelationService findRelationsById should return a relation by ID" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationService updateRelationsById should update and return the updated relation" name="AccessrelationService updateRelationsById should update and return the updated relation" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationService updateRelationsById should throw ForbiddenException if the relation already exists" name="AccessrelationService updateRelationsById should throw ForbiddenException if the relation already exists" time="0.087">
+    </testcase>
+    <testcase classname="AccessrelationService deleteRelationById should delete and return the deleted relation by ID" name="AccessrelationService deleteRelationById should delete and return the deleted relation by ID" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="UserService" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.724" tests="6">
+    <testcase classname="UserService should be defined" name="UserService should be defined" time="0.024">
+    </testcase>
+    <testcase classname="UserService findAllUsers should return paginated users with the correct filtering and sorting" name="UserService findAllUsers should return paginated users with the correct filtering and sorting" time="0.003">
+    </testcase>
+    <testcase classname="UserService findAllUsers should return all users when no pagination parameters are provided" name="UserService findAllUsers should return all users when no pagination parameters are provided" time="0.001">
+    </testcase>
+    <testcase classname="UserService findUsersById should return a user by ID" name="UserService findUsersById should return a user by ID" time="0.002">
+    </testcase>
+    <testcase classname="UserService updateUsersById should update a user by ID" name="UserService updateUsersById should update a user by ID" time="0.001">
+    </testcase>
+    <testcase classname="UserService deleteUserById should delete a user by ID" name="UserService deleteUserById should delete a user by ID" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="AccessrelationController" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.957" tests="14">
+    <testcase classname="AccessrelationController should be defined" name="AccessrelationController should be defined" time="0.027">
+    </testcase>
+    <testcase classname="AccessrelationController createRole should create an AccessRelation successfully" name="AccessrelationController createRole should create an AccessRelation successfully" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationController createRole should throw a BadRequestException when invalid data is provided" name="AccessrelationController createRole should throw a BadRequestException when invalid data is provided" time="0.009">
+    </testcase>
+    <testcase classname="AccessrelationController getUsers should return all Realation when called without query parameters" name="AccessrelationController getUsers should return all Realation when called without query parameters" time="0.004">
+    </testcase>
+    <testcase classname="AccessrelationController getUsers should call findAll with the correct parameters" name="AccessrelationController getUsers should call findAll with the correct parameters" time="0.001">
+    </testcase>
+    <testcase classname="AccessrelationController getRolesById should return an AccessRelation by ID" name="AccessrelationController getRolesById should return an AccessRelation by ID" time="0.003">
+    </testcase>
+    <testcase classname="AccessrelationController getRolesById should throw a BadRequestException for an invalid ObjectId" name="AccessrelationController getRolesById should throw a BadRequestException for an invalid ObjectId" time="0.028">
+    </testcase>
+    <testcase classname="AccessrelationController getRolesById should throw a NotFoundException when the AccessRelation is not found" name="AccessrelationController getRolesById should throw a NotFoundException when the AccessRelation is not found" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationController updateRole should update an AccessRelation successfully" name="AccessrelationController updateRole should update an AccessRelation successfully" time="0.002">
+    </testcase>
+    <testcase classname="AccessrelationController updateRole should throw a BadRequestException for an invalid ObjectId" name="AccessrelationController updateRole should throw a BadRequestException for an invalid ObjectId" time="0.001">
+    </testcase>
+    <testcase classname="AccessrelationController updateRole should throw a NotFoundException when the AccessRelation is not found" name="AccessrelationController updateRole should throw a NotFoundException when the AccessRelation is not found" time="0">
+    </testcase>
+    <testcase classname="AccessrelationController deleteRole should delete an AccessRelation successfully" name="AccessrelationController deleteRole should delete an AccessRelation successfully" time="0.001">
+    </testcase>
+    <testcase classname="AccessrelationController deleteRole should throw a BadRequestException for an invalid ObjectId" name="AccessrelationController deleteRole should throw a BadRequestException for an invalid ObjectId" time="0">
+    </testcase>
+    <testcase classname="AccessrelationController deleteRole should throw a NotFoundException when the AccessRelation is not found" name="AccessrelationController deleteRole should throw a NotFoundException when the AccessRelation is not found" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="RolesController" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="8.969" tests="14">
+    <testcase classname="RolesController should be defined" name="RolesController should be defined" time="0.009">
+    </testcase>
+    <testcase classname="RolesController createRole should create a role successfully" name="RolesController createRole should create a role successfully" time="0.002">
+    </testcase>
+    <testcase classname="RolesController createRole should throw a BadRequestException when invalid data is provided" name="RolesController createRole should throw a BadRequestException when invalid data is provided" time="0.008">
+    </testcase>
+    <testcase classname="RolesController findAllRole should return all findAllRole when called without query parameters" name="RolesController findAllRole should return all findAllRole when called without query parameters" time="0.002">
+    </testcase>
+    <testcase classname="RolesController findAllRole should call findAllRole with the correct parameters" name="RolesController findAllRole should call findAllRole with the correct parameters" time="0.003">
+    </testcase>
+    <testcase classname="RolesController getRolesById should return a role by ID" name="RolesController getRolesById should return a role by ID" time="0.002">
+    </testcase>
+    <testcase classname="RolesController getRolesById should throw a BadRequestException for an invalid ObjectId" name="RolesController getRolesById should throw a BadRequestException for an invalid ObjectId" time="0.029">
+    </testcase>
+    <testcase classname="RolesController getRolesById should throw a NotFoundException when the role is not found" name="RolesController getRolesById should throw a NotFoundException when the role is not found" time="0.003">
+    </testcase>
+    <testcase classname="RolesController updateRole should update a role successfully" name="RolesController updateRole should update a role successfully" time="0.001">
+    </testcase>
+    <testcase classname="RolesController updateRole should throw a BadRequestException for an invalid ObjectId" name="RolesController updateRole should throw a BadRequestException for an invalid ObjectId" time="0.002">
+    </testcase>
+    <testcase classname="RolesController updateRole should throw a NotFoundException when the role is not found" name="RolesController updateRole should throw a NotFoundException when the role is not found" time="0">
+    </testcase>
+    <testcase classname="RolesController deleteRole should delete a role successfully" name="RolesController deleteRole should delete a role successfully" time="0.001">
+    </testcase>
+    <testcase classname="RolesController deleteRole should throw a BadRequestException for an invalid ObjectId" name="RolesController deleteRole should throw a BadRequestException for an invalid ObjectId" time="0.002">
+    </testcase>
+    <testcase classname="RolesController deleteRole should throw a NotFoundException when the role is not found" name="RolesController deleteRole should throw a NotFoundException when the role is not found" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="ProjectController" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="9.193" tests="11">
+    <testcase classname="ProjectController createProject should create a project successfully" name="ProjectController createProject should create a project successfully" time="0.008">
+    </testcase>
+    <testcase classname="ProjectController getProjectById should return a project when a valid id is provided" name="ProjectController getProjectById should return a project when a valid id is provided" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController getProjectById should throw BadRequestException when an invalid id is provided" name="ProjectController getProjectById should throw BadRequestException when an invalid id is provided" time="0.009">
+    </testcase>
+    <testcase classname="ProjectController getProjectById should throw NotFoundException when project is not found" name="ProjectController getProjectById should throw NotFoundException when project is not found" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController findAllProject should return all Project when called without query parameters" name="ProjectController findAllProject should return all Project when called without query parameters" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController findAllProject should call findAllProject with the correct parameters" name="ProjectController findAllProject should call findAllProject with the correct parameters" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController updateProject should update a project successfully" name="ProjectController updateProject should update a project successfully" time="0.002">
+    </testcase>
+    <testcase classname="ProjectController updateProject should throw BadRequestException for invalid id" name="ProjectController updateProject should throw BadRequestException for invalid id" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController updateProject should throw NotFoundException if user not found" name="ProjectController updateProject should throw NotFoundException if user not found" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController deleteProject should delete a user successfully" name="ProjectController deleteProject should delete a user successfully" time="0.001">
+    </testcase>
+    <testcase classname="ProjectController deleteProject should throw BadRequestException for invalid id" name="ProjectController deleteProject should throw BadRequestException for invalid id" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="AccountController" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="9.211" tests="12">
+    <testcase classname="AccountController createAccount should create a account successfully" name="AccountController createAccount should create a account successfully" time="0.008">
+    </testcase>
+    <testcase classname="AccountController getUsers should return all users when called without query parameters" name="AccountController getUsers should return all users when called without query parameters" time="0.001">
+    </testcase>
+    <testcase classname="AccountController getUsers should call findAllUsers with the correct parameters" name="AccountController getUsers should call findAllUsers with the correct parameters" time="0.003">
+    </testcase>
+    <testcase classname="AccountController getAccountsById should return a account by id" name="AccountController getAccountsById should return a account by id" time="0.001">
+    </testcase>
+    <testcase classname="AccountController getAccountsById should throw BadRequestException for invalid id" name="AccountController getAccountsById should throw BadRequestException for invalid id" time="0.01">
+    </testcase>
+    <testcase classname="AccountController getAccountsById should throw NotFoundException if account not found" name="AccountController getAccountsById should throw NotFoundException if account not found" time="0.001">
+    </testcase>
+    <testcase classname="AccountController updateAccount should update a account successfully" name="AccountController updateAccount should update a account successfully" time="0.001">
+    </testcase>
+    <testcase classname="AccountController updateAccount should throw BadRequestException for invalid id" name="AccountController updateAccount should throw BadRequestException for invalid id" time="0.001">
+    </testcase>
+    <testcase classname="AccountController updateAccount should throw NotFoundException if account not found" name="AccountController updateAccount should throw NotFoundException if account not found" time="0.001">
+    </testcase>
+    <testcase classname="AccountController deleteAccount should delete a account successfully" name="AccountController deleteAccount should delete a account successfully" time="0.001">
+    </testcase>
+    <testcase classname="AccountController deleteAccount should throw BadRequestException for invalid id" name="AccountController deleteAccount should throw BadRequestException for invalid id" time="0.001">
+    </testcase>
+    <testcase classname="AccountController deleteAccount should throw NotFoundException if account not found" name="AccountController deleteAccount should throw NotFoundException if account not found" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="UsersController" errors="0" failures="0" skipped="0" timestamp="2024-09-03T09:46:09" time="9.333" tests="12">
+    <testcase classname="UsersController createUser should create a user successfully" name="UsersController createUser should create a user successfully" time="0.006">
+    </testcase>
+    <testcase classname="UsersController getUsers should return all users when called without query parameters" name="UsersController getUsers should return all users when called without query parameters" time="0.001">
+    </testcase>
+    <testcase classname="UsersController getUsers should call findAllUsers with the correct parameters" name="UsersController getUsers should call findAllUsers with the correct parameters" time="0">
+    </testcase>
+    <testcase classname="UsersController getUsersById should return a user by id" name="UsersController getUsersById should return a user by id" time="0">
+    </testcase>
+    <testcase classname="UsersController getUsersById should throw BadRequestException for invalid id" name="UsersController getUsersById should throw BadRequestException for invalid id" time="0.008">
+    </testcase>
+    <testcase classname="UsersController getUsersById should throw NotFoundException if user not found" name="UsersController getUsersById should throw NotFoundException if user not found" time="0.001">
+    </testcase>
+    <testcase classname="UsersController updateUser should update a user successfully" name="UsersController updateUser should update a user successfully" time="0.001">
+    </testcase>
+    <testcase classname="UsersController updateUser should throw BadRequestException for invalid id" name="UsersController updateUser should throw BadRequestException for invalid id" time="0">
+    </testcase>
+    <testcase classname="UsersController updateUser should throw NotFoundException if user not found" name="UsersController updateUser should throw NotFoundException if user not found" time="0.002">
+    </testcase>
+    <testcase classname="UsersController deleteUser should delete a user successfully" name="UsersController deleteUser should delete a user successfully" time="0">
+    </testcase>
+    <testcase classname="UsersController deleteUser should throw BadRequestException for invalid id" name="UsersController deleteUser should throw BadRequestException for invalid id" time="0.001">
+    </testcase>
+    <testcase classname="UsersController deleteUser should throw NotFoundException if user not found" name="UsersController deleteUser should throw NotFoundException if user not found" time="0">
+    </testcase>
+  </testsuite>
+</testsuites>

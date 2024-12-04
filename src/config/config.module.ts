@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { config } from 'dotenv';
+
+config(); // Load .env file
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(), // Automatically loads .env
+    TypeOrmModule.forRoot({
+      type: 'postgres', // Adjust according to your DB type
+      host: process.env.DATABASE_HOST,
+      port: parseInt(process.env.DATABASE_PORT, 10),
+      username: process.env.DATABASE_USERNAME,
+      password: process.env.DATABASE_PASSWORD,
+      database: process.env.DATABASE_NAME,
+      schema: process.env.DATABASE_SCHEMA,
+      // ssl: {
+      //   rejectUnauthorized: false,
+      // },
+      autoLoadEntities: process.env.AUTOLOAD_ENTITIES === 'true',
+      synchronize: process.env.SYNCHRONIZE === 'true',
+    }),
+  ],
+})
+export class AppConfigModule {}
