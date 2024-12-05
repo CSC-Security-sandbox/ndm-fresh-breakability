@@ -10,6 +10,7 @@ import { User } from '../entities/user.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
+import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
  
 describe('RolePermissionService', () => {
   let service: RolePermissionService;
@@ -49,6 +50,98 @@ describe('RolePermissionService', () => {
  
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('findAll', () => {
+    it('should return an array of role permissions', async () => {
+      const mockRolePermissions = [
+        { id: '1', role: { id: 'role-id-1' }, permission: { id: 'permission-id-1' } } as RolePermission,
+        { id: '2', role: { id: 'role-id-2' }, permission: { id: 'permission-id-2' } } as RolePermission,
+      ];
+   
+      jest
+        .spyOn(rolePermissionRepository, 'find')
+        .mockResolvedValue(mockRolePermissions);
+   
+      const result = await service.findAll(1,1,'','ASC', undefined);
+   
+      expect(result).toEqual(mockRolePermissions);
+      expect(rolePermissionRepository.find).toHaveBeenCalledWith({"order": {"": "ASC"}, "relations": ["role", "permission"], "skip": 0, "take": 1, "where": {}});
+    });
+   
+    it('should return an empty array if no role permissions are found', async () => {
+      jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
+     
+      const options = {}; 
+      const result = await service.findAll(1, 1, '', 'ASC', undefined);
+     
+      expect(result).toEqual([]); 
+      expect(rolePermissionRepository.find).toHaveBeenCalledWith({
+        where: {},
+        take: 1,
+        skip: 0,
+        order: { '': 'ASC' },
+        relations: ['role', 'permission'],
+      }); 
+    });
+
+    it('should filter by role_id when provided', async () => {
+      const mockFilter = { role_id: '1' };
+      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
+   
+      await service.findAll(1, 10, 'id', 'ASC', mockFilter);
+   
+      expect(findSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            role: { id: mockFilter.role_id },
+          },
+        }),
+      );
+    });
+   
+    it('should filter by permission_id when provided', async () => {
+      const mockFilter = { permission_id: '2' };
+      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
+   
+      await service.findAll(1, 10, 'id', 'ASC', mockFilter);
+   
+      expect(findSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            permission: { id: mockFilter.permission_id },
+          },
+        }),
+      );
+    });
+   
+    it('should filter by both role_id and permission_id when both are provided', async () => {
+      const mockFilter = { role_id: '1', permission_id: '2' };
+      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
+   
+      await service.findAll(1, 10, 'id', 'ASC', mockFilter);
+   
+      expect(findSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            role: { id: mockFilter.role_id },
+            permission: { id: mockFilter.permission_id },
+          },
+        }),
+      );
+    });
+   
+    it('should not filter when no filter is provided', async () => {
+      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
+   
+      await service.findAll(1, 10);
+   
+      expect(findSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {},
+        }),
+      );
+    });
   });
  
   describe('create', () => {

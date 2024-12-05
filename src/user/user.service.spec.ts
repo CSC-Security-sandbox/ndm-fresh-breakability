@@ -280,7 +280,7 @@ describe('UserService', () => {
     });
   });
 
-  it('should delete a user', async () => {
+  it('should delete a user successfully', async () => {
     const user = {
       id: '1',
       email: 'test@example.com',
@@ -309,6 +309,14 @@ describe('UserService', () => {
     });
 
     expect(userRepository.remove).toHaveBeenCalledWith(user);
+  });
+   
+  it('should throw NotFoundException if user is not found', async () => {
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+   
+    await expect(service.delete('1')).rejects.toThrow(
+      new NotFoundException('User with ID 1 not found')
+    );
   });
 
   it('should inactivate a user', async () => {

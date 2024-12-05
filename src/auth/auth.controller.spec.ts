@@ -89,6 +89,34 @@ describe('AuthController', () => {
       );
     });
   });
+
+  describe('getPermissions', () => {
+  it('should return user permissions from the request object', async () => {
+    const mockRequest = {
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    };
+ 
+    const result = await authController.getPermissions(mockRequest);
+ 
+    expect(result).toEqual(mockRequest.user);
+  });
+  
+ 
+  it('should handle cases where user object is not defined', async () => {
+    const mockRequest = {};
+ 
+    const result = await authController.getPermissions(mockRequest);
+ 
+    expect(result).toBeUndefined();
+  });
+});
  
   describe('resetPassword', () => {
     it('should reset the password for the given email and return the new password', async () => {
@@ -128,7 +156,7 @@ describe('AuthController', () => {
       const mockUser = {
         id: '123',
         email: 'testuser@example.com',
-        isActive: true,
+        isActive: false,
       };
  
       mockAuthService.setUserStatus.mockResolvedValue(mockUser);
@@ -137,6 +165,32 @@ describe('AuthController', () => {
  
       expect(result).toEqual({
         message: `User enabled successfully`,
+        user: mockUser,
+      });
+      expect(mockAuthService.setUserStatus).toHaveBeenCalledWith(
+        mockUserStatusDto.email,
+        mockUserStatusDto.enable
+      );
+    });
+
+    it('should disable a user based on the email and enable flag', async () => {
+      const mockUserStatusDto = {
+        email: 'testuser@example.com',
+        enable: false,
+      };
+ 
+      const mockUser = {
+        id: '123',
+        email: 'testuser@example.com',
+        isActive: true,
+      };
+ 
+      mockAuthService.setUserStatus.mockResolvedValue(mockUser);
+ 
+      const result = await authController.setUserStatus(mockUserStatusDto);
+ 
+      expect(result).toEqual({
+        message: `User disabled successfully`,
         user: mockUser,
       });
       expect(mockAuthService.setUserStatus).toHaveBeenCalledWith(
