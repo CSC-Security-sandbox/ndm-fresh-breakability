@@ -1,92 +1,73 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { CreateInventoryDto } from '../dto/create-inventory.dto';
-import { InventoryEntity } from '../entities/inventory.entity';
 import { Repository } from 'typeorm';
+import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { UpdateInventoryDto } from 'src/dto/update-inventory.dto';
+import { InventoryEntity } from '../entities/inventory.entity';
 
 @Injectable()
 export class InventoryService {
+    private readonly logger = new Logger(InventoryService.name);
 
     constructor(
         @InjectRepository(InventoryEntity)
-        private inventoryRepo: Repository<InventoryEntity>
+        private readonly inventoryRepo: Repository<InventoryEntity>,
     ) { }
 
-    async createInventory(data: CreateInventoryDto) {
-        try {            
-            const inventoryRecord = this.inventoryRepo.create({
-                pathId: data?.pathId,
-                fileName: data?.fileName,
-                path: data?.path,
-                parentPath: data?.parentPath,
-                jobRunId: data?.jobRunId,
-                isFolder: data?.isFolder,
-                uid: data?.uid,
-                gid: data?.gid,
-                size: data?.size,
-                mtime: data?.mtime,
-                birthtime: data?.birthtime,
-                extension: data?.extension,
-                permission: data?.permission,
-                atime: data?.atime,
-                sourceChecksum: null,
-                targetChecksum: null,
-                status: data?.status,
-                depth: data?.depth
-            });
-            return this.inventoryRepo.save(inventoryRecord);
-        } catch (err) {
-            Logger.log(`Error while saving data in the db - ${JSON.stringify(err)}`);
-        }
-    }
-
-    async getInventoryById(id: string) {
+    private async findInventoryById(id: string): Promise<InventoryEntity> {
         const inventory = await this.inventoryRepo.findOne({ where: { id } });
         if (!inventory) {
-            throw new Error(`Inventory with id ${id} not found`);
+            throw new NotFoundException(`Inventory with ID ${id} not found`);
         }
         return inventory;
     }
 
-    async updateInventory(id: string, data: UpdateInventoryDto) {
-        const inventory = await this.inventoryRepo.findOne({ where: { id } });
-        if (!inventory) {
-            throw new Error(`Inventory with id ${id} not found`);
+    async createInventory(data: CreateInventoryDto): Promise<InventoryEntity> {
+        try {
+            const inventoryRecord = this.inventoryRepo.create(data);
+            return await this.inventoryRepo.save(inventoryRecord);
+        } catch (err) {
+            this.logger.error(`Failed to save inventory: ${err.message}`, err.stack);
+            throw new Error('Error while saving inventory to the database');
         }
-
-        inventory.fileName = data?.fileName ?? inventory.fileName;
-        inventory.path = data?.path ?? inventory.path;
-        inventory.parentPath = data?.parentPath ?? inventory.parentPath;
-        inventory.isFolder = data?.isFolder ?? inventory.isFolder;
-        inventory.uid = data?.uid ?? inventory.uid;
-        inventory.gid = data?.gid ?? inventory.gid;
-        inventory.size = data?.size ?? inventory.size;
-        inventory.mtime = data?.mtime ?? inventory.mtime;
-        inventory.birthtime = data?.birthtime ?? inventory.birthtime;
-        inventory.extension = data?.extension ?? inventory.extension;
-        inventory.permission = data?.permission ?? inventory.permission;
-        inventory.atime = data?.atime ?? inventory.atime;
-        inventory.sourceChecksum = data?.sourceChecksum ?? inventory.sourceChecksum;
-        inventory.targetChecksum = data?.targetChecksum ?? inventory.targetChecksum;
-        inventory.status = data?.status ?? inventory.status;
-        inventory.depth = data?.depth ?? inventory.depth;
-
-        return this.inventoryRepo.save(inventory);
     }
 
-    async deleteInventory(id: string) {
-        const inventory = await this.inventoryRepo.findOne({ where: { id } });
-        if (!inventory) {
-            throw new Error(`Inventory with id ${id} not found`);
-        }
-
-        await this.inventoryRepo.remove(inventory);
-        return { message: `Inventory with id ${id} has been deleted` };
+    async getInventoryById(id: string): Promise<InventoryEntity> {
+        return this.findInventoryById(id);
     }
 
-    async getAllInventories() {
-        return await this.inventoryRepo.find();
+    async updateInventory(id: string, data: UpdateInventoryDto): Promise<InventoryEntity> {
+        const inventory = await this.findInventoryById(id);
+
+        Object.assign(inventory, data);
+
+        try {
+            return await this.inventoryRepo.save(inventory);
+        } catch (err) {
+            this.logger.error(`Failed to update inventory: ${err.message}`, err.stack);
+            throw new Error('Error while updating inventory in the database');
+        }
+    }
+
+    async deleteInventory(id: string): Promise<{ message: string }> {
+        const inventory = await this.findInventoryById(id);
+
+        try {
+            await this.inventoryRepo.remove(inventory);
+            return { message: `Inventory with ID ${id} has been deleted` };
+        } catch (err) {
+            this.logger.error(`Failed to delete inventory: ${err.message}`, err.stack);
+            throw new Error('Error while deleting inventory from the database');
+        }
+    }
+
+    async getAllInventories(): Promise<InventoryEntity[]> {
+        try {
+            return await this.inventoryRepo.find();
+        } catch (err) {
+            this.logger.error(`Failed to retrieve inventories: ${err.message}`, err.stack);
+            throw new Error('Error while fetching inventories');
+        }
     }
 
 }

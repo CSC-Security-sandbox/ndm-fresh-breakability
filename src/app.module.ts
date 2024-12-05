@@ -2,14 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { InventoryEntity } from './entities/inventory.entity';
-import { AppConfigModule } from './config/config.module';
 import { InventoryModule } from './inventory/inventory.module';
+import appConfig from './config/app.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      load: [databaseConfig],
+      load: [databaseConfig, appConfig],
       isGlobal: true
     }),
     TypeOrmModule.forRootAsync({
@@ -18,12 +17,9 @@ import { InventoryModule } from './inventory/inventory.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([InventoryEntity]),
-    AppConfigModule,
     InventoryModule,
   ],
   controllers: [],
   providers: [],
 })
 export class AppModule { }
-

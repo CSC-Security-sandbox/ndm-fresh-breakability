@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { InventoryEntity } from 'src/entities/inventory.entity';
+import { InventoryEntity } from '../entities/inventory.entity';
 import { DataSourceOptions } from 'typeorm';
 
 export default registerAs(
@@ -17,7 +17,7 @@ export default registerAs(
     ssl: false,
     logging: false,
     entities: [
-        InventoryEntity
+      InventoryEntity
     ],
     migrations: [],
   }),

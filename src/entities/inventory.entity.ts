@@ -61,7 +61,7 @@ export class InventoryEntity {
   gid: number;
 
   @ApiProperty()
-  @Column({ name: 'size' })
+  @Column({ name: 'size', default: 0 })
   size: number;
 
   @ApiProperty()

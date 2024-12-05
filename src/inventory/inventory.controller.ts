@@ -1,12 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Logger } from '@nestjs/common';
 import { Ctx, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
 import { InventoryService } from './inventory.service';
-import { QueueMessagePatterns } from 'src/enum/queue-message-pattern.enum';
-import { CreateInventoryDto } from 'src/dto/create-inventory.dto';
-import { UpdateInventoryDto } from 'src/dto/update-inventory.dto';
+import { Queues } from '../enum/queues.enum';
+import { CreateInventoryDto } from '../dto/create-inventory.dto';
+import { UpdateInventoryDto } from '../dto/update-inventory.dto';
 
 @Controller('inventory')
 export class InventoryController {
+    private readonly logger = new Logger(InventoryController.name);
 
     constructor(private readonly inventoryService: InventoryService) { }
 
@@ -38,21 +39,21 @@ export class InventoryController {
         return await this.inventoryService.getAllInventories();
     }
 
-    @MessagePattern(QueueMessagePatterns.CREATE_INVENTORY)
+    @MessagePattern(Queues.INVENTORY)
     async handleInventoryMessage(
         @Payload() data: CreateInventoryDto,
         @Ctx() context: RmqContext,
     ) {
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
-        try {            
-            Logger.log(`Received inventory message: ${JSON.stringify(data)}`);
-            Logger.log('inventory creation started');
+        try {
+            this.logger.log(`Received inventory message: ${JSON.stringify(data)}`);
+            this.logger.log('inventory creation started');
             await this.inventoryService.createInventory(data);
-            Logger.log('inventory created successfully');
+            this.logger.log('inventory created successfully');
             channel.ack(originalMsg);
         } catch (err) {
-            Logger.error(`Error processing inventory message: ${err.message}`);
+            this.logger.error(`Error processing inventory message: ${err.message}`);
             channel.nack(originalMsg);
         }
     }
