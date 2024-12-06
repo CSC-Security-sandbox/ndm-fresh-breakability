@@ -11,7 +11,6 @@ import { JobMappingModule } from './jobmappings/jobmapping.module';
 import { TaskModule } from './tasks/tasks.module';
 import appConfig from './config/app.config';
 import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
-import { AppConfigModule } from './config/config.module';
 
 @Module({
   imports: [
@@ -22,7 +21,7 @@ import { AppConfigModule } from './config/config.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule, TaskModule, RabbitmqModule, AppConfigModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule, TaskModule, RabbitmqModule
   ],
   controllers: [],
   providers: [],

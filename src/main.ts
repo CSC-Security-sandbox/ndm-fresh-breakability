@@ -5,15 +5,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
-import { RabbitMQConfigService } from './config/rabbitmq.config';
 import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  const rabbitMQConfig = app.get(RabbitMQConfigService);
-
-  Logger.log(`RabbitMQ URIs: ${rabbitMQConfig.uris}`);
-  Logger.log(`Task Queue: ${rabbitMQConfig.taskQueueName}`);
 
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>('app.http.host');
@@ -25,7 +20,7 @@ async function bootstrap() {
       transport: Transport.RMQ,
       options: {
         urls: configService.get('app.rabbitmq.urls'),
-        queue: configService.get('app.rabbitmq.queue'),
+        queue: configService.get('app.rabbitmq.serviceQueue'),
         noAck: false,
         queueOptions: {
           durable: configService.get('app.rabbitmq.durable'),
@@ -41,11 +36,11 @@ async function bootstrap() {
     {
       transport: Transport.RMQ,
       options: {
-        urls: rabbitMQConfig.uris,
-        queue: rabbitMQConfig.taskQueueName,
+        urls: configService.get('app.rabbitmq.urls'),
+        queue: configService.get('app.rabbitmq.taskQueue'),
         noAck: false,
         queueOptions: {
-          durable: true,
+          durable: configService.get('app.rabbitmq.durable'),
           arguments: {
             'x-queue-type': 'quorum',
           },
