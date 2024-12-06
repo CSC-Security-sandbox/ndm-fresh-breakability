@@ -8,6 +8,8 @@ import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobStatus } from 'src/constants/enums';
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { v4 as uuid } from 'uuid';
+import { EmitterEvents } from 'src/constants/events';
+import { SocketEvents } from 'src/constants/status';
 
 @Injectable()
 export class JobRunService {
@@ -18,10 +20,8 @@ export class JobRunService {
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
-    private readonly jobConfigService: JobConfigService,
-    private readonly eventEmitter: Eve
+    private readonly eventEmitter: EventEmitter2
   ) { }
-
 
 
   async scheduleAJob() {
@@ -36,26 +36,37 @@ export class JobRunService {
       .andWhere('jobConfig.firstRunAt <= :currentTime', { currentTime: currentTime.toISOString() }) 
       .andWhere('jobRun.id IS NULL')  
       .getMany();
-  
-    this.logger.log({ jobs, currentTime: currentTime.toISOString() }, 'Scheduled Jobs');
     jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
     return jobs;
   }
 
   
 
-  async createJobRun(job: JobConfigEntity , currentTime: Date): Promise<JobRunEntity> {
-    this.logger.log(`Data to job run - ${JSON.stringify(job)}`);
+  async createJobRun(job: JobConfigEntity , currentTime: Date) {
       const jobRunRecord = this.jobRunRepo.create({
-        id: uuid(),
         status: JobRunStatus.Ready,
         startTime: currentTime,
         endTime: null,
         iterationNumber: 1,
         jobConfigId: job.id
       });
-    await this.jobRunRepo.save(jobRunRecord);
+    
+    const update = await this.jobRunRepo.save(jobRunRecord);
+  
+    this.eventEmitter.emit(EmitterEvents.TaskCreate, 
+      {
+        jobRunId: update.id,
+        status: update.status,
+        sPath: job.sourcePath.volumePath,
+        tPath: job.targetPath?.volumePath,
+        taskType: job.jobType
+    })
 
+    this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+      workerId: "d046e20f-8ac9-40b0-8a24-aab8395a51be",
+      socketEvents: SocketEvents.WAKE_UP,
+      payload: { jobRunId: update.id}
+    })
   }
 
   async getJobRun(condition: FindManyOptions<JobRunEntity>): Promise<JobRunEntity[]> {
@@ -103,19 +114,19 @@ export class JobRunService {
     return this.jobRunRepo.save(jobRun);
   }
   
-  async scheduleAJobRun(jobId: string) {
-    const job = await this.jobConfigService.getJobConfigById(jobId);
-    if (!job) {
-      throw new Error(`Job with id ${jobId} not found`);
-    }
-    const jobRun: Partial<JobRunDto> = {
-      status: JobRunStatus.Ready,
-      startTime: new Date(),
-      iterationNumber: 1,
-      jobConfigId: job.id,
-    };
-    this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
-    const createdJobRun = this.jobRunRepo.create(jobRun);
-    return this.jobRunRepo.save(createdJobRun);
-  }
+  // async scheduleAJobRun(jobId: string) {
+  //   const job = await this.jobConfigService.getJobConfigById(jobId);
+  //   if (!job) {
+  //     throw new Error(`Job with id ${jobId} not found`);
+  //   }
+  //   const jobRun: Partial<JobRunDto> = {
+  //     status: JobRunStatus.Ready,
+  //     startTime: new Date(),
+  //     iterationNumber: 1,
+  //     jobConfigId: job.id,
+  //   };
+  //   this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
+  //   const createdJobRun = this.jobRunRepo.create(jobRun);
+  //   return this.jobRunRepo.save(createdJobRun);
+  // }
 }

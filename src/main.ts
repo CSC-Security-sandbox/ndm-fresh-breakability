@@ -19,9 +19,9 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  const serviceQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
-    AppModule,
-    {
+  // const serviceQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
+  //   AppModule,{
+    app.connectMicroservice({
       transport: Transport.RMQ,
       options: {
         urls: configService.get('app.rabbitmq.urls'),
@@ -36,9 +36,9 @@ async function bootstrap() {
       },
     });
 
-  const taskQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
-    AppModule,
-    {
+  // const taskQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
+  //   AppModule,
+     app.connectMicroservice({
       transport: Transport.RMQ,
       options: {
         urls: rabbitMQConfig.uris,
@@ -52,6 +52,8 @@ async function bootstrap() {
         },
       },
     });
+
+  await app.startAllMicroservices()
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
@@ -78,9 +80,9 @@ async function bootstrap() {
 
   app.enableCors();
 
-  await serviceQueue.listen();
+  // await serviceQueue.listen();
   Logger.log('Service Queue Microservice is listening...');
-  await taskQueue.listen();
+  // await taskQueue.listen();
   Logger.log('Task Queue Microservice is listening...');
   await app.listen(port, '0.0.0.0');
 }

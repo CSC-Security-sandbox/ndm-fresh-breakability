@@ -1,21 +1,19 @@
-import { Body, Controller, Delete, Get, Logger, Param, Post, Put, Query } from '@nestjs/common';
+import { Controller, Get, Logger, Param, Query } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { JobRunFilterDto } from '../dto/jobrun.dto';
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
-import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { SchedularService } from 'src/schedular/schedule.service';
 
 @ApiTags('jobs run')
 @Controller('job-run')
 export class JobRunController {
-  private readonly logger = new Logger(SchedularService.name);
+  private readonly logger = new Logger(JobRunController.name);
   constructor(private readonly jobRunService: JobRunService) {}
-
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron(){
-    this.logger.log('Cron job executed at: ', new Date());
+    // this.logger.log('Cron job executed at: ', new Date());
     await this.jobRunService.scheduleAJob()
   }
 

@@ -43,5 +43,5 @@ export enum JobType {
 
 
 export enum OperationStatus{
-    
+    READY='READY'
 }

@@ -16,14 +16,14 @@ export class OperationsEntity extends Base {
   @Column({ type: 'uuid', name: 'job_run_id' , nullable: true})
   jobRunId: string;
 
-  @Column({ type: 'enum', enum: OperationStatus, name: 'status' , nullable: false})
+  @Column({ type: 'text',  name: 'status' , nullable: false})
   status: OperationStatus;
  
   @Column({ name: 'operation_type', type: 'text', nullable: false })
   operationType: string;
 
-  @Column({ name: 'request', type: 'text', nullable: false })
-  request: string;
+  @Column({ name: 'request', type: 'jsonb', nullable: false })
+  request: Record<string, any>;
 
   @Column({ name: 'error_details', type: 'text', nullable: true })
   errorDetails: string;

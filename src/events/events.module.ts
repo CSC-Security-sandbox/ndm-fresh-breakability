@@ -15,13 +15,15 @@ import { RabbiMqController } from './controller/rabbimq.controller';
 import { RequestTrackService } from './service/requesttrack.service';
 import { TaskService } from 'src/tasks/tasks.service';
 import { TaskEntity } from 'src/entities/task.entity';
+import { WorkManager } from './workmanager/workmanager.service';
+import { OperationsEntity } from 'src/entities/operation.entity';
 
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity]),],
+    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity,OperationsEntity]),],
   exports: [EventsGateway],
-  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, TaskService],
+  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, TaskService, WorkManager],
   controllers: [EventsController, RabbiMqController]
 })
 export class EventsModule {}

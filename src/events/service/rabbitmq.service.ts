@@ -25,11 +25,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         await channel.assertQueue(this.queueWorkerNotify, { durable: true });
         await channel.bindQueue(this.queueWorkerNotify, this.exchange, this.routingKey);
         await channel.consume(this.queueWorkerNotify, async (message) => {
-          this.logger.error(message)
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
-            this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
+            await this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
             channel.ack(message);
           }
         });

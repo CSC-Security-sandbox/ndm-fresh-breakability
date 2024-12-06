@@ -6,17 +6,19 @@ import { EventsModule } from './events/events.module';
 import { JobConfigModule } from './jobconfig/jobconfig.module';
 import { WorkerModule } from './workers/workers.module';
 import { JobRunModule } from './jobrun/jobrun.module';
-import { SchedularModule } from './schedular/schedule.module';
 import { JobMappingModule } from './jobmappings/jobmapping.module';
 import { TaskModule } from './tasks/tasks.module';
 import appConfig from './config/app.config';
 import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
 import { AppConfigModule } from './config/config.module';
 import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
-    LoggerModule.forRoot(),
+    // LoggerModule.forRoot(),
+    EventEmitterModule.forRoot(),
     ConfigModule.forRoot({ load: [databaseConfig, appConfig], isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -24,15 +26,15 @@ import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule, TaskModule, RabbitmqModule, AppConfigModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, JobMappingModule, TaskModule, RabbitmqModule, AppConfigModule
   ],
   controllers: [],
   providers: [],
 })
 export class AppModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(RequestLoggerMiddleware)
-      .forRoutes('*');
-  }
+  // configure(consumer: MiddlewareConsumer) {
+  //   consumer
+  //     .apply(RequestLoggerMiddleware)
+  //     .forRoutes('*');
+  // }
 }

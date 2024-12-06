@@ -13,6 +13,9 @@ import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq
 import { FileConfigService } from './config.service';
 import { RabbitMqService } from './rabbitmq.service';
 import { TaskService } from './../../tasks/tasks.service';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EmitterEvents } from 'src/constants/events';
+import { NotifyWorkerPayload } from './events.service.type';
 
 
 @Injectable()
@@ -23,8 +26,12 @@ export class EventsService {
         private readonly requestTrackEntity: Repository<RequestTrackEntity>,
         private rabbitMqService: RabbitMqService,
         private readonly fileConfigService: FileConfigService,
-        // private readonly taskService: TaskService
     ) { }
+
+    @OnEvent(EmitterEvents.NotifyWorker, {async: true})
+    async notifyWorkerEvent(payload: NotifyWorkerPayload){
+        await this.notifyEventToWorker(payload.workerId, payload.socketEvents, payload.payload)
+    }
 
     async notifyEventToWorker(workerId: string, socketEvents: SocketEvents, payload: any) {
         const queueEvent: QueueEvent = {

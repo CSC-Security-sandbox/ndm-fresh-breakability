@@ -14,11 +14,11 @@ export class RabbiMqController {
     public async handleMessage(@Payload() data: ListPathsMsg, @Ctx() context: RmqContext) {
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
+        console.error(data)
         await this.eventsService.fetchPathsByCred(data)
         channel.ack(originalMsg);
     }
 
-    // fetch mount event
     @MessagePattern(RabbitMq.CreateTaskList)
     public async handleTasksMessage(@Payload() data: TaskMessage, @Ctx() context: RmqContext) {
         const channel = context.getChannelRef();

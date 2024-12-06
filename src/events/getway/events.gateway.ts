@@ -50,8 +50,8 @@ export class EventsGateway implements OnGatewayInit{
       return;
     }
    
-    this.logger.log(`Client connected: ${workerId}`);
-    this.clients.set(workerId, client.id);
+    this.logger.log(`Client connected: ${workerId} socket Id ${client.id}`);
+    
 
     const worker = await this.workerEntity.findOne({where: {workerId: workerId}})
     if(worker) {
@@ -59,6 +59,7 @@ export class EventsGateway implements OnGatewayInit{
         this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
         await this.workerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
         this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
+        this.clients.set(workerId, client.id);
       }catch(e){
         this.logger.error(`Error occurred during worker details update`, e);
       }
@@ -75,6 +76,7 @@ export class EventsGateway implements OnGatewayInit{
     try{ // Add new worker
       const registerWorker =  this.workerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
       await this.workerEntity.save(registerWorker)
+      this.clients.set(workerId, client.id);
     }
     catch(e) {
       this.logger.error(`Error occurred during worker registration`, e);
@@ -106,6 +108,7 @@ export class EventsGateway implements OnGatewayInit{
       this.logger.log('sendToClient',{workerId, eventType, message})
       this.server.to(clientId).emit(eventType, message);
     }
+  
   }
 
   // --------------------- VALIDATE CONNECTION ACK --------------------- //
