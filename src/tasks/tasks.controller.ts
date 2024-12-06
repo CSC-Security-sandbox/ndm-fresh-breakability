@@ -13,14 +13,12 @@ import {
   import { ApiTags, ApiResponse } from '@nestjs/swagger';
   import { TaskService } from './tasks.service';
   import { TaskEntity } from '../entities/task.entity';
-import { EventsGateway } from '../events/getway/events.gateway';
   
   @ApiTags('Tasks')
   @Controller('tasks')
   export class TaskController {
     constructor(
       private readonly taskService: TaskService,
-      private readonly eventsGateway: EventsGateway
     ) {}
   
     @ApiResponse({ status: 200, description: 'Returns all tasks.' })

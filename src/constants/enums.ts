@@ -27,3 +27,21 @@ export enum RabbitMq {
 export enum MessagesName {
     CREATE_TASK_LIST = 'myqueue-task-list'
 }
+
+
+export enum JobStatus {
+    Active = 'ACTIVE',
+    InActive = 'IN_ACTIVE',
+}
+  
+export enum JobType {
+    Scan = 'SCAN',
+    Migrate = 'MIGRATE',
+    CutOver = 'CUT_OVER',
+}
+
+
+
+export enum OperationStatus{
+    
+}

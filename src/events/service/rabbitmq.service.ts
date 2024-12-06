@@ -25,6 +25,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         await channel.assertQueue(this.queueWorkerNotify, { durable: true });
         await channel.bindQueue(this.queueWorkerNotify, this.exchange, this.routingKey);
         await channel.consume(this.queueWorkerNotify, async (message) => {
+          this.logger.error(message)
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
@@ -42,6 +43,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   // Send Message to exchange
   async publishToExchange(message: any): Promise<void> {
     try {
+      this.logger.log(`Message published to exchange `)
       await this.channelWrapper.publish(this.exchange, this.routingKey, Buffer.from(JSON.stringify(message)), { persistent: true } as any);
       this.logger.log(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
     } catch (err) {

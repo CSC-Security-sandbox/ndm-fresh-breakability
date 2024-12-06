@@ -8,7 +8,7 @@ import { TaskOperation, TaskStatus, TaskType } from './../entities/task.entity';
 import { WorkersService } from './../workers/workers.service';
 import { EventsGateway } from '../events/getway/events.gateway';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
-import { JobStatus } from 'src/entities/jobconfig.entity';
+// import { JobStatus } from 'src/entities/jobconfig.entity';
 
 @Injectable()
 export class SchedularService {
@@ -24,9 +24,11 @@ export class SchedularService {
 
   async handleCron(): Promise<string> {
     const currentTime = new Date();
-    const jobs = await this.jobConfigService.getJobConfigsForCreatingJobRun();
+    // const jobs = await this.jobConfigService.getJobConfigsForCreatingJobRun();
 
-    for (const job of jobs) {
+    // for (const job of jobs) {
+
+      /*
       // create a job run for this job configuration
       const jobRun = await this.jobRunService.createJobRun({
         id: uuid(),
@@ -59,6 +61,7 @@ export class SchedularService {
         await this.eventsGateway.sendToClient(workers.data[index].workerId, 'WAKE_UP', { message: 'wakeup', jobRunId: jobRun.id });
       }
     }
+    */
     return 'success';
   }
 }

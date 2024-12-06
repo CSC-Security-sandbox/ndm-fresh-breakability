@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import databaseConfig from './config/database.config';
@@ -12,9 +12,11 @@ import { TaskModule } from './tasks/tasks.module';
 import appConfig from './config/app.config';
 import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
 import { AppConfigModule } from './config/config.module';
+import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [databaseConfig, appConfig], isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -27,4 +29,10 @@ import { AppConfigModule } from './config/config.module';
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequestLoggerMiddleware)
+      .forRoutes('*');
+  }
+}

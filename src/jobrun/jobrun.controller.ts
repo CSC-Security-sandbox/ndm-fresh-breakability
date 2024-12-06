@@ -1,13 +1,24 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { SchedularService } from 'src/schedular/schedule.service';
 
 @ApiTags('jobs run')
 @Controller('job-run')
 export class JobRunController {
+  private readonly logger = new Logger(SchedularService.name);
   constructor(private readonly jobRunService: JobRunService) {}
+
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleCron(){
+    this.logger.log('Cron job executed at: ', new Date());
+    await this.jobRunService.scheduleAJob()
+  }
+
 
   @Get()
   @ApiOperation({ summary: 'Get all job runs with pagination, sorting, and filtering' })

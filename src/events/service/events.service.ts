@@ -120,7 +120,7 @@ export class EventsService {
         const transactionId = uuidv4();
         const map = new Map<string, Omit<Credentials, 'workers'>[]>()
 
-        details.credentials.forEach(async cred => {
+        details.credentials.forEach(cred => {
             cred.workers.forEach(worker => {
                 if (map.has(worker))
                     map.set(worker, [...map.get(worker), cred])
@@ -174,6 +174,7 @@ export class EventsService {
                 await this.requestTrackEntity.save(requestTrack)
             })
             await Promise.all(promise)
+            this.logger.error(payload)
             await this.notifyEventToWorker(worker, SocketEvents.LIST_PATH, payload)
 
         })

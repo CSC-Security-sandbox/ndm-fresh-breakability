@@ -1,45 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { JobStatus, JobType } from 'src/constants/enums';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { JobRunEntity } from './jobrun.entity';
+import { VolumeEntity } from './volume.entity';
 
-export enum JobStatus {
-  Active = 'ACTIVE',
-  InActive = 'IN_ACTIVE',
-}
 
-export enum JobType {
-  Scan = 'SCAN',
-  Migrate = 'MIGRATE',
-  CutOver = 'CUT_OVER',
-}
-
-export enum JobScheduleType {
-  Now = 'NOW',
-  Date = 'DATE',
-  CronExp = 'CRON_EXP',
-}
-
-export enum IncrementalJobScheduleType {
-  Off = 'OFF',
-  Date = 'DATE',
-  CronExp = 'CRON_EXP',
-}
-
-export class JobSchedule {
-  @ApiProperty({ description: 'Job schedule type', enum: JobScheduleType })
-  type: JobScheduleType;
-
-  @ApiProperty({ description: 'Job schedule expression' })
-  schedule: string;
-}
-
-export class IncrementalSchedule {
-  @ApiProperty({ description: 'Job schedule type', enum: IncrementalJobScheduleType })
-  type: IncrementalJobScheduleType;
-
-  @ApiProperty({ description: 'Job schedule expression' })
-  schedule: string;
-}
 
 @Entity({ name: 'jobconfig', schema: 'migrate' })
 export class JobConfigEntity extends Base {
@@ -68,12 +34,12 @@ export class JobConfigEntity extends Base {
   preserveAccessTime: boolean;
 
   @ApiProperty({ description: 'Job schedule configuration' })
-  @Column({ name: 'job_schedule', type: 'jsonb' })
-  jobSchedule: JobSchedule;
+  @Column({ name: 'first_run_at', type: 'timestamp with time zone' , nullable: true})
+  firstRunAt: string;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
-  @Column({ name: 'incremental_schedule', type: 'jsonb', nullable: true })
-  incrementalSchedule: IncrementalSchedule;
+  @Column({ name: 'future_schedule', type: 'timestamp with time zone' , nullable:true})
+  futureSchedule: string;
 
   @ApiProperty({ description: 'UUID of the source path configuration' })
   @Column({ type: 'uuid', nullable: false, name: 'source_path_id' })
@@ -82,4 +48,16 @@ export class JobConfigEntity extends Base {
   @ApiProperty({ description: 'UUID of the target path configuration' })
   @Column({ type: 'uuid', nullable: true, name: 'target_path_id' })
   targetPathId: string;
+
+  @ManyToOne(() => VolumeEntity, volume => volume.sourcePath, { onDelete:'CASCADE'})
+  @JoinColumn({ name: 'source_path_id' }) 
+  sourcePath: VolumeEntity;
+
+  @ManyToOne(() => VolumeEntity, volume => volume.targetPath, { onDelete:'CASCADE'})
+  @JoinColumn({ name: 'target_path_id' }) 
+  targetPath: VolumeEntity;
+
+  @OneToMany(()=> JobRunEntity,jobRun=> jobRun.jobConfig, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', eager: false})
+  jobRun: JobRunEntity[]
+
 }

@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { JobRunEntity } from './jobrun.entity';
+import { OperationsEntity } from './operation.entity';
 
 export enum TaskType {
     Scan = 'SCAN',
@@ -46,7 +48,17 @@ export class TaskEntity extends Base {
   @Column({ type: 'enum', enum: TaskType, name:'task_type' })
   taskType: TaskType;
 
-  @ApiProperty({ description: 'Operations for the task' })
-  @Column({ type: 'jsonb', nullable: false, name: 'operations' })
-  operations: object;
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+
+  @ManyToOne(()=> JobRunEntity, jobRun=>jobRun.task, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
+  @JoinColumn({ name: 'job_run_id' })
+  jobRun: JobRunEntity
+
+  @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
+  operations: OperationsEntity[]
+
 }

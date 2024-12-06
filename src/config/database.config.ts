@@ -12,6 +12,7 @@ import { DataSourceOptions } from "typeorm";
 import { JobIdMappingEntity } from "../entities/jobmapping.entity";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { TaskEntity } from "../entities/task.entity";
+import { OperationsEntity } from "src/entities/operation.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -21,12 +22,12 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         username: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
-        synchronize: false,
+        synchronize: true,
         dropSchema: false,
-        ssl: {
-            rejectUnauthorized: false, 
-        },
-        logging: true,
-        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity],
+        // ssl: {
+        //     rejectUnauthorized: false, 
+        // },
+        logging: false,
+        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity],
         migrations: []
 }))

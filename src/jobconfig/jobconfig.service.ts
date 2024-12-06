@@ -1,9 +1,8 @@
-import { v4 as uuid } from 'uuid';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
-import { Injectable, Logger } from '@nestjs/common';
-import { JobConfigEntity, JobStatus } from '../entities/jobconfig.entity';
-import { CreateJobConfigDto } from '../dto/jobconfig.dto';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigDto } from './dto/jobconfig.dto';
 
 @Injectable()
 export class JobConfigService {
@@ -13,18 +12,11 @@ export class JobConfigService {
     private jobConfigRepo: Repository<JobConfigEntity>,
   ) {}
 
-  async createJobConfig(jobConfigData: CreateJobConfigDto): Promise<JobConfigEntity> {
+  async createJobConfig(jobConfigData: JobConfigDto): Promise<JobConfigEntity> {
     this.logger.log(`Data to job - ${JSON.stringify(jobConfigData)}`);
     const jobRecord = this.jobConfigRepo.create({
-      jobType: jobConfigData.jobType,
-      status: jobConfigData.status,
-      jobSchedule: jobConfigData.jobSchedule,
-      excludeOlderThan: jobConfigData.excludeOlderThan,
-      preserveAccessTime: jobConfigData.preserveAccessTime,
-      sourcePathId: jobConfigData.sourcePathId,
-      targetPathId: jobConfigData.targetPathId,
-      createdBy: jobConfigData?.createdBy,
-      updatedBy: jobConfigData?.updatedBy
+      ...jobConfigData,
+      firstRunAt: jobConfigData?.firstRunAt?.toISOString() ?? new Date().toISOString()
     });
     return this.jobConfigRepo.save(jobRecord);
   }
@@ -41,23 +33,14 @@ export class JobConfigService {
     return await this.jobConfigRepo.find(condition);
   }
 
-  async getJobConfigsForCreatingJobRun() {
-    return await this.jobConfigRepo
-      .createQueryBuilder('jobconfig')
-      .leftJoin('jobrun', 'jobRun', 'jobRun.jobConfigId = jobconfig.id')
-      .where('jobconfig.status = :status', { status: JobStatus.Active })
-      .andWhere('jobRun.id IS NULL')
-      .getMany();
-  }
+ 
   
-  async updateJobConfig(id: string, data: Partial<CreateJobConfigDto>): Promise<JobConfigEntity> {
+  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
     }
-  
     Object.assign(job, data);
-  
     return this.jobConfigRepo.save(job);
   }
   

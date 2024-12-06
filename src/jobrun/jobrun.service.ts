@@ -1,9 +1,13 @@
 import { JobConfigService } from '../jobconfig/jobconfig.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, LessThanOrEqual, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
 import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { JobStatus } from 'src/constants/enums';
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class JobRunService {
@@ -12,14 +16,46 @@ export class JobRunService {
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
-
-    private readonly jobConfigService: JobConfigService
+    @InjectRepository(JobConfigEntity)
+    private jobConfigRepo: Repository<JobConfigEntity>,
+    private readonly jobConfigService: JobConfigService,
+    private readonly eventEmitter: Eve
   ) { }
 
-  async createJobRun(jobRunData: JobRunDto): Promise<JobRunEntity> {
-    this.logger.log(`Data to job run - ${JSON.stringify(jobRunData)}`);
-    const jobRunRecord = this.jobRunRepo.create(jobRunData);
-    return this.jobRunRepo.save(jobRunRecord);
+
+
+  async scheduleAJob() {
+    const currentTime = new Date();
+  
+    const jobs: JobConfigEntity[] = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .leftJoinAndSelect('jobConfig.jobRun', 'jobRun')  
+      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath') 
+      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath') 
+      .where('jobConfig.status = :status', { status: JobStatus.Active })
+      .andWhere('jobConfig.firstRunAt <= :currentTime', { currentTime: currentTime.toISOString() }) 
+      .andWhere('jobRun.id IS NULL')  
+      .getMany();
+  
+    this.logger.log({ jobs, currentTime: currentTime.toISOString() }, 'Scheduled Jobs');
+    jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
+    return jobs;
+  }
+
+  
+
+  async createJobRun(job: JobConfigEntity , currentTime: Date): Promise<JobRunEntity> {
+    this.logger.log(`Data to job run - ${JSON.stringify(job)}`);
+      const jobRunRecord = this.jobRunRepo.create({
+        id: uuid(),
+        status: JobRunStatus.Ready,
+        startTime: currentTime,
+        endTime: null,
+        iterationNumber: 1,
+        jobConfigId: job.id
+      });
+    await this.jobRunRepo.save(jobRunRecord);
+
   }
 
   async getJobRun(condition: FindManyOptions<JobRunEntity>): Promise<JobRunEntity[]> {
