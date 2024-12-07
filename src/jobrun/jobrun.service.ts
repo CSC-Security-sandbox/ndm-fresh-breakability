@@ -1,15 +1,14 @@
-import { JobConfigService } from '../jobconfig/jobconfig.service';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
-import { FindManyOptions, LessThanOrEqual, Repository } from 'typeorm';
-import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
-import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
-import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { InjectRepository } from '@nestjs/typeorm';
 import { JobStatus } from 'src/constants/enums';
-import { EventEmitter2 } from '@nestjs/event-emitter'
-import { v4 as uuid } from 'uuid';
 import { EmitterEvents } from 'src/constants/events';
 import { SocketEvents } from 'src/constants/status';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { FindManyOptions, Repository } from 'typeorm';
+import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
+import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
+import { WorkerEntity } from 'src/entities/worker.entity';
 
 @Injectable()
 export class JobRunService {
@@ -24,6 +23,7 @@ export class JobRunService {
   ) { }
 
 
+  // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
   
@@ -39,17 +39,57 @@ export class JobRunService {
     jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
     return jobs;
   }
-
   
+// ------------------ Get list of workers -------------------- //
+  async getSourceAndTargetWorkersByJobConfigId(
+    job: JobConfigEntity 
+  ): Promise<string[]> {
+    const jobConfig = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath')
+      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath')
+      .leftJoinAndSelect('sourcePath.fileServer', 'sourceFileServer')
+      .leftJoinAndSelect('sourceFileServer.workers', 'sourceWorkers')
+      .leftJoinAndSelect('targetPath.fileServer', 'targetFileServer')
+      .leftJoinAndSelect('targetFileServer.workers', 'targetWorkers')
+      .where('jobConfig.id = :jobConfigId', { jobConfigId: job.id })
+      .getOne();
 
+    const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
+    const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
+
+   
+    if(job.targetPathId) {
+      const workers:string[] = []
+      const workerSet = new Set<string>()
+      sourceWorkers.forEach(worker=> workerSet.add(worker.workerId))
+      targetWorkers?.forEach(worker=> {
+        if(workerSet.has(worker.workerId))
+          workers.push(worker.workerId)
+      })
+      return  workers 
+    }
+    return sourceWorkers.map(worker=> worker.workerId)
+  
+  }
+  
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
-      const jobRunRecord = this.jobRunRepo.create({
-        status: JobRunStatus.Ready,
-        startTime: currentTime,
-        endTime: null,
-        iterationNumber: 1,
-        jobConfigId: job.id
-      });
+
+    const workers =await this.getSourceAndTargetWorkersByJobConfigId(job)
+    this.logger.debug(`workers`,workers)
+    
+    if(workers.length === 0) {
+      this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)
+      return
+    }
+
+    const jobRunRecord = this.jobRunRepo.create({
+      status: JobRunStatus.Ready,
+      startTime: currentTime,
+      endTime: null,
+      iterationNumber: 1,
+      jobConfigId: job.id
+    });
     
     const update = await this.jobRunRepo.save(jobRunRecord);
   
@@ -59,13 +99,8 @@ export class JobRunService {
         status: update.status,
         sPath: job.sourcePath.volumePath,
         tPath: job.targetPath?.volumePath,
-        taskType: job.jobType
-    })
-
-    this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
-      workerId: "d046e20f-8ac9-40b0-8a24-aab8395a51be",
-      socketEvents: SocketEvents.WAKE_UP,
-      payload: { jobRunId: update.id}
+        taskType: job.jobType,
+        workers : workers
     })
   }
 

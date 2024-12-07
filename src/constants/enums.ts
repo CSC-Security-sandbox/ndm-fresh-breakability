@@ -43,5 +43,10 @@ export enum JobType {
 
 
 export enum OperationStatus{
-    READY='READY'
+    READY='READY',
+    IN_PROCESS='IN_PROCESS'
+}
+
+export enum OperationType {
+    SCAN = 'SCAN'
 }

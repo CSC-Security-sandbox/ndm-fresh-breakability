@@ -1,4 +1,4 @@
-import { OperationStatus } from 'src/constants/enums';
+import { OperationStatus, OperationType } from 'src/constants/enums';
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
@@ -19,8 +19,8 @@ export class OperationsEntity extends Base {
   @Column({ type: 'text',  name: 'status' , nullable: false})
   status: OperationStatus;
  
-  @Column({ name: 'operation_type', type: 'text', nullable: false })
-  operationType: string;
+  @Column({ name: 'operation_type', enum: OperationType,  type: 'enum', nullable: false })
+  operationType: OperationType;
 
   @Column({ name: 'request', type: 'jsonb', nullable: false })
   request: Record<string, any>;

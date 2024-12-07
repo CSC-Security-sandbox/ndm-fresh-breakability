@@ -10,7 +10,9 @@ export enum SocketEvents{
     LIST_PATH='LIST_PATH',
     LIST_PATH_ACK='LIST_PATH_ACK',
     ERROR='ERROR',
-    WAKE_UP='WAKE_UP'
+    WAKE_UP='WAKE_UP',
+    TASK='TASK',
+    TASK_ACK='TASK_ACK'
 }
 
 

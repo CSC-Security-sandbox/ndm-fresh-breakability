@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ListPathRes, ValidateConnectionRes } from '../events.type';
 import { RequestTrackService } from '../service/requesttrack.service';
+import { WorkManager } from '../workmanager/workmanager.service';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -26,7 +27,8 @@ export class EventsGateway implements OnGatewayInit{
     private readonly workerEntity: Repository<WorkerEntity>,
     @InjectRepository(ProjectEntity) 
     private readonly projectEntity: Repository<ProjectEntity>,
-    private readonly requestTrackService: RequestTrackService
+    private readonly requestTrackService: RequestTrackService,
+    private readonly workManager: WorkManager
   ){}
   
 
@@ -51,7 +53,6 @@ export class EventsGateway implements OnGatewayInit{
     }
    
     this.logger.log(`Client connected: ${workerId} socket Id ${client.id}`);
-    
 
     const worker = await this.workerEntity.findOne({where: {workerId: workerId}})
     if(worker) {
@@ -108,7 +109,6 @@ export class EventsGateway implements OnGatewayInit{
       this.logger.log('sendToClient',{workerId, eventType, message})
       this.server.to(clientId).emit(eventType, message);
     }
-  
   }
 
   // --------------------- VALIDATE CONNECTION ACK --------------------- //
@@ -122,5 +122,19 @@ export class EventsGateway implements OnGatewayInit{
   async handleListPathAck(client: Socket, ack: ListPathRes) {
     await this.requestTrackService.listPathAck(ack)
   }
+
+   // --------------------- TASK --------------------- //
+   @SubscribeMessage(SocketEvents.TASK)
+   async handleTask(client: Socket, ack: any) {
+    const jobRunId = ack.jobRunId
+    const task = await this.workManager.createTask(jobRunId)
+    this.logger.error('task', task)
+    console.error(task)
+    if(task) 
+      this.server.to(client.id).emit(SocketEvents.TASK_ACK, task)
+    else this.logger.debug(`task not found`)
+   }
+
+
 }
 
