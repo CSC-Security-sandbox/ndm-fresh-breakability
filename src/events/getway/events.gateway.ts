@@ -126,10 +126,7 @@ export class EventsGateway implements OnGatewayInit{
    // --------------------- TASK --------------------- //
    @SubscribeMessage(SocketEvents.TASK)
    async handleTask(client: Socket, ack: any) {
-    const jobRunId = ack.jobRunId
-    const task = await this.workManager.createTask(jobRunId)
-    this.logger.error('task', task)
-    console.error(task)
+    const task = await this.workManager.assignWork(client.handshake.query.worker as string)
     if(task) 
       this.server.to(client.id).emit(SocketEvents.TASK_ACK, task)
     else this.logger.debug(`task not found`)

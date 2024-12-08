@@ -10,12 +10,19 @@ export interface TaskEventPayload {
 }
   
 
-export interface Task {
+export interface TaskPayload {
   id: string,
   jobRunId: string,
   taskType: string,
   status: string,
   workerId: string,
   sPath: string,
+  tPath: string,
   commands: Record<string, any>[]
+}
+
+export interface WorkerJobRuns {
+  jobRunId: string,
+  sPathId: string,
+  tPathId: string 
 }

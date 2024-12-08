@@ -40,6 +40,10 @@ export class TaskEntity  {
   @Column({ type: 'uuid', nullable: false,  name: 'job_run_id'})
   jobRunId: string;
 
+  @ApiProperty({ description: 'worker id' })
+  @Column({ type: 'uuid', nullable: true,  name: 'workerId'})
+  workerId: string;
+
   @ApiProperty({ description: 'Task status' })
   @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Pending, name:'status' })
   status: TaskStatus;

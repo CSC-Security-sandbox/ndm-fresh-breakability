@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
-import { TaskEventPayload } from "./workmanager.types";
+import { TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobType, OperationStatus } from "src/constants/enums";
@@ -10,6 +10,7 @@ import { TaskEntity, TaskStatus } from "src/entities/task.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Repository } from "typeorm";
 import { SocketEvents } from "src/constants/status";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 
 
@@ -21,7 +22,10 @@ export class WorkManager{
         private operationsRepo: Repository<OperationsEntity>,
         @InjectRepository(TaskEntity)
         private taskRepo: Repository<TaskEntity>,
+        @InjectRepository(WorkerJobRunMap)
+        private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
         private readonly eventEmitter: EventEmitter2
+
     ){}
 
    
@@ -71,25 +75,54 @@ export class WorkManager{
         }
     }
 
-    async createTask(jobRunId: string) {
+    assignWork = async (workerId: string) => {
+        const jobRunsMapEntity = await this.workerJobRunMapRepo
+        .createQueryBuilder('workerJobRunMap')
+        .leftJoinAndSelect('workerJobRunMap.jonRun', 'jonRun')
+        .leftJoinAndSelect('jonRun.jobConfig', 'jobConfig')
+        .select([
+          'workerJobRunMap.jobRunId',
+          'jobConfig.sourcePathId',
+          'jobConfig.targetPathId',  
+        ])
+        .where('workerJobRunMap.isActive = :isActive', { isActive: true })
+        .andWhere('workerJobRunMap.workerId = :workerId', { workerId })
+        .getMany();
+
+        // console.log(jobRunsMapEntity)
+
+        const jobRun: WorkerJobRuns[] = jobRunsMapEntity.map((it) => ({
+            jobRunId: it.jobRunId,
+            sPathId: it.jonRun?.jobConfig?.sourcePathId,
+            tPathId: it.jonRun?.jobConfig?.targetPathId,
+        }))
+
+        for(const job of jobRun) {
+            const task = await  this.createTask(job, workerId)
+            // console.log(job, task)
+            if(task) return task
+        }
+        return undefined
+    }
+
+    async createTask(jobRun: WorkerJobRuns, workerId: string) {
         return await this.taskRepo.manager.transaction(async transaction=>{
             const operations: OperationsEntity[] = await transaction
             .createQueryBuilder(OperationsEntity, 'operation')
             .setLock('pessimistic_write')
             .select(['operation.fPath', 'operation.request','operation.id', 'operation.operationType', 'operation.status', 'operation.retryCount', 'operation.errorDetails'])
-            .where('operation.jobRunId = :jobRunId', {jobRunId})
+            .where('operation.jobRunId = :jobRunId', {jobRunId: jobRun.jobRunId})
             .andWhere('operation.status = :status',{ status: OperationStatus.READY})
             .limit(100).getMany()
 
             if(operations.length === 0)
                 return undefined
 
-            console.debug(operations)
-
             const taskEntity : TaskEntity = this.taskRepo.create({
-                jobRunId: jobRunId,
+                jobRunId: jobRun.jobRunId,
                 taskType: operationsTypeToTaskType(operations[0].operationType),
                 status: TaskStatus.Pending,
+                workerId: workerId
             })
             
             const savedTask = await transaction.save(TaskEntity, taskEntity);
@@ -100,10 +133,23 @@ export class WorkManager{
               { taskId: savedTask.id , status: OperationStatus.IN_PROCESS},
             );
 
-            return savedTask;
+            return this.buildTaskPayload(savedTask, operations, jobRun);
         })
     }
 
+    buildTaskPayload = (task: TaskEntity, operation: OperationsEntity[], jobRun: WorkerJobRuns): TaskPayload => {
+
+        return ({
+            id: task.id,
+            jobRunId: task.jobRunId,
+            sPath: jobRun.sPathId,
+            taskType: task.taskType,
+            status: task.status,
+            workerId: task.workerId,
+            tPath: jobRun.tPathId,
+            commands : operation.map(op=> op.request)
+        })
+    }
 
 
 }
