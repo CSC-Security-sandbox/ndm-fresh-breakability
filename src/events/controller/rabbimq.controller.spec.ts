@@ -1,10 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
-import { EventsService } from 'src/events/service/events.service';
 import { RmqContext } from '@nestjs/microservices';
 import { RabbiMqController } from './rabbimq.controller';
 import { ListPathsMsg } from './rabbitmq.types';
 import { Protocol } from 'src/constants/enums';
+import { EventsService } from '../service/events/events.service';
 
 const mockEventsService = {
   fetchPathsByCred: jest.fn(),

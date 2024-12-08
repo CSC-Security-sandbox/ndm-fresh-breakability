@@ -1,4 +1,4 @@
-import { TaskOperation, TaskStatus, TaskType as TasksType } from './../../entities/task.entity';
+
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
@@ -6,16 +6,19 @@ import { Operations, ResponseStatus, SocketEvents, TaskType } from 'src/constant
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { WorkerRequestDTO } from '../dto/responsefilter.dto';
-import { Credentials, ListPathsMsg } from '../controller/rabbitmq.types';
-import { ValidateConnectionDto } from '../dto/validateconnection.dto';
-import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from '../events.type';
-import { FileConfigService } from './config.service';
-import { RabbitMqService } from './rabbitmq.service';
-import { TaskService } from './../../tasks/tasks.service';
+
+
+
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
+import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { FileConfigService } from '../config/config.service';
 import { NotifyWorkerPayload } from './events.service.type';
+import { WorkerRequestDTO } from 'src/events/dto/responsefilter.dto';
+import { ValidateConnectionDto } from 'src/events/dto/validateconnection.dto';
+import { Credentials, ListPathsMsg } from 'src/events/controller/rabbitmq.types';
+import { ListPathOptionReq, ListPathReq, QueueEvent, ValidateConnectionOptionReq, ValidateConnectionReq } from 'src/events/events.type';
+
 
 
 @Injectable()
@@ -186,22 +189,4 @@ export class EventsService {
 
         })
     }
-
-    // async createTasks(data) {
-    //     const task = {
-    //         jobRunId: data.jobRunId,
-    //         taskType: TasksType.Scan,
-    //         status: TaskStatus.Pending,
-    //         operations: [{
-    //                 operation: TaskOperation.ScanPath,
-    //                 request: {
-    //                     pathId: data.pathId,
-    //                     folder: data.folder,
-    //                 },
-    //                 status: TaskStatus.Pending,
-    //             },
-    //         ],
-    //     };
-    //     return this.taskService.create(task);
-    // }
 }

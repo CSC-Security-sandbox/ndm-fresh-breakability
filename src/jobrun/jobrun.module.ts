@@ -6,11 +6,12 @@ import { JobRunController } from './jobrun.controller';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { ScheduleModule } from '@nestjs/schedule';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 
 @Module({
     imports: [
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap]),
     ],
     providers: [JobRunService, JobConfigService],
     controllers: [JobRunController]

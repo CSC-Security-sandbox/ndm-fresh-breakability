@@ -11,6 +11,8 @@ import { VolumeEntity } from "src/entities/volume.entity";
 import typeormConfig from 'src/config/database.config';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { TaskEntity } from 'src/entities/task.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 
 
 describe('TypeORM Config', () => {
@@ -43,11 +45,8 @@ describe('TypeORM Config', () => {
       database: 'testdb',
       synchronize: false,
       dropSchema: false,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-      logging: true,
-      entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity],
+      logging: false,
+      entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap],
       migrations: []
     };
 

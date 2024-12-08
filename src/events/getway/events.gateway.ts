@@ -11,8 +11,8 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ListPathRes, ValidateConnectionRes } from '../events.type';
-import { RequestTrackService } from '../service/requesttrack.service';
 import { WorkManager } from '../workmanager/workmanager.service';
+import { RequestTrackService } from '../service/requesttack/requesttrack.service';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)

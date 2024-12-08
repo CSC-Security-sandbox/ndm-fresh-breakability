@@ -3,12 +3,11 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
-import { SocketEvents } from 'src/constants/status';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
-import { WorkerEntity } from 'src/entities/worker.entity';
 
 @Injectable()
 export class JobRunService {
@@ -19,6 +18,8 @@ export class JobRunService {
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
+    @InjectRepository(WorkerJobRunMap)
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     private readonly eventEmitter: EventEmitter2
   ) { }
 
@@ -40,7 +41,7 @@ export class JobRunService {
     return jobs;
   }
   
-// ------------------ Get list of workers -------------------- //
+  // ------------------ Get list of workers -------------------- //
   async getSourceAndTargetWorkersByJobConfigId(
     job: JobConfigEntity 
   ): Promise<string[]> {
@@ -73,8 +74,8 @@ export class JobRunService {
   
   }
   
+  // ------------------ Create job run  -------------------- //
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
-
     const workers =await this.getSourceAndTargetWorkersByJobConfigId(job)
     this.logger.debug(`workers`,workers)
     
@@ -83,12 +84,20 @@ export class JobRunService {
       return
     }
 
+    const workerMap = workers.map(worker => 
+      this.workerJobRunMapRepo.create({
+        workerId: worker,
+        isActive: true
+      })
+    )
+
     const jobRunRecord = this.jobRunRepo.create({
       status: JobRunStatus.Ready,
       startTime: currentTime,
       endTime: null,
       iterationNumber: 1,
-      jobConfigId: job.id
+      jobConfigId: job.id,
+      workerMap: workerMap
     });
     
     const update = await this.jobRunRepo.save(jobRunRecord);

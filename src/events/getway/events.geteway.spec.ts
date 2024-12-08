@@ -8,9 +8,10 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
-import { FileConfigService } from '../service/config.service';
-import { RequestTrackService } from '../service/requesttrack.service';
+
 import { EventsGateway } from './events.gateway';
+import { FileConfigService } from '../service/config/config.service';
+import { RequestTrackService } from '../service/requesttack/requesttrack.service';
 
 jest.mock('src/auth/ws-jwt.middleware');
 jest.mock('src/auth/ws-jwt/ws-jwt.guard');

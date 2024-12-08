@@ -5,12 +5,13 @@ import { Protocol } from 'src/constants/enums';
 import { Operations, ResponseStatus, SocketEvents, TaskType } from 'src/constants/status';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
 import { Repository } from 'typeorm';
-import { WorkerRequestDTO } from '../dto/responsefilter.dto';
-import { ValidateConnectionDto } from '../dto/validateconnection.dto';
-import { FileConfigService } from './config.service';
+import { WorkerRequestDTO } from '../../dto/responsefilter.dto';
+import { ValidateConnectionDto } from '../../dto/validateconnection.dto';
+
 import { EventsService } from './events.service';
-import { RabbitMqService } from './rabbitmq.service';
-import { Credentials, ListPathsMsg } from '../controller/rabbitmq.types';
+import { Credentials, ListPathsMsg } from '../../controller/rabbitmq.types';
+import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { FileConfigService } from '../config/config.service';
 
 class MockRepositor<T> extends Repository<T> {
   async save(e: any):Promise<any> {

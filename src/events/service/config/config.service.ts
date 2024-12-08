@@ -3,9 +3,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
+import { ListPathRes } from "src/events/events.type";
 import { OperationToProtocol } from "src/utils/mapper";
 import { Repository } from "typeorm";
-import { ListPathRes } from "../events.type";
 
 @Injectable()
 export class FileConfigService {

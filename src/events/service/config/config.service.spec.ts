@@ -6,9 +6,10 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { FileConfigService } from './config.service';
 import { Repository } from 'typeorm';
-import { ListPathRes } from '../events.type';
+
 import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
 import { Protocol } from 'src/constants/enums';
+import { ListPathRes } from 'src/events/events.type';
 // import { OperationToProtocol } from 'src/utils/mapper';
 
 // jest.mock('src/utils/mapper', () => ({

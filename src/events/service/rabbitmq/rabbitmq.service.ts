@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
-import { EventsGateway } from "../getway/events.gateway";
+import { EventsGateway } from "src/events/getway/events.gateway";
+
 
 
 @Injectable()

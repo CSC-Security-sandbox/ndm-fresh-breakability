@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsController } from './events.controller';
-import { EventsService } from '../service/events.service';
+
 import { ValidateConnectionDto } from '../dto/validateconnection.dto';
 import { WorkerRequestDTO } from '../dto/responsefilter.dto';
 import { Protocol } from 'src/constants/enums';
+import { EventsService } from '../service/events/events.service';
 
 describe('EventsController', () => {
   let controller: EventsController;

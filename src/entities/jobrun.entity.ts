@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 
 export enum JobRunStatus {
   Ready = 'READY',
@@ -47,4 +48,7 @@ export class JobRunEntity extends Base {
 
   @OneToMany(()=>TaskEntity, task=>task.jobRun, { cascade: true,  eager: false})
   task: TaskEntity[]
+
+  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jonRun, { cascade: true,  eager: false})
+  workerMap: WorkerJobRunMap[]
 }

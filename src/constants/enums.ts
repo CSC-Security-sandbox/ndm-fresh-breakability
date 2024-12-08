@@ -40,8 +40,7 @@ export enum JobType {
     CutOver = 'CUT_OVER',
 }
 
-
-
+// ---------- Operations -----------/
 export enum OperationStatus{
     READY='READY',
     IN_PROCESS='IN_PROCESS'
