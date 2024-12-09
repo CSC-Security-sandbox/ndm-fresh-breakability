@@ -54,11 +54,9 @@ public class UserPermissionFetcher {
         try (Connection connection = DatabaseConnectionUtil.getConnection();
              PreparedStatement statement = connection.prepareStatement(query)) {
  
-            // Set the user's email in the query
             statement.setString(1, userEmail);
             ResultSet resultSet = statement.executeQuery();
  
-            // Process the result set to build the roles and permissions list
             while (resultSet.next()) {
                 if (userId == null) {
                     userId = resultSet.getString("user_id");
@@ -74,7 +72,6 @@ public class UserPermissionFetcher {
             throw new RuntimeException(e);
         }
  
-        // Populate the final map with user ID and roles
         userPermissionsData.put("id", userId);
         userPermissionsData.put("roles", rolePermissionsList);
         return userPermissionsData;
