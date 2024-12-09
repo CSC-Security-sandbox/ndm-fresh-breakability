@@ -113,14 +113,24 @@ describe('UserService', () => {
   });
 
   it('should find all users', async () => {
+    const baseAtts = {
+      created_at: new Date(),
+      created_by: randomUUID(),
+      updated_at: new Date(),
+      updated_by: randomUUID(),
+      user_roles: [],
+      projects: [],
+      populateWhoColumns: jest.fn(),
+    };
+   
     const users = [
       {
         id: '1',
         email: 'test',
         user_status: 'active',
-        first_name:'',
+        first_name: '',
         last_name: '',
-        name:'',
+        name: '',
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -133,9 +143,9 @@ describe('UserService', () => {
         id: '2',
         email: 'test2',
         user_status: 'active',
-        first_name:'',
+        first_name: '',
         last_name: '',
-        name:'',
+        name: '',
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -145,11 +155,34 @@ describe('UserService', () => {
         populateWhoColumns: jest.fn(),
       },
     ];
-
+   
+    // Mock the userRepository to return the list of users
     jest.spyOn(userRepository, 'find').mockResolvedValue(users);
-
-    expect(await service.findAll()).toEqual(users);
+   
+    // Mock the findOne method to return the first user (just for reference in your service)
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue(users[0]);
+   
+    // Call the service's findAll method
+    const result = await service.findAll();
+   
+    // Ensure the userRepository's find method was called
     expect(userRepository.find).toHaveBeenCalled();
+   
+    // Check if the result contains the expected users with their properties
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: '1',
+          email: 'test',
+          user_status: 'active',
+        }),
+        expect.objectContaining({
+          id: '2',
+          email: 'test2',
+          user_status: 'active',
+        }),
+      ])
+    );
   });
 
   it('should throw NotFoundException if user is not found', async () => {

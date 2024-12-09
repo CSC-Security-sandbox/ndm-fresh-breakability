@@ -33,7 +33,7 @@ export class AuthController {
  
   @Auth(Permission.InviteUser, Permission.CreateUser)
   @ApiBearerAuth()
-  @Post('invite-user')
+  @Post('create-user')
   @ApiOperation({
     summary: 'Invite a new user without permissions roles or project for keycloak entry',
   })

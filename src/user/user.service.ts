@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -43,11 +43,45 @@ export class UserService {
   }
 
 
-  findAll(): Promise<any[]> {
-    return this.userRepository.find().then(users => users.map(user => ({
-      ...user,
-      name: user.name
-    })));
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    sortField: string = 'id',
+    sortOrder: 'ASC' | 'DESC' = 'ASC',
+    filter: Partial<CreateUserDto> = {},
+  ): Promise<User[]> {
+    const options: FindManyOptions<User> = {
+      skip: (page - 1) * limit,
+      take: limit,
+      order: {
+        [sortField]: sortOrder,
+      },
+      where: filter
+    };
+   
+    const users = await this.userRepository.find(options);
+   
+    const transformedUsers = await Promise.all(
+      users.map(async (user) => {
+        const createdByUser = await this.userRepository.findOne({
+          where: { id: user.created_by },
+          select: ['id', 'email', 'user_status'],
+        });
+
+        const updatedByUser = await this.userRepository.findOne({
+          where: { id: user.updated_by },
+          select: ['id', 'email', 'user_status'],
+        });
+
+        return {
+          ...user,
+          created_by: createdByUser,
+          updated_by: updatedByUser,
+        } as any;
+      }),
+    );
+   
+    return transformedUsers;
   }
 
   async findOne(id: string): Promise<User> {

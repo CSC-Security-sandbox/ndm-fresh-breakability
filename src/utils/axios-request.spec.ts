@@ -1,53 +1,63 @@
-import axios from 'axios';
-import { InternalServerErrorException } from '@nestjs/common';
-import { makeAxiosRequest } from './axios-request-utils';
+import axios from "axios";
+import { InternalServerErrorException } from "@nestjs/common";
+import { makeAxiosRequest } from "./axios-request-utils";
  
-// Mock the entire axios module
-jest.mock('axios');
+jest.mock("axios");
  
-describe('makeAxiosRequest', () => {
+describe("makeAxiosRequest", () => {
   const mockedAxios = axios as jest.Mocked<typeof axios>;
  
-  // Test for successful request
-  it('should return data when request is successful', async () => {
-    const mockData = { message: 'Success' };
-    const mockResponse = { data: mockData, status: 200 };
-    // Mock axios to resolve with the mock response
-    mockedAxios.request.mockResolvedValue(mockResponse);
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
  
-    const config = { url: '/test', method: 'GET' };
+  it("should return data when request is successful", async () => {
+    const mockData = { message: "Success" };
+    const mockResponse = {
+      data: mockData,
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: {},
+    };
  
-    // Call the function and check the result
+    mockedAxios.request.mockResolvedValueOnce(mockResponse);
+ 
+    const config = { url: "/test", method: "GET" };
+ 
     const result = await makeAxiosRequest(config);
-    expect(result).toEqual(mockData); // Check if the result matches the mock data
-    expect(mockedAxios.request).toHaveBeenCalledWith(config); // Ensure axios was called with correct config
+ 
+    expect(result).toEqual(mockData);
+    expect(mockedAxios.request).toHaveBeenCalledWith(config);
   });
  
-  // Test for unsuccessful response (non-2xx status code)
-  it('should throw InternalServerErrorException when response status is not 2xx', async () => {
-    const mockResponse = { data: {}, status: 400 };
-    // Mock axios to resolve with an unsuccessful status
-    mockedAxios.request.mockResolvedValue(mockResponse);
+  it("should throw an exception when response status is not 2xx", async () => {
+    const mockResponse = {
+      data: {},
+      status: 400,
+      statusText: "Bad Request",
+      headers: {},
+      config: {},
+    };
  
-    const config = { url: '/test', method: 'GET' };
+    mockedAxios.request.mockResolvedValueOnce(mockResponse);
  
-    // Expect an error to be thrown
-    await expect(makeAxiosRequest(config)).rejects.toThrowError(
-      new InternalServerErrorException('Request failed with status code: 400')
+    const config = { url: "/test", method: "GET" };
+ 
+    await expect(makeAxiosRequest(config)).rejects.toThrow(
+      new InternalServerErrorException("Axios request failed error: Request failed with status code: 400")
     );
+    expect(mockedAxios.request).toHaveBeenCalledWith(config);
   });
  
-  // Test for Axios request failure (network error, timeout, etc.)
-  it('should throw InternalServerErrorException when Axios throws an error', async () => {
-    const mockError = new Error('Network Error');
-    // Mock axios to reject with an error
-    mockedAxios.request.mockRejectedValue(mockError);
+  it("should throw an exception when Axios request fails", async () => {
+    mockedAxios.request.mockRejectedValueOnce(new Error("Network Error"));
  
-    const config = { url: '/test', method: 'GET' };
+    const config = { url: "/test", method: "GET" };
  
-    // Expect an error to be thrown
-    await expect(makeAxiosRequest(config)).rejects.toThrowError(
-      new InternalServerErrorException('Axios request failed: Network Error')
+    await expect(makeAxiosRequest(config)).rejects.toThrow(
+      new InternalServerErrorException("Axios request failed error: Network Error")
     );
+    expect(mockedAxios.request).toHaveBeenCalledWith(config);
   });
 });

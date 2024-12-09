@@ -91,7 +91,6 @@ export class AuthService {
 
       return { user: savedUser, tempPassword };
     } catch (error) {
-      console.error(error);
       throw new InternalServerErrorException("Failed to create user in Keycloak");
     }
   }
@@ -169,9 +168,22 @@ export class AuthService {
         data: { enabled: enable },
       });
   
+      if (!enable) {
+        console.log(`reached----${(keycloakUser.id).trim()}`)
+        await makeAxiosRequest({
+          method: "OPTIONS",
+          url: `${process.env.KEYCLOAK_BASE_URL}/${process.env.KEYCLOAK_REALM}/users/${(keycloakUser.id).toString().trim()}/logout`,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+  
       return user;
     } catch (error) {
-      throw new InternalServerErrorException("Failed to update user status in Keycloak, error:", error.message);
+      throw new InternalServerErrorException(
+        `Failed to update user status in Keycloak, error: ${error.message}`
+      );
     }
   }
 }
