@@ -43,7 +43,9 @@ export enum JobType {
 // ---------- Operations -----------/
 export enum OperationStatus{
     READY='READY',
-    IN_PROCESS='IN_PROCESS'
+    IN_PROCESS='IN_PROCESS',
+    ERROR ='ERROR',
+    COMPLETED = 'COMPLETED'
 }
 
 export enum OperationType {

@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ListPathRes, ValidateConnectionRes } from '../events.type';
 import { WorkManager } from '../workmanager/workmanager.service';
 import { RequestTrackService } from '../service/requesttack/requesttrack.service';
+import { ScanCompletedPayload } from '../workmanager/workmanager.types';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -132,6 +133,12 @@ export class EventsGateway implements OnGatewayInit{
     else this.logger.debug(`task not found`)
    }
 
+
+   @SubscribeMessage(SocketEvents.TASK_COMPLETED)
+   async taskCompleted(client: Socket, ack: ScanCompletedPayload) {
+    this.logger.debug(ack)
+    const task = await this.workManager.updateTask(ack)
+   }
 
 }
 

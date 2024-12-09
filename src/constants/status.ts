@@ -12,7 +12,8 @@ export enum SocketEvents{
     ERROR='ERROR',
     WAKE_UP='WAKE_UP',
     TASK='TASK',
-    TASK_ACK='TASK_ACK'
+    TASK_ACK='TASK_ACK',
+    TASK_COMPLETED='TASK_COMPLETED'
 }
 
 

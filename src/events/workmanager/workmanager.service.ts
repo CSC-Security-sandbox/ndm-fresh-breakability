@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
-import { TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
+import { ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobType, OperationStatus } from "src/constants/enums";
@@ -25,7 +25,6 @@ export class WorkManager{
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
         private readonly eventEmitter: EventEmitter2
-
     ){}
 
    
@@ -151,5 +150,27 @@ export class WorkManager{
         })
     }
 
+    // -------------------------- Task Update --------------------------------- //
+    updateTask = async (task: ScanCompletedPayload) => {
+        await this.updateScanTask(task)
+    }
+
+    // -------------------------- Scan Task Update --------------------------------- //
+    updateScanTask = async (task: ScanCompletedPayload) => {
+        const successOperations: string[] = [] 
+        for(const op of task.commands) {
+            if(op.ops["0"].status === OperationStatus.COMPLETED) {
+                successOperations.push(op.fPath)
+                continue;
+            }
+            await this.operationsRepo.update(
+                {fPath: op.fPath, taskId: task.id}, {status : OperationStatus.ERROR, errorDetails: op.ops["0"].error}
+            )
+        }
+        await this.operationsRepo.update(
+            {fPath: In(successOperations), taskId: task.id}, {status : OperationStatus.COMPLETED}
+        )
+        await this.taskRepo.update({id: task.id}, {status: TaskStatus.Completed})
+    }
 
 }

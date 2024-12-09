@@ -130,7 +130,7 @@ export class EventsService {
         const transactionId = uuidv4();
         const map = new Map<string, Omit<Credentials, 'workers'>[]>()
 
-        details.credentials.forEach(cred => {
+        details.credentials?.forEach(cred => {
             cred.workers.forEach(worker => {
                 if (map.has(worker))
                     map.set(worker, [...map.get(worker), cred])
