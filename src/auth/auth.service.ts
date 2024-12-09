@@ -71,7 +71,7 @@ export class AuthService {
               temporary: true,
             },
           ],
-          requiredActions: ["UPDATE_PASSWORD", "UPDATE_PROFILE"],
+          requiredActions: ["UPDATE_PASSWORD"],
         },
         headers: {
           Authorization: `Bearer ${token}`,
