@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
-import { randomUUID } from 'crypto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserRole } from '../entities/user-role.entity';
@@ -10,6 +9,7 @@ import { Account } from '../entities/account.entity';
 import { Project } from '../entities/project.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class UserService {
@@ -33,13 +33,12 @@ export class UserService {
     private accountRepository: Repository<Account>,
   ) {}
 
-  create(createUserDto: CreateUserDto): Promise<User> {
+  create(createUserDto: CreateUserDto, userPermissions:UserPermissionResponse): Promise<User> {
     const user = this.userRepository.create({
       ...createUserDto,
       user_status: 'active',
     });
-    // TODO: get user from bearer token
-    user.populateWhoColumns(randomUUID()); // This is a fake user
+    user.populateWhoColumns(userPermissions.user.id);
     return this.userRepository.save(user);
   }
 
@@ -55,11 +54,10 @@ export class UserService {
     return await this.userRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<void> {
+  async update(id: string, updateUserDto: UpdateUserDto, userPermissions:UserPermissionResponse): Promise<void> {
     await this.userRepository.update(id, {
       ...updateUserDto,
-      // TODO: get user from bearer token
-      updated_by: randomUUID(), // This is a fake user
+      updated_by: userPermissions.user.id,
     });
   }
 

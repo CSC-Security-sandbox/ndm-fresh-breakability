@@ -5,30 +5,37 @@ import {
   Body,
   Patch,
   Param,
-  Delete
+  Delete,
+  Request
 } from '@nestjs/common';
 
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
-import { ApiBody, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiBody, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PermissionService } from './permission.service';
 import { PermissionDescription } from '../swagger/swagger-summary';
+import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('permissions')
 @Controller('/api/v1/permission')
 export class PermissionController {
   constructor(private readonly permissionService: PermissionService) {}
 
+  @Auth()
+  @ApiBearerAuth()
   @Post()
   @ApiBody({ type: CreatePermissionDto })
   @ApiOperation({
     summary: 'Create Permission',
     description: PermissionDescription.CreatePermissionDescription,
   })
-  create(@Body() createPermissionDto: CreatePermissionDto) {
-    return this.permissionService.create(createPermissionDto);
+  create(@Body() createPermissionDto: CreatePermissionDto, @Request() userPermissionResponse: UserPermissionResponse)  {
+    return this.permissionService.create(createPermissionDto, userPermissionResponse);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Retrieve All Permissions',
@@ -38,6 +45,8 @@ export class PermissionController {
     return this.permissionService.findAll();
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Retrieve Permission by ID',
@@ -47,6 +56,8 @@ export class PermissionController {
     return this.permissionService.findOne(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update Permission',
@@ -55,10 +66,13 @@ export class PermissionController {
   update(
     @Param('id') id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
+    @Request() userPermissionResponse: UserPermissionResponse
   ) {
-    return this.permissionService.update(id, updatePermissionDto);
+    return this.permissionService.update(id, updatePermissionDto, userPermissionResponse);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete Permission',
@@ -68,6 +82,8 @@ export class PermissionController {
     return this.permissionService.delete(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id/inactivate')
   @ApiOperation({
     summary: 'Inactivate Permission',

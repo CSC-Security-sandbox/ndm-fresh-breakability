@@ -12,6 +12,7 @@ import { Account } from '../entities/account.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 describe('UserService', () => {
   let service: UserService;
@@ -68,6 +69,19 @@ describe('UserService', () => {
     );
   });
 
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
+
   it('should create a user', async () => {
     
     const createUserDto = {
@@ -88,7 +102,7 @@ describe('UserService', () => {
     jest.spyOn(userRepository, 'create').mockReturnValue(mockUser as any);
     jest.spyOn(userRepository, 'save').mockResolvedValue(mockUser as any);
  
-    const user = await service.create(createUserDto);
+    const user = await service.create(createUserDto, userPermissionResponseMock);
  
     expect(user).toEqual(mockUser);
     expect(userRepository.create).toHaveBeenCalledWith({
@@ -273,7 +287,7 @@ describe('UserService', () => {
       affected: 1,
     });
 
-    await service.update('1', updateUserDto);
+    await service.update('1', updateUserDto, userPermissionResponseMock);
     expect(userRepository.update).toHaveBeenCalledWith('1', {
       ...updateUserDto,
       updated_by: expect.any(String),

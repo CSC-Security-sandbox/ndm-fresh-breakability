@@ -7,31 +7,39 @@ import {
   Param,
   Delete,
   Query,
+  Request
 } from '@nestjs/common';
 import { RolePermissionService } from './role-permission.service';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
 import { UpdateRolePermissionDto } from './dto/update-role-permission.dto';
-import { ApiBody, ApiQuery, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiBody, ApiQuery, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RolePermissionDescription } from '../swagger/swagger-summary';
+import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('role-permissions')
 @Controller('/api/v1/role-permissions')
 export class RolePermissionController {
   constructor(private readonly rolePermissionService: RolePermissionService) {}
 
+  @Auth()
+  @ApiBearerAuth()
   @Post()
   @ApiOperation({
     summary: 'Create a new role-permission association',
     description: RolePermissionDescription.CreateRolePermissionDescription,
   })
   @ApiBody({ type: CreateRolePermissionDto })
-  create(@Body() createRolePermissionDto: CreateRolePermissionDto) {
+  create(@Body() createRolePermissionDto: CreateRolePermissionDto, @Request() userPermissionResponse:UserPermissionResponse) {
     return this.rolePermissionService.create(
       createRolePermissionDto.role_id,
       createRolePermissionDto,
+      userPermissionResponse
     );
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get a paginated list of role-permission associations',
@@ -83,6 +91,8 @@ export class RolePermissionController {
     );
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get a role-permission association by ID',
@@ -92,6 +102,8 @@ export class RolePermissionController {
     return this.rolePermissionService.findOne(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a role-permission association by ID',
@@ -104,6 +116,8 @@ export class RolePermissionController {
     return this.rolePermissionService.update(id, updateRolePermissionDto);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a role-permission association by ID',

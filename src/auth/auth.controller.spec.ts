@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { UserPermissionResponse } from './auth-user.type';
  
 describe('AuthController', () => {
   let authController: AuthController;
@@ -63,6 +64,19 @@ describe('AuthController', () => {
     authController = module.get<AuthController>(AuthController);
     authService = module.get<AuthService>(AuthService);
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
  
   describe('inviteUser', () => {
     it('should invite a user and return the result', async () => {
@@ -79,13 +93,14 @@ describe('AuthController', () => {
  
       mockAuthService.inviteUser.mockResolvedValue(mockResponse);
  
-      const result = await authController.inviteUser(mockInviteUserDto);
+      const result = await authController.inviteUser(mockInviteUserDto, userPermissionResponseMock);
  
       expect(result).toEqual(mockResponse);
       expect(mockAuthService.inviteUser).toHaveBeenCalledWith(
         mockInviteUserDto.username,
         mockInviteUserDto.firstName,
-        mockInviteUserDto.lastName
+        mockInviteUserDto.lastName,
+        userPermissionResponseMock
       );
     });
   });

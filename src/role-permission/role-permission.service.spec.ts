@@ -11,6 +11,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
  
 describe('RolePermissionService', () => {
   let service: RolePermissionService;
@@ -47,6 +48,19 @@ describe('RolePermissionService', () => {
     permissionRepository = module.get<Repository<Permission>>(getRepositoryToken(Permission));
     rolePermissionRepository = module.get<Repository<RolePermission>>(getRepositoryToken(RolePermission));
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
  
   it('should be defined', () => {
     expect(service).toBeDefined();
@@ -161,7 +175,7 @@ describe('RolePermissionService', () => {
       jest.spyOn(rolePermissionRepository, 'create').mockReturnValue(rolePermission);
       jest.spyOn(rolePermissionRepository, 'save').mockResolvedValue(rolePermission);
  
-      const result = await service.create(roleId, createRolePermissionDto);
+      const result = await service.create(roleId, createRolePermissionDto, userPermissionResponseMock);
  
       expect(result).toEqual(rolePermission);
       expect(roleRepository.findOneBy).toHaveBeenCalledWith({ id: roleId });
@@ -178,7 +192,7 @@ describe('RolePermissionService', () => {
  
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(null);
  
-      await expect(service.create(roleId, createRolePermissionDto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(NotFoundException);
     });
  
     it('should throw TypeError if the role permission already exists', async () => {
@@ -196,7 +210,7 @@ describe('RolePermissionService', () => {
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
       jest.spyOn(rolePermissionRepository, 'findOne').mockResolvedValue(existingRolePermission);
  
-      await expect(service.create(roleId, createRolePermissionDto)).rejects.toThrow(TypeError);
+      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
     });
  
     it('should throw BadRequestException if permission_id is missing', async () => {
@@ -206,7 +220,7 @@ describe('RolePermissionService', () => {
         role_id: roleId,
       };
  
-      await expect(service.create(roleId, createRolePermissionDto)).rejects.toThrow(TypeError);
+      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
     });
  
     it('should throw NotFoundException if permission not found', async () => {
@@ -220,7 +234,7 @@ describe('RolePermissionService', () => {
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
       jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue(null);
  
-      await expect(service.create(roleId, createRolePermissionDto)).rejects.toThrow(TypeError);
+      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
     });
   });
  

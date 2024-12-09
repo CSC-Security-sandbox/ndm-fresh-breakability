@@ -7,20 +7,26 @@ import {
   Delete,
   Get,
   Query,
+  Request
 } from '@nestjs/common';
 import { UserRoleService } from './user-role.service';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UserRole } from '../entities/user-role.entity';
-import { ApiQuery, ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiQuery, ApiTags, ApiOperation, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
 export class UserRoleController {
   constructor(private readonly userRoleService: UserRoleService) {}
 
+
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
   @Post()
   @ApiOperation({
     summary: 'Create a new user-role association',
@@ -29,11 +35,14 @@ export class UserRoleController {
   @ApiBody({ type: CreateUserRoleDto })
   async create(
     @Body() createUserRoleDto: CreateUserRoleDto,
+    @Request() userPermissionResponse:UserPermissionResponse
   ): Promise<UserRole> {
-    return this.userRoleService.create(createUserRoleDto);
+    return this.userRoleService.create(createUserRoleDto, userPermissionResponse);
   }
 
 
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
   @Post('/batch')
   @ApiOperation({
     summary: 'Create a new user-role association',
@@ -47,7 +56,8 @@ export class UserRoleController {
   }
 
   
-
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a user-role association by ID',
@@ -56,10 +66,13 @@ export class UserRoleController {
   async update(
     @Param('id') id: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
+    @Request() userPermissionResponse:UserPermissionResponse
   ): Promise<void> {
-    await this.userRoleService.update(id, updateUserRoleDto);
+    await this.userRoleService.update(id, updateUserRoleDto, userPermissionResponse);
   }
 
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a user-role association by ID',
@@ -69,6 +82,8 @@ export class UserRoleController {
     await this.userRoleService.delete(id);
   }
 
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get a user-role association by ID',
@@ -78,6 +93,8 @@ export class UserRoleController {
     return this.userRoleService.findOne(id);
   }
 
+  @Auth(Permission.ListUsers)
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get a paginated list of user-role associations',

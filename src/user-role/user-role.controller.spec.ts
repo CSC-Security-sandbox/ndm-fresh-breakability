@@ -1,8 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserRoleController } from './user-role.controller';
 import { UserRoleService } from './user-role.service';
-//import { CreateUserRoleDto } from './dto/create-user-role.dto';
-//import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { Role } from '../entities/role.entity';
 import { Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
@@ -11,10 +9,30 @@ import { UserRole } from '../entities/user-role.entity';
 import { User } from '../entities/user.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('UserRoleController', () => {
   let controller: UserRoleController;
   let service: UserRoleService;
+
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -24,6 +42,10 @@ describe('UserRoleController', () => {
         {
           provide: getRepositoryToken(Role),
           useClass: Repository,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
         {
           provide: getRepositoryToken(Permission),
@@ -45,6 +67,19 @@ describe('UserRoleController', () => {
     controller = module.get<UserRoleController>(UserRoleController);
     service = module.get<UserRoleService>(UserRoleService);
   });
+  
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -64,7 +99,7 @@ describe('UserRoleController', () => {
     jest
       .spyOn(service, 'create')
       .mockImplementation(async () => userRole as any);
-    expect(await controller.create(userRole)).toBe(userRole);
+    expect(await controller.create(userRole, userPermissionResponseMock)).toBe(userRole);
   });
 
   it('should find all user-roles', async () => {
@@ -103,7 +138,7 @@ describe('UserRoleController', () => {
     jest
       .spyOn(service, 'update')
       .mockImplementation(async () => userRole as any);
-    expect(await controller.update('1', userRole)).toBeUndefined();
+    expect(await controller.update('1', userRole, userPermissionResponseMock)).toBeUndefined();
   });
 
   it('should delete an user-role', async () => {

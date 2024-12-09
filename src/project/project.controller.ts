@@ -7,31 +7,39 @@ import {
   Param,
   Delete,
   Query,
+  Request
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ProjectDescriptions } from '../swagger/swagger-summary';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('projects')
 @Controller('/api/v1/projects')
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @Post()
   @ApiOperation({
     summary: 'Create Project',
     description: ProjectDescriptions.CreateProjectsDescription,
   })
   @ApiBody({ type: CreateProjectDto })
-  create(@Body() createProjectDto: CreateProjectDto) {
+  create(@Body() createProjectDto: CreateProjectDto, @Request() userPermissionResponse: UserPermissionResponse) {
     return this.projectService.create(
       createProjectDto.account_id,
       createProjectDto,
+      userPermissionResponse
     );
   }
 
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get Page of Project List',
@@ -83,6 +91,8 @@ export class ProjectController {
     );
   }
 
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @Get('/accounts/:account_id/projects')
   @ApiOperation({
     summary: 'Get Project By Account Id',
@@ -136,6 +146,8 @@ export class ProjectController {
     );
   }
 
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get Project by project id',
@@ -145,15 +157,19 @@ export class ProjectController {
     return this.projectService.findOne(id);
   }
 
+  @Auth(Permission.UpdateProject)
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update Project',
     description: ProjectDescriptions.UpdateProjectById,
   })
-  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
-    return this.projectService.update(id, updateProjectDto);
+  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto, @Request() userPermissionResponse:UserPermissionResponse) {
+    return this.projectService.update(id, updateProjectDto, userPermissionResponse);
   }
 
+  @Auth(Permission.DeleteProject)
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete Project',

@@ -5,10 +5,11 @@ import { User } from '../entities/user.entity';
 import { Repository } from 'typeorm';
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import axios from 'axios';
-import * as crypto from 'crypto';
-import { Type } from 'class-transformer';
+import { UserPermissionResponse } from './auth-user.type';
+import { makeAxiosRequest } from 'src/utils/axios-request-utils'; // Importing the new utility function
 
 jest.mock('axios');
+jest.mock('src/utils/axios-request-utils'); // Mocking makeAxiosRequest
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -22,6 +23,19 @@ describe('AuthService', () => {
 
   const mockToken = 'mocked-token';
   const mockKeycloakResponse = { id: 'mocked-user-id' };
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca"
+    }
+  } as UserPermissionResponse;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -45,7 +59,7 @@ describe('AuthService', () => {
     const firstName = 'John';
     const lastName = 'Doe';
 
-    (axios.post as jest.Mock).mockResolvedValue(mockKeycloakResponse);
+    (makeAxiosRequest as jest.Mock).mockResolvedValue(mockKeycloakResponse);
     jest.spyOn(service, 'getKeycloakToken').mockResolvedValue(mockToken as any);
 
     const whoColumns = jest.fn();
@@ -62,7 +76,7 @@ describe('AuthService', () => {
       user_status: 'active',
     });
 
-    const { user, tempPassword } = await service.inviteUser(username, firstName, lastName);
+    const { user, tempPassword } = await service.inviteUser(username, firstName, lastName, userPermissionResponseMock);
 
     expect(mockUserRepository.save).toHaveBeenCalledWith({
       email: username,
@@ -71,8 +85,7 @@ describe('AuthService', () => {
       populateWhoColumns: whoColumns,
     });
 
-    expect(axios.post).toHaveBeenCalled();
-
+    expect(makeAxiosRequest).toHaveBeenCalled();
     expect(tempPassword).toBeDefined();
     expect(tempPassword).toHaveLength(12);
     expect(user.first_name).toBe(firstName);
@@ -84,9 +97,9 @@ describe('AuthService', () => {
     const firstName = 'John';
     const lastName = 'Doe';
 
-    (axios.post as jest.Mock).mockRejectedValue(new Error('Keycloak API error'));
+    (makeAxiosRequest as jest.Mock).mockRejectedValue(new Error('Keycloak API error'));
 
-    await expect(service.inviteUser(username, firstName, lastName)).rejects.toThrow(
+    await expect(service.inviteUser(username, firstName, lastName, userPermissionResponseMock)).rejects.toThrow(
       new InternalServerErrorException('Failed to create user in Keycloak'),
     );
   });
@@ -96,12 +109,12 @@ describe('AuthService', () => {
     const firstName = 'John';
     const lastName = 'Doe';
 
-    (axios.post as jest.Mock).mockResolvedValue(mockKeycloakResponse);
+    (makeAxiosRequest as jest.Mock).mockResolvedValue(mockKeycloakResponse);
 
     mockUserRepository.create.mockReturnValue({ email: username, first_name: firstName, last_name: lastName });
     mockUserRepository.save.mockRejectedValue(new Error('PostgreSQL save error'));
 
-    await expect(service.inviteUser(username, firstName, lastName)).rejects.toThrow(
+    await expect(service.inviteUser(username, firstName, lastName, userPermissionResponseMock)).rejects.toThrow(
       new InternalServerErrorException('Failed to create user in Keycloak'),
     );
   });
@@ -113,7 +126,7 @@ describe('AuthService', () => {
 
     jest.spyOn(service, 'getKeycloakToken').mockRejectedValue(new Error('Failed to retrieve Keycloak token'));
 
-    await expect(service.inviteUser(username, firstName, lastName)).rejects.toThrow(
+    await expect(service.inviteUser(username, firstName, lastName, userPermissionResponseMock)).rejects.toThrow(
       new InternalServerErrorException('Failed to retrieve Keycloak token'),
     );
   });
@@ -123,26 +136,22 @@ describe('AuthService', () => {
     const firstName = 'John';
     const lastName = 'Doe';
 
-    (axios.post as jest.Mock).mockResolvedValue({});
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({});
 
-    await expect(service.inviteUser(username, firstName, lastName)).rejects.toThrow(
+    await expect(service.inviteUser(username, firstName, lastName, userPermissionResponseMock)).rejects.toThrow(
       new InternalServerErrorException('Failed to create user in Keycloak'),
     );
   });
-
-  
-  
-  
 
   it('should throw an error if user is not found during password reset', async () => {
     const email = 'user@example.com';
     const token = 'mock-token';
 
-    (axios.get as jest.Mock).mockResolvedValue({ data: [] });
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({ data: [] });
     jest.spyOn(service, 'getKeycloakToken').mockResolvedValue(token);
 
     await expect(service.resetPassword(email)).rejects.toThrow(
-      new InternalServerErrorException('Failed to reset password in Keycloak'),
+      new InternalServerErrorException('Failed to reset password in Keycloak, : error'),
     );
   });
 
@@ -156,13 +165,13 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(user);
     mockUserRepository.save.mockResolvedValue(user);
 
-    (axios.get as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
-    (axios.put as jest.Mock).mockResolvedValue({});
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({});
 
     const updatedUser = await service.setUserStatus(email, enable);
 
     expect(updatedUser.user_status).toBe('active');
-    expect(axios.put).toHaveBeenCalled();
+    expect(makeAxiosRequest).toHaveBeenCalled();
   });
 
   it('should set user status to inactive and update in Keycloak', async () => {
@@ -175,13 +184,13 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(user);
     mockUserRepository.save.mockResolvedValue(user);
 
-    (axios.get as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
-    (axios.put as jest.Mock).mockResolvedValue({});
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({});
 
     const updatedUser = await service.setUserStatus(email, enable);
 
     expect(updatedUser.user_status).toBe('inactive');
-    expect(axios.put).toHaveBeenCalled();
+    expect(makeAxiosRequest).toHaveBeenCalled();
   });
 
   it('should throw error when user is not found in PostgreSQL during status update', async () => {
@@ -205,11 +214,11 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(user);
     mockUserRepository.save.mockResolvedValue(user);
 
-    (axios.get as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
-    (axios.put as jest.Mock).mockRejectedValue(new Error('Keycloak update error'));
+    (makeAxiosRequest as jest.Mock).mockResolvedValue({ data: [{ id: 'user-id' }] });
+    (makeAxiosRequest as jest.Mock).mockRejectedValue(new Error('Keycloak update error'));
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
-      new InternalServerErrorException('Failed to update user status in Keycloak'),
+      new InternalServerErrorException('Failed to update user status in Keycloak, error:'),
     );
   });
 });

@@ -6,28 +6,35 @@ import {
   Patch,
   Param,
   Delete,
+  Request
 } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RoleDescription } from '../swagger/swagger-summary';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('roles')
 @Controller('/api/v1/roles')
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
+  @Auth()
+  @ApiBearerAuth()
   @Post()
   @ApiOperation({
     summary: 'Create a new Role',
     description: RoleDescription.CreateRoleDescription,
   })
   @ApiBody({ type: CreateRoleDto })
-  create(@Body() createRoleDto: CreateRoleDto) {
-    return this.roleService.create(createRoleDto);
+  create(@Body() createRoleDto: CreateRoleDto, @Request() userPermissionResponse:UserPermissionResponse) {
+    return this.roleService.create(createRoleDto, userPermissionResponse);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get a paginated list of Roles',
@@ -37,6 +44,8 @@ export class RoleController {
     return this.roleService.findAll();
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get Role by ID',
@@ -46,15 +55,19 @@ export class RoleController {
     return this.roleService.findOne(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update Role by ID',
     description: RoleDescription.UpdateRoleDescription,
   })
-  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
-    return this.roleService.update(id, updateRoleDto);
+  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto, @Request() userPermissionResponse:UserPermissionResponse) {
+    return this.roleService.update(id, updateRoleDto, userPermissionResponse);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete Role by ID',
@@ -64,6 +77,8 @@ export class RoleController {
     return this.roleService.delete(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id/inactivate')
   @ApiOperation({
     summary: 'Inactivate Role',

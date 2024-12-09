@@ -1,8 +1,9 @@
 import { Controller, Get, Post, Body, Request, Param } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { User } from '../entities/user.entity';
+import { UserPermissionResponse } from './auth-user.type';
 
 class InviteUserDto {
   username: string;
@@ -30,6 +31,8 @@ export class AuthController {
     return req.user;
   }
  
+  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @ApiBearerAuth()
   @Post('invite-user')
   @ApiOperation({
     summary: 'Invite a new user without permissions roles or project for keycloak entry',
@@ -47,11 +50,14 @@ export class AuthController {
       },
     },
   })
-  async inviteUser(@Body() inviteUserDto: InviteUserDto) {
+  async inviteUser(@Body() inviteUserDto: InviteUserDto, @Request() userPermissionResponse:UserPermissionResponse) {
     const { username, firstName, lastName } = inviteUserDto;
-    return this.authService.inviteUser(username, firstName, lastName);
+    return this.authService.inviteUser(username, firstName, lastName, userPermissionResponse);
   }
 
+
+  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @ApiBearerAuth()
   @Post('reset-password')
   @ApiOperation({
     summary: 'Reset a user password and return the newly generated password',
@@ -72,6 +78,8 @@ export class AuthController {
     return { email, newPassword };
   }
  
+  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @ApiBearerAuth()
   @Post('user-status')
   @ApiOperation({
     summary: 'Enable or disable a user based on the email and enable flag',

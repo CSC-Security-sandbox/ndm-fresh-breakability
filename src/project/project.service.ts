@@ -5,8 +5,8 @@ import { Project } from '../entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Account } from '../entities/account.entity';
-import { randomUUID } from 'crypto';
 import { User } from '../entities/user.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class ProjectService {
@@ -22,6 +22,7 @@ export class ProjectService {
   async create(
     accountId: string,
     createProjectDto: CreateProjectDto,
+    userPermissionResponse:UserPermissionResponse
   ): Promise<Project> {
     const account = await this.accountRepository.findOneBy({ id: accountId });
     if (!account) {
@@ -40,18 +41,17 @@ export class ProjectService {
 
     const project = this.projectRepository.create({
       ...createProjectDto,
-      id: randomUUID(),
+      id: userPermissionResponse.user.id,
       account,
     });
-    project.created_by = randomUUID(); // This is a fake user
+    project.created_by = userPermissionResponse.user.id
     return this.projectRepository.save(project);
   }
 
-  async update(id: string, updateProjectDto: UpdateProjectDto): Promise<void> {
+  async update(id: string, updateProjectDto: UpdateProjectDto, userPermissionResponse:UserPermissionResponse): Promise<void> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
-      //TODO: get user from bearer token
-      updated_by: randomUUID(), // This is a fake user
+      updated_by: userPermissionResponse.user.id,
     });
   }
 

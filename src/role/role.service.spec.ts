@@ -7,6 +7,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 describe('RoleService', () => {
   let service: RoleService;
@@ -31,6 +32,19 @@ describe('RoleService', () => {
     repository = module.get<Repository<Role>>(getRepositoryToken(Role));
   });
 
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
+
   it('should create an role', async () => {
     const createRoleDto: CreateRoleDto = {
       role_name: 'test',
@@ -52,7 +66,7 @@ describe('RoleService', () => {
     jest.spyOn(repository, 'create').mockReturnValue(role);
     jest.spyOn(repository, 'save').mockResolvedValue(role);
 
-    expect(await service.create(createRoleDto)).toEqual(role);
+    expect(await service.create(createRoleDto, userPermissionResponseMock)).toEqual(role);
     expect(repository.create).toHaveBeenCalledWith({
       ...createRoleDto,
       role_status: 'active',
@@ -124,7 +138,7 @@ describe('RoleService', () => {
 
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 
-    await service.update('1', updateRoleDto);
+    await service.update('1', updateRoleDto, userPermissionResponseMock);
     expect(repository.update).toHaveBeenCalledWith('1', {
       ...updateRoleDto,
       updated_by: expect.any(String),

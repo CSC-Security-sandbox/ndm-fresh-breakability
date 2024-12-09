@@ -5,10 +5,29 @@ import { AccountService } from './account.service';
 import { Repository } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('AccountController', () => {
   let controller: AccountController;
   let service: AccountService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -19,12 +38,29 @@ describe('AccountController', () => {
           provide: getRepositoryToken(Account),
           useClass: Repository,
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
       ],
     }).compile();
 
     controller = module.get<AccountController>(AccountController);
     service = module.get<AccountService>(AccountService);
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -46,7 +82,7 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(account);
 
-    expect(await controller.create(createAccountDto)).toEqual(account);
+    expect(await controller.create(createAccountDto, userPermissionResponseMock)).toEqual(account);
   });
 
   it('should find all accounts', async () => {
@@ -103,7 +139,7 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateAccountDto)).toBeUndefined();
+    expect(await controller.update('1', updateAccountDto, userPermissionResponseMock)).toBeUndefined();
   });
 
   it('should throw NotFoundException when updating a non-existent account', async () => {
@@ -112,7 +148,7 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'update').mockRejectedValue(new NotFoundException('Account not found'));
 
-    await expect(controller.update(id, updateAccountDto)).rejects.toThrow(NotFoundException);
+    await expect(controller.update(id, updateAccountDto, userPermissionResponseMock)).rejects.toThrow(NotFoundException);
   });
 
   it('should throw BadRequestException if input data is invalid', async () => {
@@ -120,7 +156,7 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'create').mockRejectedValue(new BadRequestException('Invalid input'));
 
-    await expect(controller.create(invalidAccountDto)).rejects.toThrow(BadRequestException);
+    await expect(controller.create(invalidAccountDto, userPermissionResponseMock)).rejects.toThrow(BadRequestException);
   });
 
   it('should delete an account', async () => {

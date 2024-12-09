@@ -7,6 +7,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 describe('AccountService', () => {
   let service: AccountService;
@@ -31,6 +32,19 @@ describe('AccountService', () => {
     repository = module.get<Repository<Account>>(getRepositoryToken(Account));
   });
 
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
+
   it('should create an account', async () => {
     const createAccountDto: CreateAccountDto = { account_name: 'test' };
     const account = {
@@ -48,7 +62,7 @@ describe('AccountService', () => {
     jest.spyOn(repository, 'create').mockReturnValue(account);
     jest.spyOn(repository, 'save').mockResolvedValue(account);
 
-    expect(await service.create(createAccountDto)).toEqual(account);
+    expect(await service.create(createAccountDto, userPermissionResponseMock)).toEqual(account);
     expect(repository.create).toHaveBeenCalledWith(createAccountDto);
     expect(repository.save).toHaveBeenCalledWith(account);
   });
@@ -107,9 +121,11 @@ describe('AccountService', () => {
   it('should update an account', async () => {
     const updateAccountDto: UpdateAccountDto = { account_name: 'test' };
 
+    
+
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 
-    await service.update('1', updateAccountDto);
+    await service.update('1', updateAccountDto, userPermissionResponseMock);
     expect(repository.update).toHaveBeenCalledWith('1', {
       ...updateAccountDto,
       updated_by: expect.any(String),

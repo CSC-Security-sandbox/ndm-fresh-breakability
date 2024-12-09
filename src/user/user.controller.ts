@@ -6,28 +6,35 @@ import {
   Patch,
   Param,
   Delete,
-  Query
+  Query,
+  Request
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserDescriptions } from '../swagger/swagger-summary';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('users')
 @Controller('/api/v1/users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @ApiBearerAuth()
   @Post()
   @ApiOperation({
     summary: 'Create a new User',
     description: UserDescriptions.CreateUsersDescription,
   })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.userService.create(createUserDto);
+  create(@Body() createUserDto: CreateUserDto, @Request() getUserPermissions:UserPermissionResponse) {
+    return this.userService.create(createUserDto, getUserPermissions);
   }
 
+  @Auth(Permission.ListUsers)
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get a paginated list of Users',
@@ -37,6 +44,9 @@ export class UserController {
     return this.userService.findAll();
   }
 
+
+  @Auth()
+  @ApiBearerAuth()
   @Get('/permissions')
   @ApiOperation({
     summary: 'Get user permissions according to project',
@@ -49,6 +59,8 @@ export class UserController {
     return this.userService.getUserProjectsAndPermissions(email, projectId);
   }
 
+  @Auth(Permission.ListUsers)
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get User by ID',
@@ -58,15 +70,19 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
+  @Auth(Permission.UpdateUser)
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update User by ID',
     description: UserDescriptions.UpdateUserById,
   })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(id, updateUserDto);
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Request() userPermissions:UserPermissionResponse) {
+    return this.userService.update(id, updateUserDto, userPermissions);
   }
 
+  @Auth(Permission.DeleteUser)
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete User by ID',
@@ -76,6 +92,9 @@ export class UserController {
     return this.userService.delete(id);
   }
 
+
+  @Auth(Permission.UpdateUser)
+  @ApiBearerAuth()
   @Patch(':id/inactivate')
   @ApiOperation({
     summary: 'Inactivate User By Id',

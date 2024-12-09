@@ -7,28 +7,35 @@ import {
   Param,
   Delete,
   Query,
+  Request,
 } from '@nestjs/common';
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AccountDescription } from '../swagger/swagger-summary';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @ApiTags('accounts')
 @Controller('/api/v1/accounts')
 export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 
+  @Auth()
+  @ApiBearerAuth()
   @Post()
   @ApiBody({ type: CreateAccountDto })
   @ApiOperation({
     summary: 'Create Account',
     description: AccountDescription.CreateAccountDescription,
   })
-  create(@Body() createAccountDto: CreateAccountDto) {
-    return this.accountService.create(createAccountDto);
+  create(@Body() createAccountDto: CreateAccountDto, @Request() userPermissions:UserPermissionResponse) {
+    return this.accountService.create(createAccountDto, userPermissions);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get()
   @ApiOperation({
     summary: 'Get Page of Account List',
@@ -80,6 +87,8 @@ export class AccountController {
     );
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
     summary: 'Get Account by account id',
@@ -89,15 +98,19 @@ export class AccountController {
     return this.accountService.findOne(id);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
     summary: 'Update Account',
     description: AccountDescription.UpdateAccountDescription,
   })
-  update(@Param('id') id: string, @Body() updateAccountDto: UpdateAccountDto) {
-    return this.accountService.update(id, updateAccountDto);
+  update(@Param('id') id: string, @Body() updateAccountDto: UpdateAccountDto, @Request() userPermissionResponse: UserPermissionResponse) {
+    return this.accountService.update(id, updateAccountDto, userPermissionResponse);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete Account',

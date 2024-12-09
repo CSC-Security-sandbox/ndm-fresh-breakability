@@ -4,9 +4,9 @@ import { FindManyOptions, FindOptionsWhere, Repository } from 'typeorm';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
 import { UpdateRolePermissionDto } from './dto/update-role-permission.dto';
 import { Role } from '../entities/role.entity';
-import { randomUUID } from 'crypto';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class RolePermissionService {
@@ -22,6 +22,7 @@ export class RolePermissionService {
   async create(
     roleId: string,
     createRolePermissionDto: CreateRolePermissionDto,
+    userPermissionResponse:UserPermissionResponse
   ): Promise<RolePermission> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -30,7 +31,7 @@ export class RolePermissionService {
 
     const rolePermission = this.rolePermissionRepository.create({
       ...createRolePermissionDto,
-      id: randomUUID(),
+      id: userPermissionResponse.user.id,
       role,
     });
 

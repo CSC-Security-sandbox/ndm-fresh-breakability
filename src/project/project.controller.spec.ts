@@ -8,11 +8,30 @@ import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { UserRole } from 'src/entities/user-role.entity';
 import { randomUUID } from 'crypto';
-import exp from 'constants';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('ProjectController', () => {
   let controller: ProjectController;
   let service: ProjectService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
+
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -22,6 +41,10 @@ describe('ProjectController', () => {
         {
           provide: getRepositoryToken(Project),
           useClass: Repository,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
         {
           provide: getRepositoryToken(Account),
@@ -37,6 +60,18 @@ describe('ProjectController', () => {
     controller = module.get<ProjectController>(ProjectController);
     service = module.get<ProjectService>(ProjectService);
   });
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -72,9 +107,9 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'create').mockResolvedValue(project);
 
-      const result = await controller.create(createProjectDto);
+      const result = await controller.create(createProjectDto,  userPermissionResponseMock);
       expect(result).toEqual(project);
-      expect(service.create).toHaveBeenCalledWith(createProjectDto.account_id, createProjectDto);
+      expect(service.create).toHaveBeenCalledWith(createProjectDto.account_id, createProjectDto, userPermissionResponseMock);
     });
 
     it('should handle errors during project creation', async () => {
@@ -87,7 +122,7 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'create').mockRejectedValue(new Error('Failed to create project'));
 
-      await expect(controller.create(createProjectDto)).rejects.toThrow('Failed to create project');
+      await expect(controller.create(createProjectDto,  userPermissionResponseMock)).rejects.toThrow('Failed to create project');
     });
   });
 
@@ -218,8 +253,8 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'update').mockResolvedValue();
 
-      await controller.update('1', updateDto);
-      expect(service.update).toHaveBeenCalledWith('1', updateDto);
+      await controller.update('1', updateDto,  userPermissionResponseMock);
+      expect(service.update).toHaveBeenCalledWith('1', updateDto, userPermissionResponseMock);
     });
 
     it('should handle errors during update', async () => {
@@ -227,7 +262,7 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'update').mockRejectedValue(new Error('Failed to update project'));
 
-      await expect(controller.update('1', updateDto)).rejects.toThrow('Failed to update project');
+      await expect(controller.update('1', updateDto,  userPermissionResponseMock)).rejects.toThrow('Failed to update project');
     });
   });
 

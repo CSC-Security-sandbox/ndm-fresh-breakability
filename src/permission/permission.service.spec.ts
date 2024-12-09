@@ -6,6 +6,7 @@ import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { randomUUID } from 'crypto';
 import { PermissionService } from './permission.service';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 describe('PermissionService', () => {
   let service: PermissionService;
@@ -28,6 +29,19 @@ describe('PermissionService', () => {
     );
   });
 
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
+
   it('should create an permission', async () => {
     const createPermissionDto: CreatePermissionDto = {
       permission_name: 'test',
@@ -48,7 +62,7 @@ describe('PermissionService', () => {
     jest.spyOn(repository, 'create').mockReturnValue(permission);
     jest.spyOn(repository, 'save').mockResolvedValue(permission);
 
-    expect(await service.create(createPermissionDto)).toEqual(permission);
+    expect(await service.create(createPermissionDto, userPermissionResponseMock)).toEqual(permission);
     expect(repository.create).toHaveBeenCalledWith({
       ...createPermissionDto,
       permission_status: 'active',
@@ -117,7 +131,7 @@ describe('PermissionService', () => {
 
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 
-    await service.update('1', updatePermissionDto);
+    await service.update('1', updatePermissionDto, userPermissionResponseMock);
     expect(repository.update).toHaveBeenCalledWith('1', {
       ...updatePermissionDto,
       updated_by: expect.any(String),

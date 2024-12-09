@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { first, last } from 'rxjs';
 import { UserRoleMap, UserRoleRelationDto } from './dto/user-role.dto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -61,6 +62,19 @@ describe('UserRoleService', () => {
       getRepositoryToken(UserRole),
     );
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should throw NotFoundException if any user is not found', async () => {
     const userRoleRelationDto: UserRoleRelationDto = {
@@ -332,7 +346,7 @@ describe('UserRoleService', () => {
     jest.spyOn(userRoleRepository, 'create').mockReturnValue(userRole);
     jest.spyOn(userRoleRepository, 'save').mockResolvedValue(userRole);
 
-    expect(await service.create(createUserRoleDto)).toEqual(userRole);
+    expect(await service.create(createUserRoleDto, userPermissionResponseMock)).toEqual(userRole);
     expect(userRoleRepository.create).toHaveBeenCalledWith(expect.any(Object));
     expect(userRoleRepository.save).toHaveBeenCalledWith(userRole);
   });
@@ -616,7 +630,7 @@ describe('UserRoleService', () => {
       jest.spyOn(userRoleRepository, 'create').mockReturnValue(userRole);
       jest.spyOn(userRoleRepository, 'save').mockResolvedValue(userRole);
 
-      const result = await service.create(createUserRoleDto);
+      const result = await service.create(createUserRoleDto, userPermissionResponseMock);
       expect(result).toEqual(userRole);
     });
 
@@ -630,7 +644,7 @@ describe('UserRoleService', () => {
 
       jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
 
-      await expect(service.create(createUserRoleDto)).rejects.toThrow(
+      await expect(service.create(createUserRoleDto, userPermissionResponseMock)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -652,7 +666,7 @@ describe('UserRoleService', () => {
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
       jest.spyOn(projectRepository, 'findOneBy').mockResolvedValue(project);
 
-      await expect(service.create(createUserRoleDto)).rejects.toThrow(
+      await expect(service.create(createUserRoleDto, userPermissionResponseMock)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -686,7 +700,7 @@ describe('UserRoleService', () => {
       jest.spyOn(userRoleRepository, 'create').mockReturnValue(userRole);
       jest.spyOn(userRoleRepository, 'save').mockResolvedValue(userRole);
 
-      const result = await service.create(createUserRoleDto);
+      const result = await service.create(createUserRoleDto, userPermissionResponseMock);
       expect(result).toEqual(userRole);
     });
 
@@ -707,7 +721,7 @@ describe('UserRoleService', () => {
       jest.spyOn(projectRepository, 'findOneBy').mockResolvedValue(project);
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(null);
 
-      await expect(service.create(createUserRoleDto)).rejects.toThrow(
+      await expect(service.create(createUserRoleDto, userPermissionResponseMock)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -742,7 +756,7 @@ describe('UserRoleService', () => {
       jest.spyOn(accountRepository, 'findOneBy').mockResolvedValue(account);
       jest.spyOn(userRoleRepository, 'save').mockResolvedValue(userRole);
 
-      await service.update('user-role-id', updateUserRoleDto);
+      await service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock);
 
       expect(userRoleRepository.save).toHaveBeenCalledWith(userRole);
     });
@@ -758,7 +772,7 @@ describe('UserRoleService', () => {
       jest.spyOn(userRoleRepository, 'findOneBy').mockResolvedValue(null);
 
       await expect(
-        service.update('user-role-id', updateUserRoleDto),
+        service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -781,7 +795,7 @@ describe('UserRoleService', () => {
       jest.spyOn(accountRepository, 'findOneBy').mockResolvedValue(account);
 
       await expect(
-        service.update('user-role-id', updateUserRoleDto),
+        service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -804,7 +818,7 @@ describe('UserRoleService', () => {
       jest.spyOn(accountRepository, 'findOneBy').mockResolvedValue(null);
 
       await expect(
-        service.update('user-role-id', updateUserRoleDto),
+        service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -827,7 +841,7 @@ describe('UserRoleService', () => {
       jest.spyOn(accountRepository, 'findOneBy').mockResolvedValue(account);
 
       await expect(
-        service.update('user-role-id', updateUserRoleDto),
+        service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -858,7 +872,7 @@ describe('UserRoleService', () => {
       jest.spyOn(accountRepository, 'findOneBy').mockResolvedValue(account);
       jest.spyOn(userRoleRepository, 'save').mockResolvedValue(userRole);
 
-      await service.update('user-role-id', updateUserRoleDto);
+      await service.update('user-role-id', updateUserRoleDto, userPermissionResponseMock);
 
       expect(userRoleRepository.save).toHaveBeenCalledWith(userRole);
     });

@@ -4,7 +4,7 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { randomUUID } from 'crypto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class AccountService {
@@ -13,10 +13,9 @@ export class AccountService {
     private accountRepository: Repository<Account>,
   ) {}
 
-  create(createAccountDto: CreateAccountDto): Promise<Account> {
+  create(createAccountDto: CreateAccountDto, userPermissions:UserPermissionResponse): Promise<Account> {
     const account = this.accountRepository.create(createAccountDto);
-    //TODO: get user from bearer token
-    account.populateWhoColumns(randomUUID()); // This is a fake user
+    account.populateWhoColumns(userPermissions.user.id);
     return this.accountRepository.save(account);
   }
 
@@ -42,11 +41,10 @@ export class AccountService {
     return await this.accountRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateAccountDto: UpdateAccountDto): Promise<void> {
+  async update(id: string, updateAccountDto: UpdateAccountDto, userPermissionResponse:UserPermissionResponse): Promise<void> {
     await this.accountRepository.update(id, {
       ...updateAccountDto,
-      //TODO: get user from bearer token
-      updated_by: randomUUID(), // This is a fake user
+      updated_by: userPermissionResponse.user.id,
     });
   }
 

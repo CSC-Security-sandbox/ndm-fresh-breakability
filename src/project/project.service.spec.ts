@@ -10,6 +10,7 @@ import { NotFoundException } from '@nestjs/common';
 import { DeleteResult } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any):Promise<any> {
@@ -65,6 +66,19 @@ describe('ProjectService', () => {
     userRepository = module.get<MockRepository<User>>(getRepositoryToken(User));
   });
 
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
+
   afterEach(() => {
     jest.resetAllMocks();
   });
@@ -113,7 +127,7 @@ describe('ProjectService', () => {
         .spyOn(projectRepository, 'save')
         .mockResolvedValueOnce(createdProject);
 
-      const result = await service.create(accountId, createProjectDto);
+      const result = await service.create(accountId, createProjectDto, userPermissionResponseMock);
 
       expect(accountRepository.findOneBy).toHaveBeenCalledWith({
         id: accountId,
@@ -153,7 +167,7 @@ describe('ProjectService', () => {
         .spyOn(projectRepository, 'findOneBy')
         .mockResolvedValueOnce(existingProject);
 
-      await service.update(projectId, updateProjectDto);
+      await service.update(projectId, updateProjectDto,  userPermissionResponseMock);
       expect(projectRepository.update).toHaveBeenCalledWith(projectId, {
         ...updateProjectDto,
         updated_by: expect.any(String),

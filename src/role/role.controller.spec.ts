@@ -4,10 +4,29 @@ import { RoleController } from './role.controller';
 import { RoleService } from './role.service';
 import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('RoleController', () => {
   let controller: RoleController;
   let service: RoleService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -18,12 +37,29 @@ describe('RoleController', () => {
           provide: getRepositoryToken(Role),
           useClass: Repository,
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
       ],
     }).compile();
 
     controller = module.get<RoleController>(RoleController);
     service = module.get<RoleService>(RoleService);
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -53,7 +89,7 @@ describe('RoleController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(role);
 
-    expect(await controller.create(createRoleDto)).toEqual(role);
+    expect(await controller.create(createRoleDto, userPermissionResponseMock)).toEqual(role);
   });
 
   it('should find all roles', async () => {
@@ -118,7 +154,7 @@ describe('RoleController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateRoleDto)).toBeUndefined();
+    expect(await controller.update('1', updateRoleDto, userPermissionResponseMock)).toBeUndefined();
   });
 
   it('should delete an role', async () => {

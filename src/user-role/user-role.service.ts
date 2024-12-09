@@ -10,6 +10,7 @@ import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
 import { UserRoleRelationDto } from './dto/user-role.dto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class UserRoleService {
@@ -98,7 +99,7 @@ export class UserRoleService {
   } 
 
 
-  async create(createUserRoleDto: CreateUserRoleDto): Promise<UserRole> {
+  async create(createUserRoleDto: CreateUserRoleDto, userPermissionResponse:UserPermissionResponse): Promise<UserRole> {
     const user = await this.userRepository.findOneBy({
       id: createUserRoleDto.user_id,
     });
@@ -140,7 +141,7 @@ export class UserRoleService {
       account,
     });
 
-    userRole.populateWhoColumns(randomUUID()); // This is a fake user
+    userRole.populateWhoColumns(userPermissionResponse.user.id);
 
     return this.userRoleRepository.save(userRole);
   }
@@ -148,6 +149,7 @@ export class UserRoleService {
   async update(
     id: string,
     updateUserRoleDto: UpdateUserRoleDto,
+    userPermissionResponse:UserPermissionResponse
   ): Promise<void> {
     const userRole = await this.userRoleRepository.findOneBy({ id });
 
@@ -193,7 +195,7 @@ export class UserRoleService {
     userRole.project = project;
     userRole.account = account;
 
-    userRole.populateWhoColumns(randomUUID()); // Fake user
+    userRole.populateWhoColumns(userPermissionResponse.user.id); // Fake user
 
     await this.userRoleRepository.save(userRole);
   }

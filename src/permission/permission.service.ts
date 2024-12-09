@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
-import { randomUUID } from 'crypto';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
 
 @Injectable()
 export class PermissionService {
@@ -13,13 +13,12 @@ export class PermissionService {
     private permissionRepository: Repository<Permission>,
   ) {}
 
-  create(createPermissionDto: CreatePermissionDto): Promise<Permission> {
+  create(createPermissionDto: CreatePermissionDto, userPermissionResponse:UserPermissionResponse): Promise<Permission> {
     const permission = this.permissionRepository.create({
       ...createPermissionDto,
       permission_status: 'active',
     });
-    //TODO: get user from bearer token
-    permission.populateWhoColumns(randomUUID()); // This is a fake user
+    permission.populateWhoColumns(userPermissionResponse.user.id);
     return this.permissionRepository.save(permission);
   }
 
@@ -38,11 +37,11 @@ export class PermissionService {
   async update(
     id: string,
     updatePermissionDto: UpdatePermissionDto,
+    userPermissionResponse:UserPermissionResponse
   ): Promise<void> {
     await this.permissionRepository.update(id, {
       ...updatePermissionDto,
-      //TODO: get user from bearer token
-      updated_by: randomUUID(), // This is a fake user
+      updated_by: userPermissionResponse.user.id,
     });
   }
 

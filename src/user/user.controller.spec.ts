@@ -8,11 +8,30 @@ import { Account } from '../entities/account.entity';
 import { Project } from '../entities/project.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
+import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 
 describe('UserController', () => {
   let controller: UserController;
   let service: UserService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -40,6 +59,10 @@ describe('UserController', () => {
           useClass: Repository,
         },
         {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
+        {
           provide: getRepositoryToken(Role), 
           useClass: Repository,
         },
@@ -57,6 +80,19 @@ describe('UserController', () => {
     controller = module.get<UserController>(UserController);
     service = module.get<UserService>(UserService);
   });
+
+  const userPermissionResponseMock = {
+    user: {
+      roles: [
+        {
+          role_name: "",
+          projects: [],
+          permissions: []
+        }
+      ],
+      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
+    }
+  } as UserPermissionResponse
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -92,7 +128,7 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(user);
 
-    expect(await controller.create(createUserDto)).toEqual(user);
+    expect(await controller.create(createUserDto, userPermissionResponseMock)).toEqual(user);
   });
 
   it('should find all users', async () => {
@@ -206,7 +242,7 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateUserDto)).toBeUndefined();
+    expect(await controller.update('1', updateUserDto, userPermissionResponseMock)).toBeUndefined();
   });
 
   it('should delete an user', async () => {
