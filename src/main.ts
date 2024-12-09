@@ -19,8 +19,6 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  // const serviceQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
-  //   AppModule,{
     app.connectMicroservice({
       transport: Transport.RMQ,
       options: {
@@ -36,8 +34,6 @@ async function bootstrap() {
       },
     });
 
-  // const taskQueue = await NestFactory.createMicroservice<MicroserviceOptions>(
-  //   AppModule,
      app.connectMicroservice({
       transport: Transport.RMQ,
       options: {

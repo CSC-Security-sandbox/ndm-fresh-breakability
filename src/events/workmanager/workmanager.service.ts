@@ -77,13 +77,14 @@ export class WorkManager{
     assignWork = async (workerId: string) => {
         const jobRunsMapEntity = await this.workerJobRunMapRepo
         .createQueryBuilder('workerJobRunMap')
-        .leftJoinAndSelect('workerJobRunMap.jonRun', 'jonRun')
-        .leftJoinAndSelect('jonRun.jobConfig', 'jobConfig')
         .select([
-          'workerJobRunMap.jobRunId',
-          'jobConfig.sourcePathId',
-          'jobConfig.targetPathId',  
+            'workerJobRunMap',
+            'jobRun',
+            'jobConfig.sourcePathId',
+            'jobConfig.targetPathId'
         ])
+        .leftJoin('workerJobRunMap.jobRun', 'jobRun',)
+        .leftJoin('jobRun.jobConfig', 'jobConfig')
         .where('workerJobRunMap.isActive = :isActive', { isActive: true })
         .andWhere('workerJobRunMap.workerId = :workerId', { workerId })
         .getMany();
@@ -92,8 +93,8 @@ export class WorkManager{
 
         const jobRun: WorkerJobRuns[] = jobRunsMapEntity.map((it) => ({
             jobRunId: it.jobRunId,
-            sPathId: it.jonRun?.jobConfig?.sourcePathId,
-            tPathId: it.jonRun?.jobConfig?.targetPathId,
+            sPathId: it.jobRun?.jobConfig?.sourcePathId,
+            tPathId: it.jobRun?.jobConfig?.targetPathId,
         }))
 
         for(const job of jobRun) {

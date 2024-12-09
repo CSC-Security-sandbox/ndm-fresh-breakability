@@ -49,6 +49,6 @@ export class JobRunEntity extends Base {
   @OneToMany(()=>TaskEntity, task=>task.jobRun, { cascade: true,  eager: false})
   task: TaskEntity[]
 
-  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jonRun, { cascade: true,  eager: false})
+  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
   workerMap: WorkerJobRunMap[]
 }
