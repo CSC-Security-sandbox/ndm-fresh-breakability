@@ -3,6 +3,8 @@ version: "3.8"
 services:
   postgres:
     image: postgres:latest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: datamigrate
       POSTGRES_USER: dmadmin
@@ -21,7 +23,10 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     depends_on:
-     - postgres
+      - postgres
     ports:
-      - "8080:8080"  # HTTP port for Keycloak
-      - "8443:8443"  # HTTPS port for Keycloak, if you need SSL
+      - "8080:8080" # HTTP port for Keycloak
+      - "8443:8443" # HTTPS port for Keycloak, if you need SSL
+
+volumes:
+  pgdata: {}
