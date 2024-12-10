@@ -1,23 +1,30 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  app.useGlobalPipes(new ValidationPipe())
+
   const config = new DocumentBuilder()
-  .setTitle('Admin service')
-  .setDescription('Users And Account Mangement')
-  .setVersion('1.0')
-  .addTag('admin')
-  .build();
+    .setTitle('Admin Service')
+    .setDescription(
+      'Admin Service - admin services handle account, project, user and role management',
+    )
+    .setVersion('1.0')
+    .addServer(
+      process.env.SWAGGER_BASEURL || 'http://localhost:3000',
+      process.env.SWAGGER_SERVER_NAME || 'Local Development',
+    )
+    .addTag('admin')
+    .addBearerAuth()
+    .build();
 
   const document = SwaggerModule.createDocument(app, config);
-
-  SwaggerModule.setup('docs', app, document);
-
+  SwaggerModule.setup('/api/v1/api-docs', app, document, {jsonDocumentUrl:"/swagger/json"});
+  app.useGlobalPipes(new ValidationPipe());
+  app.enableCors();
   await app.listen(3000);
 }
+
 bootstrap();
