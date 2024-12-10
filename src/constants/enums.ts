@@ -3,7 +3,7 @@ export enum WorkerStatus {
     Offline = 'Offline',
 }
 
-export enum Protocol{
+export enum Protocol {
     NFS = 'NFS',
     SMB = 'SMB'
 }
@@ -20,5 +20,28 @@ export enum ConfigurationType {
 }
 
 export enum RabbitMq {
-    ListPaths ='ListPaths'
+    ListPaths = 'ListPaths'
+}
+
+export enum JobRunStatus {
+    Ready = 'READY',
+    Pending = 'PENDING',
+    Running = 'RUNNING',
+    Paused = 'PAUSED',
+    Stopped = 'STOPPED',
+    Completed = 'COMPLETED',
+    Failed = 'FAILED',
+    Errored = 'ERRORED'
+}
+
+export enum JobStatus {
+    Active = 'ACTIVE',
+    InActive = 'IN_ACTIVE',
+}
+
+export enum JobType {
+    Scan = 'SCAN',
+    Migrate = 'MIGRATE',
+    CutOver = 'CUT_OVER',
+    SpeedTest = 'SPEED_TEST',
 }

@@ -3,17 +3,9 @@ import { Column, Entity, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn 
 import { Base } from './base.entity';
 import { InventoryEntity } from './inventory.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { JobRunStatus } from 'src/constants/enums';
 
-export enum JobRunStatus {
-  Ready = 'READY',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Paused = 'PAUSED',
-  Stopped = 'STOPPED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Errored = 'ERRORED'
-}
+
 
 @Entity({ name: 'jobrun', schema: 'migrate' })
 export class JobRunEntity extends Base {

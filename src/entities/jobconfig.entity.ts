@@ -4,19 +4,7 @@ import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
 import { join } from 'path';
-
-export enum JobStatus {
-  Active = 'ACTIVE',
-  InActive = 'IN_ACTIVE',
-}
-
-export enum JobType {
-  Scan = 'SCAN',
-  Migrate = 'MIGRATE',
-  CutOver = 'CUT_OVER',
-  SpeedTest = 'SPEED_TEST',
-}
-
+import { JobStatus, JobType } from 'src/constants/enums';
 
 @Entity({ name: 'jobconfig', schema: 'migrate' })
 export class JobConfigEntity extends Base {

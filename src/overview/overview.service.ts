@@ -2,12 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { log } from 'console';
 import { config } from 'dotenv';
-import { OverviewDTO } from 'src/dto/overview.dto';
+import { OverviewDTO } from 'src/overview/overview.dto';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { JobType } from 'src/entities/jobconfig.entity';
-import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { Repository } from 'typeorm';
+import { JobRunStatus, JobType } from 'src/constants/enums';
 
 @Injectable()
 export class OverviewService {

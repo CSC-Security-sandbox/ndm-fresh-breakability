@@ -4,8 +4,8 @@ import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { JobType } from 'src/entities/jobconfig.entity';
-import { OverviewDTO } from 'src/dto/overview.dto';
+import { OverviewDTO } from 'src/overview/overview.dto';
+import { JobType } from 'src/constants/enums';
 
 describe('OverviewService', () => {
   let service: OverviewService;
