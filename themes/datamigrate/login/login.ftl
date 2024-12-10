@@ -23,7 +23,7 @@
                 <div class="netappLogo"></div>
                 <div class="login-card text-center bg-white shadow-md rounded-lg p-8">
                     <div class="text-2xl mb-2">Welcome!</div>
-                    <div class="text-base-secondary text-sm leading-tight py-2 mb-10">Log in to Datamigrate</div>
+                    <div class="text-base-secondary text-sm leading-tight py-2 mb-10">Log in to DataMigrate</div>
                     <div>
                         <form
                             id="kc-form-login"
