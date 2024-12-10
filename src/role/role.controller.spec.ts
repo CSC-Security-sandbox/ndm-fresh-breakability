@@ -4,7 +4,7 @@ import { RoleController } from './role.controller';
 import { RoleService } from './role.service';
 import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('RoleController', () => {

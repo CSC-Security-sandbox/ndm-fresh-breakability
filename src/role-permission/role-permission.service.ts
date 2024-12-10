@@ -6,7 +6,7 @@ import { UpdateRolePermissionDto } from './dto/update-role-permission.dto';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @Injectable()
 export class RolePermissionService {

@@ -6,7 +6,7 @@ import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { randomUUID } from 'crypto';
 import { PermissionService } from './permission.service';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 describe('PermissionService', () => {
   let service: PermissionService;

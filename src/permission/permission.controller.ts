@@ -15,7 +15,7 @@ import { ApiBody, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PermissionService } from './permission.service';
 import { PermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @ApiTags('permissions')
 @Controller('/api/v1/permission')

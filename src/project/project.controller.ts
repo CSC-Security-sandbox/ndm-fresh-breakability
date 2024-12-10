@@ -15,7 +15,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ProjectDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @ApiTags('projects')
 @Controller('/api/v1/projects')

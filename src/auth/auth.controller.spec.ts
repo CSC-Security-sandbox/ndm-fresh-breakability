@@ -6,7 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { UserPermissionResponse } from './auth-user.type';
+import { UserPermissionResponse } from './user-permission-response-type';
  
 describe('AuthController', () => {
   let authController: AuthController;

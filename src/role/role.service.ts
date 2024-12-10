@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @Injectable()
 export class RoleService {

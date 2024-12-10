@@ -8,7 +8,7 @@ import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { UserRole } from 'src/entities/user-role.entity';
 import { randomUUID } from 'crypto';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('ProjectController', () => {

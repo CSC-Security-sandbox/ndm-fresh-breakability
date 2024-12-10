@@ -7,7 +7,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 describe('AccountService', () => {
   let service: AccountService;

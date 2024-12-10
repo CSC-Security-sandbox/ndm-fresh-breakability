@@ -5,7 +5,7 @@ import { AccountService } from './account.service';
 import { Repository } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('AccountController', () => {
