@@ -1,11 +1,14 @@
 import { OperationStatus, OperationType } from 'src/constants/enums';
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 
 
 
 @Entity({ name: 'operations', schema: 'migrate' })
+@Index('idx_operation_run_status', ['jobRunId', 'status'])
+@Index('idx_file_path_task', ['fPath', 'taskId'])
+@Index('idx_operation_type', ['operationType'])
 export class OperationsEntity extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;

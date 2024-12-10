@@ -21,13 +21,8 @@ export enum ConfigurationType {
 
 export enum RabbitMq {
     ListPaths ='ListPaths',
-    CreateTaskList = 'createTaskList'
+    CreateTaskList = 'task-list'
 }
-
-export enum MessagesName {
-    CREATE_TASK_LIST = 'myqueue-task-list'
-}
-
 
 export enum JobStatus {
     Active = 'ACTIVE',

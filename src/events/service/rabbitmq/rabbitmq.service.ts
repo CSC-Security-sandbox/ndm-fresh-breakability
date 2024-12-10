@@ -43,9 +43,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   // Send Message to exchange
   async publishToExchange(message: any): Promise<void> {
     try {
-      this.logger.log(`Message published to exchange `)
+      // this.logger.debug(`Message published to exchange `)
       await this.channelWrapper.publish(this.exchange, this.routingKey, Buffer.from(JSON.stringify(message)), { persistent: true } as any);
-      this.logger.log(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
+      // this.logger.debug(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
     } catch (err) {
       this.logger.error('Error publishing message:', err);
     }

@@ -1,5 +1,13 @@
 import { JobType } from "src/constants/enums";
 
+// -------------------------- RMQ TASK --------------------------- //
+export interface RMQTask{
+  jobRunId: string,
+  pathId: string,
+  folder: string
+}
+
+
 export interface TaskEventPayload {
   jobRunId: string;
   status: string;

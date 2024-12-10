@@ -1,9 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
-import { ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
-
+import { RMQTask, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobType, OperationStatus } from "src/constants/enums";
+import { JobType, OperationStatus, OperationType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { TaskEntity, TaskStatus } from "src/entities/task.entity";
@@ -11,6 +10,7 @@ import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapp
 import { In, Repository } from "typeorm";
 import { SocketEvents } from "src/constants/status";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { buildRequest, buildScanPayload } from "./workmanager.mapper";
 
 
 
@@ -27,29 +27,34 @@ export class WorkManager{
         private readonly eventEmitter: EventEmitter2
     ){}
 
-   
+    rmqTask = async (data: RMQTask) => {
+        const operation = this.operationsRepo.create({
+            jobRunId: data.jobRunId,
+            status: OperationStatus.READY,
+            fPath: data.folder,
+            retryCount: 0,
+            operationType: OperationType.SCAN,
+            request: buildScanPayload(data.folder)
+        })
+        await this.operationsRepo.save(operation)
+        const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
 
-    buildScanPayload =  (payload: TaskEventPayload) => ({
-        fPath: payload.sPath,
-        ops: {
-            0 : {
-                cmd : "SCAN_PATH"
-            }
-        }
-    })
-
-    buildRequest = (payload: TaskEventPayload) => {
-        switch (payload.taskType){
-            case JobType.Scan: 
-                return this.buildScanPayload(payload)
-            default: return
-        }
+        // Notify worker
+        workers.forEach(async worker => {
+            this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+                workerId: worker.workerId,
+                socketEvents: SocketEvents.WAKE_UP,
+                payload: { jobRunId: data.jobRunId}
+            })
+        })
+        
     }
 
+    // --------------------------- Create init Operation --------------------------------//
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
     async createOperation(payload: TaskEventPayload){
         try{
-            const request = this.buildRequest(payload)
+            const request = buildRequest(payload)
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
@@ -62,6 +67,7 @@ export class WorkManager{
 
             // notify to workers
             payload.workers.forEach(worker => {
+                this.logger.debug(`Sending weak up to ${worker}`)
                 this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
                     workerId: worker,
                     socketEvents: SocketEvents.WAKE_UP,
@@ -74,6 +80,8 @@ export class WorkManager{
         }
     }
 
+
+    // --------------------------- Assign Work --------------------------------//
     assignWork = async (workerId: string) => {
         const jobRunsMapEntity = await this.workerJobRunMapRepo
         .createQueryBuilder('workerJobRunMap')
@@ -89,8 +97,6 @@ export class WorkManager{
         .andWhere('workerJobRunMap.workerId = :workerId', { workerId })
         .getMany();
 
-        // console.log(jobRunsMapEntity)
-
         const jobRun: WorkerJobRuns[] = jobRunsMapEntity.map((it) => ({
             jobRunId: it.jobRunId,
             sPathId: it.jobRun?.jobConfig?.sourcePathId,
@@ -98,13 +104,13 @@ export class WorkManager{
         }))
 
         for(const job of jobRun) {
-            const task = await  this.createTask(job, workerId)
-            // console.log(job, task)
+            const task = await this.createTask(job, workerId)
             if(task) return task
         }
         return undefined
     }
 
+    // --------------------------- Create Work --------------------------------//
     async createTask(jobRun: WorkerJobRuns, workerId: string) {
         return await this.taskRepo.manager.transaction(async transaction=>{
             const operations: OperationsEntity[] = await transaction
@@ -138,7 +144,6 @@ export class WorkManager{
     }
 
     buildTaskPayload = (task: TaskEntity, operation: OperationsEntity[], jobRun: WorkerJobRuns): TaskPayload => {
-
         return ({
             id: task.id,
             jobRunId: task.jobRunId,
@@ -158,8 +163,10 @@ export class WorkManager{
 
     // -------------------------- Scan Task Update --------------------------------- //
     updateScanTask = async (task: ScanCompletedPayload) => {
+        this.logger.debug('updateScanTask',task)
         const successOperations: string[] = [] 
         for(const op of task.commands) {
+            this.logger.debug(op.ops["0"])
             if(op.ops["0"].status === OperationStatus.COMPLETED) {
                 successOperations.push(op.fPath)
                 continue;

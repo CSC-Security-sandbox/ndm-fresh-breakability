@@ -14,6 +14,12 @@ export class ProjectEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'project_name' })
     projectName: string;
 
+    @Column({ type: 'date', nullable: true,  name:'start_date' })
+    startDate: Date;
+  
+    @Column({ type: 'text', nullable: true,  name:'project_description' })
+    projectDescription: string;
+
     @OneToMany(()=> WorkerEntity, worker=>worker.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE'})
     workers: WorkerEntity[]
     

@@ -104,7 +104,7 @@ export class EventsGateway implements OnGatewayInit{
 
   // Send Message to workers by worker Id
   sendToClient(workerId: string, eventType: string, message: any,) {
-    this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}`)
+    this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}, ${JSON.stringify(message)}`)
     const clientId = this.clients.get(workerId);
     if (clientId) {
       this.logger.log('sendToClient',{workerId, eventType, message})
@@ -128,15 +128,16 @@ export class EventsGateway implements OnGatewayInit{
    @SubscribeMessage(SocketEvents.TASK)
    async handleTask(client: Socket, ack: any) {
     const task = await this.workManager.assignWork(client.handshake.query.worker as string)
-    if(task) 
+    if(task) {
+      this.logger.error(`sending Task jobRun: ${task?.jobRunId} - taskId:  ${task.id}`)
       this.server.to(client.id).emit(SocketEvents.TASK_ACK, task)
-    else this.logger.debug(`task not found`)
+    }
+    else this.logger.error(`task not found`)
    }
 
 
    @SubscribeMessage(SocketEvents.TASK_COMPLETED)
    async taskCompleted(client: Socket, ack: ScanCompletedPayload) {
-    this.logger.debug(ack)
     const task = await this.workManager.updateTask(ack)
    }
 

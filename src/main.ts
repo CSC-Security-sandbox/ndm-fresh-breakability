@@ -37,7 +37,7 @@ async function bootstrap() {
      app.connectMicroservice({
       transport: Transport.RMQ,
       options: {
-        urls: rabbitMQConfig.uris,
+        urls: configService.get('app.rabbitmq.urls'),
         queue: rabbitMQConfig.taskQueueName,
         noAck: false,
         queueOptions: {
@@ -61,7 +61,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Job service')
     .setDescription('Job Management')
-    .addServer(serverEndpoint, `Environment`)
+    // .addServer(serverEndpoint, `Environment`)
     .setVersion('1.0')
     .build();
 
