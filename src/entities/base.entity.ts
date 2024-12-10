@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { Test, TestingModule } from '@nestjs/testing';
+
 
 
 export class Base {
