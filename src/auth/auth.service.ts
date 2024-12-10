@@ -4,7 +4,7 @@ import { User } from '../entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
-import { makeAxiosRequest } from 'src/utils/axios-request-utils';
+import { makeAxiosRequest } from '../utils/axios-request-utils';
  
 @Injectable()
 export class AuthService {

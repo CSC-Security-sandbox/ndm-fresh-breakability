@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @Injectable()
 export class PermissionService {

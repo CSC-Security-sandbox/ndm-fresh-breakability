@@ -10,7 +10,7 @@ import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
 import { UserRoleRelationDto } from './dto/user-role.dto';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @Injectable()
 export class UserRoleService {

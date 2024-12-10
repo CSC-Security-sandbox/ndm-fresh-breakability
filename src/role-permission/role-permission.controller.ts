@@ -15,7 +15,7 @@ import { UpdateRolePermissionDto } from './dto/update-role-permission.dto';
 import { ApiBody, ApiQuery, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RolePermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @ApiTags('role-permissions')
 @Controller('/api/v1/role-permissions')
