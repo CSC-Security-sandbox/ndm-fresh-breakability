@@ -15,7 +15,7 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AccountDescription } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @ApiTags('accounts')
 @Controller('/api/v1/accounts')

@@ -15,7 +15,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @ApiTags('users')
 @Controller('/api/v1/users')
