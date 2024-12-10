@@ -34,7 +34,7 @@ public class UserPermissionFetcher {
                 u.id AS user_id,
                 r.role_name,
                 array_agg(DISTINCT p.permission_name) AS permissions,
-                array_agg(DISTINCT ur.project_id) AS projects
+                COALESCE(array_agg(DISTINCT ur.project_id) FILTER (WHERE ur.project_id IS NOT NULL), '{}') AS projects
             FROM
                 migrateadmin.user_role ur
             JOIN

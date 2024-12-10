@@ -1,8 +1,11 @@
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+</head>
 <#import "template.ftl" as layout>
     <@layout.registrationLayout displayMessage=!messagesPerField.existsError('firstName', 'lastName' , 'email' ); section>
         <#if section="header">
             <nav class="border-blue-200 bg-blue-50 dark:bg-blue-800 dark:border-blue-700">
-                <div class="max-w-screen-xl navbarStyles flex flex-wrap items-center justify-between mx-auto p-4">
+                <div class="navbarStyles flex flex-wrap items-center justify-between mx-auto p-4">
                     <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
                         <div class="flex">
                             <div class="netappNavBarLogo"></div>
