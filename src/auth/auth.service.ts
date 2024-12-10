@@ -169,7 +169,6 @@ export class AuthService {
       });
   
       if (!enable) {
-        console.log(`reached----${(keycloakUser.id).trim()}`)
         await makeAxiosRequest({
           method: "OPTIONS",
           url: `${process.env.KEYCLOAK_BASE_URL}/${process.env.KEYCLOAK_REALM}/users/${(keycloakUser.id).toString().trim()}/logout`,
