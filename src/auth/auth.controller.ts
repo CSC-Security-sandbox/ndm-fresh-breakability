@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { User } from '../entities/user.entity';
-import { UserPermissionResponse } from './auth-user.type';
+import { UserPermissionResponse } from './user-permission-response-type';
 
 class InviteUserDto {
   username: string;

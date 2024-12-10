@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { first, last } from 'rxjs';
 import { UserRoleMap, UserRoleRelationDto } from './dto/user-role.dto';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any):Promise<any> {

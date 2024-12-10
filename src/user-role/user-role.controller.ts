@@ -17,7 +17,7 @@ import { ApiQuery, ApiTags, ApiOperation, ApiBody, ApiBearerAuth } from '@nestjs
 import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')

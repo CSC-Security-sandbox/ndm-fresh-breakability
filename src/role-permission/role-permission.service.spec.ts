@@ -11,7 +11,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
  
 describe('RolePermissionService', () => {
   let service: RolePermissionService;

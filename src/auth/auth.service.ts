@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserPermissionResponse } from './auth-user.type';
+import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from 'src/utils/axios-request-utils';
  
 @Injectable()

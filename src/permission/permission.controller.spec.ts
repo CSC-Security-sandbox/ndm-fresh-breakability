@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
 import { PermissionController } from './permission.controller';
 import { PermissionService } from './permission.service';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('PermissionController', () => {

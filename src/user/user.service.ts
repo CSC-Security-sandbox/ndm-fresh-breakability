@@ -9,7 +9,7 @@ import { Account } from '../entities/account.entity';
 import { Project } from '../entities/project.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 @Injectable()
 export class UserService {

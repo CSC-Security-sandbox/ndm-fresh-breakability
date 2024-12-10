@@ -10,7 +10,7 @@ import { User } from '../entities/user.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('RolePermissionController', () => {

@@ -7,7 +7,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
-import { UserPermissionResponse } from 'src/auth/auth-user.type';
+import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
 describe('RoleService', () => {
   let service: RoleService;
