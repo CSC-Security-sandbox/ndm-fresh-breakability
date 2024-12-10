@@ -5,6 +5,7 @@ import { DiscoveryModule } from './discovery/discovery.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { OverviewModule } from './overview/overview.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    DiscoveryModule
+    DiscoveryModule,
+    OverviewModule
   ],
   controllers: [AppController],
   providers: [AppService],

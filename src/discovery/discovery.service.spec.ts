@@ -34,14 +34,14 @@ describe('DiscoveryService', () => {
 
   describe('getDiscoveryByFileServerId', () => {
     it('should return transformed data based on the file server ID', async () => {
-      const mockData = { mount_path: '/test/mount', file_server: 'server1' };
+      const mockData = { path: '/test/mount', file_server: 'server1' };
       mockInventoryRepo.findOne.mockResolvedValue(mockData);
       mockInventoryRepo.find.mockResolvedValue([{ fileName: 'file1' }]);
 
       const result = await discoveryService.getDiscoveryByFileServerId('server1');
       expect(result).toEqual([{ root: 'mount', childs: [{ fileName: 'file1', childs: [] }] }]);
-      expect(mockInventoryRepo.findOne).toHaveBeenCalledWith({ where: { file_server: 'server1' } });
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { file_server: 'server1', parent_path: '/test/mount' } });
+      expect(mockInventoryRepo.findOne).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1' } });
+      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/mount' } });
     });
   });
 
@@ -52,7 +52,7 @@ describe('DiscoveryService', () => {
 
       const result = await discoveryService.getDiscoveryByFileServerIdAndParentPath('server1', '/test/path');
       expect(result).toEqual([{ fileName: 'file1', childs: [] }]);
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { file_server: 'server1', parent_path: '/test/path' } });
+      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/path' } });
     });
   });
 
@@ -63,7 +63,7 @@ describe('DiscoveryService', () => {
 
       const result = await discoveryService.getDataFromParentPath('server1', '/test/path');
       expect(result).toEqual(mockData);
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { file_server: 'server1', parent_path: '/test/path' } });
+      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/path' } });
     });
   });
 });
