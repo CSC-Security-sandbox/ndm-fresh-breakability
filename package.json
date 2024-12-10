@@ -111,6 +111,14 @@
       "/coverage",
       "/dist",
       "/test/"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      ".*\\.module\\.ts$",
+      "/coverage",
+      "/dist",
+      "/test/",
+      "/entities/"
     ]
   }
 }

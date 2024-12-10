@@ -2,6 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
+import { JobConfigEntity } from "./jobconfig.entity";
 
 @Entity({name:'volume', schema:'migrate'})
 export class VolumeEntity extends Base {
@@ -32,5 +33,8 @@ export class VolumeEntity extends Base {
     @ManyToOne(() => FileServerEntity, fileServer => fileServer.volumes, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
+
+    @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: false})
+    jobConfig: JobConfigEntity[]
 
 }

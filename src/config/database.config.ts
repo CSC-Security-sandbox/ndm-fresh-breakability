@@ -5,6 +5,8 @@ import { FileServerEntity } from "src/entities/fileserver.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { DataSourceOptions } from "typeorm";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import { JobRunEntity } from "src/entities/jobrun.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -16,10 +18,7 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         database: process.env.DB_NAME,
         synchronize: false,
         dropSchema: false,
-        ssl: {
-            rejectUnauthorized: false, 
-        },
         logging: true,
-        entities: [WorkerEntity, ConfigEntity, FileServerEntity, VolumeEntity, ProjectEntity],
+        entities: [WorkerEntity, ConfigEntity, FileServerEntity, VolumeEntity, ProjectEntity,JobConfigEntity,JobRunEntity],
         migrations: []
     }))

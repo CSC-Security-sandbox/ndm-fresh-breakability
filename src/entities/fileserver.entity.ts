@@ -39,7 +39,7 @@ export class FileServerEntity extends Base {
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;
 
-    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
+    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: false})
     volumes: VolumeEntity[]
 
     @ApiProperty({ description: 'is Refreshed Config' })

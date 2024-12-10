@@ -31,9 +31,27 @@ export class ConfigurationService {
         
         const findOptions: FindManyOptions<ConfigEntity> = {
           where: filter, order: { [sort]: order }, 
+          select: {
+            id: true,
+            configName: true,
+            configType: true,
+            projectId: true,
+            createdAt: true,
+            createdBy: true,
+            fileServers:{
+                id: true,
+                host: true,
+                serverType: true,
+                protocol: true,
+                userName: true,
+                isRefreshed: true,
+                createdAt: true,
+                createdBy: true,
+            }
+          },
           relations: {
             fileServers: true
-          }
+          },
         };
         let serverConfig = [], total = 0;
         if (page && limit) {
@@ -52,15 +70,48 @@ export class ConfigurationService {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
         const config =  await this.configEntity.findOne({
+            select: {
+                id: true,
+                configName: true,
+                configType: true,
+                projectId: true,
+                fileServers:{
+                    id: true,
+                    host: true,
+                    serverType: true,
+                    protocol: true,
+                    userName: true,
+                    isRefreshed: true,
+                    volumes:{
+                        id: true,
+                        volumePath: true,
+                        jobConfig: {
+                            id: true,
+                            jobType: true,
+                            jobRunDetails: {
+                                id: true,
+                                status: true
+                            }
+                        }
+                    }
+                }
+            },
             where: { id },
             relations: {
                 project: true,
                 fileServers: {
                     workers: true,
-                    volumes: true
+                    volumes: {
+                        jobConfig: {
+                              jobRunDetails: true  
+                        }    
+                    }
+                        
                 }
             }
         });
+
+        
         if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
         return config
     }
