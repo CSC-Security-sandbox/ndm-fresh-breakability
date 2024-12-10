@@ -28,7 +28,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
-    "@netapp-cloud-datamigrate/auth-lib": "^0.0.1",
+    "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.2",
     "axios": "^1.7.7",
     "class-transformer": "^0.5.1",
