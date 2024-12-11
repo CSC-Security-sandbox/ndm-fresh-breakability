@@ -3,7 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from "./base.entity";
 import { VolumeEntity } from "./volume.entity";
 
-@Entity({name:'inventory', schema:'migrate'})
+@Entity({name:'inventory', schema:'migrateadmin'})
 export class InventoryEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
