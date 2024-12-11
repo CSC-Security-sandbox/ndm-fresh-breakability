@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RabbitmqController } from './rabbitmq.controller';
+import { RabbitmqService } from './rabbitmq.service';
 
 describe('RabbitmqController', () => {
   let controller: RabbitmqController;
@@ -7,6 +8,14 @@ describe('RabbitmqController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RabbitmqController],
+      providers: [
+        {
+          provide: RabbitmqService,
+          useValue: {
+            send: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     controller = module.get<RabbitmqController>(RabbitmqController);

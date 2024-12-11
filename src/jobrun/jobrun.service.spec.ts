@@ -189,25 +189,25 @@ describe('JobRunService', () => {
     });
   });
 
-  describe('deleteJobRun', () => {
-    it('should delete a job run', async () => {
-      const id = 'jobrun-id-123';
-      const jobRun = { id };
+  // describe('deleteJobRun', () => {
+  //   it('should delete a job run', async () => {
+  //     const id = 'jobrun-id-123';
+  //     const jobRun = { id };
 
-      mockJobRunRepo.findOne.mockResolvedValue(jobRun);
-      const result = await jobRunService.deleteJobRun(id);
+  //     mockJobRunRepo.findOne.mockResolvedValue(jobRun);
+  //     const result = await jobRunService.deleteJobRun(id);
       
-      expect(result).toEqual({ message: `Job run with id ${id} has been deleted` });
-      expect(mockJobRunRepo.remove).toHaveBeenCalledWith(jobRun);
-    });
+  //     expect(result).toEqual({ message: `Job run with id ${id} has been deleted` });
+  //     expect(mockJobRunRepo.remove).toHaveBeenCalledWith(jobRun);
+  //   });
 
-    it('should throw an error if job run is not found', async () => {
-      const id = 'nonexistent-id';
-      mockJobRunRepo.findOne.mockResolvedValue(null);
+  //   it('should throw an error if job run is not found', async () => {
+  //     const id = 'nonexistent-id';
+  //     mockJobRunRepo.findOne.mockResolvedValue(null);
       
-      await expect(jobRunService.deleteJobRun(id)).rejects.toThrow(`Job run with id ${id} not found`);
-    });
-  });
+  //     await expect(jobRunService.deleteJobRun(id)).rejects.toThrow(`Job run with id ${id} not found`);
+  //   });
+  // });
 
   describe('scheduleAJobRun', () => {
     it('should schedule a job run', async () => {

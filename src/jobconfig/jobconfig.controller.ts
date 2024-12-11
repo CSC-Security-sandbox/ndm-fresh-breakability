@@ -1,10 +1,12 @@
 import { JobMappingService } from './../jobmappings/jobmapping.service';
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { JobConfigService } from './jobconfig.service';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { CreateJobConfigDto, IdMapping } from '../dto/jobconfig.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobIdMappingType } from '../entities/jobmapping.entity';
+import { JobListingDTO } from 'src/dto/joblisting.dto';
+import { FindallJobDetailsPageDto } from 'src/dto/findallJobDetails.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -18,8 +20,8 @@ export class JobConfigController {
   @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
   @Post()
   async createJobConfig(@Body() jobConfigData: CreateJobConfigDto): Promise<JobConfigEntity> {
-    const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
-    
+    //const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
+    const jobConfig=undefined
     // Prepare job mappings based on the sid, uid, gid mappings
     const jobMappings = [];
     if (!!jobConfigData.sidMapping && jobConfigData.sidMapping.length) jobConfigData.sidMapping.forEach((mapping: IdMapping): void => {
@@ -55,11 +57,11 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
   @Get()
-  async getAllJobConfig(): Promise<JobConfigEntity[]> {
+  async getAllJobConfig(): Promise<JobListingDTO[]> {
     return await this.jobConfigService.getAllJobConfig();
   }
 
-  @ApiOperation({ summary: 'Get job by ID' })
+  @ApiOperation({ summary: 'Get jobfindallConfigPageDto: import("/Users/avadoot.narvekar/code_base/netapp/netapp_code_base/jobs-service/src/dto/findallconfig.dto").FindallConfigPageDto by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get(':id')

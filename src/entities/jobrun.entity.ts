@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { JobConfigEntity } from './jobconfig.entity';
 
 export enum JobRunStatus {
   Ready = 'READY',
@@ -38,4 +39,7 @@ export class JobRunEntity extends Base {
   @ApiProperty({ description: 'Job ID associated with this run' })
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
+
+  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
+  jobConfig: JobConfigEntity; 
 }

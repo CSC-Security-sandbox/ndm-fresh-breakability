@@ -7,6 +7,7 @@ import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 
 @Injectable()
 export class JobRunService {
+
   private readonly logger = new Logger(JobRunService.name);
 
   constructor(
@@ -82,4 +83,5 @@ export class JobRunService {
     const createdJobRun = this.jobRunRepo.create(jobRun);
     return this.jobRunRepo.save(createdJobRun);
   }
+
 }

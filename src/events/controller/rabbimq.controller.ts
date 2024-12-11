@@ -19,11 +19,11 @@ export class RabbiMqController {
     }
 
     // fetch mount event
-    @MessagePattern(RabbitMq.CreateTaskList)
-    public async handleTasksMessage(@Payload() data: TaskMessage, @Ctx() context: RmqContext) {
-        const channel = context.getChannelRef();
-        const originalMsg = context.getMessage();
-        await this.eventsService.createTasks(data);
-        channel.ack(originalMsg);
-    }
+    // @MessagePattern(RabbitMq.CreateTaskList)
+    // public async handleTasksMessage(@Payload() data: TaskMessage, @Ctx() context: RmqContext) {
+    //     const channel = context.getChannelRef();
+    //     const originalMsg = context.getMessage();
+    //     await this.eventsService.createTasks(data);
+    //     channel.ack(originalMsg);
+    // }
 }

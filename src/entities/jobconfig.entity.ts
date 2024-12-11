@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
 import { Base } from './base.entity';
+import { JobRunEntity } from './jobrun.entity';
+import { VolumeEntity } from './volume.entity';
 
 export enum JobStatus {
   Active = 'ACTIVE',
@@ -68,12 +70,12 @@ export class JobConfigEntity extends Base {
   preserveAccessTime: boolean;
 
   @ApiProperty({ description: 'Job schedule configuration' })
-  @Column({ name: 'job_schedule', type: 'jsonb' })
-  jobSchedule: JobSchedule;
+  @Column({ name: 'first_run_at', type: 'timestamp' ,nullable: true})
+  firstRunAt: Timestamp;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
-  @Column({ name: 'incremental_schedule', type: 'jsonb', nullable: true })
-  incrementalSchedule: IncrementalSchedule;
+  @Column({ name: 'future_schedule_at', type: 'text', nullable: true })
+  futureScheduleAt: string;
 
   @ApiProperty({ description: 'UUID of the source path configuration' })
   @Column({ type: 'uuid', nullable: false, name: 'source_path_id' })
@@ -82,4 +84,11 @@ export class JobConfigEntity extends Base {
   @ApiProperty({ description: 'UUID of the target path configuration' })
   @Column({ type: 'uuid', nullable: true, name: 'target_path_id' })
   targetPathId: string;
+
+  @OneToMany(() => JobRunEntity, jobRun => jobRun.jobConfig, { cascade: true, eager: false })
+  jobRunDetails: JobRunEntity[];
+
+  @ManyToOne(() => VolumeEntity, volume => volume.jobConfig, { onDelete: 'CASCADE', orphanedRowAction: 'delete' })
+  @JoinColumn({ name: 'source_path_id' })
+  paths: VolumeEntity
 }

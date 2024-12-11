@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { InventoryEntity } from "./inventory.entity";
+import { JobConfigEntity } from "./jobconfig.entity";
 
 @Entity({name:'volume', schema:'migrate'})
 export class VolumeEntity extends Base {
@@ -36,4 +37,7 @@ export class VolumeEntity extends Base {
 
     @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: true})
     inventory: InventoryEntity[]
+
+    @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: true})
+    jobConfig: JobConfigEntity[]
 }
