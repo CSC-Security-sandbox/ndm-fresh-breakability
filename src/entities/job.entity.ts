@@ -3,7 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 't
 import { Base } from './base.entity';
 import { ProjectEntity } from './project.entity';
 
-@Entity({ name: 'job' })
+@Entity({ name: 'job' , schema:'migrateadmin'})
 export class JobEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')
