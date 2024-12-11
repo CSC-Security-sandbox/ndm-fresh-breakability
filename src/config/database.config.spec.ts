@@ -6,6 +6,8 @@ import { DataSourceOptions } from 'typeorm';
 
 import typeormConfig from 'src/config/database.config';
 import { VolumeEntity } from "src/entities/volume.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import { JobRunEntity } from "src/entities/jobrun.entity";
 
 
 describe('TypeORM Config', () => {
@@ -38,17 +40,15 @@ describe('TypeORM Config', () => {
       database: 'testdb',
       synchronize: false,
       dropSchema: false,
-      ssl: {
-        rejectUnauthorized: false,
-      },
       logging: true,
       entities: [
         WorkerEntity,
-
         ConfigEntity,
         FileServerEntity,
         VolumeEntity,
         ProjectEntity,
+        JobConfigEntity,
+        JobRunEntity
       ],
       migrations: []
     };
