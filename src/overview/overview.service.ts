@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { log } from 'console';
-import { config } from 'dotenv';
 import { OverviewDTO } from 'src/overview/overview.dto';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
@@ -84,7 +82,6 @@ export class OverviewService {
                         .select('SUM(inventory.fileSize)', 'totalSize')
                         .addSelect('SUM(inventory.fileSize)', 'totalSize');
                 const jobRunId = lastScanRun[0].id;
-                log(jobRunId);
                 if (lastScanRun[0].id) {
                     inventoryQueryBuilder.andWhere('job_run_id = :jobRunId', { jobRunId });
                 }
