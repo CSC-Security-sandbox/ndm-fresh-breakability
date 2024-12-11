@@ -12,6 +12,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.logging.Logger;
+import java.util.List;
+import java.util.ArrayList;
  
 /**
 * An implementation of the Keycloak `EventListenerProvider` interface to handle user events.
@@ -52,7 +54,7 @@ public class UserProfileEventListener implements EventListenerProvider {
      */
     @Override
     public void onEvent(AdminEvent event, boolean includeRepresentation) {
-        logger.info("Admin event received: " + event.getOperationType());
+        logger.info(String.format("Admin event received: %s", event.getOperationType()));
     }
  
     /**
@@ -63,13 +65,14 @@ public class UserProfileEventListener implements EventListenerProvider {
      */
     private void handleUpdateProfileEvent(Event event) {
         String username = event.getDetails().get("username");
-        String updatedEmail = event.getDetails().get("updated_email");
- 
+        String updatedEmail = (event.getDetails().get("updated_email") == null) ?  event.getDetails().get("username") : event.getDetails().get("updated_email");
+        String updatedLastName = event.getDetails().get("updated_last_name");
+        String updatedFirstName = event.getDetails().get("updated_first_name");
         // Validate event details
         if (ValidationUtil.isValid(username) && ValidationUtil.isValid(updatedEmail)) {
-            updateUserEmailInDatabase(username, updatedEmail);
+            updateUserEmailInDatabase(username, updatedEmail, updatedLastName, updatedFirstName);
         } else {
-            logger.warning("Username or updated email is missing or invalid in the event details.");
+            logger.warning(String.format("Username or updated email is missing or invalid in the event details."));
         }
     }
  
@@ -79,25 +82,39 @@ public class UserProfileEventListener implements EventListenerProvider {
      * @param username    the user's current username
      * @param updatedEmail the new email to update
      */
-    private void updateUserEmailInDatabase(String username, String updatedEmail) {
-        String query = "UPDATE migrateadmin.\"user\" SET email = ? WHERE email = ?";
- 
-        // Execute the database update
+    private void updateUserEmailInDatabase(String username, String updatedEmail, String updatedLastName, String updatedFirstName) {
+        StringBuilder queryBuilder = new StringBuilder("UPDATE migrateadmin.\"user\" SET email = ?");
+        List<Object> parameters = new ArrayList<>();
+        parameters.add(updatedEmail);
+     
+        if (updatedFirstName != null) {
+            queryBuilder.append(", first_name = ?");
+            parameters.add(updatedFirstName);
+        }
+        if (updatedLastName != null) {
+            queryBuilder.append(", last_name = ?");
+            parameters.add(updatedLastName);
+        }
+     
+        queryBuilder.append(" WHERE email = ?");
+        parameters.add(username);
+     
         try (Connection connection = DatabaseConnectionUtil.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
- 
-            statement.setString(1, updatedEmail);
-            statement.setString(2, username);
+             PreparedStatement statement = connection.prepareStatement(queryBuilder.toString())) {
+     
+            for (int i = 0; i < parameters.size(); i++) {
+                statement.setObject(i + 1, parameters.get(i));
+            }
+     
             int rowsAffected = statement.executeUpdate();
- 
-            // Log the outcome
+          
             if (rowsAffected > 0) {
-                logger.info("User email updated successfully in the database for username: " + username);
+                logger.info(String.format("User email and optionally first/last name updated successfully in the database for username: %s" , username));
             } else {
-                logger.warning("No user found with username: " + username);
+                logger.warning(String.format("No user found with username: %s", username));
             }
         } catch (SQLException e) {
-            logger.severe("Database connection error while updating user email: " + e.getMessage());
+            logger.severe(String.format("Database connection error while updating user details: %s" , e.getMessage()));
             throw new RuntimeException(e);
         }
     }
