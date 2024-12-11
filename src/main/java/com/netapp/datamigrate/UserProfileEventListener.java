@@ -54,7 +54,7 @@ public class UserProfileEventListener implements EventListenerProvider {
      */
     @Override
     public void onEvent(AdminEvent event, boolean includeRepresentation) {
-        logger.info("Admin event received: " + event.getOperationType());
+        logger.info(String.format("Admin event received: %s", event.getOperationType()));
     }
  
     /**
@@ -72,7 +72,7 @@ public class UserProfileEventListener implements EventListenerProvider {
         if (ValidationUtil.isValid(username) && ValidationUtil.isValid(updatedEmail)) {
             updateUserEmailInDatabase(username, updatedEmail, updatedLastName, updatedFirstName);
         } else {
-            logger.warning("Username or updated email is missing or invalid in the event details.");
+            logger.warning(String.format("Username or updated email is missing or invalid in the event details."));
         }
     }
  
@@ -109,12 +109,12 @@ public class UserProfileEventListener implements EventListenerProvider {
             int rowsAffected = statement.executeUpdate();
           
             if (rowsAffected > 0) {
-                logger.info("User email and optionally first/last name updated successfully in the database for username: " + username);
+                logger.info(String.format("User email and optionally first/last name updated successfully in the database for username: %s" , username));
             } else {
-                logger.warning("No user found with username: " + username);
+                logger.warning(String.format("No user found with username: %s", username));
             }
         } catch (SQLException e) {
-            logger.severe("Database connection error while updating user details: " + e.getMessage());
+            logger.severe(String.format("Database connection error while updating user details: %s" , e.getMessage()));
             throw new RuntimeException(e);
         }
     }

@@ -68,7 +68,7 @@ public class UserPermissionFetcher {
                 rolePermissionsList.add(roleData);
             }
         } catch (SQLException e) {
-            logger.severe("Database connection error: " + e.getMessage());
+            logger.severe(String.format("Database connection error: %s" , e.getMessage()));
             throw new RuntimeException(e);
         }
  
