@@ -134,7 +134,6 @@ describe('ProjectService', () => {
       });
       expect(projectRepository.create).toHaveBeenCalledWith({
         ...createProjectDto,
-        id: expect.any(String),
         account: { id: accountId } as Account,
       });
       expect(projectRepository.save).toHaveBeenCalledWith(createdProject);

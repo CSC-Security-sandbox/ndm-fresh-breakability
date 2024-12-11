@@ -46,17 +46,15 @@ export class UserService {
   async findAll(
     page: number = 1,
     limit: number = 10,
-    sortField: string = 'id',
+    sortField: string = "id",
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
   ): Promise<User[]> {
     const options: FindManyOptions<User> = {
       skip: (page - 1) * limit,
       take: limit,
-      order: {
-        [sortField]: sortOrder,
-      },
-      where: filter
+      order: { [sortField]: sortOrder },
+      where: filter,
     };
    
     const users = await this.userRepository.find(options);
@@ -67,12 +65,12 @@ export class UserService {
           where: { id: user.created_by },
           select: ['id', 'email', 'user_status'],
         });
-
+   
         const updatedByUser = await this.userRepository.findOne({
           where: { id: user.updated_by },
           select: ['id', 'email', 'user_status'],
         });
-
+   
         return {
           ...user,
           created_by: createdByUser,
