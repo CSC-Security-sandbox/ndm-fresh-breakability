@@ -13,17 +13,17 @@ export class DiscoveryService {
 
     async getDiscoveryByFileServerId(fileServerId: string) {
         const singleRecord = await this.inventoryRepo.findOne({
-            where: { file_server: fileServerId }
+            where: { fileServerPathId: fileServerId }
         });
 
-        const data = await this.getDataFromParentPath(fileServerId, singleRecord.mount_path);
+        const data = await this.getDataFromParentPath(fileServerId, singleRecord.path);
         const transformedData = data.map((item) => ({
             ...item,
             childs: []
         }));
         
         return [{
-            root: path.basename(singleRecord.mount_path),
+            root: path.basename(singleRecord.path),
             childs: transformedData,
         }];
     }
@@ -38,7 +38,7 @@ export class DiscoveryService {
 
     getDataFromParentPath = async (fileServerId: string, parentPath: string) => {
         return await this.inventoryRepo.find({
-            where: { file_server: fileServerId, parent_path: parentPath }
+            where: { fileServerPathId: fileServerId, parentPath: parentPath }
         });
     }
 
