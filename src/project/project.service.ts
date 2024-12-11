@@ -41,7 +41,6 @@ export class ProjectService {
 
     const project = this.projectRepository.create({
       ...createProjectDto,
-      id: userPermissionResponse.user.id,
       account,
     });
     project.created_by = userPermissionResponse.user.id

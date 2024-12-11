@@ -167,7 +167,8 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'findAll').mockResolvedValue(users);
 
-    expect(await controller.findAll()).toEqual(users);
+    expect(await controller.findAll(1,1,'id','ASC', "{}")).toEqual(users);
+    expect(await controller.findAll(undefined,undefined,undefined,undefined, undefined)).toEqual(users);
   });
 
   it('should call service method getUserProjectsAndPermissions with email and projectId', async () => {
