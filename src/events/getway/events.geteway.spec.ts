@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { EventsGateway } from './events.gateway';
 import { FileConfigService } from '../service/config/config.service';
 import { RequestTrackService } from '../service/requesttack/requesttrack.service';
+import { WorkManager } from '../workmanager/workmanager.service';
 
 jest.mock('src/auth/ws-jwt.middleware');
 jest.mock('src/auth/ws-jwt/ws-jwt.guard');
@@ -98,6 +99,10 @@ describe('EventsGateway', () => {
         {
             provide: getRepositoryToken(ProjectEntity),
             useValue: mockRepository
+        },
+        {
+          provide: WorkManager,
+          useValue: {}
         },
         {
           provide: FileConfigService,

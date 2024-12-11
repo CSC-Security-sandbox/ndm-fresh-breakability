@@ -88,3 +88,10 @@ export interface ListPathRes{
     }]
 }
 
+export interface UnScannedRes {
+    jobRunId: string,
+    workerId: string,
+    transactionId: string,
+    paths: string[]
+}
+

@@ -10,7 +10,7 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { ListPathRes, ValidateConnectionRes } from '../events.type';
+import { ListPathRes, UnScannedRes, ValidateConnectionRes } from '../events.type';
 import { WorkManager } from '../workmanager/workmanager.service';
 import { RequestTrackService } from '../service/requesttack/requesttrack.service';
 import { ScanCompletedPayload } from '../workmanager/workmanager.types';
@@ -138,8 +138,15 @@ export class EventsGateway implements OnGatewayInit{
 
    @SubscribeMessage(SocketEvents.TASK_COMPLETED)
    async taskCompleted(client: Socket, ack: ScanCompletedPayload) {
-    const task = await this.workManager.updateTask(ack)
+    await this.workManager.updateTask(ack)
    }
 
+   @SubscribeMessage(SocketEvents.TASK_UN_SCANNED)
+   async taskUnScanned(client: Socket, ack: UnScannedRes) {
+    this.logger.debug(ack)
+    await this.workManager.createUnScannedTask(ack)
+   }
+
+   
 }
 

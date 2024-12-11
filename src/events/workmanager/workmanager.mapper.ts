@@ -10,7 +10,6 @@ export const buildScanPayload = (path: string) => ({
     }
 })
 
-
 export const buildRequest = (payload: TaskEventPayload) => {
     switch (payload.taskType){
         case JobType.Scan: 

@@ -9,7 +9,6 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { RabbiMqController } from './controller/rabbimq.controller';
-import { TaskService } from 'src/tasks/tasks.service';
 import { TaskEntity } from 'src/entities/task.entity';
 import { WorkManager } from './workmanager/workmanager.service';
 import { OperationsEntity } from 'src/entities/operation.entity';
@@ -24,7 +23,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
   imports: [
     TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity,OperationsEntity, WorkerJobRunMap]),],
   exports: [EventsGateway],
-  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, TaskService, WorkManager],
+  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, WorkManager],
   controllers: [EventsController, RabbiMqController]
 })
 export class EventsModule {}

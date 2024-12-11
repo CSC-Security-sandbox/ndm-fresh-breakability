@@ -24,6 +24,7 @@ export class RabbiMqController {
         channel.ack(originalMsg);
     }
 
+    /* deprecated */
     @MessagePattern(RabbitMq.CreateTaskList)
     public async handleTasksMessage(@Payload() data: RMQTask, @Ctx() context: RmqContext) {
         const channel = context.getChannelRef();

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobConfigService } from './jobconfig.service';
-import { JobConfigEntity, JobScheduleType, JobStatus, JobType } from '../entities/jobconfig.entity';
+import { JobConfigEntity, } from '../entities/jobconfig.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
@@ -17,11 +17,11 @@ const mockJobEntity: JobConfigEntity = {
   excludeFilePatterns: '',
   excludeOlderThan: new Date(),
   preserveAccessTime: false,
-  incrementalSchedule: null,
-  jobSchedule: {
-    type: JobScheduleType.Date,
-    schedule: new Date().toString()
-  },
+  firstRunAt: '',
+  futureSchedule: null,
+  jobRun: null,
+  sourcePath:null,
+  targetPath:null,
   status: JobStatus.Active
 };
 

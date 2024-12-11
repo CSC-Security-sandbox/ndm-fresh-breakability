@@ -1,19 +1,14 @@
-import { MiddlewareConsumer, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import { EventsModule } from './events/events.module';
 import { JobConfigModule } from './jobconfig/jobconfig.module';
-import { WorkerModule } from './workers/workers.module';
-import { JobRunModule } from './jobrun/jobrun.module';
 import { JobMappingModule } from './jobmappings/jobmapping.module';
-import { TaskModule } from './tasks/tasks.module';
-import appConfig from './config/app.config';
-import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
-import { AppConfigModule } from './config/config.module';
-import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-import { CacheModule } from '@nestjs/cache-manager';
+import { JobRunModule } from './jobrun/jobrun.module';
+import { WorkerModule } from './workers/workers.module';
 
 @Module({
   imports: [
@@ -26,7 +21,7 @@ import { CacheModule } from '@nestjs/cache-manager';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, JobMappingModule, TaskModule, RabbitmqModule, AppConfigModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, JobMappingModule
   ],
   controllers: [],
   providers: [],

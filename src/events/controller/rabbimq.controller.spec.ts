@@ -4,6 +4,7 @@ import { RabbiMqController } from './rabbimq.controller';
 import { ListPathsMsg } from './rabbitmq.types';
 import { Protocol } from 'src/constants/enums';
 import { EventsService } from '../service/events/events.service';
+import { WorkManager } from '../workmanager/workmanager.service';
 
 const mockEventsService = {
   fetchPathsByCred: jest.fn(),
@@ -40,7 +41,13 @@ describe('RabbiMqController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RabbiMqController],
-      providers: [{ provide: EventsService, useValue: mockEventsService }],
+      providers: [
+        { provide: EventsService, useValue: mockEventsService },
+        {
+          provide: WorkManager,
+          useValue: {}
+        }
+      ],
     }).compile();
 
     controller = module.get<RabbiMqController>(RabbiMqController);
