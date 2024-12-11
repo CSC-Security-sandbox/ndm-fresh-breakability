@@ -7,7 +7,7 @@ import { JobRunStatus } from 'src/constants/enums';
 
 
 
-@Entity({ name: 'jobrun', schema: 'migrate' })
+@Entity({ name: 'jobrun', schema: 'migrateadmin' })
 export class JobRunEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')

@@ -4,7 +4,7 @@ import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 
 
-@Entity({name:'inventory', schema:'migrate'})
+@Entity({name:'inventory', schema:'migrateadmin'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['fileServerPathId'])
