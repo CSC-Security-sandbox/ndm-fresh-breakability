@@ -6,9 +6,6 @@ import { EventsModule } from './events/events.module';
 import { JobConfigModule } from './jobconfig/jobconfig.module';
 import { WorkerModule } from './workers/workers.module';
 import { JobRunModule } from './jobrun/jobrun.module';
-import { SchedularModule } from './schedular/schedule.module';
-import { JobMappingModule } from './jobmappings/jobmapping.module';
-import { TaskModule } from './tasks/tasks.module';
 import appConfig from './config/app.config';
 import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
 
@@ -21,7 +18,7 @@ import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, SchedularModule, JobMappingModule, TaskModule, RabbitmqModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule, RabbitmqModule
   ],
   controllers: [],
   providers: [],

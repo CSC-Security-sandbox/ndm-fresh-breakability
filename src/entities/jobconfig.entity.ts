@@ -14,7 +14,7 @@ export class IncrementalSchedule {
   schedule: string;
 }
 
-@Entity({ name: 'jobconfig', schema: 'migrate' })
+@Entity({ name: 'jobconfig', schema: 'migrateadmin' })
 export class JobConfigEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')

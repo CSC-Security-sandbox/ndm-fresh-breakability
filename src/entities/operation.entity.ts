@@ -5,7 +5,7 @@ import { ErrorDetails, OperationStatus, OperationType } from 'src/constants/enum
 
 
 
-@Entity({ name: 'operations', schema: 'migrate' })
+@Entity({ name: 'operations', schema: 'migrateadmin' })
 @Index('idx_task_id', ['taskId'])
 @Index('idx_operation_type', ['operationType'])
 export class OperationEntity extends Base {

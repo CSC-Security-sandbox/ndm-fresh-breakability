@@ -5,8 +5,8 @@ import { OperationEntity } from './operation.entity';
 import { TaskStatus, TaskType } from 'src/constants/enums';
 
 
-@Entity({ name: 'tasks', schema: 'migrate' })
-@Index('idx_job_run_id', ['jobRunId'])
+@Entity({ name: 'tasks', schema: 'migrateadmin' })
+@Index('idx_task_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])
 export class TaskEntity extends Base {
