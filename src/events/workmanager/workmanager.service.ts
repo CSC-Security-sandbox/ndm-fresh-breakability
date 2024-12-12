@@ -95,8 +95,8 @@ export class WorkManager{
                 operationType: OperationType.SCAN,
                 request: buildScanPayload(path)
             }))
-            const created= await this.operationsRepo.save(operations)
-            this.logger.log(created)
+            await this.operationsRepo.save(operations)
+            // this.logger.log(created)
             const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
             // Notify worker
             workers.forEach(async worker => {
