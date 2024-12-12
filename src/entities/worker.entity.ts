@@ -7,7 +7,7 @@ import { FileServerEntity } from './fileserver.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 
 
-@Entity({name:'worker', schema:'migrateadmin'})
+@Entity({name:'worker', schema:'migrate'})
 export class WorkerEntity extends Base  {
   @ApiProperty({ description: 'workerId' })
   @PrimaryColumn({ type: 'uuid', name: 'id' })

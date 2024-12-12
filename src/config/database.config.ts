@@ -23,7 +23,7 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         username: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
-        synchronize: false,
+        synchronize: true,
         dropSchema: false,
         logging: false,
         entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap],

@@ -40,9 +40,9 @@ export interface ScanCompletedCommands{
   fPath: string,
   ops: {
     0 : {
-      cmd: string
+      cmd?: string
       status: string
-      error: any
+      error?: any
     }
   }
 }
@@ -54,6 +54,6 @@ export interface ScanCompletedPayload{
   status: string,
   workerId: string,
   sPath: string,
-  tPath: string | null,
+  tPath?: string | null,
   commands: ScanCompletedCommands[]
 }

@@ -157,20 +157,4 @@ export class JobRunService {
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
-  
-  // async scheduleAJobRun(jobId: string) {
-  //   const job = await this.jobConfigService.getJobConfigById(jobId);
-  //   if (!job) {
-  //     throw new Error(`Job with id ${jobId} not found`);
-  //   }
-  //   const jobRun: Partial<JobRunDto> = {
-  //     status: JobRunStatus.Ready,
-  //     startTime: new Date(),
-  //     iterationNumber: 1,
-  //     jobConfigId: job.id,
-  //   };
-  //   this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
-  //   const createdJobRun = this.jobRunRepo.create(jobRun);
-  //   return this.jobRunRepo.save(createdJobRun);
-  // }
 }

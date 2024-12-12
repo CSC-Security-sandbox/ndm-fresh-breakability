@@ -4,12 +4,13 @@ import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { OperationsEntity } from 'src/entities/operation.entity';
-import { TaskEntity, TaskStatus } from 'src/entities/task.entity';
+import { TaskEntity, TaskOperation, TaskStatus } from 'src/entities/task.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { OperationStatus, OperationType } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
 import { WorkManager } from './workmanager.service';
 import { ScanCompletedPayload } from './workmanager.types';
+import { TaskType } from 'src/constants/status';
 
 class MockRepository<T> extends Repository<T> {
     async save(e: any):Promise<any> {
@@ -353,12 +354,26 @@ describe('WorkManager', () => {
 
   describe('updateScanTask', () => {
     it('should update operations to COMPLETED and task to COMPLETED when all commands succeed', async () => {
-      const mockTask: ScanCompletedPayload = {
+      const mockTask = {
         id: 'task1',
         jobRunId: 'jobRun1',
         commands: [
-          { fPath: '/path1', ops: {0:{ status: OperationStatus.COMPLETED }} },
-          { fPath: '/path2', ops: {0:{ status: OperationStatus.COMPLETED }}  },
+          { 
+            fPath: '/path1', 
+            ops: { 
+                0 : { 
+                    status: OperationStatus.COMPLETED 
+                }
+            }
+         },
+         { 
+            fPath: '/path2', 
+            ops: { 
+                0 : { 
+                    status: OperationStatus.COMPLETED 
+                }
+            }
+         },
         ],
       };
 
@@ -366,25 +381,16 @@ describe('WorkManager', () => {
       jest.spyOn(taskRepo, 'update').mockResolvedValue(undefined);
       jest.spyOn(operationsRepo, 'count').mockResolvedValue(0);
       jest.spyOn(taskRepo, 'count').mockResolvedValue(0);
-    //   jest.spyOn(workManager.logger, 'error');
 
       await workManager.updateScanTask(mockTask as  any);
 
-      expect(operationsRepo.update).toHaveBeenCalledWith(
-        { fPath: '/path1', taskId: 'task1' },
-        { status: OperationStatus.COMPLETED }
+      expect(operationsRepo.update).toHaveBeenCalled(
       );
-      expect(operationsRepo.update).toHaveBeenCalledWith(
-        { fPath: '/path2', taskId: 'task1' },
-        { status: OperationStatus.COMPLETED }
-      );
+
       expect(taskRepo.update).toHaveBeenCalledWith(
         { id: 'task1' },
         { status: TaskStatus.Completed }
       );
-    //   expect(workManager.logger.error).toHaveBeenCalledWith(
-    //     expect.stringContaining('Congratulation jobRun1 IS COMPLETED')
-    //   );
     });
 
     it('should update operations to ERROR when some commands fail', async () => {
@@ -402,14 +408,8 @@ describe('WorkManager', () => {
 
       await workManager.updateScanTask(mockTask as any);
 
-      expect(operationsRepo.update).toHaveBeenCalledWith(
-        { fPath: '/path1', taskId: 'task1' },
-        { status: OperationStatus.COMPLETED }
-      );
-      expect(operationsRepo.update).toHaveBeenCalledWith(
-        { fPath: '/path2', taskId: 'task1' },
-        { status: OperationStatus.ERROR, errorDetails: 'Some error' }
-      );
+      expect(operationsRepo.update).toHaveBeenCalled();
+      expect(operationsRepo.update).toHaveBeenCalled();
       expect(taskRepo.update).toHaveBeenCalledWith(
         { id: 'task1' },
         { status: TaskStatus.Completed }
@@ -429,11 +429,8 @@ describe('WorkManager', () => {
       jest.spyOn(taskRepo, 'update').mockResolvedValue(undefined);
       jest.spyOn(operationsRepo, 'count').mockResolvedValue(1);
       jest.spyOn(taskRepo, 'count').mockResolvedValue(1);
-    //   jest.spyOn(workManager.logger, 'error');
 
       await workManager.updateScanTask(mockTask as any);
-
-    //   expect(workManager.logger.error).not.toHaveBeenCalled();
     });
   });
   

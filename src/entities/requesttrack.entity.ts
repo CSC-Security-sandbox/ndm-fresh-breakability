@@ -5,7 +5,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 't
 import { Base } from './base.entity';
 import { WorkerEntity } from './worker.entity';
 
-@Entity({name:'request_track', schema:'migrateadmin'})
+@Entity({name:'request_track', schema:'migrate'})
 export class RequestTrackEntity extends Base {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')
