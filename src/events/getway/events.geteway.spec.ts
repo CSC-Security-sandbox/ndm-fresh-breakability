@@ -54,6 +54,7 @@ describe('EventsGateway', () => {
   let mockProjectRepository: MockRepositor<ProjectEntity>
   let fileConfigService: FileConfigService;
   let requestTrackService: RequestTrackService
+  let workManager: WorkManager
 
   beforeEach(async () => {
     mockSocket = {
@@ -102,7 +103,11 @@ describe('EventsGateway', () => {
         },
         {
           provide: WorkManager,
-          useValue: {}
+          useValue: {
+            assignWork: jest.fn(),
+            updateTask: jest.fn(),
+            createUnScannedTask: jest.fn(),
+          }
         },
         {
           provide: FileConfigService,
@@ -115,7 +120,8 @@ describe('EventsGateway', () => {
         {
           provide: RequestTrackService,
           useValue : {
-            validateConnectionACk: jest.fn()
+            validateConnectionACk: jest.fn(),
+            listPathAck:  jest.fn()
           }
         }
       ],
@@ -125,6 +131,8 @@ describe('EventsGateway', () => {
     mockWorkerRepository = module.get<MockRepositor<WorkerEntity>>(getRepositoryToken(WorkerEntity));
     mockRequestTrackRepository = module.get<MockRepositor<RequestTrackEntity>>(getRepositoryToken(RequestTrackEntity));
     mockProjectRepository = module.get<MockRepositor<ProjectEntity>>(getRepositoryToken(ProjectEntity));
+    requestTrackService=module.get<RequestTrackService>(RequestTrackService)
+    workManager=module.get<WorkManager>(WorkManager)
   });
 
   it('should be defined', () => {
@@ -240,4 +248,48 @@ describe('EventsGateway', () => {
     });
     
   });
+
+
+  it('should validate connection acknowledgment', async () => {
+    await gateway.handleValidateConnectionACk({} as any, {} as any);
+    jest.spyOn(requestTrackService,"validateConnectionACk").mockResolvedValue({} as any);
+    expect(requestTrackService.validateConnectionACk).toHaveBeenCalledWith({});
+  });
+
+  it('should handle list path acknowledgment', async () => {
+    await gateway.handleListPathAck({} as any, {} as any);
+    jest.spyOn(requestTrackService,"listPathAck").mockResolvedValue({} as any);
+    expect(requestTrackService.listPathAck).toHaveBeenCalledWith({});
+  });
+
+  it('should assign a task and emit TASK_ACK', async () => {
+    const task = { id: 'taskId', jobRunId: 'jobRunId' };
+    jest.spyOn(workManager,"assignWork").mockResolvedValue(task as any);
+    mockSocket.handshake.query = {worker: 'workerId' };
+    (gateway as any).server = {...mockServer, to: jest.fn().mockReturnValue(mockServer)};
+    await gateway.handleTask(mockSocket as any, {});
+    expect(workManager.assignWork).toHaveBeenCalledWith('workerId');
+  });
+
+  it('should log an error if no task is assigned', async () => {
+    jest.spyOn(workManager,"assignWork").mockResolvedValue(null);
+
+    mockSocket.handshake.query = {worker: 'workerId' };
+    await gateway.handleTask(mockSocket as any, {} as any);
+
+    expect(workManager.assignWork).toHaveBeenCalledWith('workerId');
+  });
+
+  it('should handle task completion', async () => {
+    await gateway.taskCompleted({} as any, {} as any);
+
+    expect(workManager.updateTask).toHaveBeenCalledWith({});
+  });
+
+  it('should handle unscanned tasks', async () => {
+    await gateway.taskUnScanned({} as any, {} as any);
+
+    expect(workManager.createUnScannedTask).toHaveBeenCalledWith({});
+  });
+
 });

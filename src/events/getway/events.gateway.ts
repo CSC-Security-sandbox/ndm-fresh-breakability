@@ -143,7 +143,6 @@ export class EventsGateway implements OnGatewayInit{
 
    @SubscribeMessage(SocketEvents.TASK_UN_SCANNED)
    async taskUnScanned(client: Socket, ack: UnScannedRes) {
-    // this.logger.debug(ack)
     await this.workManager.createUnScannedTask(ack)
    }
 

@@ -1,17 +1,17 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
-import { RMQTask, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobType, OperationStatus, OperationType } from "src/constants/enums";
+import { OperationStatus, OperationType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
+import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { TaskEntity, TaskStatus } from "src/entities/task.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";
-import { SocketEvents } from "src/constants/status";
-import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { buildRequest, buildScanPayload } from "./workmanager.mapper";
 import { UnScannedRes } from "../events.type";
+import { buildRequest, buildScanPayload } from "./workmanager.mapper";
+import { RMQTask, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 
 
 
@@ -194,11 +194,9 @@ export class WorkManager{
 
     // -------------------------- Scan Task Update --------------------------------- //
     updateScanTask = async (task: ScanCompletedPayload) => {
-        // this.logger.debug('updateScanTask',task)
         const successOperations: string[] = []
         let isErrored: boolean = false
         for(const op of task.commands) {
-            // this.logger.debug(op)
             if(op.ops["0"].status === OperationStatus.COMPLETED) {
                 successOperations.push(op.fPath)
                 continue;
@@ -220,5 +218,4 @@ export class WorkManager{
                 this.logger.error(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         }
     }
-
 }
