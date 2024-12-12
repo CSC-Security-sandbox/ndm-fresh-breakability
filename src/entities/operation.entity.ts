@@ -4,7 +4,7 @@ import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 
 
-@Entity({ name: 'operations', schema: 'migrate' })
+@Entity({ name: 'operations', schema: 'migrateadmin' })
 @Index('idx_operation_run_status', ['jobRunId', 'status'])
 @Index('idx_file_path_task', ['fPath', 'taskId'])
 @Index('idx_operation_type', ['operationType'])

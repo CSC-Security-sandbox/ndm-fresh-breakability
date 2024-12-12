@@ -6,7 +6,7 @@ import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
 
-@Entity({name:'file_server', schema:'migrate'})
+@Entity({name:'file_server', schema:'migrateadmin'})
 export class FileServerEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
