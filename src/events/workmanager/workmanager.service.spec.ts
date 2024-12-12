@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { OperationStatus, OperationType, TaskStatus } from 'src/constants/enums';
+import { JobRunStatus, OperationStatus, OperationType, TaskStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
 import { OperationsEntity } from 'src/entities/operation.entity';
 import { TaskEntity } from 'src/entities/task.entity';
@@ -270,6 +270,7 @@ describe('WorkManager', () => {
         jobRunId: 'jobRun1',
         sPathId: '/source1',
         tPathId: '/target1',
+        status: JobRunStatus.Ready
       };
   
       const mockOperations = [
@@ -323,6 +324,7 @@ describe('WorkManager', () => {
         jobRunId: 'jobRun1',
         sPathId: '/source1',
         tPathId: '/target1',
+        status: JobRunStatus.Ready
       };
 
       (taskRepo as any).manager = {

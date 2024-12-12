@@ -1,7 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
-import { NotFoundException, ValidationPipe } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
 import { JobRunPageDto } from './dto/jobrunpage.dto';

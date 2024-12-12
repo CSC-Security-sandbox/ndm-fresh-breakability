@@ -33,6 +33,7 @@ export interface WorkerJobRuns {
   jobRunId: string,
   sPathId: string,
   tPathId: string 
+  status: string
 }
 
 

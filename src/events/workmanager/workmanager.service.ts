@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { OperationStatus, OperationType, TaskStatus } from "src/constants/enums";
+import { JobRunStatus, OperationStatus, OperationType, TaskStatus } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
@@ -71,7 +71,6 @@ export class WorkManager{
 
             // notify to workers
             payload.workers.forEach(worker => {
-                // this.logger.debug(`Sending weak up to ${worker}`)
                 this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
                     workerId: worker,
                     socketEvents: SocketEvents.WAKE_UP,
@@ -96,7 +95,6 @@ export class WorkManager{
                 request: buildScanPayload(path)
             }))
             await this.operationsRepo.save(operations)
-            // this.logger.log(created)
             const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
             // Notify worker
             workers.forEach(async worker => {
@@ -132,11 +130,19 @@ export class WorkManager{
             jobRunId: it.jobRunId,
             sPathId: it.jobRun?.jobConfig?.sourcePathId,
             tPathId: it.jobRun?.jobConfig?.targetPathId,
+            status: it.jobRun?.status
         }))
 
         for(const job of jobRun) {
             const task = await this.createTask(job, workerId)
-            if(task) return task
+            if(task) {
+                if(job.status === JobRunStatus.Ready)
+                    this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+                        jobRunId: job.jobRunId,
+                        status: JobRunStatus.Running
+                    })
+                return task
+            }
         }
         return undefined
     }
@@ -214,8 +220,13 @@ export class WorkManager{
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.count({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.count({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            if(0 === isNotCompletedOperation && 0 === isNotCompletedTask) 
+            if(0 === isNotCompletedOperation && 0 === isNotCompletedTask)  {
+                this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+                    jobRunId: task.jobRunId,
+                    status: JobRunStatus.Completed
+                })
                 this.logger.error(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
@@ -25,6 +25,8 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     private readonly eventEmitter: EventEmitter2
   ) { }
+
+
 
 
   // ------------------ Cron schedule -------------------- //
@@ -146,4 +148,11 @@ export class JobRunService {
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
+
+
+  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
+  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
+    this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
+  }
+
 }
