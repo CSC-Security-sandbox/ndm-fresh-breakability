@@ -41,6 +41,8 @@
     "cron-parser": "^4.9.0",
     "dotenv": "^16.4.5",
     "jest-junit": "^16.0.0",
+    "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.3",
     "mysql2": "^3.11.2",
