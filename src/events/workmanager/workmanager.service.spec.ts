@@ -1,16 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { OperationsEntity } from 'src/entities/operation.entity';
-import { TaskEntity, TaskOperation, TaskStatus } from 'src/entities/task.entity';
-import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { OperationStatus, OperationType } from 'src/constants/enums';
+import { OperationStatus, OperationType, TaskStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { TaskEntity } from 'src/entities/task.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { Repository } from 'typeorm';
 import { WorkManager } from './workmanager.service';
-import { ScanCompletedPayload } from './workmanager.types';
-import { TaskType } from 'src/constants/status';
 
 class MockRepository<T> extends Repository<T> {
     async save(e: any):Promise<any> {

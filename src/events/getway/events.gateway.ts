@@ -135,7 +135,6 @@ export class EventsGateway implements OnGatewayInit{
     else this.logger.error(`task not found`)
    }
 
-
    @SubscribeMessage(SocketEvents.TASK_COMPLETED)
    async taskCompleted(client: Socket, ack: ScanCompletedPayload) {
     await this.workManager.updateTask(ack)
