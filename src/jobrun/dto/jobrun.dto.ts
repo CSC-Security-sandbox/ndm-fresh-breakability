@@ -1,6 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
-import { JobRunStatus } from '../entities/jobrun.entity';
+import { JobRunStatus } from 'src/constants/enums';
+
+
+
 export class JobRunDto {
   @ApiProperty({ description: 'UUID of the job run' })
   @IsUUID()

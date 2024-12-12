@@ -47,9 +47,9 @@ async function bootstrap() {
   await app.startAllMicroservices()
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-
+  
   app.setGlobalPrefix('api/v1/')
-
+  
   app.useGlobalPipes(new ValidationPipe())
 
   const serverEndpoint = `http://${host}:${port}`;
@@ -62,13 +62,13 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('docs', app, document, {
+  SwaggerModule.setup('docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
-
+  
   app.enableShutdownHooks();
   app.set('trust proxy', true);
-
+  
   app.enableCors();
 
   // await serviceQueue.listen();

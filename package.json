@@ -40,6 +40,7 @@
     "amqplib": "^0.10.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cron-parser": "^4.9.0",
     "dotenv": "^16.4.5",
     "jest-junit": "^16.0.0",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
@@ -113,7 +114,19 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
+      "/test/",
+      "/config/",
+      "/entities/"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      ".*\\.module\\.ts$",
+      "/coverage",
+      "/dist",
+      "/test/",
+      "/config/",
+      "/entities/",
+      "/dto/"
     ]
   }
 }

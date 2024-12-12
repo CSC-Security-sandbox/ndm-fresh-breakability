@@ -1,11 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { OperationStatus, OperationType } from "src/constants/enums";
+import { OperationStatus, OperationType, TaskStatus } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
-import { TaskEntity, TaskStatus } from "src/entities/task.entity";
+import { TaskEntity  } from "src/entities/task.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";

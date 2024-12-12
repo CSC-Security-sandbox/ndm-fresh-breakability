@@ -1,9 +1,10 @@
+
 export enum WorkerStatus {
     Online = 'Online',
     Offline = 'Offline',
 }
 
-export enum Protocol{
+export enum Protocol {
     NFS = 'NFS',
     SMB = 'SMB'
 }
@@ -34,6 +35,50 @@ export enum JobType {
     Migrate = 'MIGRATE',
     CutOver = 'CUT_OVER',
 }
+
+export enum JobIdMappingType {
+    Gid = 'GID',
+    Uid = 'UID',
+    Sid = 'SID'
+}
+
+// ---------- Job Run -----------/
+export enum JobRunStatus {
+    Ready = 'READY',
+    Pending = 'PENDING',
+    Running = 'RUNNING',
+    Paused = 'PAUSED',
+    Stopped = 'STOPPED',
+    Completed = 'COMPLETED',
+    Failed = 'FAILED',
+    Errored = 'ERRORED'
+}
+
+
+// ---------- Job Run -----------/
+export enum TaskType {
+    Scan = 'SCAN',
+    Migrate = 'MIGRATE',
+    Copy = 'COPY'
+}
+
+export enum TaskStatus {
+    Ready = 'READY',
+    Pending = 'PENDING',
+    Running = 'RUNNING',
+    Paused = 'PAUSED',
+    Stopped = 'STOPPED',
+    Errored = 'ERRORED',
+    Failed = 'FAILED',
+    Completed = 'COMPLETED',
+}
+
+export enum TaskOperation {
+    ScanPath = 'SCAN_PATH',
+    CopyFile = 'COPY_FILE',
+    MetaStamp = 'META_STAMP'
+}
+
 
 // ---------- Operations -----------/
 export enum OperationStatus{

@@ -4,17 +4,9 @@ import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
+import { JobRunStatus } from 'src/constants/enums';
 
-export enum JobRunStatus {
-  Ready = 'READY',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Paused = 'PAUSED',
-  Stopped = 'STOPPED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Errored = 'ERRORED'
-}
+
 
 @Entity({ name: 'jobrun', schema: 'migrate' })
 export class JobRunEntity extends Base {

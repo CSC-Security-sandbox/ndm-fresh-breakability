@@ -1,16 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobMappingService } from './../jobmappings/jobmapping.service';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
+import { JobListingDTO } from './dto/joblisting.dto';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobConfigController {
   constructor(
     private readonly jobConfigService: JobConfigService,
-    private readonly jobMappingService: JobMappingService
   ) {}
 
   @ApiOperation({ summary: 'Create a new job' })
@@ -21,14 +21,24 @@ export class JobConfigController {
     return jobConfig;
   }
 
+  @ApiOperation({ summary: 'Create a new job' })
+  @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
+  @Post('/bulk-discovery')
+  async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
+    const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
+    return jobConfig;
+  }
+
+
+
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
   @Get()
-  async getAllJobConfig(): Promise<JobConfigEntity[]> {
+  async getAllJobConfig(): Promise<JobListingDTO[]> {
     return await this.jobConfigService.getAllJobConfig();
   }
 
-  @ApiOperation({ summary: 'Get job by ID' })
+  @ApiOperation({ summary: 'Get jobfindallConfigPageDto: FindallConfigPageDto by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get(':id')

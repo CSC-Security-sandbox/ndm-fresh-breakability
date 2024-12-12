@@ -1,14 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { JobIdMappingType } from 'src/constants/enums';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
-import { JobConfigEntity } from './jobconfig.entity';
-import { FileServerEntity } from './fileserver.entity';
 
-export enum JobIdMappingType {
-  Gid = 'GID',
-  Uid = 'UID',
-  Sid = 'SID'
-}
+
 @Entity({ name: 'jobidmapping', schema: 'migrate' })
 export class JobIdMappingEntity extends Base {
   @ApiProperty({ description: 'UUID of the job mapping' })
@@ -25,9 +20,9 @@ export class JobIdMappingEntity extends Base {
 
   @ApiProperty({ description: 'source id' })
   @Column({ name: 'source_id', nullable: false })
-  sourceId: number;
+  sourceId: string;
 
   @ApiProperty({ description: 'destination' })
   @Column({ name: 'destination_id', nullable: false })
-  destinationId: number;
+  destinationId: string;
 }

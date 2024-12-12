@@ -4,7 +4,7 @@ import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JobConfigService } from '../jobconfig/jobconfig.service';
-import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
+import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
 
 describe('JobRunService', () => {
   let jobRunService: JobRunService;

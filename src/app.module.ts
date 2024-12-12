@@ -6,9 +6,8 @@ import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import { EventsModule } from './events/events.module';
 import { JobConfigModule } from './jobconfig/jobconfig.module';
-import { JobMappingModule } from './jobmappings/jobmapping.module';
-import { JobRunModule } from './jobrun/jobrun.module';
 import { WorkerModule } from './workers/workers.module';
+import { JobRunModule } from './jobrun/jobrun.module';
 
 @Module({
   imports: [
@@ -21,7 +20,7 @@ import { WorkerModule } from './workers/workers.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, JobMappingModule
+    JobConfigModule, EventsModule, WorkerModule, JobRunModule
   ],
   controllers: [],
   providers: [],

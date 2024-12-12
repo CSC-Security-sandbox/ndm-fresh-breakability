@@ -1,6 +1,6 @@
-import { JobType, OperationType, Protocol } from "src/constants/enums";
+import { JobType, OperationType, Protocol, TaskType } from "src/constants/enums";
 import { Operations } from "src/constants/status";
-import { TaskType } from "src/entities/task.entity";
+
 
 export const OperationToProtocol = (operation : Operations):Protocol => {
     switch (operation) {

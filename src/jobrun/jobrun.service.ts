@@ -1,16 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { JobStatus } from 'src/constants/enums';
+import { JobRunStatus, JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FindManyOptions, Repository } from 'typeorm';
-import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
-import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
+import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
+import { JobRunEntity } from '../entities/jobrun.entity';
+
 
 @Injectable()
 export class JobRunService {
+
   private readonly logger = new Logger(JobRunService.name);
 
   constructor(
@@ -27,7 +29,6 @@ export class JobRunService {
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
-  
     const jobs: JobConfigEntity[] = await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
       .leftJoinAndSelect('jobConfig.jobRun', 'jobRun')  
@@ -77,7 +78,6 @@ export class JobRunService {
   // ------------------ Create job run  -------------------- //
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
     const workers =await this.getSourceAndTargetWorkersByJobConfigId(job)
-    this.logger.debug(`workers`,workers)
     
     if(workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)

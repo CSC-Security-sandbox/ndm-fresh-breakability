@@ -7,7 +7,7 @@ export class Base {
   createdAt: Date;
 
   @ApiProperty({ description: 'updated_at' })
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at',nullable:true })
   updatedAt: Date;
   
   @ApiProperty({ description: 'created_by' })

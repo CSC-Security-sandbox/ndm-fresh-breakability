@@ -38,8 +38,8 @@ export class JobConfigEntity extends Base {
   firstRunAt: string;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
-  @Column({ name: 'future_schedule', type: 'timestamp with time zone' , nullable:true})
-  futureSchedule: string;
+  @Column({ name: 'future_schedule_at', type: 'text', nullable: true })
+  futureScheduleAt: string;
 
   @ApiProperty({ description: 'UUID of the source path configuration' })
   @Column({ type: 'uuid', nullable: false, name: 'source_path_id' })
