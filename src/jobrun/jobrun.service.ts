@@ -8,6 +8,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
 import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
 
 
 @Injectable()
@@ -119,36 +120,24 @@ export class JobRunService {
     return jobRun;
   }
 
-  async getJobAllRuns(
-    page: number,
-    limit: number,
-    sortField: string,
-    sortOrder: 'ASC' | 'DESC',
-    filter: JobRunFilterDto,
-  ) {
-    const queryBuilder = this.jobRunRepo.createQueryBuilder('job_run');
-
-    // Apply filters
-    Object.entries(filter).forEach(([key, value]) => {
-      if (value) {
-        queryBuilder.andWhere(`job_run.${key} LIKE :${key}`, { [key]: `%${value}%` });
-      }
-    });
-
-    // Apply sorting
-    queryBuilder.orderBy(`job_run.${sortField}`, sortOrder);
-
-    // Apply pagination
-    queryBuilder.skip((page - 1) * limit).take(limit);
-
-    const [data, total] = await queryBuilder.getManyAndCount();
-
-    return {
-      total,
-      page,
-      limit,
-      data,
+  async findAllJobRuns(jobRunPageDto: JobRunPageDto) {
+    const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = jobRunPageDto;
+    
+    const findOptions: FindManyOptions<JobRunEntity> = {
+      where: filter, order: { [sort]: order }, 
     };
+
+    let data = [], total = 0;
+    if (page && limit) {
+      findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+      findOptions.take = parseInt(limit); 
+      data = await this.jobRunRepo.find(findOptions);
+      total = await this.jobRunRepo.count({ where: filter });
+    } else {
+      data = await this.jobRunRepo.find(findOptions);
+      total = await this.jobRunRepo.count({ where: filter });
+    }
+    return { data, total };
   }
 
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {

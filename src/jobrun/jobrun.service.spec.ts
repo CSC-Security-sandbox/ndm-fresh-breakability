@@ -1,13 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobRunService } from './jobrun.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Repository } from 'typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { WorkerJobRunMap } from '../entities/workerjobrun.entity';
 import { JobRunStatus, JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
+import { Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
 
 describe('JobRunService', () => {
   let service: JobRunService;
@@ -74,6 +75,126 @@ describe('JobRunService', () => {
       expect(result).toEqual([]);
     });
   });
+  
+  describe('getSourceAndTargetWorkersByJobConfigId', () => {
+    it('should return overlapping workers when targetPathId is present', async () => {
+      const job = { id: '1', targetPathId: '2' } as JobConfigEntity;
+      const mockJobConfig = {
+        sourcePath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }] },
+        },
+        targetPath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker3' }] },
+        },
+      };
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockJobConfig),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual(['worker1']);
+      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith('jobConfig');
+    });
+  
+    it('should return only source workers when targetPathId is not present', async () => {
+      const job = { id: '1' } as JobConfigEntity; // targetPathId is not defined
+      const mockJobConfig = {
+        sourcePath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }] },
+        },
+        targetPath: null,
+      };
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockJobConfig),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual(['worker1', 'worker2']);
+    });
+  
+    it('should return an empty array when jobConfig is null', async () => {
+      const job = { id: '1', targetPathId: '2' } as JobConfigEntity;
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual([]);
+    });
+  
+    it('should return an empty array when no workers are present in source or target', async () => {
+      const job = { id: '1', targetPathId: '2' } as JobConfigEntity;
+      const mockJobConfig = {
+        sourcePath: { fileServer: { workers: [] } },
+        targetPath: { fileServer: { workers: [] } },
+      };
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockJobConfig),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual([]);
+    });
+  
+    it('should handle workers in source but not in target when targetPathId is present', async () => {
+      const job = { id: '1', targetPathId: '2' } as JobConfigEntity;
+      const mockJobConfig = {
+        sourcePath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }] },
+        },
+        targetPath: { fileServer: { workers: [] } },
+      };
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockJobConfig),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual([]);
+    });
+  
+    it('should return only unique workers when both source and target are the same', async () => {
+      const job = { id: '1', targetPathId: '2' } as JobConfigEntity;
+      const mockJobConfig = {
+        sourcePath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }] },
+        },
+        targetPath: {
+          fileServer: { workers: [{ workerId: 'worker1' }, { workerId: 'worker2' }] },
+        },
+      };
+  
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockJobConfig),
+      } as any);
+  
+      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
+  
+      expect(result).toEqual(['worker1', 'worker2']);
+    });
+  });
+  
 
   describe('createJobRun', () => {
     it('should create a job run if workers exist', async () => {
@@ -126,6 +247,121 @@ describe('JobRunService', () => {
       expect(jobRunRepo.find).toHaveBeenCalledWith({ where: { status:  JobRunStatus.Ready} });
     });
   });
+  
+  describe('findAllJobRuns', () => {
+
+    it('should return paginated data with count if undefined', async () => {
+
+      const workers = [{ id: '1', name: 'Worker1' }, { id: '2', name: 'Worker2' }];
+      const total = 2;
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce(workers as any);
+      jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(total);
+
+      const result = await service.findAllJobRuns({});
+
+      expect(result).toEqual({ data: workers, total });
+      expect(jobRunRepo.find).toHaveBeenCalled();
+      expect(jobRunRepo.count).toHaveBeenCalled();
+    });
+
+    it('should return paginated data with count', async () => {
+      const jobRunPageDto: JobRunPageDto = {
+        page: '1',
+        limit: '10',
+        sort: 'name',
+        order: 'asc',
+        iterationNumber: 1,
+        jobConfigId : "e45678",
+        status: JobRunStatus.Ready,
+      };
+      const workers = [{ id: '1', name: 'Worker1' }, { id: '2', name: 'Worker2' }];
+      const total = 2;
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce(workers as any);
+      jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(total);
+
+      const result = await service.findAllJobRuns(jobRunPageDto);
+
+      expect(result).toEqual({ data: workers, total });
+      expect(jobRunRepo.find).toHaveBeenCalled();
+      expect(jobRunRepo.count).toHaveBeenCalled();
+    });
+
+    it('should return data without pagination if no page and limit are provided', async () => {
+      const jobRunPageDto: JobRunPageDto = {
+        sort: 'name',
+        order: 'asc',
+      };
+      const jobRun = [{ id: '1', name: 'jobRun1' }, { id: '2', name: 'jobRun2' }];
+      const total = 2;
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce(jobRun as any);
+      jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(total);
+
+      const result = await service.findAllJobRuns(jobRunPageDto);
+
+      expect(result).toEqual({ data: jobRun, total });
+      expect(jobRunRepo.find).toHaveBeenCalledWith({
+        where: {},
+        order: { name: 'asc' },
+      });
+      expect(jobRunRepo.count).toHaveBeenCalled();
+    });
+
+    it('should return an empty result when no workers are found', async () => {
+      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' };
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce([]);
+      jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(0);
+
+      const result = await service.findAllJobRuns(jobRunPageDto);
+      expect(result).toEqual({ data: [], total: 0 });
+      expect(jobRunRepo.find).toHaveBeenCalled();
+      expect(jobRunRepo.count).toHaveBeenCalled();
+    });
+
+    it('should handle jobRunRepo errors', async () => {
+      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' };
+      jest.spyOn(jobRunRepo, 'find').mockRejectedValueOnce(new Error('Database error'));
+
+      await expect(service.findAllJobRuns(jobRunPageDto)).rejects.toThrow('Database error');
+      expect(jobRunRepo.find).toHaveBeenCalled();
+    });
+  });
+  
+
+  describe('updateJobRun', () => {
+    it('should update and return the updated job run when it exists', async () => {
+      const jobRunId = '1';
+      const existingJobRun = { id: jobRunId, status: 'Ready', iterationNumber: 1 };
+      const updateData = { status: 'In Progress' };
+      const updatedJobRun = { ...existingJobRun, ...updateData };
+  
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(existingJobRun as any);
+      jest.spyOn(jobRunRepo, 'save').mockResolvedValue(updatedJobRun as any);
+  
+      const result = await service.updateJobRun(jobRunId, updateData as any);
+  
+      expect(result).toEqual(updatedJobRun);
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
+      expect(jobRunRepo.save).toHaveBeenCalledWith({ ...existingJobRun, ...updateData });
+    });
+  
+    it('should throw an error when the job run does not exist', async () => {
+      const jobRunId = '1';
+      const updateData = { status: 'In Progress' };
+  
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+  
+      await expect(service.updateJobRun(jobRunId, updateData as any)).rejects.toThrowError(
+        `Job run with id ${jobRunId} not found`
+      );
+  
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
+      // expect(jobRunRepo.save).not.toHaveBeenCalled();
+    });
+  });
+  
   
 
 });

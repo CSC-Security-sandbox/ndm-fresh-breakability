@@ -8,6 +8,8 @@ import { VolumeEntity } from 'src/entities/volume.entity';
 import * as parser from 'cron-parser';
 import { log } from 'console';
 import {  JobStatus, JobType } from 'src/constants/enums';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigDto } from './dto/jobconfig.dto';
 
 const mockJobEntity = {
   id: 'uuid1',
@@ -69,17 +71,146 @@ describe('JobConfigService', () => {
     expect(service).toBeDefined();
   });
 
-  // describe('createJobConfig', () => {
-  //   it('should create a job', async () => {
-  //     jest.spyOn(repo, 'create').mockReturnValue(mockJobEntity);
-  //     jest.spyOn(repo, 'save').mockResolvedValue(mockJobEntity);
+  describe('createJobConfig', () => {
+    it('should create and save a job record successfully', async () => {
+      const jobConfigData: JobConfigDto = {
+        sourcePathId: 'path1',
+        excludeFilePatterns: ['*.tmp'],
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        futureSchedule: new Date(),
+        firstRunAt: new Date(),
+        createdBy: 'user1',
+      }as any;
 
-  //     const result = await service.createJobConfig(mockJobDto);
-  //     expect(result).toEqual(mockJobEntity);
-  //     expect(repo.create).toHaveBeenCalled();
-  //     expect(repo.save).toHaveBeenCalled();
-  //   });
-  // });
+      const mockJobRecord = {
+        ...jobConfigData,
+        firstRunAt: jobConfigData.firstRunAt.toISOString(),
+      };
+
+      jest.spyOn(repo,'save').mockResolvedValue(mockJobRecord as any);
+
+      const result = await service.createJobConfig(jobConfigData);
+
+      expect(repo.create).toHaveBeenCalledWith({
+        ...jobConfigData,
+        firstRunAt: jobConfigData.firstRunAt.toISOString(),
+      });
+      expect(result).toEqual(mockJobRecord);
+    });
+
+    it('should set firstRunAt to current date if not provided', async () => {
+      const jobConfigData: JobConfigDto = {
+        sourcePathId: 'path1',
+        excludeFilePatterns: ['*.log'],
+        preserveAccessTime: false,
+        excludeOlderThan: new Date(),
+        futureSchedule: new Date(),
+        createdBy: 'user2',
+      }as any;;
+
+      const currentDate = new Date().toISOString();
+      const mockJobRecord = {
+        ...jobConfigData,
+        firstRunAt: currentDate,
+      };
+
+      jest.spyOn(repo,'save').mockResolvedValue(mockJobRecord as any);
+
+
+      const result = await service.createJobConfig(jobConfigData);
+
+      expect(repo.create).toHaveBeenCalledWith({
+        ...jobConfigData,
+        firstRunAt: expect.any(String),
+      });
+      expect(result.firstRunAt).toBeDefined();
+      expect(new Date(result.firstRunAt).toISOString()).toEqual(currentDate);
+    });
+  });
+
+  describe('createBulkDiscovery', () => {
+    it('should create and save job records successfully', async () => {
+      const bulkDiscovery: JobConfigDiscoverBulk = {
+        sourcePathIds: ['path1', 'path2'],
+        excludeFilePatterns: ['*.tmp'],
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        futureSchedule: new Date(),
+        firstRunAt: new Date(),
+        createdBy: 'user1',
+      } as any;
+
+      const mockJobRecords = bulkDiscovery.sourcePathIds.map((path) => ({
+        status: JobStatus.Active,
+        excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+        jobType: JobType.Scan,
+        preserveAccessTime: bulkDiscovery.preserveAccessTime,
+        sourcePathId: path,
+        excludeOlderThan: bulkDiscovery.excludeOlderThan,
+        futureScheduleAt: bulkDiscovery.futureSchedule,
+        firstRunAt: bulkDiscovery.firstRunAt?.toISOString(),
+        createdBy: bulkDiscovery.createdBy,
+      }));
+
+      jest.spyOn(repo,'save').mockResolvedValue(mockJobRecords as any);
+
+      const result = await service.createBulkDiscovery(bulkDiscovery);
+
+      expect(repo.create).toHaveBeenCalledTimes(2);
+      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path1' }));
+      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path2' }));
+      expect(result).toEqual(mockJobRecords);
+    });
+
+    it('should handle missing firstRunAt gracefully', async () => {
+      const bulkDiscovery: JobConfigDiscoverBulk = {
+        sourcePathIds: ['path1'],
+        excludeFilePatterns: '*.log',
+        preserveAccessTime: false,
+        excludeOlderThan: new Date(),
+        futureSchedule: new Date().toISOString(),
+        createdBy: 'user2',
+      } as any;
+
+      const mockJobRecord = {
+        status: JobStatus.Active,
+        excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+        jobType: JobType.Scan,
+        preserveAccessTime: bulkDiscovery.preserveAccessTime,
+        sourcePathId: 'path1',
+        excludeOlderThan: bulkDiscovery.excludeOlderThan,
+        futureScheduleAt: bulkDiscovery.futureSchedule,
+        firstRunAt: expect.any(String), // Default to current date
+        createdBy: bulkDiscovery.createdBy,
+      };
+
+      jest.spyOn(repo,'save').mockResolvedValue([mockJobRecord] as any);
+
+      const result = await service.createBulkDiscovery(bulkDiscovery);
+
+      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path1' }));
+      expect(result[0].firstRunAt).toBeDefined();
+    });
+
+    // it('should return an empty array if sourcePathIds is empty', async () => {
+    //   const bulkDiscovery: JobConfigDiscoverBulk = {
+    //     sourcePathIds:null,
+    //     excludeFilePatterns: null,
+    //     preserveAccessTime: false,
+    //     excludeOlderThan: new Date(),
+    //     futureSchedule: new Date().toISOString(),
+    //     createdBy: 'user3',
+    //   }as JobConfigDiscoverBulk;
+
+    //   const result = await service.createBulkDiscovery(bulkDiscovery);
+
+    //   expect(repo.create).not.toHaveBeenCalled();
+    //   expect(repo.save).not.toHaveBeenCalled();
+    //   expect(result).toEqual([]);
+    // });
+  });
+
 
   describe('getJobConfigById', () => {
     it('should return a job by id', async () => {
