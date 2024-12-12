@@ -23,9 +23,9 @@ export class JobIdMappingEntity extends Base {
 
   @ApiProperty({ description: 'source id' })
   @Column({ name: 'source_id', nullable: false })
-  sourceId: number;
+  sourceId: string;
 
   @ApiProperty({ description: 'destination' })
   @Column({ name: 'destination_id', nullable: false })
-  destinationId: number;
+  destinationId: string;
 }

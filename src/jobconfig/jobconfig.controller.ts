@@ -1,19 +1,15 @@
-import { JobMappingService } from './../jobmappings/jobmapping.service';
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { JobConfigService } from './jobconfig.service';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { CreateJobConfigDto, IdMapping } from '../dto/jobconfig.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JobIdMappingType } from '../entities/jobmapping.entity';
 import { JobListingDTO } from 'src/jobconfig/joblisting.dto';
-import { FindallJobDetailsPageDto } from 'src/jobconfig/findallJobDetails.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobConfigController {
   constructor(
     private readonly jobConfigService: JobConfigService,
-    private readonly jobMappingService: JobMappingService
   ) {}
 
   @ApiOperation({ summary: 'Create a new job' })

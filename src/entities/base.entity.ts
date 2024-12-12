@@ -7,14 +7,14 @@ export class Base {
   createdAt: Date;
 
   @ApiProperty({ description: 'updated_at' })
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at',nullable:true })
   updatedAt: Date;
   
   @ApiProperty({ description: 'created_by' })
   @Column({ name: 'created_by' })
   createdBy: string;
 
-  @ApiProperty({ description: 'updated_by' })
-  @Column({ name: 'updated_by' })
+  @ApiProperty({ description: 'updated_by'})
+  @Column({ name: 'updated_by',nullable:true })
   updatedBy: string;
 }

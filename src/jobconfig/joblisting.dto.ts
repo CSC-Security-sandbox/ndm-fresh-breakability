@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsEnum, IsUUID } from "class-validator";
-import { JobStatus, JobType } from "src/entities/jobconfig.entity";
+import { JobStatus, JobType } from "src/constants/enums";
 
 export class JobListingDTO{
 

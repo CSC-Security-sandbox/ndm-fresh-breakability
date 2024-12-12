@@ -3,7 +3,6 @@ import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobMappingService } from '../jobmappings/jobmapping.service';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { JobScheduleType, JobStatus, JobType } from 'src/constants/enums';
 
@@ -54,12 +53,6 @@ describe('JobConfigController', () => {
             updateJobConfig: jest.fn().mockResolvedValue(mockJobEntity),
             deleteJobConfig: jest.fn().mockResolvedValue({ message: 'Job with id uuid1 has been deleted' }),
             getAllJobConfig: jest.fn().mockResolvedValue([mockJobEntity]),
-          },
-        },
-        {
-          provide: JobMappingService,
-          useValue: {
-            createMany: jest.fn(),
           },
         },
       ],
