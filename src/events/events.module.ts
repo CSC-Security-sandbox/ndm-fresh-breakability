@@ -13,11 +13,13 @@ import { VolumeEntity } from 'src/entities/volume.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { RabbiMqController } from './controller/rabbimq.controller';
 import { RequestTrackService } from './service/requesttrack.service';
+import { TaskEntity } from 'src/entities/task.entity';
+
 
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity]),],
+    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity])],
   exports: [EventsGateway],
   providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService],
   controllers: [EventsController, RabbiMqController]

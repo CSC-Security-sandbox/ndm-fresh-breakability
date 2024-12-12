@@ -1,13 +1,15 @@
+import { JobIdMappingEntity } from './../entities/jobmapping.entity';
 import { DataSourceOptions } from 'typeorm';
 import { WorkerEntity } from "src/entities/worker.entity";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
-import { JobEntity } from "src/entities/job.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { RequestTrackEntity } from "src/entities/requesttrack.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import typeormConfig from 'src/config/database.config';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 
 describe('TypeORM Config', () => {
@@ -44,16 +46,7 @@ describe('TypeORM Config', () => {
         rejectUnauthorized: false,
       },
       logging: true,
-      entities: [
-        WorkerEntity,
-        RequestTrackEntity,
-        ConfigEntity,
-        InventoryEntity,
-        FileServerEntity,
-        VolumeEntity,
-        ProjectEntity,
-        JobEntity,
-      ],
+      entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity],
       migrations: []
     };
 

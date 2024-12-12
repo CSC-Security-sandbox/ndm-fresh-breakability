@@ -119,6 +119,5 @@ export class EventsGateway implements OnGatewayInit{
   async handleListPathAck(client: Socket, ack: ListPathRes) {
     await this.requestTrackService.listPathAck(ack)
   }
-
 }
 

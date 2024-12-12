@@ -1,0 +1,57 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
+import { JobRunStatus } from 'src/constants/enums';
+
+export class JobRunDto {
+  @ApiProperty({ description: 'UUID of the job run' })
+  @IsUUID()
+  id: string;
+
+  @ApiProperty({ description: 'Job run status' })
+  @IsString()
+  status: JobRunStatus;
+
+  @ApiProperty({ description: 'Start time of the job' })
+  @IsDateString()
+  startTime: Date;
+
+  @ApiPropertyOptional({ description: 'End time of the job' })
+  @IsDateString()
+  @IsOptional()
+  endTime: Date;
+
+  @ApiProperty({ description: 'Iteration number of the job' })
+  @IsNumber()
+  iterationNumber: number;
+
+  @ApiProperty({ description: 'Job Config ID associated with this run' })
+  @IsUUID()
+  jobConfigId: string;
+}
+
+export class JobRunFilterDto {
+  @ApiPropertyOptional({ description: 'Filter by Job Config ID', example: '1234' })
+  @IsOptional()
+  @IsUUID()
+  jobConfigId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by status', example: 'running' })
+  @IsOptional()
+  @IsString()
+  status?: JobRunStatus;
+
+  @ApiPropertyOptional({ description: 'Filter by start time', example: '2024-11-13T12:00:00Z' })
+  @IsOptional()
+  @IsDateString()
+  startTime?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by end time', example: '2024-11-14T12:00:00Z' })
+  @IsOptional()
+  @IsDateString()
+  endTime?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by iteration number', example: 1 })
+  @IsOptional()
+  @IsNumber()
+  iterationNumber?: number;
+}
