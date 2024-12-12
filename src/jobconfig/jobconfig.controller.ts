@@ -5,8 +5,8 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { CreateJobConfigDto, IdMapping } from '../dto/jobconfig.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobIdMappingType } from '../entities/jobmapping.entity';
-import { JobListingDTO } from 'src/dto/joblisting.dto';
-import { FindallJobDetailsPageDto } from 'src/dto/findallJobDetails.dto';
+import { JobListingDTO } from 'src/jobconfig/joblisting.dto';
+import { FindallJobDetailsPageDto } from 'src/jobconfig/findallJobDetails.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -23,34 +23,11 @@ export class JobConfigController {
     //const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
     const jobConfig=undefined
     // Prepare job mappings based on the sid, uid, gid mappings
-    const jobMappings = [];
-    if (!!jobConfigData.sidMapping && jobConfigData.sidMapping.length) jobConfigData.sidMapping.forEach((mapping: IdMapping): void => {
-      jobMappings.push({
-        jobConfigId: jobConfig.id,
-        type: JobIdMappingType.Sid,
-        sourceId: mapping.sourceId,
-        destinationId: mapping.destinationId
-      })
-    })
-    if (!!jobConfigData.uidMapping && jobConfigData.uidMapping.length) jobConfigData.uidMapping.forEach((mapping: IdMapping): void => {
-      jobMappings.push({
-        jobConfigId: jobConfig.id,
-        type: JobIdMappingType.Uid,
-        sourceId: mapping.sourceId,
-        destinationId: mapping.destinationId
-      })
-    })
-    if (!!jobConfigData.gidMapping && jobConfigData.gidMapping.length) jobConfigData.gidMapping.forEach((mapping: IdMapping): void => {
-      jobMappings.push({
-        jobConfigId: jobConfig.id,
-        type: JobIdMappingType.Gid,
-        sourceId: mapping.sourceId,
-        destinationId: mapping.destinationId
-      })
-    })
-
+   
+    
+  
     // Save the job mappings
-    await this.jobMappingService.createMany(jobMappings);
+   // await this.jobMappingService.createMany(jobMappings);
     return jobConfig;
   }
 

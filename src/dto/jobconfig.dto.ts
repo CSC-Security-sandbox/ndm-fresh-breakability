@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID, IsBoolean, IsDate, IsObject, IsArray } from 'class-validator';
-import { JobType, JobStatus, JobSchedule, IncrementalSchedule } from '../entities/jobconfig.entity';
+import {  IncrementalSchedule } from '../entities/jobconfig.entity';
+import { JobSchedule, JobStatus, JobType } from 'src/constants/enums';
 
 export class IdMapping {
   @ApiProperty({ description: 'UUID of the source mapping' })
@@ -37,11 +38,11 @@ export class CreateJobConfigDto {
 
   @ApiProperty({ description: 'Job schedule configuration' })
   @IsObject()
-  jobSchedule: JobSchedule;
+  firstRunAt: Date;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
   @IsObject()
-  incrementalSchedule: IncrementalSchedule;
+  futureScheduleAt: string;
 
   @ApiProperty({ description: 'UUID of the source path configuration' })
   @IsUUID()
@@ -51,21 +52,6 @@ export class CreateJobConfigDto {
   @IsOptional()
   @IsUUID()
   targetPathId: string;
-
-  @ApiProperty({ description: 'SID Mapping', type: [IdMapping], required: false })
-  @IsOptional()
-  @IsArray()
-  sidMapping?: IdMapping[];
-
-  @ApiProperty({ description: 'GID Mapping', type: [IdMapping], required: false })
-  @IsOptional()
-  @IsArray()
-  gidMapping?: IdMapping[];
-
-  @ApiProperty({ description: 'UID Mapping', type: [IdMapping], required: false })
-  @IsOptional()
-  @IsArray()
-  uidMapping?: IdMapping[];
 
   @ApiProperty({ description: 'Created by user ID', required: false })
   @IsOptional()

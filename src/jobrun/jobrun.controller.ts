@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
-import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
+import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
 
 @ApiTags('jobs run')
 @Controller('job-run')

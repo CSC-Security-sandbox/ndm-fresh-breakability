@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobRunController } from './jobrun.controller';
 import { JobRunService } from './jobrun.service';
-import { JobRunEntity, JobRunStatus } from './../entities/jobrun.entity';
-import { JobRunDto, JobRunFilterDto } from '../dto/jobrun.dto';
+import { JobRunEntity } from './../entities/jobrun.entity';
+import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
+import { JobRunStatus } from 'src/constants/enums';
 
 describe('JobRunController', () => {
   let jobRunController: JobRunController;

@@ -1,12 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobConfigService } from './jobconfig.service';
-import { JobConfigEntity, JobScheduleType, JobStatus, JobType } from '../entities/jobconfig.entity';
+import { JobConfigEntity} from '../entities/jobconfig.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import * as parser from 'cron-parser';
 import { log } from 'console';
+import { JobScheduleType, JobStatus, JobType } from 'src/constants/enums';
 
 const mockJobEntity: JobConfigEntity = {
   id: 'uuid1',
@@ -34,12 +35,9 @@ const mockJobDto: CreateJobConfigDto = {
   sourcePathId: '',
   status: JobStatus.Active, 
   preserveAccessTime: false, 
-  incrementalSchedule: null, 
+  futureScheduleAt: null, 
   targetPathId: '',
-  jobSchedule: {
-    type: JobScheduleType.Date,
-    schedule: new Date().toString()
-  }
+  firstRunAt: new Date(),
 };
 
 describe('JobConfigService', () => {

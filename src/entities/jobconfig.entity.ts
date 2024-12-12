@@ -3,37 +3,8 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
+import { IncrementalJobScheduleType, JobStatus, JobType } from 'src/constants/enums';
 
-export enum JobStatus {
-  Active = 'ACTIVE',
-  InActive = 'IN_ACTIVE',
-}
-
-export enum JobType {
-  Scan = 'SCAN',
-  Migrate = 'MIGRATE',
-  CutOver = 'CUT_OVER',
-}
-
-export enum JobScheduleType {
-  Now = 'NOW',
-  Date = 'DATE',
-  CronExp = 'CRON_EXP',
-}
-
-export enum IncrementalJobScheduleType {
-  Off = 'OFF',
-  Date = 'DATE',
-  CronExp = 'CRON_EXP',
-}
-
-export class JobSchedule {
-  @ApiProperty({ description: 'Job schedule type', enum: JobScheduleType })
-  type: JobScheduleType;
-
-  @ApiProperty({ description: 'Job schedule expression' })
-  schedule: string;
-}
 
 export class IncrementalSchedule {
   @ApiProperty({ description: 'Job schedule type', enum: IncrementalJobScheduleType })

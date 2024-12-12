@@ -2,8 +2,9 @@ import { JobConfigService } from '../jobconfig/jobconfig.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
 import { FindManyOptions, Repository } from 'typeorm';
-import { JobRunDto, JobRunFilterDto } from './../dto/jobrun.dto';
-import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
+import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunStatus } from 'src/constants/enums';
 
 @Injectable()
 export class JobRunService {

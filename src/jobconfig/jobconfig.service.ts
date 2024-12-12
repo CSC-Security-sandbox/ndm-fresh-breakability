@@ -2,12 +2,13 @@ import { v4 as uuid } from 'uuid';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { Injectable, Logger } from '@nestjs/common';
-import { JobConfigEntity, JobStatus } from '../entities/jobconfig.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
-import { JobListingDTO } from 'src/dto/joblisting.dto';
+import { JobListingDTO } from 'src/jobconfig/joblisting.dto';
 import * as parser from 'cron-parser';
 import { log } from 'console';
-import { FindallJobDetailsPageDto } from 'src/dto/findallJobDetails.dto';
+import { FindallJobDetailsPageDto } from 'src/jobconfig/findallJobDetails.dto';
+import { JobStatus } from 'src/constants/enums';
 
 @Injectable()
 export class JobConfigService {
@@ -48,7 +49,7 @@ export class JobConfigService {
   async getJobConfigsForCreatingJobRun() {
     return await this.jobConfigRepo
       .createQueryBuilder('jobconfig')
-      .leftJoin('jobrun', 'jobRun', 'jobRun.jobConfigId = jobconfig.id')
+      .leftJoin('jobrun', 'jobRun', 'jobRun.jobConfig Id = jobconfig.id')
       .where('jobconfig.status = :status', { status: JobStatus.Active })
       .andWhere('jobRun.id IS NULL')
       .getMany();

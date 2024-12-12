@@ -2,9 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
 import { CreateJobConfigDto } from '../dto/jobconfig.dto';
-import { JobConfigEntity, JobScheduleType, JobStatus, JobType } from '../entities/jobconfig.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobMappingService } from '../jobmappings/jobmapping.service';
 import { VolumeEntity } from 'src/entities/volume.entity';
+import { JobScheduleType, JobStatus, JobType } from 'src/constants/enums';
 
 const mockJobEntity: JobConfigEntity = {
   id: 'uuid1',
@@ -32,12 +33,9 @@ const mockJobDto: CreateJobConfigDto = {
   sourcePathId: '',
   status: JobStatus.Active,
   preserveAccessTime: false,
-  incrementalSchedule: null,
+  futureScheduleAt: null,
   targetPathId: '',
-  jobSchedule: {
-    type: JobScheduleType.Date,
-    schedule: new Date().toString(),
-  },
+  firstRunAt:new Date(),
 };
 
 describe('JobConfigController', () => {

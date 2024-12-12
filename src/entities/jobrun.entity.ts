@@ -2,17 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { JobRunStatus } from 'src/constants/enums';
 
-export enum JobRunStatus {
-  Ready = 'READY',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Paused = 'PAUSED',
-  Stopped = 'STOPPED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Errored = 'ERRORED'
-}
+
 
 @Entity({ name: 'jobrun', schema: 'migrate' })
 export class JobRunEntity extends Base {

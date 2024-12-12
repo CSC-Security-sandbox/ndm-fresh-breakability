@@ -2,32 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { OperationEntity } from './operation.entity';
+import { TaskStatus, TaskType } from 'src/constants/enums';
 
-export enum TaskType {
-    Scan = 'SCAN',
-    Migrate = 'MIGRATE',
-    Sync = 'SYNC',
-    ValidateConnection= 'VALIDATE_CONNECTION',
-    ListPaths= 'LIST_PATHS',
-}
-
-export enum TaskStatus {
-    Ready = 'READY',
-    Pending = 'PENDING',
-    Running = 'RUNNING',
-    Paused = 'PAUSED',
-    Stopped = 'STOPPED',
-    Errored = 'ERRORED',
-    Failed = 'FAILED',
-    Completed = 'COMPLETED',
-    InProgress = 'IN_PROGRESS',
-}
-
-export enum TaskOperation {
-    ScanPath = 'SCAN_PATH',
-    CopyFile = 'COPY_FILE',
-    MetaStamp = 'META_STAMP'
-}
 
 @Entity({ name: 'tasks', schema: 'migrate' })
 @Index('idx_job_run_id', ['jobRunId'])

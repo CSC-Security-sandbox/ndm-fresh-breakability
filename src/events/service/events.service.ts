@@ -1,4 +1,4 @@
-import { TaskOperation, TaskStatus, TaskType as TasksType } from './../../entities/task.entity';
+import { TaskOperation, TaskStatus, TaskType as TasksType } from './../../constants/enums';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Protocol } from 'src/constants/enums';
