@@ -1,4 +1,3 @@
-import { ApiProperty } from "@nestjs/swagger";
 
 export enum WorkerStatus {
     Online = 'Online',
@@ -22,45 +21,28 @@ export enum ConfigurationType {
 }
 
 export enum RabbitMq {
-    ListPaths = 'ListPaths',
-    CreateTaskList = 'createTaskList'
-}
-
-export enum QueueNames {
-    TASK_LIST = 'task-list'
+    ListPaths ='ListPaths',
+    CreateTaskList = 'taskList'
 }
 
 export enum JobStatus {
     Active = 'ACTIVE',
     InActive = 'IN_ACTIVE',
 }
-
+  
 export enum JobType {
     Scan = 'SCAN',
     Migrate = 'MIGRATE',
     CutOver = 'CUT_OVER',
 }
 
-export enum JobScheduleType {
-    Now = 'NOW',
-    Date = 'DATE',
-    CronExp = 'CRON_EXP',
+export enum JobIdMappingType {
+    Gid = 'GID',
+    Uid = 'UID',
+    Sid = 'SID'
 }
 
-export enum IncrementalJobScheduleType {
-    Off = 'OFF',
-    Date = 'DATE',
-    CronExp = 'CRON_EXP',
-}
-
-export class JobSchedule {
-    @ApiProperty({ description: 'Job schedule type', enum: JobScheduleType })
-    type: JobScheduleType;
-
-    @ApiProperty({ description: 'Job schedule expression' })
-    schedule: string;
-}
-
+// ---------- Job Run -----------/
 export enum JobRunStatus {
     Ready = 'READY',
     Pending = 'PENDING',
@@ -72,41 +54,12 @@ export enum JobRunStatus {
     Errored = 'ERRORED'
 }
 
-export enum OperationType {
-    ValidateNFSConnection = 'VAL_NFS_CONN',
-    ValidateSMBCOnnection = 'VAL_SMB_CONN',
-    ListNFSPaths = 'LS_NFS_PATHS',
-    ListSMBPaths = 'LS_SMB_PATHS',
-    ScanPaths = 'SCAN_PATH',
-    Copy = "CP",
-    CalculateChecksum = "CS",
-    ComapreChecksum = "CC",
-    CopyMetadata = "CM",
-    ReadThroughput = "R_TPT",
-    WriteThroughput = "W_TPT",
-    NetworkLatency = "N_LAT",
-}
 
-export enum OperationStatus {
-    Completed = 'COMPLETED',
-    Failed = 'FAILED',
-}
-
-export class ErrorDetails {
-    @ApiProperty({ description: 'Error code' })
-    errorCode: string;
-
-    @ApiProperty({ description: 'Error message' })
-    errorMessage: string;
-}
-
-
+// ---------- Job Run -----------/
 export enum TaskType {
     Scan = 'SCAN',
     Migrate = 'MIGRATE',
-    Sync = 'SYNC',
-    ValidateConnection = 'VALIDATE_CONNECTION',
-    ListPaths = 'LIST_PATHS',
+    Copy = 'COPY'
 }
 
 export enum TaskStatus {
@@ -118,11 +71,23 @@ export enum TaskStatus {
     Errored = 'ERRORED',
     Failed = 'FAILED',
     Completed = 'COMPLETED',
-    InProgress = 'IN_PROGRESS',
 }
 
 export enum TaskOperation {
     ScanPath = 'SCAN_PATH',
     CopyFile = 'COPY_FILE',
     MetaStamp = 'META_STAMP'
+}
+
+
+// ---------- Operations -----------/
+export enum OperationStatus{
+    READY='READY',
+    IN_PROCESS='IN_PROCESS',
+    ERROR ='ERROR',
+    COMPLETED = 'COMPLETED'
+}
+
+export enum OperationType {
+    SCAN = 'SCAN'
 }

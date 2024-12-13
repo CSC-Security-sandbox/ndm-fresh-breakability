@@ -24,7 +24,7 @@ export class RequestTrackEntity extends Base {
   status: ResponseStatus;
 
   @ApiProperty({ description: 'Operation of the request',  name:'operation'  })
-  @Column({ type: 'text', enum: Protocol, nullable: false })
+  @Column({ type: 'varchar', nullable: false })
   operation: Operations;
 
   @ApiProperty({ description: 'Worker ID' })

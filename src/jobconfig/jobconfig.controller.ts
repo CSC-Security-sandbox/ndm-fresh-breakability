@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { JobConfigService } from './jobconfig.service';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { CreateJobConfigDto, IdMapping } from '../dto/jobconfig.dto';
+import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JobListingDTO } from 'src/jobconfig/joblisting.dto';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigDto } from './dto/jobconfig.dto';
+import { JobConfigService } from './jobconfig.service';
+import { JobListingDTO } from './dto/joblisting.dto';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -15,17 +16,20 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Create a new job' })
   @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
   @Post()
-  async createJobConfig(@Body() jobConfigData: CreateJobConfigDto): Promise<JobConfigEntity> {
-    //const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
-    const jobConfig=undefined
-    // Prepare job mappings based on the sid, uid, gid mappings
-   
-    
-  
-    // Save the job mappings
-   // await this.jobMappingService.createMany(jobMappings);
+  async createJobConfig(@Body() jobConfigData: JobConfigDto): Promise<JobConfigEntity> {
+    const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
     return jobConfig;
   }
+
+  @ApiOperation({ summary: 'Create a new job' })
+  @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
+  @Post('/bulk-discovery')
+  async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
+    const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
+    return jobConfig;
+  }
+
+
 
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
@@ -34,7 +38,7 @@ export class JobConfigController {
     return await this.jobConfigService.getAllJobConfig();
   }
 
-  @ApiOperation({ summary: 'Get jobfindallConfigPageDto: import("/Users/avadoot.narvekar/code_base/netapp/netapp_code_base/jobs-service/src/dto/findallconfig.dto").FindallConfigPageDto by ID' })
+  @ApiOperation({ summary: 'Get jobfindallConfigPageDto: FindallConfigPageDto by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get(':id')
@@ -48,7 +52,7 @@ export class JobConfigController {
   @Put(':id')
   async updateJobConfig(
     @Param('id') id: string,
-    @Body() jobConfigData: CreateJobConfigDto,
+    @Body() jobConfigData: JobConfigDto,
   ): Promise<JobConfigEntity> {
     return await this.jobConfigService.updateJobConfig(id, jobConfigData);
   }

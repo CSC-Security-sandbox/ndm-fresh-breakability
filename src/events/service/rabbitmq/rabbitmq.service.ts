@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
-import { EventsGateway } from "../getway/events.gateway";
+import { EventsGateway } from "src/events/getway/events.gateway";
+
 
 
 @Injectable()
@@ -28,7 +29,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
-            this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
+            await this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
             channel.ack(message);
           }
         });
@@ -42,8 +43,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   // Send Message to exchange
   async publishToExchange(message: any): Promise<void> {
     try {
+      // this.logger.debug(`Message published to exchange `)
       await this.channelWrapper.publish(this.exchange, this.routingKey, Buffer.from(JSON.stringify(message)), { persistent: true } as any);
-      this.logger.log(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
+      // this.logger.debug(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
     } catch (err) {
       this.logger.error('Error publishing message:', err);
     }

@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+import { TaskEntity } from './task.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 import { JobRunStatus } from 'src/constants/enums';
 
 
@@ -13,7 +15,7 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
@@ -21,7 +23,7 @@ export class JobRunEntity extends Base {
   startTime: Date;
 
   @ApiProperty({ description: 'End time of the job' })
-  @Column({ name: 'end_time' })
+  @Column({ name: 'end_time' , nullable: true})
   endTime: Date;
 
   @ApiProperty({ description: 'Iteration number of the job' })
@@ -32,6 +34,13 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
 
-  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
-  jobConfig: JobConfigEntity; 
+  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRun, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+  @JoinColumn({ name: 'job_config_id' }) 
+  jobConfig: JobConfigEntity;
+
+  @OneToMany(()=>TaskEntity, task=>task.jobRun, { cascade: true,  eager: false})
+  task: TaskEntity[]
+
+  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
+  workerMap: WorkerJobRunMap[]
 }

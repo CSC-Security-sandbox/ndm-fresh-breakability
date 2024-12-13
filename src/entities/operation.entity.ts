@@ -1,40 +1,49 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { OperationStatus, OperationType } from 'src/constants/enums';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
-import { ErrorDetails, OperationStatus, OperationType } from 'src/constants/enums';
-
+import { TaskEntity } from './task.entity';
 
 
 @Entity({ name: 'operations', schema: 'migrateadmin' })
-@Index('idx_task_id', ['taskId'])
+@Index('idx_operation_run_status', ['jobRunId', 'status'])
+@Index('idx_file_path_task', ['fPath', 'taskId'])
 @Index('idx_operation_type', ['operationType'])
-export class OperationEntity extends Base {
-  @ApiProperty({ description: 'UUID of the task' })
+export class OperationsEntity extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ApiProperty({ description: 'Task id' })
-  @Column({ type: 'uuid', nullable: false,  name: 'task_id'})
+  @Column({ type: 'uuid', name: 'task_id' , nullable: true})
   taskId: string;
 
-  @ApiProperty({ description: 'Operation status' })
-  @Column({ type: 'enum', enum: OperationStatus, default: OperationStatus.Failed, name:'status' })
-  status: OperationStatus;
+  @Column({ type: 'uuid', name: 'job_run_id' , nullable: true})
+  jobRunId: string;
 
-  @ApiProperty({ description: 'Operation type' })
-  @Column({ type: 'enum', enum: OperationType, name:'operation_type' })
+  @Column({ type: 'varchar',  name: 'status' , nullable: false})
+  status: OperationStatus;
+ 
+  @Column({ name: 'operation_type',  type: 'varchar', nullable: false })
   operationType: OperationType;
 
-  @ApiProperty({ description: 'Operation paylod sent to worker' })
-  @Column({ type: 'jsonb', nullable: false, name: 'request_payload' })
-  request: object;
+  @Column({ name: 'request', type: 'jsonb', nullable: false })
+  request: Record<string, any>;
 
+  @Column({ name: 'error_details', type: 'text', nullable: true })
+  errorDetails: string;
 
-  @ApiProperty({ description: 'Retry Count' })
-  @Column({ type: 'int', nullable: false, name: 'retry_count' ,default: 0})
+  @Column({ name: 'f_path', type: 'text' , nullable: false})
+  fPath: string;
+
+  @Column({ name: 'retry_count', type: 'int' , nullable:true})
   retryCount: number;
 
-  @ApiProperty({ description: 'Error Details' })
-  @Column({ type: 'jsonb', nullable: true, name: 'error_details'})
-  errorDetails: ErrorDetails;
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+
+  @ManyToOne(() => TaskEntity, task => task.operations, { onDelete:'CASCADE'})
+  @JoinColumn({ name: 'task_id' }) 
+  task: TaskEntity;
+
 }

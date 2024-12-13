@@ -9,9 +9,9 @@ export default registerAs(
     },
     rabbitmq: {
         urls: process.env.RABBITMQ_URL?.split(',') || [],
-        serviceQueue: process.env.RABBITMQ_QUEUE || '',
+        queue: process.env.RABBITMQ_QUEUE || '',
         durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false,
-        taskQueue: process.env.RABBITMQ_TASK_LIST_QUEUE || '',
+        taskqueue: process.env.RABBITMQ_TASK_LIST_QUEUE
     }
   }),
 );

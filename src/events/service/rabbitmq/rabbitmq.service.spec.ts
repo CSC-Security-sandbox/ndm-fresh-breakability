@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { EventsGateway } from '../getway/events.gateway';
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
 import { RabbitMqService } from './rabbitmq.service';
+import { EventsGateway } from 'src/events/getway/events.gateway';
 
 jest.mock('amqp-connection-manager');
 

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobConfigService } from './jobconfig.service';
 import { JobConfigController } from './jobconfig.controller';
+
 import { JobIdMappingEntity } from '../entities/jobmapping.entity';
 
 @Module({

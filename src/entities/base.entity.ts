@@ -11,10 +11,10 @@ export class Base {
   updatedAt: Date;
   
   @ApiProperty({ description: 'created_by' })
-  @Column({ name: 'created_by' })
+  @Column({ name: 'created_by', nullable: true })
   createdBy: string;
 
-  @ApiProperty({ description: 'updated_by'})
-  @Column({ name: 'updated_by',nullable:true })
+  @ApiProperty({ description: 'updated_by' })
+  @Column({ name: 'updated_by' , nullable: true})
   updatedBy: string;
 }

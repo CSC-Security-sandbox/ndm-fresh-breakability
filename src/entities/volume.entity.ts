@@ -35,9 +35,12 @@ export class VolumeEntity extends Base {
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
 
-    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: true})
-    inventory: InventoryEntity[]
+    @OneToMany(()=> JobConfigEntity, inventory=>inventory.sourcePath,{ cascade: true,  eager: false})
+    sourcePath: JobConfigEntity[]
 
-    @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: true})
-    jobConfig: JobConfigEntity[]
+    @OneToMany(()=> JobConfigEntity, inventory=>inventory.targetPath,{ cascade: true,  eager: false})
+    targetPath: JobConfigEntity[]
+
+    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: false})
+    inventory: InventoryEntity[]
 }
