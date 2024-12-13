@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 
@@ -14,7 +14,7 @@ export enum JobRunStatus {
   Errored = 'ERRORED'
 }
 
-@Entity({ name: 'jobrun', schema: 'migrate' })
+@Entity({ name: 'jobrun', schema: 'migrateadmin' })
 export class JobRunEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
@@ -37,5 +37,6 @@ export class JobRunEntity extends Base {
   jobConfigId: string;
 
   @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
+  @JoinColumn({ name: 'job_config_id' })
   jobConfig: JobConfigEntity; 
 }

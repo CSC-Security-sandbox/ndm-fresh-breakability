@@ -18,7 +18,7 @@ export enum JobType {
 }
 
 
-@Entity({ name: 'jobconfig', schema: 'migrate' })
+@Entity({ name: 'jobconfig', schema: 'migrateadmin' })
 export class JobConfigEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')
@@ -29,7 +29,7 @@ export class JobConfigEntity extends Base {
   jobType: JobType;
 
   @ApiProperty({ description: 'Status of the job' })
-  @Column({ type: 'enum', enum: JobStatus, name: 'status' })
+  @Column({ type: 'varchar', name: 'status' })
   status: JobStatus;
 
   @ApiProperty({ description: 'Exclude files older than this date' })
