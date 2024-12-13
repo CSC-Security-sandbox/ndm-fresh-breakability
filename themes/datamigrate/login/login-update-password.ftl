@@ -2,17 +2,27 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        .password-rule {
-            font-size: 0.9rem;
-            margin-top: 5px;
-        }
-        .rule-passed {
-            color: green;
-        }
-        .rule-failed {
-            color: red;
-        }
-    </style>
+    .password-rule {
+        font-size: 0.75rem;
+        font-family: 'Roboto', sans-serif;
+        letter-spacing: 1px;
+        margin-top: 0.4rem;
+        line-height: 1.2;
+    }
+    .rule-passed {
+        color: green;
+    }
+    .rule-failed {
+        color: red;
+    }
+    .password-policy-heading {
+        font-size: 0.85rem;
+        font-weight: bold;
+        font-family: 'Roboto', sans-serif;
+        color: #000000;
+        margin-top: 1.3rem;
+    }
+</style>
 </head>
 
 <#import "template.ftl" as layout>
@@ -52,7 +62,6 @@
                             <label for="password-new" class="${properties.kcLabelClass!}">
                                 ${msg("passwordNew")}
                             </label>
-                            <button>Clickme</button>
                             <div class="relative ${properties.kcInputWrapperClass!}">
                                 <input type="password" id="password-new" name="password-new" class="${properties.kcInputClass!}" autocomplete="new-password" placeholder="Enter ${msg("passwordNew")}" aria-invalid="<#if messagesPerField.existsError('password')>true</#if>" />
                                 <button type="button" id="toggle-password-new" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">
@@ -66,12 +75,16 @@
                             </#if>
 
                             <!-- Password Rules -->
-                            <div id="password-rules" class="password-rule">
-                                <div id="rule-length" class="rule-failed">At least 8 characters</div>
-                                <div id="rule-uppercase" class="rule-failed">At least one uppercase letter</div>
-                                <div id="rule-lowercase" class="rule-failed">At least one lowercase letter</div>
-                                <div id="rule-number" class="rule-failed">At least one number</div>
-                                <div id="rule-special" class="rule-failed">At least one special character</div>
+                           <!-- Password Rules -->
+                            <div id="password-rules-container">
+                                <div class="password-policy-heading">Password Policy</div>
+                                    <div id="password-rules" class="password-rule">
+                                    <div id="rule-length" class="rule-failed">At least 8 characters</div>
+                                    <div id="rule-uppercase" class="rule-failed">At least one uppercase letter</div>
+                                    <div id="rule-lowercase" class="rule-failed">At least one lowercase letter</div>
+                                    <div id="rule-number" class="rule-failed">At least one number</div>
+                                    <div id="rule-special" class="rule-failed">At least one special character</div>
+                                </div>
                             </div>
                         </div>
 
@@ -96,7 +109,7 @@
                         <!-- Submit Button -->
                         <div class="my-2 w-full">
                             <button id="kc-update-password" type="submit" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}">
-                                ${msg("doSubmit")}
+                                Reset Password
                             </button>
                         </div>
                     </div>

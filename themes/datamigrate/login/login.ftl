@@ -1,6 +1,11 @@
 <head>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .emailInputLable {
+        margin-bottom: 0.8rem;
+        }
+    </style>
 </head>
 <#import "template.ftl" as layout>
     <@layout.registrationLayout displayMessage=false displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
@@ -33,8 +38,8 @@
                             <div class="flex flex-col gap-10">
                                 <!-- Username -->
                                 <div class="w-full text-left">
-                                    <label class="${properties.kcLabelWrapperClass!}">Email/Username</label>
-                                    <div class="${properties.kcInputWrapperClass!}">
+                                    <label class="${properties.kcLabelWrapperClass!} emailInputLable">Email/Username</label>
+                                    <div class="${properties.kcInputWrapperClass!} mt-3 mb-2">
                                         <input
                                             tabindex="1"
                                             id="username"
@@ -51,7 +56,7 @@
                                 <!-- Password -->
                                 <div class="w-full text-left">
                                     <label class="${properties.kcLabelWrapperClass!}">Password</label>
-                                    <div class="${properties.kcInputWrapperClass!} relative">
+                                    <div class="${properties.kcInputWrapperClass!} relative mt-3">
                                         <input
                                             tabindex="2"
                                             id="password"
