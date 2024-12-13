@@ -11,6 +11,7 @@ describe('JobRunController', () => {
     findAllJobRuns: jest.fn(),
     getJobRun: jest.fn(),
     scheduleAJob: jest.fn(),
+    getJobAllRuns: jest.fn()
   };
 
   beforeEach(async () => {
@@ -31,13 +32,13 @@ describe('JobRunController', () => {
   describe('getJobRuns', () => {
     it('should return a list of job runs', async () => {
       const jobRuns = [{ id: '1', name: 'Job 1' }];
-      mockJobRunService.findAllJobRuns.mockResolvedValue(jobRuns);
+      mockJobRunService.getJobAllRuns.mockResolvedValue(jobRuns);
 
       const jobRunPageDto = new JobRunPageDto();
       const result = await controller.getJobRuns(jobRunPageDto);
 
       expect(result).toEqual(jobRuns);
-      expect(mockJobRunService.findAllJobRuns).toHaveBeenCalledWith(jobRunPageDto);
+      expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(jobRunPageDto);
     });
   });
 

@@ -26,7 +26,7 @@ export class JobRunController {
   })
   @Get('/')
   async getJobRuns(@Query(new ValidationPipe({ transform: false, whitelist: true }))  jobRunPageDto: JobRunPageDto) {
-      return await this.jobRunService.findAllJobRuns(jobRunPageDto);
+      return await this.jobRunService.getJobAllRuns(jobRunPageDto);
   }
 
   @ApiOperation({ summary: 'Get job run by ID' })
