@@ -1,178 +1,128 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
-import { JobConfigEntity} from '../entities/jobconfig.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CreateJobConfigDto } from '../dto/jobconfig.dto';
-import { VolumeEntity } from 'src/entities/volume.entity';
-import * as parser from 'cron-parser';
-import { log } from 'console';
-import {  JobStatus, JobType } from 'src/constants/enums';
+import { BadRequestException } from '@nestjs/common';
+import { JobConfigDto } from './dto/jobconfig.dto';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobListingDTO } from './dto/joblisting.dto';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobStatus } from 'src/constants/enums';
 
-const mockJobEntity = {
-  id: 'uuid1',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  createdBy: '',
-  updatedBy: '',
-  jobType: JobType.Scan,
-  sourcePathId: '',
-  targetPathId: '',
-  excludeFilePatterns: '',
-  excludeOlderThan: new Date(),
-  preserveAccessTime: false,
-  futureScheduleAt: null,
-  firstRunAt: null,
-  status: JobStatus.Active,
-};
-
-const mockJobDto: CreateJobConfigDto = {
-  createdBy: '',
-  updatedBy: '',
-  jobType: JobType.Scan,
-  sourcePathId: '',
-  status: JobStatus.Active, 
-  preserveAccessTime: false, 
-  futureScheduleAt: null, 
-  targetPathId: '',
-  firstRunAt: new Date(),
-};
-
-describe('JobConfigService', () => {
+describe('JobConfigController', () => {
+  let controller: JobConfigController;
   let service: JobConfigService;
-  let repo: Repository<JobConfigEntity>;
+
+  const mockJobConfigService = {
+    createJobConfig: jest.fn(),
+    createBulkDiscovery: jest.fn(),
+    getAllJobConfig: jest.fn(),
+    getJobConfigById: jest.fn(),
+    updateJobConfig: jest.fn(),
+    deleteJobConfig: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      controllers: [JobConfigController],
       providers: [
-        JobConfigService,
         {
-          provide: getRepositoryToken(JobConfigEntity),
-          useValue: {
-            findOne: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            remove: jest.fn(),
-            find: jest.fn(),
-            createQueryBuilder: jest.fn(),
-          },
+          provide: JobConfigService,
+          useValue: mockJobConfigService,
         },
       ],
     }).compile();
 
+    controller = module.get<JobConfigController>(JobConfigController);
     service = module.get<JobConfigService>(JobConfigService);
-    repo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
   });
 
   it('should be defined', () => {
-    expect(service).toBeDefined();
+    expect(controller).toBeDefined();
   });
 
-  // describe('createJobConfig', () => {
-  //   it('should create a job', async () => {
-  //     jest.spyOn(repo, 'create').mockReturnValue(mockJobEntity);
-  //     jest.spyOn(repo, 'save').mockResolvedValue(mockJobEntity);
+  describe('createJobConfig', () => {
+    it('should create a job config', async () => {
+      const jobConfigDto: JobConfigDto = { id: 'asd', status: JobStatus.Active } as any;
+      const jobConfigEntity: JobConfigEntity = { id: '1' } as JobConfigEntity;
 
-  //     const result = await service.createJobConfig(mockJobDto);
-  //     expect(result).toEqual(mockJobEntity);
-  //     expect(repo.create).toHaveBeenCalled();
-  //     expect(repo.save).toHaveBeenCalled();
-  //   });
-  // });
+      mockJobConfigService.createJobConfig.mockResolvedValue(jobConfigEntity);
 
-  describe('getJobConfigById', () => {
-    it('should return a job by id', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(mockJobEntity as any);
+      const result = await controller.createJobConfig(jobConfigDto);
+      expect(result).toEqual(jobConfigEntity);
+      expect(mockJobConfigService.createJobConfig).toHaveBeenCalledWith(jobConfigDto);
+    });
+  });
 
-      const result = await service.getJobConfigById('uuid1');
-      expect(result).toEqual(mockJobEntity);
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 'uuid1' } });
+  describe('createBulkDiscovery', () => {
+    it('should create bulk discovery jobs', async () => {
+      const bulkDiscovery: JobConfigDiscoverBulk = { sourcePathIds: ['123'] } as  JobConfigDiscoverBulk ;
+      const jobConfigEntities: JobConfigEntity[] = [
+        { id: '1', },
+        { id: '2', },
+      ] as JobConfigEntity[];
+
+      mockJobConfigService.createBulkDiscovery.mockResolvedValue(jobConfigEntities);
+
+      const result = await controller.createBulkDiscovery(bulkDiscovery);
+      expect(result).toEqual(jobConfigEntities);
+      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkDiscovery);
+    });
+  });
+
+  describe('getAllJobConfig', () => {
+    it('should throw BadRequestException if projectId is missing', async () => {
+      await expect(controller.getAllJobConfig('')).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw an error if job not found', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(undefined);
+    it('should return all job configs for a project', async () => {
+      const projectId = 'project1';
+      const jobListing: JobListingDTO[] = [{ jobConfigId: '1', }] as JobListingDTO[];
 
-      await expect(service.getJobConfigById('uuid1')).rejects.toThrowError(
-        'Job with id uuid1 not found',
-      );
+      mockJobConfigService.getAllJobConfig.mockResolvedValue(jobListing);
+
+      const result = await controller.getAllJobConfig(projectId);
+      expect(result).toEqual(jobListing);
+      expect(mockJobConfigService.getAllJobConfig).toHaveBeenCalledWith(projectId);
+    });
+  });
+
+  describe('getJobConfigById', () => {
+    it('should return a job by its ID', async () => {
+      const jobId = '1';
+      const job = { id: jobId, name: 'Test Job' };
+
+      mockJobConfigService.getJobConfigById.mockResolvedValue(job);
+
+      const result = await controller.getJobConfigById(jobId);
+      expect(result).toEqual(job);
+      expect(mockJobConfigService.getJobConfigById).toHaveBeenCalledWith(jobId);
     });
   });
 
   describe('updateJobConfig', () => {
-    it('should update a job', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(mockJobEntity as any);
-      jest.spyOn(repo, 'save').mockResolvedValue(mockJobEntity as any);
+    it('should update a job config', async () => {
+      const jobId = '1';
+      const jobConfigDto: JobConfigDto = { sourcePathId: '76a4sd76as5d768as' } as JobConfigDto;
+      const updatedJob = { id: jobId, ...jobConfigDto };
 
-      const result = await service.updateJobConfig('uuid1', mockJobDto);
-      expect(result).toEqual(mockJobEntity);
-      expect(repo.save).toHaveBeenCalledWith(mockJobEntity);
-    });
+      mockJobConfigService.updateJobConfig.mockResolvedValue(updatedJob);
 
-    it('should throw an error if job not found', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(undefined);
-
-      await expect(service.updateJobConfig('uuid1', mockJobDto)).rejects.toThrowError(
-        'Job with id uuid1 not found',
-      );
+      const result = await controller.updateJobConfig(jobId, jobConfigDto);
+      expect(result).toEqual(updatedJob);
+      expect(mockJobConfigService.updateJobConfig).toHaveBeenCalledWith(jobId, jobConfigDto);
     });
   });
 
   describe('deleteJobConfig', () => {
-    it('should delete a job by id', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(mockJobEntity as any);
-      jest.spyOn(repo, 'remove').mockResolvedValue(undefined);
+    it('should delete a job config', async () => {
+      const jobId = '1';
+      const message = { message: 'Job deleted successfully' };
 
-      const result = await service.deleteJobConfig('uuid1');
-      expect(result).toEqual({ message: 'Job with id uuid1 has been deleted' });
-      expect(repo.remove).toHaveBeenCalledWith(mockJobEntity);
+      mockJobConfigService.deleteJobConfig.mockResolvedValue(message);
+
+      const result = await controller.deleteJobConfig(jobId);
+      expect(result).toEqual(message);
+      expect(mockJobConfigService.deleteJobConfig).toHaveBeenCalledWith(jobId);
     });
-
-    it('should throw an error if job not found', async () => {
-      jest.spyOn(repo, 'findOne').mockResolvedValue(undefined);
-
-      await expect(service.deleteJobConfig('uuid1')).rejects.toThrowError(
-        'Job with id uuid1 not found',
-      );
-    });
-  });
-
-  it('should return transformed job configurations', async () => {
-    jest.spyOn(repo, 'createQueryBuilder').mockImplementation(() => ({
-      leftJoin: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      addGroupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([
-        {
-          jobconfigid: '1',
-          jobtype: 'Backup',
-          jobconfigstatus: 'Active',
-          sourcepathid: 'src1',
-          targetpathid: 'dst1',
-          futureschedule: '0 0 * * *',
-          path: '/source/path',
-          protocol: 'NFS',
-          configname: 'Config1',
-          createdat: new Date(),
-        },
-      ]),
-    }) as any);
-
-    const result = await service.getAllJobConfig();
-    log
-
-    expect(result).toEqual([
-      {
-        jobConfigId: '1',
-        jobType: 'Backup',
-        jobStatus: 'Active',
-        nextScheduleDate: parser.parseExpression('0 0 * * *').next().toDate(),
-        sourcePath: '/source/path',
-        errors: 0,
-        protocol: 'NFS',
-        configName: 'Config1',
-      },
-    ]);
   });
 });

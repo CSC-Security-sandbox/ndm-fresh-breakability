@@ -35,7 +35,8 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
 
-  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRuns, {eager: false })
+  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRuns, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+  @JoinColumn({ name: 'job_config_id' }) 
   jobConfig: JobConfigEntity; 
 
   @OneToMany(() => InventoryEntity, inventory => inventory.jobRuns, { cascade: true, eager: false })

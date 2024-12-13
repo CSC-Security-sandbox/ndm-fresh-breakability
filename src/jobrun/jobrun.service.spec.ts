@@ -9,6 +9,7 @@ import { EmitterEvents } from 'src/constants/events';
 import { JobRunPageDto } from './dto/jobrunpage.dto';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { InventoryEntity } from 'src/entities/inventory.entity';
 
 describe('JobRunService', () => {
   let service: JobRunService;
@@ -16,6 +17,7 @@ describe('JobRunService', () => {
   let jobConfigRepo: Repository<JobConfigEntity>;
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
+  let inventoryRepo: Repository<InventoryEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +35,17 @@ describe('JobRunService', () => {
           provide: getRepositoryToken(WorkerJobRunMap),
           useClass: Repository,
         },
+        {
+          provide: getRepositoryToken(InventoryEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
         EventEmitter2,
       ],
     }).compile();
@@ -41,6 +54,7 @@ describe('JobRunService', () => {
     jobRunRepo = module.get<Repository<JobRunEntity>>(getRepositoryToken(JobRunEntity));
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(getRepositoryToken(WorkerJobRunMap));
+    inventoryRepo = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });
 
@@ -258,7 +272,7 @@ describe('JobRunService', () => {
       jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce(workers as any);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(total);
 
-      const result = await service.findAllJobRuns({});
+      const result = await service.findAllJobRuns({} as any);
 
       expect(result).toEqual({ data: workers, total });
       expect(jobRunRepo.find).toHaveBeenCalled();
@@ -274,7 +288,7 @@ describe('JobRunService', () => {
         iterationNumber: 1,
         jobConfigId : "e45678",
         status: JobRunStatus.Ready,
-      };
+      } as any;
       const workers = [{ id: '1', name: 'Worker1' }, { id: '2', name: 'Worker2' }];
       const total = 2;
 
@@ -292,7 +306,7 @@ describe('JobRunService', () => {
       const jobRunPageDto: JobRunPageDto = {
         sort: 'name',
         order: 'asc',
-      };
+      }as any
       const jobRun = [{ id: '1', name: 'jobRun1' }, { id: '2', name: 'jobRun2' }];
       const total = 2;
 
@@ -310,7 +324,7 @@ describe('JobRunService', () => {
     });
 
     it('should return an empty result when no workers are found', async () => {
-      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' };
+      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' }as any
       jest.spyOn(jobRunRepo, 'find').mockResolvedValueOnce([]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValueOnce(0);
 
@@ -321,7 +335,7 @@ describe('JobRunService', () => {
     });
 
     it('should handle jobRunRepo errors', async () => {
-      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' };
+      const jobRunPageDto: JobRunPageDto = { page: '1', limit: '10' }as any
       jest.spyOn(jobRunRepo, 'find').mockRejectedValueOnce(new Error('Database error'));
 
       await expect(service.findAllJobRuns(jobRunPageDto)).rejects.toThrow('Database error');
@@ -358,10 +372,156 @@ describe('JobRunService', () => {
       );
   
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
-      // expect(jobRunRepo.save).not.toHaveBeenCalled();
     });
   });
   
+  
+  it('should return job runs with calculated stats', async () => {
+    const filter = { projectId: 'project123' };
+    const mockJobRuns = [
+      {
+        jobtype: 'COPY',
+        volumepath: '/source/path',
+        sourcefileserverprotocol: 'HTTP',
+        sourceconfigname: 'SourceServer',
+        targetvolumepath: '/target/path',
+        targetfileserverprotocol: 'FTP',
+        targetconfigname: 'TargetServer',
+        status: 'SUCCESS',
+        starttime: new Date(Date.now() - 10000),
+        endtime: new Date(),
+      },
+    ];
+  
+    const mockInventoryStats = {
+      filecount: '10',
+      directorycount: '2',
+      totalsize: '2048',
+    };
+
+    jest.spyOn(jobRunRepo, 'createQueryBuilder').mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
+    } as any);
+
+
+    jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(mockInventoryStats),
+    } as any);
+  
+    const result = await service.getJobAllRuns(filter);
+  
+    expect(result).toMatchObject([
+      {
+        status: 'SUCCESS',
+        startTime: mockJobRuns[0].starttime,
+        endTime: mockJobRuns[0].endtime,
+        jobType: 'COPY',
+        sourceServer: {
+          serverName: 'SourceServer',
+          path: '/source/path',
+          protocol: 'HTTP',
+        },
+        destinationServer: {
+          serverName: 'TargetServer',
+          path: '/target/path',
+          protocol: 'FTP',
+        },
+        scannedFilesCount: '10',
+        scannedDirectoriesCount: '2',
+        totalScannedSize: '2048',
+        errors: [],
+      },
+    ]);
+  });
+  
+  it('should handle no job runs for the given filter', async () => {
+    const filter = { projectId: 'nonexistent' };
+  
+
+    jest.spyOn(jobRunRepo, 'createQueryBuilder').mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    } as any);
+
+
+    jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(null),
+    } as any);
+  
+    
+    const result = await service.getJobAllRuns(filter);
+  
+    expect(result).toEqual([]);
+  });
+  
+  it('should handle missing inventory data for job runs', async () => {
+    const filter = { projectId: 'project123' };
+    const mockJobRuns = [
+      {
+        jobtype: 'COPY',
+        jobconfigid: 'config1',
+        volumepath: '/source/path',
+        sourcefileserverprotocol: 'HTTP',
+        sourceconfigname: 'SourceServer',
+        targetvolumepath: null,
+        targetfileserverprotocol: null,
+        targetconfigname: null,
+        status: 'SUCCESS',
+        starttime: new Date(Date.now() - 10000),
+        endtime: null,
+      },
+    ];
+  
+
+
+    jest.spyOn(jobRunRepo, 'createQueryBuilder').mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
+    } as any);
+
+
+    jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(null),
+    } as any);
+  
+    const result = await service.getJobAllRuns(filter);
+  
+    expect(result).toEqual([
+      {
+        status: 'SUCCESS',
+        startTime: mockJobRuns[0].starttime,
+        endTime: null,
+        jobType: 'COPY',
+        sourceServer: {
+          serverName: 'SourceServer',
+          path: '/source/path',
+          protocol: 'HTTP',
+        },
+        destinationServer: {},
+        timeElapsed: Date.now() - mockJobRuns[0].starttime.getTime(),
+        scannedFilesCount: '0',
+        scannedDirectoriesCount: '0',
+        totalScannedSize: '0',
+        errors: [],
+      },
+    ]);
+  });
   
 
 });

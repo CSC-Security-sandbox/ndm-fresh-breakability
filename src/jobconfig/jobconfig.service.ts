@@ -57,7 +57,10 @@ export class JobConfigService {
       ],
     });
 
-    const runStats= await Promise.all(jobConfig.jobRuns.map(async (jobRun) => {
+    if (!jobConfig) 
+      throw new Error(`Job with id ${id} not found`);
+
+    const runStats = await Promise.all(jobConfig.jobRuns.map(async (jobRun) => {
     
       const inventoryCounts = await this.inventoryRepo
         .createQueryBuilder('inventory')
@@ -84,35 +87,28 @@ export class JobConfigService {
   
     const payload={
       id: jobConfig.id,
-    jobType: jobConfig.jobType,
-    sourceServer: {
-      serverName: jobConfig.sourcePath?.fileServer?.config?.configName || null,
-      path: jobConfig.sourcePath?.volumePath || null,
-      protocol: jobConfig.sourcePath?.fileServer?.protocol || null,
-    },
+      jobType: jobConfig.jobType,
+      sourceServer: {
+        serverName: jobConfig.sourcePath?.fileServer?.config?.configName || null,
+        path: jobConfig.sourcePath?.volumePath || null,
+        protocol: jobConfig.sourcePath?.fileServer?.protocol || null,
+      },
 
-    destinationServer: jobConfig.targetPath? {
-      serverName: jobConfig.targetPath?.fileServer?.config?.configName || null,
-      path: jobConfig.targetPath?.volumePath || null,
-      protocol: jobConfig.targetPath?.fileServer?.protocol || null,
-    }:{},
+      destinationServer: jobConfig.targetPath? {
+        serverName: jobConfig.targetPath?.fileServer?.config?.configName || null,
+        path: jobConfig.targetPath?.volumePath || null,
+        protocol: jobConfig.targetPath?.fileServer?.protocol || null,
+      }:{},
 
-    status: jobConfig.status,    
-    createdAt: jobConfig.createdAt,
-    jobRuns: runStats,
-    errors: [],
-  };
-    console.log(payload)
-    if (!jobConfig) {
-      throw new Error(`Job with id ${id} not found`);
-    }
+      status: jobConfig.status,    
+      createdAt: jobConfig.createdAt,
+      jobRuns: runStats,
+      errors: [],
+    };
+
     return payload;
   }
 
-  async getJobConfigs(condition: FindManyOptions<JobConfigEntity>): Promise<JobConfigEntity[]> {
-    return await this.jobConfigRepo.find(condition);
-  }
-  
   async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
@@ -172,7 +168,6 @@ export class JobConfigService {
       .addGroupBy('targetConfig.configName')
       .addGroupBy('jobconfig.createdAt')
       .getRawMany();
-    console.log(allJobsDetails)
 
     const payload: JobListingDTO[] = [];
     allJobsDetails.forEach((job) => {

@@ -5,13 +5,12 @@ import { JobRunStatus, JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { FindManyOptions, In, Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunPageDto } from './dto/jobrunpage.dto';
-
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import path from 'path';
+
 
 @Injectable()
 export class JobRunService {
@@ -21,29 +20,32 @@ export class JobRunService {
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
-    @InjectRepository(InventoryEntity)
-    private inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+    @InjectRepository(InventoryEntity)
+    private inventoryRepo: Repository<InventoryEntity>,
     private readonly eventEmitter: EventEmitter2
   ) { }
 
 
-
+  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
+  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
+    this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
+  }
 
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
     const jobs: JobConfigEntity[] = await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
-      .leftJoinAndSelect('jobConfig.jobRun', 'jobRun')  
+      .leftJoinAndSelect('jobConfig.jobRuns', 'jobRuns')  
       .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath') 
       .leftJoinAndSelect('jobConfig.targetPath', 'targetPath') 
       .where('jobConfig.status = :status', { status: JobStatus.Active })
       .andWhere('jobConfig.firstRunAt <= :currentTime', { currentTime: currentTime.toISOString() }) 
-      .andWhere('jobRun.id IS NULL')  
+      .andWhere('jobRuns.id IS NULL')  
       .getMany();
     jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
     return jobs;
@@ -66,7 +68,6 @@ export class JobRunService {
 
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-
    
     if(job.targetPathId) {
       const workers:string[] = []
@@ -120,10 +121,39 @@ export class JobRunService {
     })
   }
 
+  //  ------------------- get JobRun Details ------------------ //
+  async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
+    const jobRun = await this.jobRunRepo.findOne({ where: { id } });
+    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
+    Object.assign(jobRun, data);
+    return this.jobRunRepo.save(jobRun);
+  }
+
+ //  ------------------- get JobRun Details ------------------ //
   async getJobRun(condition: FindManyOptions<JobRunEntity>): Promise<JobRunEntity[]> {
     const jobRun = await this.jobRunRepo.find(condition);
     if (!jobRun.length) throw new Error(`Job run not found`);
     return jobRun;
+  }
+
+  async findAllJobRuns(jobRunPageDto: JobRunPageDto) {
+    const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = jobRunPageDto;
+    
+    const findOptions: FindManyOptions<JobRunEntity> = {
+      where: filter, order: { [sort]: order }, 
+    };
+
+    let data = [], total = 0;
+    if (page && limit) {
+      findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+      findOptions.take = parseInt(limit); 
+      data = await this.jobRunRepo.find(findOptions);
+      total = await this.jobRunRepo.count({ where: filter });
+    } else {
+      data = await this.jobRunRepo.find(findOptions);
+      total = await this.jobRunRepo.count({ where: filter });
+    }
+    return { data, total };
   }
 
   async getJobAllRuns(
@@ -155,10 +185,7 @@ export class JobRunService {
     ])
     .getRawMany();
 
-      console.log(jobRuns)
-
     const runStats = await Promise.all(jobRuns.map(async (jobRun) => {
-      console.log(jobRun)
 
       const inventoryCounts = await this.inventoryRepo
         .createQueryBuilder('inventory')
@@ -169,6 +196,7 @@ export class JobRunService {
         ])
         .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRun.jobrunid })
         .getRawOne();
+
       return {
         jobRunId: jobRun.id,
         status: jobRun.status,
@@ -186,9 +214,9 @@ export class JobRunService {
           protocol: jobRun.targetfileserverprotocol,
         }:{},
         timeElapsed: jobRun.endtime ? jobRun.endtime.getTime() - jobRun.starttime.getTime() : Date.now() - jobRun.starttime.getTime(),
-        scannedFilesCount: BigInt(inventoryCounts.filecount || '0')?.toString(),
-        scannedDirectoriesCount: BigInt(inventoryCounts.directorycount || '0')?.toString(),
-        totalScannedSize: BigInt(inventoryCounts.totalsize || '0')?.toString(),
+        scannedFilesCount: BigInt(inventoryCounts?.filecount || '0')?.toString(),
+        scannedDirectoriesCount: BigInt(inventoryCounts?.directorycount || '0')?.toString(),
+        totalScannedSize: BigInt(inventoryCounts?.totalsize || '0')?.toString(),
         errors: []
       };
     }));
@@ -196,17 +224,6 @@ export class JobRunService {
 
   }
 
-  async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
-    const jobRun = await this.jobRunRepo.findOne({ where: { id } });
-    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
-    Object.assign(jobRun, data);
-    return this.jobRunRepo.save(jobRun);
-  }
-
-
-  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
-  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
-  }
+ 
 
 }
