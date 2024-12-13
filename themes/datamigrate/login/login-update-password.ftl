@@ -163,7 +163,7 @@
                 const password = document.getElementById('password-new').value;
                 const confirmPassword = document.getElementById('password-confirm').value;
                 if (password !== confirmPassword) {
-                    alert("Passwords do not match.");
+                    error.classList.remove('hidden');
                     return false;
                 }
                 return true;
