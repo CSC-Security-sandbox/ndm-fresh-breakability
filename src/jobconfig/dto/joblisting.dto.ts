@@ -20,21 +20,28 @@ export class JobListingDTO{
     @IsEnum(JobStatus)
     jobStatus: string;
 
-    @ApiProperty({ description: 'protocol' })
-    protocol: string;
-
     @ApiProperty({ description: 'Total Jobs Runs' ,nullable: true}) 
     totalRuns: number;
 
     @ApiProperty({ description: 'Destination Server Path Details' ,nullable: true})
-    destinationPath: string;
+    destinationServer:DestinationServer ;
 
     @ApiProperty({ description: 'Source Server Path Details' ,nullable: true})
-    sourcePath: string;
+    sourceServer: SourceServer;
 
     @ApiProperty({ description: 'Error counts for the job config',nullable: true })
     errors: number;
 
     @ApiProperty({ description: 'Next Schedule Date' ,nullable: true})
     nextScheduleDate:Date;
+}
+export interface SourceServer{
+    serverName: string;
+    path: string;
+    protocol: string;
+}
+export interface DestinationServer{
+    serverName?: string;
+    path?: string;
+    protocol?: string;
 }

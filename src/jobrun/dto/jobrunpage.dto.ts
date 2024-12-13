@@ -55,6 +55,10 @@ export class JobRunPageDto {
   @IsDateString()
   endTime?: Date;
 
+  @ApiPropertyOptional({ description: 'Project Id'})
+  @IsUUID()
+  projectId: string;
+
 }
 
 

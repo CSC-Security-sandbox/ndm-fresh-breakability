@@ -37,6 +37,11 @@ export class JobRunFilterDto {
   @IsUUID()
   jobConfigId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by Project ID', example: '1234' })
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by status', example: 'running' })
   @IsOptional()
   @IsString()
