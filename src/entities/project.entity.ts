@@ -5,7 +5,7 @@ import { Base } from "./base.entity";
 
 import { ConfigEntity } from "./config.entity";
 
-@Entity({name:'project', schema:'migrate'})
+@Entity({name:'project', schema:'migrateadmin'})
 export class ProjectEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
