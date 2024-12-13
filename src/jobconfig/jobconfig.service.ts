@@ -1,14 +1,12 @@
-import { v4 as uuid } from 'uuid';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
-import { Injectable, Logger } from '@nestjs/common';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { CreateJobConfigDto } from '../dto/jobconfig.dto';
-import { JobListingDTO } from 'src/jobconfig/joblisting.dto';
+import { JobConfigDto } from './dto/jobconfig.dto';
+import { JobListingDTO } from './dto/joblisting.dto';
 import * as parser from 'cron-parser';
-import { error, log } from 'console';
-import { FindallJobDetailsPageDto } from 'src/jobconfig/findallJobDetails.dto';
-import { JobStatus } from 'src/constants/enums';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobStatus, JobType } from 'src/constants/enums';
 import path from 'path';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 
@@ -22,21 +20,30 @@ export class JobConfigService {
     private inventoryRepo: Repository<InventoryEntity>,
   ) { }
 
-  // async createJobConfig(jobConfigData: CreateJobConfigDto): Promise<JobConfigEntity> {
-  //   this.logger.log(`Data to job - ${JSON.stringify(jobConfigData)}`);
-  //   const jobRecord = this.jobConfigRepo.create({
-  //     jobType: jobConfigData.jobType,
-  //     status: jobConfigData.status,
-  //     jobSchedule: jobConfigData.jobSchedule,
-  //     excludeOlderThan: jobConfigData.excludeOlderThan,
-  //     preserveAccessTime: jobConfigData.preserveAccessTime,
-  //     sourcePathId: jobConfigData.sourcePathId,
-  //     targetPathId: jobConfigData.targetPathId,
-  //     createdBy: jobConfigData?.createdBy,
-  //     updatedBy: jobConfigData?.updatedBy
-  //   });
-  //   return this.jobConfigRepo.save(jobRecord);
-  // }
+  async createJobConfig(jobConfigData: JobConfigDto): Promise<JobConfigEntity> {
+    const jobRecord = this.jobConfigRepo.create({
+      ...jobConfigData,
+      firstRunAt: jobConfigData?.firstRunAt?.toISOString() ?? new Date().toISOString()
+    });
+    return await this.jobConfigRepo.save(jobRecord);
+  }
+
+
+  async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
+    const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
+    const jobRecord: JobConfigEntity[] = bulkDiscovery.sourcePathIds.map((path: string) :JobConfigEntity=> this.jobConfigRepo.create({
+      status: JobStatus.Active,
+      excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+      jobType:  JobType.Scan,
+      preserveAccessTime: bulkDiscovery.preserveAccessTime,
+      sourcePathId: path,
+      excludeOlderThan:  bulkDiscovery.excludeOlderThan,
+      futureScheduleAt: bulkDiscovery.futureSchedule,
+      firstRunAt: firstRunAt,
+      createdBy: bulkDiscovery.createdBy
+    }))
+    return await this.jobConfigRepo.save(jobRecord);
+  }
 
   async getJobConfigById(id: string): Promise<any> {
     const jobConfig = await this.jobConfigRepo.findOne({ where: { id },  
@@ -106,24 +113,13 @@ export class JobConfigService {
   async getJobConfigs(condition: FindManyOptions<JobConfigEntity>): Promise<JobConfigEntity[]> {
     return await this.jobConfigRepo.find(condition);
   }
-
-  async getJobConfigsForCreatingJobRun() {
-    return await this.jobConfigRepo
-      .createQueryBuilder('jobconfig')
-      .leftJoin('jobrun', 'jobRun', 'jobRun.jobConfig Id = jobconfig.id')
-      .where('jobconfig.status = :status', { status: JobStatus.Active })
-      .andWhere('jobRun.id IS NULL')
-      .getMany();
-  }
-
-  async updateJobConfig(id: string, data: Partial<CreateJobConfigDto>): Promise<JobConfigEntity> {
+  
+  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
     }
-
     Object.assign(job, data);
-
     return this.jobConfigRepo.save(job);
   }
 
@@ -181,7 +177,6 @@ export class JobConfigService {
 
     const payload: JobListingDTO[] = [];
     allJobsDetails.forEach((job) => {
-      log(job)
       payload.push({
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,

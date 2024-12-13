@@ -1,18 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
+import { JobStatus, JobType } from 'src/constants/enums';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
-import { IncrementalJobScheduleType, JobStatus, JobType } from 'src/constants/enums';
 
 
-export class IncrementalSchedule {
-  @ApiProperty({ description: 'Job schedule type', enum: IncrementalJobScheduleType })
-  type: IncrementalJobScheduleType;
-
-  @ApiProperty({ description: 'Job schedule expression' })
-  schedule: string;
-}
 
 @Entity({ name: 'jobconfig', schema: 'migrateadmin' })
 export class JobConfigEntity extends Base {
@@ -21,11 +14,11 @@ export class JobConfigEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job type, e.g., discovery' })
-  @Column({ type: 'enum', enum: JobType, name: 'job_type' })
+  @Column({ type: 'varchar', name: 'job_type' })
   jobType: JobType;
 
   @ApiProperty({ description: 'Status of the job' })
-  @Column({ type: 'enum', enum: JobStatus, name: 'status' })
+  @Column({ type: 'varchar', name: 'status' })
   status: JobStatus;
 
   @ApiProperty({ description: 'Exclude files older than this date' })
@@ -41,8 +34,8 @@ export class JobConfigEntity extends Base {
   preserveAccessTime: boolean;
 
   @ApiProperty({ description: 'Job schedule configuration' })
-  @Column({ name: 'first_run_at', type: 'timestamp' ,nullable: true})
-  firstRunAt: Timestamp;
+  @Column({ name: 'first_run_at', type: 'timestamp with time zone' , nullable: true})
+  firstRunAt: string;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
   @Column({ name: 'future_schedule_at', type: 'text', nullable: true })

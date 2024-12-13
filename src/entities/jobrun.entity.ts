@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 import { JobRunStatus } from 'src/constants/enums';
 import { InventoryEntity } from './inventory.entity';
 import { TaskEntity } from './task.entity';
@@ -15,7 +16,7 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
@@ -23,7 +24,7 @@ export class JobRunEntity extends Base {
   startTime: Date;
 
   @ApiProperty({ description: 'End time of the job' })
-  @Column({ name: 'end_time' })
+  @Column({ name: 'end_time' , nullable: true})
   endTime: Date;
 
   @ApiProperty({ description: 'Iteration number of the job' })
@@ -43,4 +44,8 @@ export class JobRunEntity extends Base {
   @OneToMany(() => TaskEntity, task => task.jobRun, { cascade: true, eager: false })
   @Column({ type: 'uuid', nullable: true,  name: 'job_run_id'})
   tasks:TaskEntity[];
+
+  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
+  workerMap: WorkerJobRunMap[]
+
 }

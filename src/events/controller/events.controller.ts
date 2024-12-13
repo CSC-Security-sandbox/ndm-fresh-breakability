@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Logger, Param, Post, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkerRequestDTO, WorkerResponseDto } from '../dto/responsefilter.dto';
-import { EventsService } from '../service/events.service';
 import { ValidateConnectionDto } from '../dto/validateconnection.dto';
+import { EventsService } from '../service/events/events.service';
 
 
 

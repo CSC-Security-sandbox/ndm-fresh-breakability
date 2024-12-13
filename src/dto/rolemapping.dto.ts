@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsUUID, IsString, IsOptional } from 'class-validator';
-import { JobIdMappingType } from 'src/entities/jobmapping.entity';
+import { JobIdMappingType } from 'src/constants/enums';
 
 export class AccessControlMapping {
   @ApiProperty({ description: 'UUID of the file server' })

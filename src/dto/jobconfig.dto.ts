@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, IsBoolean, IsDate, IsObject, IsArray } from 'class-validator';
-import {  IncrementalSchedule } from '../entities/jobconfig.entity';
-import { JobSchedule, JobStatus, JobType } from 'src/constants/enums';
+import { IsBoolean, IsDate, IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { JobStatus, JobType } from 'src/constants/enums';
 
 export class IdMapping {
   @ApiProperty({ description: 'UUID of the source mapping' })

@@ -1,37 +1,32 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Get, Logger, Param, Query, ValidationPipe } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
-import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
+import { JobRunFilterDto } from './dto/jobrun.dto';
+import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 
 @ApiTags('jobs run')
 @Controller('job-run')
 export class JobRunController {
+  private readonly logger = new Logger(JobRunController.name);
   constructor(private readonly jobRunService: JobRunService) {}
 
-  @Get()
-  @ApiOperation({ summary: 'Get all job runs with pagination, sorting, and filtering' })
-  @ApiQuery({ name: 'page', type: Number, required: false, example: 1, description: 'Page number for pagination' })
-  @ApiQuery({ name: 'limit', type: Number, required: false, example: 10, description: 'Number of records per page' })
-  @ApiQuery({ name: 'sortField', type: String, required: false, example: 'start_time', description: 'Field to sort by' })
-  @ApiQuery({ name: 'sortOrder', enum: ['ASC', 'DESC'], required: false, example: 'ASC', description: 'Sort order' })
-  @ApiQuery({ 
-    name: 'filter', 
-    required: false, 
-    description: 'Filter object for job runs',
-    type: JobRunFilterDto,
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleCron(){
+    await this.jobRunService.scheduleAJob()
+  }
+
+
+  @ApiOperation({ summary: 'Get a paginated list of  Job Run',  description: 'Returns a list of  Job Run based on the provided pagination parameters.'})
+  @ApiOkResponse({ description: 'The list of Job Run has been retrieved successfully.',  type: JobRunPageResponseDto})
+  @ApiBadRequestResponse({
+      description: 'Invalid pagination parameters.'
   })
-  async getJobRuns(
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-    @Query('sortField') sortField = 'start_time',
-    @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
-    @Query() filter: JobRunFilterDto,
-  ) {
-    if (!filter.projectId){
-      throw new BadRequestException(`Required parameters['projectId'] is missing in the request`);
-    }
-    return this.jobRunService.getJobAllRuns(page, limit, sortField, sortOrder, filter);
+  @Get('/')
+  async getJobRuns(@Query(new ValidationPipe({ transform: false, whitelist: true }))  jobRunPageDto: JobRunPageDto) {
+      return await this.jobRunService.getJobAllRuns(jobRunPageDto);
   }
 
   @ApiOperation({ summary: 'Get job run by ID' })

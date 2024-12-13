@@ -1,17 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JobRunController } from './jobrun.controller';
 import { JobRunService } from './jobrun.service';
-import { JobRunFilterDto } from './jobrun.dto';
-import { JobRunStatus } from 'src/constants/enums';
-import { NotFoundException } from '@nestjs/common';
+import { JobRunController } from './jobrun.controller';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
-  let jobRunService: JobRunService;
+  let service: JobRunService;
 
   const mockJobRunService = {
-    getJobAllRuns: jest.fn(),
+    findAllJobRuns: jest.fn(),
     getJobRun: jest.fn(),
+    scheduleAJob: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -26,133 +25,47 @@ describe('JobRunController', () => {
     }).compile();
 
     controller = module.get<JobRunController>(JobRunController);
-    jobRunService = module.get<JobRunService>(JobRunService);
+    service = module.get<JobRunService>(JobRunService);
   });
 
-  it('should return paginated job runs with default parameters', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValueOnce(mockResponse);
+  describe('getJobRuns', () => {
+    it('should return a list of job runs', async () => {
+      const jobRuns = [{ id: '1', name: 'Job 1' }];
+      mockJobRunService.findAllJobRuns.mockResolvedValue(jobRuns);
 
-    const result = await controller.getJobRuns(1, 10, 'start_time', 'ASC', {});
+      const jobRunPageDto = new JobRunPageDto();
+      const result = await controller.getJobRuns(jobRunPageDto);
 
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(
-      1, 
-      10, 
-      'start_time', 
-      'ASC', 
-      {},
-    );
-    expect(result).toEqual(mockResponse);
+      expect(result).toEqual(jobRuns);
+      expect(mockJobRunService.findAllJobRuns).toHaveBeenCalledWith(jobRunPageDto);
+    });
   });
 
-  it('should return paginated job runs with default parameters for page 2 and desc', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValueOnce(mockResponse);
+  describe('getJobById', () => {
+    it('should return a job run by ID', async () => {
+      const jobRun = { id: '1', name: 'Job 1' };
+      mockJobRunService.getJobRun.mockResolvedValue([jobRun]);
 
-    const result = await controller.getJobRuns(2, 100, undefined, 'DESC', {});
+      const result = await controller.getJobById('1');
 
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalled();
-    expect(result).toEqual(mockResponse);
+      expect(result).toEqual([jobRun]);
+      expect(mockJobRunService.getJobRun).toHaveBeenCalledWith({
+        where: { id: '1' },
+      });
+    });
   });
 
-  it('should return paginated job runs with default parameters for page 2 , desc and no limit', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValueOnce(mockResponse);
+  describe('handleCron', () => {
+    it('should call the scheduleAJob method on the service', async () => {
+      mockJobRunService.scheduleAJob.mockResolvedValue(undefined);
 
-    const result = await controller.getJobRuns(2, undefined, undefined, 'DESC', {});
+      await controller.handleCron();
 
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalled();
-    expect(result).toEqual(mockResponse);
+      expect(mockJobRunService.scheduleAJob).toHaveBeenCalled();
+    });
   });
 
-  it('should return paginated job runs with default parameters with no filter', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValueOnce(mockResponse);
-
-    const result = await controller.getJobRuns(undefined, undefined, undefined, undefined, undefined);
-
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalled();
-    expect(result).toEqual(mockResponse);
-  });
-
-  it('should return paginated job runs with custom parameters', async () => {
-    const mockResponse = { data: [{ id: 1 }], total: 1 };
-    mockJobRunService.getJobAllRuns.mockResolvedValue(mockResponse);
-
-    const customFilter: JobRunFilterDto = { status: JobRunStatus.Completed };
-    const result = await controller.getJobRuns(
-      3, 
-      10, 
-      'end_time', 
-      'DESC', 
-      customFilter, 
-    );
-
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(
-      3,
-      10,
-      'end_time',
-      'DESC',
-      customFilter,
-    );
-    expect(result).toEqual(mockResponse);
-  });
-
-  it('should handle missing or invalid query parameters', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValue(mockResponse);
-
-    const result = await controller.getJobRuns(
-      null, 
-      undefined, 
-      '', 
-      'INVALID' as 'ASC' | 'DESC',
-      {}, 
-    );
-
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(
-      1, 
-      10, 
-      'start_time',
-      'ASC', 
-      {},
-    );
-    expect(result).toEqual(mockResponse);
-  });
-
-  it('should handle an empty filter', async () => {
-    const mockResponse = { data: [], total: 0 };
-    mockJobRunService.getJobAllRuns.mockResolvedValue(mockResponse);
-
-    const result = await controller.getJobRuns(1, 10, 'start_time', 'ASC', {});
-
-    expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(
-      1,
-      10,
-      'start_time',
-      'ASC',
-      {}, // empty filter
-    );
-    expect(result).toEqual(mockResponse);
-  });
-
-  it('should return a job run by its ID', async () => {
-    const jobRunId = '123';
-    const mockJobRun = [
-      {
-        id: jobRunId,
-        jobType: 'Backup',
-        status: 'Completed',
-        startTime: new Date(),
-        endTime: new Date(),
-      },
-    ];
-
-    mockJobRunService.getJobRun.mockResolvedValue(mockJobRun);
-
-    const result = await controller.getJobById(jobRunId);
-
-    expect(mockJobRunService.getJobRun).toHaveBeenCalledWith({ where: { id: jobRunId } });
-    expect(result).toEqual(mockJobRun);
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
   });
 });

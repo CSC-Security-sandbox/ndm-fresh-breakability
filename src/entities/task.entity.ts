@@ -1,16 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import { Base } from './base.entity';
-import { OperationEntity } from './operation.entity';
 import { TaskStatus, TaskType } from 'src/constants/enums';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { JobRunEntity } from './jobrun.entity';
+import { OperationsEntity } from './operation.entity';
 
 
 @Entity({ name: 'tasks', schema: 'migrateadmin' })
-@Index('idx_task_job_run_id', ['jobRunId'])
+@Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])
-export class TaskEntity extends Base {
+
+export class TaskEntity  {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -20,21 +20,28 @@ export class TaskEntity extends Base {
   jobRunId: string;
 
   @ApiProperty({ description: 'Task status' })
-  @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Pending, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: TaskStatus;
 
   @ApiProperty({ description: 'Task type' })
-  @Column({ type: 'enum', enum: TaskType, name:'task_type',nullable: true})
+  @Column({ type: 'varchar', name:'task_type',nullable: true})
   taskType: TaskType;
 
   @ApiProperty({ description: 'Id of the worker worked on the task' })
   @Column({ type: 'uuid', nullable: true,  name: 'worker_id' })
   workerId: string;
 
-  @ApiProperty({ description: 'Operations for the task' })
-  @Column({ type: 'jsonb', nullable: false, name: 'operations' })
-  operations: OperationEntity[];
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
 
-  @ManyToOne(() => JobRunEntity, jobRun => jobRun.tasks, { onDelete: 'CASCADE' }) 
-  jobRun: JobRunEntity;
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+
+  @ManyToOne(()=> JobRunEntity, jobRun=>jobRun.tasks, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
+  @JoinColumn({ name: 'job_run_id' })
+  jobRun: JobRunEntity
+
+  @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
+  operations: OperationsEntity[]
+
 }

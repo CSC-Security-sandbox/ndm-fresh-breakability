@@ -1,10 +1,15 @@
-import { JobConfigService } from '../jobconfig/jobconfig.service';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { InjectRepository } from '@nestjs/typeorm';
+import { JobRunStatus, JobStatus } from 'src/constants/enums';
+import { EmitterEvents } from 'src/constants/events';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FindManyOptions, In, Repository } from 'typeorm';
-import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
+import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
 import { JobRunEntity } from '../entities/jobrun.entity';
-import { JobRunStatus } from 'src/constants/enums';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
+
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import path from 'path';
 
@@ -18,14 +23,101 @@ export class JobRunService {
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
-
-    private readonly jobConfigService: JobConfigService
+    @InjectRepository(JobConfigEntity)
+    private jobConfigRepo: Repository<JobConfigEntity>,
+    @InjectRepository(WorkerJobRunMap)
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+    private readonly eventEmitter: EventEmitter2
   ) { }
 
-  async createJobRun(jobRunData: JobRunDto): Promise<JobRunEntity> {
-    this.logger.log(`Data to job run - ${JSON.stringify(jobRunData)}`);
-    const jobRunRecord = this.jobRunRepo.create(jobRunData);
-    return this.jobRunRepo.save(jobRunRecord);
+
+
+
+  // ------------------ Cron schedule -------------------- //
+  async scheduleAJob() {
+    const currentTime = new Date();
+    const jobs: JobConfigEntity[] = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .leftJoinAndSelect('jobConfig.jobRun', 'jobRun')  
+      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath') 
+      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath') 
+      .where('jobConfig.status = :status', { status: JobStatus.Active })
+      .andWhere('jobConfig.firstRunAt <= :currentTime', { currentTime: currentTime.toISOString() }) 
+      .andWhere('jobRun.id IS NULL')  
+      .getMany();
+    jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
+    return jobs;
+  }
+  
+  // ------------------ Get list of workers -------------------- //
+  async getSourceAndTargetWorkersByJobConfigId(
+    job: JobConfigEntity 
+  ): Promise<string[]> {
+    const jobConfig = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath')
+      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath')
+      .leftJoinAndSelect('sourcePath.fileServer', 'sourceFileServer')
+      .leftJoinAndSelect('sourceFileServer.workers', 'sourceWorkers')
+      .leftJoinAndSelect('targetPath.fileServer', 'targetFileServer')
+      .leftJoinAndSelect('targetFileServer.workers', 'targetWorkers')
+      .where('jobConfig.id = :jobConfigId', { jobConfigId: job.id })
+      .getOne();
+
+    const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
+    const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
+
+   
+    if(job.targetPathId) {
+      const workers:string[] = []
+      const workerSet = new Set<string>()
+      sourceWorkers.forEach(worker=> workerSet.add(worker.workerId))
+      targetWorkers?.forEach(worker=> {
+        if(workerSet.has(worker.workerId))
+          workers.push(worker.workerId)
+      })
+      return  workers 
+    }
+    return sourceWorkers.map(worker=> worker.workerId)
+  
+  }
+  
+  // ------------------ Create job run  -------------------- //
+  async createJobRun(job: JobConfigEntity , currentTime: Date) {
+    const workers =await this.getSourceAndTargetWorkersByJobConfigId(job)
+    
+    if(workers.length === 0) {
+      this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)
+      return
+    }
+
+    const workerMap = workers.map(worker => 
+      this.workerJobRunMapRepo.create({
+        workerId: worker,
+        isActive: true
+      })
+    )
+
+    const jobRunRecord = this.jobRunRepo.create({
+      status: JobRunStatus.Ready,
+      startTime: currentTime,
+      endTime: null,
+      iterationNumber: 1,
+      jobConfigId: job.id,
+      workerMap: workerMap
+    });
+    
+    const update = await this.jobRunRepo.save(jobRunRecord);
+  
+    this.eventEmitter.emit(EmitterEvents.TaskCreate, 
+      {
+        jobRunId: update.id,
+        status: update.status,
+        sPath: job.sourcePath.volumePath,
+        tPath: job.targetPath?.volumePath,
+        taskType: job.jobType,
+        workers : workers
+    })
   }
 
   async getJobRun(condition: FindManyOptions<JobRunEntity>): Promise<JobRunEntity[]> {
@@ -35,16 +127,12 @@ export class JobRunService {
   }
 
   async getJobAllRuns(
-    page: number,
-    limit: number,
-    sortField: string,
-    sortOrder: 'ASC' | 'DESC',
-    filter: JobRunFilterDto,
+    filter: JobRunPageDto,
   ) {
     const jobRuns = await this.jobRunRepo.createQueryBuilder('jobRun')
     .leftJoinAndSelect('jobRun.jobConfig', 'jobConfig')
     .leftJoinAndSelect('jobConfig.sourcePath', 'sourceVolume')
-    .leftJoinAndSelect('jobConfig.targetPath', 'targetVolume')  // Assuming targetPath relates to Volumes
+    .leftJoinAndSelect('jobConfig.targetPath', 'targetVolume') 
     .leftJoinAndSelect('sourceVolume.fileServer', 'sourceFileServer')
     .leftJoinAndSelect('targetVolume.fileServer', 'targetFileServer')
     .leftJoinAndSelect('sourceFileServer.config', 'sourceConfig')
@@ -115,20 +203,10 @@ export class JobRunService {
     return this.jobRunRepo.save(jobRun);
   }
 
-  async scheduleAJobRun(jobId: string) {
-    const job = await this.jobConfigService.getJobConfigById(jobId);
-    if (!job) {
-      throw new Error(`Job with id ${jobId} not found`);
-    }
-    const jobRun: Partial<JobRunDto> = {
-      status: JobRunStatus.Ready,
-      startTime: new Date(),
-      iterationNumber: 1,
-      jobConfigId: job.id,
-    };
-    this.logger.log(`Scheduling job run: ${JSON.stringify(jobRun)}`);
-    const createdJobRun = this.jobRunRepo.create(jobRun);
-    return this.jobRunRepo.save(createdJobRun);
+
+  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
+  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
+    this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
   }
 
 }
