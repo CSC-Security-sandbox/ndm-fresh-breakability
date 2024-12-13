@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
@@ -27,18 +28,30 @@ export class JobConfigService {
 
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
-    const jobRecord: JobConfigEntity[] = bulkDiscovery.sourcePathIds.map((path: string) :JobConfigEntity=> this.jobConfigRepo.create({
-      status: JobStatus.Active,
+    const existingList = await this.jobConfigRepo.find({where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, select: {sourcePathId:true}})
+    await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-      jobType:  JobType.Scan,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
-      sourcePathId: path,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-      futureScheduleAt: bulkDiscovery.futureSchedule,
-      firstRunAt: firstRunAt,
-      createdBy: bulkDiscovery.createdBy
-    }))
-    return await this.jobConfigRepo.save(jobRecord);
+    })
+    const existingSet = new Set(existingList.map(it=>it.sourcePathId))
+    const entries:JobConfigEntity[] = []
+    bulkDiscovery.sourcePathIds.forEach((path: string) =>  {
+      if(!existingSet.has(path))
+        entries.push(this.jobConfigRepo.create({
+          status: JobStatus.Active,
+          excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+          jobType:  JobType.Scan,
+          preserveAccessTime: bulkDiscovery.preserveAccessTime,
+          sourcePathId: path,
+          excludeOlderThan:  bulkDiscovery.excludeOlderThan,
+          futureScheduleAt: bulkDiscovery.futureSchedule,
+          firstRunAt: firstRunAt,
+          createdBy: bulkDiscovery.createdBy
+        })
+      )})
+    
+    return await this.jobConfigRepo.save(entries);
   }
 
   async getJobConfigById(id: string): Promise<JobConfigEntity> {

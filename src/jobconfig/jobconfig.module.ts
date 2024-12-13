@@ -5,6 +5,7 @@ import { JobConfigService } from './jobconfig.service';
 import { JobConfigController } from './jobconfig.controller';
 
 import { JobIdMappingEntity } from '../entities/jobmapping.entity';
+import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 
 @Module({
     imports: [

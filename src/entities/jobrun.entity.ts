@@ -1,11 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 import { JobRunStatus } from 'src/constants/enums';
-
+import { JobOptionsEntity } from './joboptions.entity';
 
 
 @Entity({ name: 'jobrun', schema: 'migrateadmin' })
@@ -34,6 +34,10 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
 
+  @ApiProperty({ description: 'Job ID associated with this run' })
+  @Column({ name: 'job_options_id' })
+  optionsId: string;
+
   @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRun, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
   @JoinColumn({ name: 'job_config_id' }) 
   jobConfig: JobConfigEntity;
@@ -43,4 +47,7 @@ export class JobRunEntity extends Base {
 
   @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
   workerMap: WorkerJobRunMap[]
+
+  @OneToOne(()=>JobOptionsEntity, jobOption=> jobOption.jobRun, {cascade: true,  eager: false})
+  options: JobOptionsEntity
 }
