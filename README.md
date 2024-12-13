@@ -27,6 +27,7 @@ docker build -t localhost:32000/data-migrate-ui:1.0.4 .
 ### Saving the Docker Image
 
 Once the image is built, save it to a file in the datamigrate directory. Replace <version> with the appropriate version, e.g., 1.0.4.
+You can add multiple docker images in this tar file by passing additional docker images
 ```
 docker save -o datamigrate/datamigrate_1.0.4.tar localhost:32000/data-migrate-ui:1.0.4
 ```
