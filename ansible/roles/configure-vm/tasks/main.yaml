@@ -1,0 +1,66 @@
+---
+- name: 2.1. Update apt package index
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: 2.2. Ensure essential packages are installed
+  apt:
+    name:
+      - curl
+      - apt-transport-https
+      - software-properties-common
+      - ca-certificates
+      - snapd
+      - firewalld
+      - ntp
+      - net-tools
+      - acl
+      - docker.io
+    state: present
+  
+- name: 2.3. Ensure Docker is started
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: 2.4. Upgrade all packages to the latest version
+  apt:
+    upgrade: dist
+    update_cache: yes
+
+- name: 2.5. Sets the /data directory owner as {{ vm_username }}
+  file:
+    path: /data
+    state: directory
+    owner: '{{ vm_username }}'
+    group: '{{ vm_username }}'   
+    mode: 0755
+
+- name: 2.6. Sets the /logs directory owner as {{ vm_username }}
+  file:
+    path: /logs
+    state: directory
+    owner: '{{ vm_username }}'
+    group: '{{ vm_username }}'   
+    mode: 0755
+  
+- name: 2.7. Sets default ACL for {{ vm_username }} on /data
+  ansible.posix.acl:
+    path: /data
+    entity: '{{ vm_username }}'
+    etype: user
+    permissions: rwx
+    default: true
+    state: present
+
+- name: 2.8. Sets default ACL for {{ vm_username }} on /logs
+  ansible.posix.acl:
+    path: /logs
+    entity: '{{ vm_username }}'
+    etype: user
+    permissions: rwx
+    default: true
+    state: present
+  

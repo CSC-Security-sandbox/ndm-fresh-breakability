@@ -1,0 +1,7 @@
+---
+- name: Configure Firewall
+  hosts: servers
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role:  ../roles/configure-firewall, tags: 'configure-firewall' }

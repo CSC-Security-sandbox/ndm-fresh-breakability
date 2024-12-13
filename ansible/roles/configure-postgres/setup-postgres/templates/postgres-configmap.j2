@@ -1,0 +1,238 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: postgres-init-config
+    namespace: postgres
+data:
+    createUserDb.sql: |
+
+        -- Grant all privileges to the new user (if needed)
+        GRANT ALL PRIVILEGES ON DATABASE datamigrate TO dmadmin;
+    
+    createSchema.sql: |
+
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+        -- public.account definition
+
+        -- Create schema migrateadmin
+        CREATE SCHEMA IF NOT EXISTS "migrateadmin";
+
+        -- Create account table in the migrateadmin schema
+        CREATE TABLE migrateadmin.account (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            account_name varchar(255) NOT NULL,
+            CONSTRAINT "PK_54115ee388cdb6d86bb4bf5b2ea" PRIMARY KEY (id)
+        );
+
+        -- Create permission table in the migrateadmin schema
+        CREATE TABLE migrateadmin.permission (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            permission_name varchar(255) NOT NULL,
+            permission_status varchar(255) NOT NULL,
+            CONSTRAINT "PK_3b8b97af9d9d8807e41e6f48362" PRIMARY KEY (id)
+        );
+
+        -- Create role table in the migrateadmin schema
+        CREATE TABLE migrateadmin.role (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            role_name varchar(255) NOT NULL,
+            role_status varchar(255) NOT NULL,
+            CONSTRAINT "PK_b36bcfe02fc8de3c57a8b2391c2" PRIMARY KEY (id)
+        );
+
+        -- Create user table in the migrateadmin schema
+        CREATE TABLE migrateadmin.user (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            email varchar(255) NOT NULL,
+            user_status varchar(255) NOT NULL,
+            first_name varchar(255) NULL,
+            last_name varchar(255) NULL,
+            CONSTRAINT "PK_cace4a159ff9f2512dd42373760" PRIMARY KEY (id)
+        );
+
+        -- Create project table in the migrateadmin schema
+        CREATE TABLE migrateadmin.project (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            project_name varchar(255) NOT NULL,
+            project_description text NULL,
+            start_date date NULL,
+            account_id uuid NULL,
+            CONSTRAINT "PK_4d68b1358bb5b766d3e78f32f57" PRIMARY KEY (id),
+            CONSTRAINT "FK_76eea9da615605bb68d1ffc995c" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id)
+        );
+
+        -- Create role_permission table in the migrateadmin schema
+        CREATE TABLE migrateadmin.role_permission (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            role_id uuid NOT NULL,
+            permission_id uuid NOT NULL,
+            CONSTRAINT "PK_96c8f1fd25538d3692024115b47" PRIMARY KEY (id),
+            CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES migrateadmin.role(id),
+            CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin.permission(id)
+        );
+
+        -- Create user_role table in the migrateadmin schema
+        CREATE TABLE migrateadmin.user_role (
+            created_at timestamp DEFAULT now() NOT NULL,
+            created_by uuid NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            updated_by uuid NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            user_id uuid NOT NULL,
+            role_id uuid NOT NULL,
+            project_id uuid NULL,
+            account_id uuid NOT NULL,
+            CONSTRAINT "PK_fb2e442d14add3cefbdf33c4561" PRIMARY KEY (id),
+            CONSTRAINT "FK_32a6fc2fcb019d8e3a8ace0f55f" FOREIGN KEY (role_id) REFERENCES migrateadmin.role(id),
+            CONSTRAINT "FK_7b6db8740e8e0e2916ac5c7d089" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id),
+            CONSTRAINT "FK_8541d9c873a5883eca10c3822e4" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id),
+            CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES migrateadmin.user(id)
+        );
+    seedDb.sql: |
+        DO $$
+        DECLARE
+            user_id UUID;
+            account_id UUID;
+            project_id UUID;
+
+        BEGIN
+            -- Clean up existing records in the migrateadmin schema
+            DELETE FROM "migrateadmin"."project" CASCADE;
+            DELETE FROM "migrateadmin"."account" CASCADE;
+            DELETE FROM "migrateadmin"."role_permission" CASCADE;
+            DELETE FROM "migrateadmin"."role" CASCADE;
+            DELETE FROM "migrateadmin"."permission" CASCADE;
+            DELETE FROM "migrateadmin"."user" CASCADE;
+
+            -- Ensure the UUID extension is available
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+            
+            -- Generate a system user for tracking
+            user_id = uuid_generate_v4();
+            INSERT INTO "migrateadmin"."user" (id, email, user_status, created_at, created_by, updated_at, updated_by) 
+            VALUES (
+                user_id,
+                'system@datamigrate.local',
+                'active',
+                now(),
+                user_id,
+                now(),
+                user_id
+            );
+
+            -- Insert permissions
+            INSERT INTO "migrateadmin"."permission" (id, permission_name, permission_status, created_at, created_by, updated_at, updated_by) 
+            VALUES
+                (uuid_generate_v4(), 'ManageProject', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'DeleteProject', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'UpdateProject', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'InviteUser', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'CreateUser', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'DeleteUser', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'UpdateUser', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'AgentDeployment', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ManageConfig', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ManageJob', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'RollbackJob', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ViewLogs', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ViewJob', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Reports', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ListUsers', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ViewProject', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ViewConfig', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ViewAgentsList', 'active', now(), user_id, now(), user_id);
+
+            -- Create roles
+            INSERT INTO "migrateadmin"."role" (id, role_name, role_status, created_at, created_by, updated_at, updated_by)
+            VALUES 
+                (uuid_generate_v4(), 'AccountAdmin', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'ProjectAdmin', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Viewer', 'active', now(), user_id, now(), user_id);
+
+            -- Assign permissions to roles
+            -- AccountAdmin gets all permissions
+            INSERT INTO "migrateadmin"."role_permission" (id, role_id, permission_id, created_at, created_by, updated_at, updated_by)
+            SELECT uuid_generate_v4(), r.id, p.id, now(), user_id, now(), user_id
+            FROM "migrateadmin"."role" r, "migrateadmin"."permission" p
+            WHERE r.role_name = 'AccountAdmin';
+
+            -- ProjectAdmin gets specific permissions
+            INSERT INTO "migrateadmin"."role_permission" (id, role_id, permission_id, created_at, created_by, updated_at, updated_by)
+            SELECT uuid_generate_v4(), r.id, p.id, now(), user_id, now(), user_id
+            FROM "migrateadmin"."role" r, "migrateadmin"."permission" p
+            WHERE r.role_name = 'ProjectAdmin'
+            AND p.permission_name IN (
+                'ManageProject', 'UpdateProject', 'AgentDeployment', 'ManageConfig', 
+                'ManageJob', 'RollbackJob', 'ViewLogs', 'ViewJob', 'Reports', 
+                'ListUsers', 'ViewProject', 'ViewConfig', 'ViewAgentsList'
+            );
+
+            -- Viewer gets only view-related permissions
+            INSERT INTO "migrateadmin"."role_permission" (id, role_id, permission_id, created_at, created_by, updated_at, updated_by)
+            SELECT uuid_generate_v4(), r.id, p.id, now(), user_id, now(), user_id
+            FROM "migrateadmin"."role" r, "migrateadmin"."permission" p
+            WHERE r.role_name = 'Viewer'
+            AND p.permission_name IN (
+                'ViewLogs', 'ViewJob', 'Reports', 'ListUsers', 
+                'ViewProject', 'ViewConfig', 'ViewAgentsList'
+            );
+
+            -- Insert accounts
+            INSERT INTO "migrateadmin"."account" (id, account_name, created_at, created_by, updated_at, updated_by)
+            VALUES 
+                (uuid_generate_v4(), 'Demo Account 1', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Account 2', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Account 3', now(), user_id, now(), user_id);
+
+            -- Insert projects
+            INSERT INTO "migrateadmin"."project" (id, project_name, account_id, start_date, created_at, created_by, updated_at, updated_by)
+            VALUES 
+                (uuid_generate_v4(), 'Demo Project 10', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Project 11', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Project 12', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Project 13', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Project 2', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 2'), now(), now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Demo Project 3', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 3'), now(), now(), user_id, now(), user_id);
+
+            -- Insert users
+            INSERT INTO "migrateadmin"."user" (id, email, user_status, created_at, created_by, updated_at, updated_by)
+            VALUES 
+                (uuid_generate_v4(), 'account-admin-1@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'account-admin-2@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'account-admin-3@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-11@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-12@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-multi@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-10@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-11@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-12@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-13@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-2@datamigrate.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-3@datamigrate.local', 'active', now(), user_id, now(), user_id);
+
+        END $$;

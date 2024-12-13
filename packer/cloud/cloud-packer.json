@@ -1,0 +1,8 @@
+{
+  "project_name": "datamigrate",
+  "datamigrate_release_version": "1.0.0",
+  "aws_ubuntu_release_version": "20241109",
+  "aws_packer_instance_type": "t3a.large",
+  "aws_region": "us-east-1"
+}
+  

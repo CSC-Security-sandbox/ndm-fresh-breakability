@@ -1,0 +1,17 @@
+- name: Configure user access on VM
+  import_playbook: configure-user.yaml
+
+- name: Configure VM by upgrading packages
+  import_playbook: configure-vm.yaml
+
+- name: Configure firewall
+  import_playbook: configure-firewall.yaml
+
+- name: Install and configure microk8s cluster, users, addons
+  import_playbook: configure-microk8s.yaml
+
+- name: Configure microk8s image registry with datamigrate application images
+  import_playbook: configure-microk8s-registry.yaml
+
+- name: Deploy datamigrate helm chart
+  import_playbook: helm-chart-install.yaml

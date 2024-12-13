@@ -1,0 +1,6 @@
+appName: "data-migrate-ui"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  tag: latest
