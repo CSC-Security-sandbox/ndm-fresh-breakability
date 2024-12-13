@@ -7,7 +7,6 @@ import { JobListingDTO } from './dto/joblisting.dto';
 import * as parser from 'cron-parser';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
-import path from 'path';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 
 @Injectable()

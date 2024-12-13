@@ -42,7 +42,6 @@ export class JobRunEntity extends Base {
   inventoryDetails: InventoryEntity[];  
 
   @OneToMany(() => TaskEntity, task => task.jobRun, { cascade: true, eager: false })
-  @Column({ type: 'uuid', nullable: true,  name: 'job_run_id'})
   tasks:TaskEntity[];
 
   @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
