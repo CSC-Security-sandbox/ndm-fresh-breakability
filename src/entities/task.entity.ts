@@ -20,11 +20,11 @@ export class TaskEntity  {
   jobRunId: string;
 
   @ApiProperty({ description: 'Task status' })
-  @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Pending, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: TaskStatus;
 
   @ApiProperty({ description: 'Task type' })
-  @Column({ type: 'enum', enum: TaskType, name:'task_type',nullable: true})
+  @Column({ type: 'varchar', name:'task_type',nullable: true})
   taskType: TaskType;
 
   @ApiProperty({ description: 'Id of the worker worked on the task' })

@@ -74,8 +74,8 @@ export class JobConfigService {
 
   async getAllJobConfig(): Promise<JobListingDTO[]> {
     const allJobsDetails = await this.jobConfigRepo.createQueryBuilder('jobconfig')
-      .leftJoin('jobconfig.jobRunDetails', 'jobRun')
-      .leftJoin('jobconfig.paths', 'volumes')
+      .leftJoin('jobconfig.jobRun', 'jobRun')
+      .leftJoin('jobconfig.sourcePath', 'volumes')
       .leftJoin('volumes.fileServer', 'fileServer')
       .leftJoin('fileServer.config', 'config')
       .select([

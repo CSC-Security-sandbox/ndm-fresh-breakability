@@ -15,7 +15,7 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })

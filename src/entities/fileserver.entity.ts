@@ -21,10 +21,10 @@ export class FileServerEntity extends Base {
     userName: string;
 
     @ApiProperty({ description: 'protocol' })
-    @Column({ type: 'text', name:'protocol', nullable: true})
+    @Column({ type: 'varchar', name:'protocol', nullable: true})
     protocol: Protocol;
 
-    @Column({ type: 'enum', enum: ServerType, name:'server_type' })
+    @Column({ type: 'varchar', name:'server_type' })
     serverType: ServerType;
 
     @ApiProperty({ description: 'password' })

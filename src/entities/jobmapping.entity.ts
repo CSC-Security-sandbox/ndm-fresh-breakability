@@ -15,7 +15,7 @@ export class JobIdMappingEntity extends Base {
   jobConfigId: string;
 
   @ApiProperty({ description: 'Type of mapping, e.g. GID | UID | SID' })
-  @Column({ type: 'enum', enum: JobIdMappingType, nullable: false, name: 'type' })
+  @Column({ type: 'varchar', nullable: false, name: 'type' })
   type: JobIdMappingType;
 
   @ApiProperty({ description: 'source id' })

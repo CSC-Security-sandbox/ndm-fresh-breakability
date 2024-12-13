@@ -18,10 +18,10 @@ export class OperationsEntity extends Base {
   @Column({ type: 'uuid', name: 'job_run_id' , nullable: true})
   jobRunId: string;
 
-  @Column({ type: 'text',  name: 'status' , nullable: false})
+  @Column({ type: 'varchar',  name: 'status' , nullable: false})
   status: OperationStatus;
  
-  @Column({ name: 'operation_type', enum: OperationType,  type: 'enum', nullable: false })
+  @Column({ name: 'operation_type',  type: 'varchar', nullable: false })
   operationType: OperationType;
 
   @Column({ name: 'request', type: 'jsonb', nullable: false })

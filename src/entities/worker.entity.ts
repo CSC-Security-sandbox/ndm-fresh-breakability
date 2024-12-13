@@ -35,7 +35,7 @@ export class WorkerEntity extends Base  {
   project: ProjectEntity;
 
   @ApiProperty({ description: 'status' })
-  @Column({ type: 'enum', enum: WorkerStatus, default: WorkerStatus.Offline, name:'status' })
+  @Column({ type: 'varchar', name:'status' })
   status: WorkerStatus;
 
   @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
