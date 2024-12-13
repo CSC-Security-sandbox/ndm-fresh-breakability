@@ -57,9 +57,13 @@ export class JobConfigEntity extends Base {
   targetPathId: string;
 
   @OneToMany(() => JobRunEntity, jobRun => jobRun.jobConfig, { cascade: true, eager: false })
-  jobRunDetails: JobRunEntity[];
+  jobRuns: JobRunEntity[];
 
-  @ManyToOne(() => VolumeEntity, volume => volume.jobConfig, { onDelete: 'CASCADE', orphanedRowAction: 'delete' })
-  @JoinColumn({ name: 'source_path_id' })
-  paths: VolumeEntity
+  @ManyToOne(() => VolumeEntity, volume => volume.sourcePath, { onDelete:'CASCADE'})
+  @JoinColumn({ name: 'source_path_id' }) 
+  sourcePath: VolumeEntity;
+
+  @ManyToOne(() => VolumeEntity, volume => volume.targetPath, { onDelete:'CASCADE'})
+  @JoinColumn({ name: 'target_path_id' }) 
+  targetPath: VolumeEntity;
 }

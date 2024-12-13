@@ -1,10 +1,12 @@
 import { JobConfigService } from '../jobconfig/jobconfig.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable, Logger } from '@nestjs/common';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, In, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './jobrun.dto';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunStatus } from 'src/constants/enums';
+import { InventoryEntity } from 'src/entities/inventory.entity';
+import path from 'path';
 
 @Injectable()
 export class JobRunService {
@@ -14,6 +16,8 @@ export class JobRunService {
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
+    @InjectRepository(InventoryEntity)
+    private inventoryRepo: Repository<InventoryEntity>,
 
     private readonly jobConfigService: JobConfigService
   ) { }
@@ -37,29 +41,71 @@ export class JobRunService {
     sortOrder: 'ASC' | 'DESC',
     filter: JobRunFilterDto,
   ) {
-    const queryBuilder = this.jobRunRepo.createQueryBuilder('job_run');
+    const jobRuns = await this.jobRunRepo.createQueryBuilder('jobRun')
+    .leftJoinAndSelect('jobRun.jobConfig', 'jobConfig')
+    .leftJoinAndSelect('jobConfig.sourcePath', 'sourceVolume')
+    .leftJoinAndSelect('jobConfig.targetPath', 'targetVolume')  // Assuming targetPath relates to Volumes
+    .leftJoinAndSelect('sourceVolume.fileServer', 'sourceFileServer')
+    .leftJoinAndSelect('targetVolume.fileServer', 'targetFileServer')
+    .leftJoinAndSelect('sourceFileServer.config', 'sourceConfig')
+    .leftJoinAndSelect('targetFileServer.config', 'targetConfig')
+    .where('sourceConfig.projectId = :projectId', { projectId:filter.projectId })
+    .orWhere('targetConfig.projectId = :projectId', { projectId:filter.projectId })
+    .select([
+      'jobRun.id AS jobRunId',
+      'jobConfig.jobType AS jobType', 
+      'jobConfig.id AS jobConfigId',
+      'sourceVolume.volumePath AS volumePath',
+      'sourceFileServer.protocol AS sourceFileServerProtocol',
+      'sourceConfig.configName AS sourceConfigName',
+      'targetVolume.volumePath AS targetVolumePath',
+      'targetFileServer.protocol AS targetFileServerProtocol',
+      'targetConfig.configName AS targetConfigName',
+      'jobRun.status AS status',
+      'jobRun.startTime AS startTime',
+      'jobRun.endTime AS endTime',
+    ])
+    .getRawMany();
 
-    // Apply filters
-    Object.entries(filter).forEach(([key, value]) => {
-      if (value) {
-        queryBuilder.andWhere(`job_run.${key} LIKE :${key}`, { [key]: `%${value}%` });
-      }
-    });
+      console.log(jobRuns)
 
-    // Apply sorting
-    queryBuilder.orderBy(`job_run.${sortField}`, sortOrder);
+    const runStats = await Promise.all(jobRuns.map(async (jobRun) => {
+      console.log(jobRun)
 
-    // Apply pagination
-    queryBuilder.skip((page - 1) * limit).take(limit);
+      const inventoryCounts = await this.inventoryRepo
+        .createQueryBuilder('inventory')
+        .select([
+          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+          "SUM(inventory.fileSize) AS totalSize",
+        ])
+        .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRun.jobrunid })
+        .getRawOne();
+      return {
+        jobRunId: jobRun.id,
+        status: jobRun.status,
+        startTime: jobRun.starttime,
+        endTime: jobRun.endtime,
+        jobType: jobRun.jobtype,
+        sourceServer: {
+          serverName: jobRun.sourceconfigname,
+          path: jobRun.volumepath,
+          protocol: jobRun.sourcefileserverprotocol,
+        },
+        destinationServer: jobRun.targetvolumepath ? {
+          serverName: jobRun.targetconfigname,
+          path: jobRun.targetvolumepath,
+          protocol: jobRun.targetfileserverprotocol,
+        }:{},
+        timeElapsed: jobRun.endtime ? jobRun.endtime.getTime() - jobRun.starttime.getTime() : Date.now() - jobRun.starttime.getTime(),
+        scannedFilesCount: BigInt(inventoryCounts.filecount || '0')?.toString(),
+        scannedDirectoriesCount: BigInt(inventoryCounts.directorycount || '0')?.toString(),
+        totalScannedSize: BigInt(inventoryCounts.totalsize || '0')?.toString(),
+        errors: []
+      };
+    }));
+    return runStats;
 
-    const [data, total] = await queryBuilder.getManyAndCount();
-
-    return {
-      total,
-      page,
-      limit,
-      data,
-    };
   }
 
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
@@ -68,7 +114,7 @@ export class JobRunService {
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
-  
+
   async scheduleAJobRun(jobId: string) {
     const job = await this.jobConfigService.getJobConfigById(jobId);
     if (!job) {

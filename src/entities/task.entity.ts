@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { OperationEntity } from './operation.entity';
 import { TaskStatus, TaskType } from 'src/constants/enums';
+import { JobRunEntity } from './jobrun.entity';
 
 
 @Entity({ name: 'tasks', schema: 'migrateadmin' })
@@ -33,4 +34,7 @@ export class TaskEntity extends Base {
   @ApiProperty({ description: 'Operations for the task' })
   @Column({ type: 'jsonb', nullable: false, name: 'operations' })
   operations: OperationEntity[];
+
+  @ManyToOne(() => JobRunEntity, jobRun => jobRun.tasks, { onDelete: 'CASCADE' }) 
+  jobRun: JobRunEntity;
 }

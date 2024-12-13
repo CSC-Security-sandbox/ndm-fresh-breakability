@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
@@ -28,6 +28,9 @@ export class JobRunController {
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query() filter: JobRunFilterDto,
   ) {
+    if (!filter.projectId){
+      throw new BadRequestException(`Required parameters['projectId'] is missing in the request`);
+    }
     return this.jobRunService.getJobAllRuns(page, limit, sortField, sortOrder, filter);
   }
 
