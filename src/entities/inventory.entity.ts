@@ -9,7 +9,7 @@ import { VolumeEntity } from './volume.entity';
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['fileServerPathId'])
-@Index('idx_job_run_id', ['jobRunId'])
+@Index('idx_inventory_job_run_id', ['jobRunId'])
 export class InventoryEntity extends Base {
     @ApiProperty({ description: 'UUID of the inventory' })
     @PrimaryGeneratedColumn('uuid')
