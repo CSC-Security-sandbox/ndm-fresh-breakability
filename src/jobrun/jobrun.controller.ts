@@ -1,4 +1,4 @@
-import { Controller, Get, Logger, Param, Query, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, Param, Query, ValidationPipe } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
@@ -26,7 +26,7 @@ export class JobRunController {
   })
   @Get('/')
   async getJobRuns(@Query(new ValidationPipe({ transform: false, whitelist: true }))  jobRunPageDto: JobRunPageDto) {
-      return await this.jobRunService.findAllJobRuns(jobRunPageDto);
+      return await this.jobRunService.getJobAllRuns(jobRunPageDto);
   }
 
   @ApiOperation({ summary: 'Get job run by ID' })

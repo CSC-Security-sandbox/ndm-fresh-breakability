@@ -1,10 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
-import { TaskEntity } from './task.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 import { JobRunStatus } from 'src/constants/enums';
+import { InventoryEntity } from './inventory.entity';
+import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
 
 
@@ -38,12 +39,15 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_options_id' })
   optionsId: string;
 
-  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRun, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRuns, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
   @JoinColumn({ name: 'job_config_id' }) 
-  jobConfig: JobConfigEntity;
+  jobConfig: JobConfigEntity; 
 
-  @OneToMany(()=>TaskEntity, task=>task.jobRun, { cascade: true,  eager: false})
-  task: TaskEntity[]
+  @OneToMany(() => InventoryEntity, inventory => inventory.jobRuns, { cascade: true, eager: false })
+  inventoryDetails: InventoryEntity[];  
+
+  @OneToMany(() => TaskEntity, task => task.jobRun, { cascade: true, eager: false })
+  tasks:TaskEntity[];
 
   @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
   workerMap: WorkerJobRunMap[]

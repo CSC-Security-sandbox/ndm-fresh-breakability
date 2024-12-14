@@ -37,7 +37,7 @@ export class TaskEntity  {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @ManyToOne(()=> JobRunEntity, jobRun=>jobRun.task, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
+  @ManyToOne(()=> JobRunEntity, jobRun=>jobRun.tasks, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
   @JoinColumn({ name: 'job_run_id' })
   jobRun: JobRunEntity
 

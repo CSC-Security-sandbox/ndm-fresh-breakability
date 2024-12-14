@@ -25,7 +25,7 @@ export class JobOptionsEntity extends Base {
   @Column({ name: 'preserve_access_time', type: 'boolean', default: false })
   preserveAccessTime: boolean;
 
-  @OneToOne(()=> JobRunEntity,jobRun=> jobRun.options, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', eager: false})
+  @OneToOne(()=> JobRunEntity,jobRun=> jobRun.options, {orphanedRowAction: 'delete', onDelete:'CASCADE'})
   @JoinColumn({ name: 'job_run_id' }) 
   jobRun: JobRunEntity
 
