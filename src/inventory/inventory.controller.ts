@@ -55,7 +55,7 @@ export class InventoryController {
             if(payload.type == InventoryPayloadType.DATA_INSERT) {
                 await this.inventoryService.createInventory(payload.data);
                 this.totalObjects += (payload?.data.length || 0)
-                this.logger.debug(`Sending Message of length:  ${payload?.data.length} | total count:${++this.counter} | totalObjects : ${this.totalObjects} | Completed Count : ${this.completedCount}`)
+                this.logger.debug(`Sending Message of length:  ${payload?.data.length} | total count:${++this.counter} | totalObjects : ${this.totalObjects} | Completed Count : ${this.completedCount} `)
             }else  {
                 this.logger.error(`------------------ DISCOVERY_COMPLETED ---------------- \n\n\n\m ------------------ DISCOVERY_COMPLETED ---------------- \n\n\n\m ------------------ DISCOVERY_COMPLETED ---------------- `)
                 this.completedCount++;
@@ -65,8 +65,8 @@ export class InventoryController {
         } catch (err) {
             // this.logger.error(payload)
             this.logger.error(`Error processing inventory message: ${err.message}`);
-            channel.ack(originalMsg);
-            // channel.nack(originalMsg);
+            // channel.ack(originalMsg);
+            channel.nack(originalMsg);
         }
     }
 }
