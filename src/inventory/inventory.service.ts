@@ -22,10 +22,10 @@ export class InventoryService {
         return inventory;
     }
 
-    async createInventory(data: CreateInventoryDto[]): Promise<InventoryEntity[]> {
+    async createInventory(data: CreateInventoryDto[]) {
         try {
             const inventoryRecords = this.inventoryRepo.create(data);
-            return await this.inventoryRepo.save(inventoryRecords);
+             await this.inventoryRepo.insert(inventoryRecords);
         } catch (err) {
             this.logger.error(`Failed to save inventory records: ${err.message}`, err.stack);
             throw new Error('Error while saving inventory records to the database');

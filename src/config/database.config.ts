@@ -12,7 +12,7 @@ export default registerAs(
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     schema: process.env.SCHEMA,
-    synchronize: false,
+    synchronize: true,
     dropSchema: false,
     ssl: false,
     logging: false,

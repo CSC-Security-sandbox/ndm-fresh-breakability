@@ -6,12 +6,6 @@ export class InventoryEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // commenting because from discovery pathId comming as string instead of uuid
-  // so for testing purpose making it as string
-  // @ApiProperty()
-  // @Column({ name: 'pathId', type: 'uuid' })
-  // pathId: string;
-
   @ApiProperty()
   @Column({ name: 'pathId', type: 'text' })
   pathId: string;
