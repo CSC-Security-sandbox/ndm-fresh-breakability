@@ -167,7 +167,7 @@ export class JobRunService {
     .leftJoinAndSelect('targetVolume.fileServer', 'targetFileServer')
     .leftJoinAndSelect('sourceFileServer.config', 'sourceConfig')
     .leftJoinAndSelect('targetFileServer.config', 'targetConfig')
-    .where('sourceConfig.projectId = :projectId', { projectId:filter.projectId })
+    .where('sourceConfig.projectId = :projectId', { projectId:filter?.projectId })
     .orWhere('targetConfig.projectId = :projectId', { projectId:filter.projectId })
     .select([
       'jobRun.id AS jobRunId',

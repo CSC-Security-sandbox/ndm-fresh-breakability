@@ -1,14 +1,17 @@
-
+// -------------- worker ------------- //
 export enum WorkerStatus {
     Online = 'Online',
     Offline = 'Offline',
 }
 
+
+// -------------- Protocol ------------- //
 export enum Protocol {
     NFS = 'NFS',
     SMB = 'SMB'
 }
 
+// -------------- Config ------------- //
 export enum ServerType {
     other = 'OtherNAS',
     dell = 'dell',
@@ -20,10 +23,8 @@ export enum ConfigurationType {
     objectStorage = 'OBJECT_STORAGE'
 }
 
-export enum RabbitMq {
-    ListPaths ='ListPaths',
-    CreateTaskList = 'taskList'
-}
+
+// ---------- Job -----------/
 
 export enum JobStatus {
     Active = 'ACTIVE',
@@ -54,13 +55,14 @@ export enum JobRunStatus {
     Errored = 'ERRORED'
 }
 
-
-// ---------- Job Run -----------/
 export enum TaskType {
     Scan = 'SCAN',
     Migrate = 'MIGRATE',
     Copy = 'COPY'
 }
+
+
+// -------------- Task ------------- //
 
 export enum TaskStatus {
     Ready = 'READY',
@@ -91,3 +93,12 @@ export enum OperationStatus{
 export enum OperationType {
     SCAN = 'SCAN'
 }
+
+
+
+// -------------- QueueEvent ------------- //
+export enum RabbitMq {
+    ListPaths ='ListPaths',
+    CreateTaskList = 'taskList'
+}
+
