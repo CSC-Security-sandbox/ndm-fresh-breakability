@@ -13,7 +13,7 @@ export class InventoryController {
 
     @Post()
     async createInventory(@Body() data: CreateInventoryDto) {
-        return await this.inventoryService.createInventory(data);
+        return await this.inventoryService.createInventory([data]);
     }
 
     @Get(':id')
@@ -41,13 +41,13 @@ export class InventoryController {
 
     @MessagePattern(Queues.INVENTORY)
     async handleInventoryMessage(
-        @Payload() data: CreateInventoryDto,
+        @Payload() data: CreateInventoryDto[],
         @Ctx() context: RmqContext,
     ) {
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
         try {
-            this.logger.log(`Received inventory message: ${JSON.stringify(data)}`);
+            // this.logger.log(`Received inventory message: ${JSON.stringify(data)}`);
             this.logger.log('inventory creation started');
             await this.inventoryService.createInventory(data);
             this.logger.log('inventory created successfully');
