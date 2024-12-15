@@ -3,7 +3,8 @@ export const enum EmitterEvents{
     TaskCreate='task.create',
     NotifyWorker='worker.message',
     JobRunStatusUpdate='jobrun.status.update',
-    DiscoveryComplete='discovery.completed'
+    DiscoveryComplete='discovery.completed',
+    UpdateJobRunMapping = 'update.jobrun.worker.mapping'
 } 
 
 

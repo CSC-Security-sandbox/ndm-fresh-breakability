@@ -1,15 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobStatus } from 'src/constants/enums';
 import { EmitterEvents } from 'src/constants/events';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, In, Repository } from 'typeorm';
 import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunPageDto } from './dto/jobrunpage.dto';
 import { InventoryEntity } from 'src/entities/inventory.entity';
+import { UpdateJobRunMappingPayload } from './jobrun.types';
+import { JobRunActions, JobRunActionsReq } from './dto/jobrunactions.dto';
+import { SocketEvents } from 'src/constants/status';
+
 
 
 @Injectable()
@@ -29,10 +33,18 @@ export class JobRunService {
     private readonly eventEmitter: EventEmitter2
   ) { }
 
+   // ------------------ Events  -------------------- //
 
   @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
+    await this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
+    if(payload.status === JobRunStatus.Completed) 
+      await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
+  }
+
+  @OnEvent(EmitterEvents.UpdateJobRunMapping, { async: true })
+  async updateJobRunMapping(payload: UpdateJobRunMappingPayload){
+    await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
   }
 
   // ------------------ Cron schedule -------------------- //
@@ -85,7 +97,7 @@ export class JobRunService {
   
   // ------------------ Create job run  -------------------- //
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
-    const workers =await this.getSourceAndTargetWorkersByJobConfigId(job)
+    const workers = await this.getSourceAndTargetWorkersByJobConfigId(job)
     
     if(workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)
@@ -107,7 +119,6 @@ export class JobRunService {
       jobConfigId: job.id,
       workerMap: workerMap
     });
-    
     const update = await this.jobRunRepo.save(jobRunRecord);
   
     this.eventEmitter.emit(EmitterEvents.TaskCreate, 
@@ -119,6 +130,66 @@ export class JobRunService {
         taskType: job.jobType,
         workers : workers
     })
+  }
+
+  //  ------------------- JobRun actions ------------------ //
+  async actions( jobRunActions: JobRunActionsReq) {
+    switch (jobRunActions.action) {
+      case JobRunActions.PAUSE:
+        return await this.pauseJobRuns(jobRunActions.jobRuns);
+      case JobRunActions.STOP:
+        return await this.stopJobRuns(jobRunActions.jobRuns);
+      case JobRunActions.RESUME:
+        return await this.resumeJobRuns(jobRunActions.jobRuns);
+      default:
+        throw new BadRequestException('Invalid Action Type')
+    }
+  }
+  //  ------------------- JobRun actions PAUSE ------------------ //
+  async pauseJobRuns(jobRuns: string[]) { 
+    await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
+    await this.jobRunRepo.update({id: In(jobRuns)}, {status: JobRunStatus.Paused})
+    return {details: 'Operation Completed Successfully'}
+  }
+
+  //  ------------------- JobRun actions STOP ------------------ //
+  async stopJobRuns(jobRuns: string[]) { 
+    const mappings = await this.workerJobRunMapRepo.find({
+      where: {jobRunId: In(jobRuns),isActive:true}, select: {workerId: true, jobRunId: true}
+    })
+    const worker = new Map<string,string[]>()
+    mappings.forEach(map=>{
+      worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
+    }) 
+    await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
+    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
+    worker.forEach((jobRuns, workerId)=>
+      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+        workerId: workerId,
+        socketEvents: SocketEvents.STOP_TASK,
+        payload: { jobRuns }
+      })
+    )
+    return {details: 'Operation Completed Successfully'}
+  }
+
+  //  ------------------- JobRun actions RESUME ------------------ //
+  async resumeJobRuns(jobRuns: string[]) { 
+    const mappings = await this.workerJobRunMapRepo.find({
+      where: {jobRunId: In(jobRuns)}, select: {workerId: true}
+    })
+    await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: true})
+    const workerSet = new Set<string>(mappings.map(it=>it.workerId))
+    await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
+    this.logger.debug(mappings)
+    workerSet.forEach((workerId)=>
+      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+        workerId: workerId,
+        socketEvents: SocketEvents.WAKE_UP,
+        payload: { jobRuns }
+      })
+    )
+    return {details: 'Operation Completed Successfully'}
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -223,7 +294,5 @@ export class JobRunService {
     return runStats;
 
   }
-
- 
 
 }

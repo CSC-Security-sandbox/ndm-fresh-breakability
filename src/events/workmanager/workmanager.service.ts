@@ -225,7 +225,7 @@ export class WorkManager{
                 this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
                     jobRunId: task.jobRunId,
                     status: JobRunStatus.Completed
-                })                
+                })             
                 this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
                 this.onTaskComplete(task)
             }

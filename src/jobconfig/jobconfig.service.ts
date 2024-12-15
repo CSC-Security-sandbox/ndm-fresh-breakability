@@ -28,17 +28,21 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(jobRecord);
   }
 
-
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
-    const existingList = await this.jobConfigRepo.find({where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, select: {sourcePathId:true}})
+    const existingList = await this.jobConfigRepo.find({
+      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, select: {sourcePathId:true}
+    })
+   
     await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
     })
+
     const existingSet = new Set(existingList.map(it=>it.sourcePathId))
     const entries:JobConfigEntity[] = []
+
     bulkDiscovery.sourcePathIds.forEach((path: string) =>  {
       if(!existingSet.has(path))
         entries.push(this.jobConfigRepo.create({
@@ -55,6 +59,25 @@ export class JobConfigService {
       )})
     
     return await this.jobConfigRepo.save(entries);
+  }
+
+  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
+    const job = await this.jobConfigRepo.findOne({ where: { id } });
+    if (!job) {
+      throw new Error(`Job with id ${id} not found`);
+    }
+    Object.assign(job, data);
+    return this.jobConfigRepo.save(job);
+  }
+
+  async deleteJobConfig(id: string): Promise<{ message: string }> {
+    const job = await this.jobConfigRepo.findOne({ where: { id } });
+    if (!job) {
+      throw new Error(`Job with id ${id} not found`);
+    }
+
+    await this.jobConfigRepo.remove(job);
+    return { message: `Job with id ${id} has been deleted` };
   }
 
   async getJobConfigById(id: string): Promise<any> {
@@ -122,25 +145,7 @@ export class JobConfigService {
     return payload;
   }
 
-  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
-    }
-    Object.assign(job, data);
-    return this.jobConfigRepo.save(job);
-  }
-
-  async deleteJobConfig(id: string): Promise<{ message: string }> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
-    }
-
-    await this.jobConfigRepo.remove(job);
-    return { message: `Job with id ${id} has been deleted` };
-  }
-
+ 
   async getAllJobConfig(projectId:string): Promise<JobListingDTO[]> {
     const allJobsDetails = await this.jobConfigRepo.createQueryBuilder('jobconfig')
       .leftJoin('jobconfig.jobRuns', 'jobRun')

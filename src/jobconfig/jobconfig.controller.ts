@@ -28,8 +28,7 @@ export class JobConfigController {
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
     return jobConfig;
   }
-
-
+  
 
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
