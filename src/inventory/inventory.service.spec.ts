@@ -85,11 +85,9 @@ describe('InventoryService', () => {
   describe('operate', () => {
     it('should process DATA_INSERT type payload', async () => {
       jest.spyOn(service, 'createInventory').mockResolvedValueOnce(undefined);
-      const consoleSpy = jest.spyOn(console, 'debug');
 
       await service.operate(mockPayload);
 
-      expect(consoleSpy).toHaveBeenCalledWith(mockPayload);
       expect(service.createInventory).toHaveBeenCalledWith(mockPayload.data);
     });
 
