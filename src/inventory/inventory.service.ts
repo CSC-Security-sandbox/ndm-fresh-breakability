@@ -51,7 +51,6 @@ export class InventoryService {
     }
 
     async operate(payload: InventoryPayload) {
-        console.debug(payload)
         switch(payload.type) {
             case InventoryPayloadType.DATA_INSERT:
                 // this.totalObjects += (payload?.data.length || 0)
