@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, OperationStatus, OperationType, TaskStatus } from "src/constants/enums";
+import { JobRunStatus, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
@@ -156,7 +156,7 @@ export class WorkManager{
             .select(['operation.fPath', 'operation.request','operation.id', 'operation.operationType', 'operation.status', 'operation.retryCount', 'operation.errorDetails'])
             .where('operation.jobRunId = :jobRunId', {jobRunId: jobRun.jobRunId})
             .andWhere('operation.status = :status',{ status: OperationStatus.READY})
-            .limit(1000).getMany()
+            .limit(500).getMany()
 
             if(operations.length === 0)
                 return undefined
@@ -218,15 +218,28 @@ export class WorkManager{
         await this.taskRepo.update({id: task.id}, {status: TaskStatus.Completed})
 
         if(!isErrored){
-            const isNotCompletedOperation = await this.operationsRepo.count({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
-            const isNotCompletedTask = await this.taskRepo.count({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            if(0 === isNotCompletedOperation && 0 === isNotCompletedTask)  {
+            const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
+            const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
+            this.logger.warn(isNotCompletedOperation,isNotCompletedTask, task.id)
+            if(!isNotCompletedOperation && !isNotCompletedTask)  {
                 this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
                     jobRunId: task.jobRunId,
                     status: JobRunStatus.Completed
-                })
-                this.logger.error(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
+                })             
+                this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
+                this.onTaskComplete(task)
             }
+        }
+    }
+
+    async onTaskComplete(task: ScanCompletedPayload) {
+        switch(task.taskType) {
+            case TaskType.Scan:
+                this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
+                    jobRunId: task.jobRunId,
+                })
+                break;
+            default: return  
         }
     }
 }

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
@@ -27,21 +28,56 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(jobRecord);
   }
 
-
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
-    const jobRecord: JobConfigEntity[] = bulkDiscovery.sourcePathIds.map((path: string) :JobConfigEntity=> this.jobConfigRepo.create({
-      status: JobStatus.Active,
+    const existingList = await this.jobConfigRepo.find({
+      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true}
+    })
+   
+    await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery?.sourcePathIds)}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-      jobType:  JobType.Scan,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
-      sourcePathId: path,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-      futureScheduleAt: bulkDiscovery.futureSchedule,
-      firstRunAt: firstRunAt,
-      createdBy: bulkDiscovery.createdBy
-    }))
-    return await this.jobConfigRepo.save(jobRecord);
+    })
+
+    const existingSet = new Set(existingList.map(it=>it.sourcePathId))
+    const entries:JobConfigEntity[] = []
+
+    bulkDiscovery.sourcePathIds.forEach((path: string) =>  {
+      if(!existingSet.has(path))
+        entries.push(this.jobConfigRepo.create({
+          status: JobStatus.Active,
+          excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+          jobType:  JobType.Scan,
+          preserveAccessTime: bulkDiscovery.preserveAccessTime,
+          sourcePathId: path,
+          excludeOlderThan:  bulkDiscovery.excludeOlderThan,
+          futureScheduleAt: bulkDiscovery.futureSchedule,
+          firstRunAt: firstRunAt,
+          createdBy: bulkDiscovery.createdBy
+        })
+      )})
+    
+    return await this.jobConfigRepo.save(entries);
+  }
+
+  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
+    const job = await this.jobConfigRepo.findOne({ where: { id } });
+    if (!job) {
+      throw new Error(`Job with id ${id} not found`);
+    }
+    Object.assign(job, data);
+    return this.jobConfigRepo.save(job);
+  }
+
+  async deleteJobConfig(id: string): Promise<{ message: string }> {
+    const job = await this.jobConfigRepo.findOne({ where: { id } });
+    if (!job) {
+      throw new Error(`Job with id ${id} not found`);
+    }
+
+    await this.jobConfigRepo.remove(job);
+    return { message: `Job with id ${id} has been deleted` };
   }
 
   async getJobConfigById(id: string): Promise<any> {
@@ -109,25 +145,7 @@ export class JobConfigService {
     return payload;
   }
 
-  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
-    }
-    Object.assign(job, data);
-    return this.jobConfigRepo.save(job);
-  }
-
-  async deleteJobConfig(id: string): Promise<{ message: string }> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
-    }
-
-    await this.jobConfigRepo.remove(job);
-    return { message: `Job with id ${id} has been deleted` };
-  }
-
+ 
   async getAllJobConfig(projectId:string): Promise<JobListingDTO[]> {
     const allJobsDetails = await this.jobConfigRepo.createQueryBuilder('jobconfig')
       .leftJoin('jobconfig.jobRuns', 'jobRun')

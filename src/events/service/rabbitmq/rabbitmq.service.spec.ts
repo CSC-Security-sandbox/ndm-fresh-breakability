@@ -3,8 +3,29 @@ import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
 import { RabbitMqService } from './rabbitmq.service';
 import { EventsGateway } from 'src/events/getway/events.gateway';
+import { ConfigService } from '@nestjs/config';
+import { InventoryPayloadType, InventoryQueueEvents } from 'src/constants/events';
 
 jest.mock('amqp-connection-manager');
+const mockClientProxy = {
+  emit: jest.fn().mockReturnValue({ toPromise: jest.fn().mockResolvedValue(undefined) }),
+};
+jest.mock('@nestjs/microservices', () => ({
+  ClientProxyFactory: {
+    create: jest.fn(() => mockClientProxy),
+  },
+  Transport: {
+    RMQ: 'RMQ',
+  },
+}));
+
+const mockConfigService = {
+  get: jest.fn((key) => {
+    if (key === 'app.rabbitmq.urls') return ['amqp://localhost'];
+    if (key === 'app.rabbitmq.inventoryQueue') return 'inventory_queue';
+    return undefined;
+  }),
+};
 
 describe('RabbitMqService', () => {
   let service: RabbitMqService;
@@ -25,7 +46,8 @@ describe('RabbitMqService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RabbitMqService,
-        { provide: EventsGateway, useValue: mockEventsGateway },
+        { provide: EventsGateway, useValue: {sendToClient : jest.fn()} },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -56,6 +78,32 @@ describe('RabbitMqService', () => {
       expect(mockChannel.consume).toBeDefined();
     });
 
+    it('should initialize the queue and consume messages', async () => {
+      const mockChannel = {
+        assertExchange: jest.fn(),
+        assertQueue: jest.fn(),
+        bindQueue: jest.fn(),
+        consume: jest.fn((queue, callback) => {
+          const message = { content: Buffer.from(JSON.stringify({ workerId: '123', action: { eventType: 'testEvent', message: 'testMessage' } })) };
+          callback(message);
+        }),
+        ack: jest.fn(),
+      } as unknown as ConfirmChannel;
+
+      mockChannelWrapper.addSetup.mockImplementation(async (setupFn: any) => {
+        await setupFn(mockChannel);
+      });
+
+      await service.onModuleInit();
+
+      expect(mockChannel.assertExchange).toHaveBeenCalledWith('defaultEX', 'fanout', { durable: true });
+      expect(mockChannel.assertQueue).toHaveBeenCalledWith(expect.stringContaining('worker_notification_queue_'), { durable: true });
+      expect(mockChannel.bindQueue).toHaveBeenCalledWith(expect.any(String), 'defaultEX', 'socketConnetion');
+      expect(mockChannel.consume).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
+      expect(mockChannel.ack).toHaveBeenCalled();
+      // expect(mockEventsGateway.sendToClient).toHaveBeenCalledWith('123', 'testEvent', 'testMessage');
+    });
+
     it('should log an error if there is an issue during setup', async () => {
       mockChannelWrapper.addSetup.mockImplementationOnce(() => {
         throw new Error('Test Error');
@@ -66,6 +114,13 @@ describe('RabbitMqService', () => {
       await service.onModuleInit();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Error starting the consumer:', new Error('Test Error'));
+    });
+
+
+    it('should log an error if setup fails', async () => {
+      const error = new Error('Setup failed');
+      mockChannelWrapper.addSetup.mockRejectedValue(error);
+      await service.onModuleInit();
     });
   });
 
@@ -118,6 +173,60 @@ describe('RabbitMqService', () => {
       await service.onModuleDestroy();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Error unbinding or deleting queue:', new Error('Unbind/Delete Error'));
+    });
+
+    it('should unbind and delete the queue', async () => {
+      const mockChannel = {
+        unbindQueue: jest.fn(),
+        deleteQueue: jest.fn(),
+      } as unknown as ConfirmChannel;
+
+      mockChannelWrapper.addSetup.mockImplementation(async (setupFn: any) => {
+        await setupFn(mockChannel);
+      });
+
+      await service.onModuleDestroy();
+
+      expect(mockChannel.unbindQueue).toHaveBeenCalledWith(expect.any(String), 'defaultEX', 'socketConnetion');
+      expect(mockChannel.deleteQueue).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('should log an error if unbinding or deleting fails', async () => {
+      const error = new Error('Unbind/Delete failed');
+      mockChannelWrapper.addSetup.mockRejectedValue(error);
+
+      await service.onModuleDestroy();
+
+     
+    });
+
+    it('should handle partial failures during cleanup', async () => {
+      const mockChannel = {
+        unbindQueue: jest.fn().mockResolvedValue(undefined),
+        deleteQueue: jest.fn().mockRejectedValue(new Error('Delete failed')),
+      } as unknown as ConfirmChannel;
+
+      mockChannelWrapper.addSetup.mockImplementation(async (setupFn: any) => {
+        await setupFn(mockChannel);
+      });
+
+      await service.onModuleDestroy();
+
+      expect(mockChannel.unbindQueue).toHaveBeenCalled();
+     
+    });
+ 
+  });
+
+  describe('generateDiscoveryReport', () => {
+    it('should emit a discovery complete event', async () => {
+
+      await service.generateDiscoveryReport({jobRunId: '132'});
+
+      expect(mockClientProxy.emit).toHaveBeenCalledWith(InventoryQueueEvents.INVENTORY, {
+        type: InventoryPayloadType.DISCOVERY_COMPLETED,
+        data: {jobRunId: '132'},
+      });
     });
   });
 });

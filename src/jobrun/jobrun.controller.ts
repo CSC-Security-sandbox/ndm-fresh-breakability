@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Logger, Param, Query, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Logger, Param, Post, Put, Query, ValidationPipe } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
@@ -6,6 +6,7 @@ import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunFilterDto } from './dto/jobrun.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
+import { JobRunActionsReq } from './dto/jobrunactions.dto';
 
 @ApiTags('jobs run')
 @Controller('job-run')
@@ -35,5 +36,13 @@ export class JobRunController {
   @Get(':id')
   async getJobById(@Param('id') id: string): Promise<JobRunEntity[]> {
     return await this.jobRunService.getJobRun({ where: { id } });
+  }
+
+
+  @ApiOperation({ summary: 'Job Run Actions PAUSE | RESUME | STOP' })
+  @ApiResponse({ status: 200, description: 'The job run action completed successfully .' })
+  @Put('/action')
+  async actions(@Body() jobRunActions: JobRunActionsReq) {
+    return this.jobRunService.actions(jobRunActions)
   }
 }
