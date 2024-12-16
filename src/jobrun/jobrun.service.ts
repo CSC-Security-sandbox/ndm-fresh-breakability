@@ -1,24 +1,25 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { InjectRepository } from '@nestjs/typeorm';
-import { JobRunStatus, JobStatus } from 'src/constants/enums';
-import { EmitterEvents } from 'src/constants/events';
-import { JobConfigEntity } from 'src/entities/jobconfig.entity';
-import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { FindManyOptions, In, Repository } from 'typeorm';
-import { JobRunDto, JobRunFilterDto } from './dto/jobrun.dto';
-import { JobRunEntity } from '../entities/jobrun.entity';
-import { JobRunPageDto } from './dto/jobrunpage.dto';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { UpdateJobRunMappingPayload } from './jobrun.types';
-import { JobRunActions, JobRunActionsReq } from './dto/jobrunactions.dto';
-import { SocketEvents } from 'src/constants/status';
-
-
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
+import { InjectRepository } from "@nestjs/typeorm";
+import { JobRunStatus, JobStatus } from "src/constants/enums";
+import { EmitterEvents } from "src/constants/events";
+import { SocketEvents } from "src/constants/status";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { FindManyOptions, In, Repository } from "typeorm";
+import { JobRunEntity } from "../entities/jobrun.entity";
+import {
+  JobRunDetailsDTO,
+  JobRunDto,
+  JobRunsDTO
+} from "./dto/jobrun.dto";
+import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
+import { JobRunPageDto } from "./dto/jobrunpage.dto";
+import { UpdateJobRunMappingPayload } from "./jobrun.types";
 
 @Injectable()
 export class JobRunService {
-
   private readonly logger = new Logger(JobRunService.name);
 
   constructor(
@@ -31,9 +32,7 @@ export class JobRunService {
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     private readonly eventEmitter: EventEmitter2
-  ) { }
-
-   // ------------------ Events  -------------------- //
+  ) {}
 
   @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
@@ -51,50 +50,50 @@ export class JobRunService {
   async scheduleAJob() {
     const currentTime = new Date();
     const jobs: JobConfigEntity[] = await this.jobConfigRepo
-      .createQueryBuilder('jobConfig')
-      .leftJoinAndSelect('jobConfig.jobRuns', 'jobRuns')  
-      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath') 
-      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath') 
-      .where('jobConfig.status = :status', { status: JobStatus.Active })
-      .andWhere('jobConfig.firstRunAt <= :currentTime', { currentTime: currentTime.toISOString() }) 
-      .andWhere('jobRuns.id IS NULL')  
+      .createQueryBuilder("jobConfig")
+      .leftJoinAndSelect("jobConfig.jobRuns", "jobRuns")
+      .leftJoinAndSelect("jobConfig.sourcePath", "sourcePath")
+      .leftJoinAndSelect("jobConfig.targetPath", "targetPath")
+      .where("jobConfig.status = :status", { status: JobStatus.Active })
+      .andWhere("jobConfig.firstRunAt <= :currentTime", {
+        currentTime: currentTime.toISOString(),
+      })
+      .andWhere("jobRuns.id IS NULL")
       .getMany();
-    jobs.forEach(async (job)=> await this.createJobRun(job, currentTime))
+    jobs.forEach(async (job) => await this.createJobRun(job, currentTime));
     return jobs;
   }
-  
+
   // ------------------ Get list of workers -------------------- //
   async getSourceAndTargetWorkersByJobConfigId(
-    job: JobConfigEntity 
+    job: JobConfigEntity
   ): Promise<string[]> {
     const jobConfig = await this.jobConfigRepo
-      .createQueryBuilder('jobConfig')
-      .leftJoinAndSelect('jobConfig.sourcePath', 'sourcePath')
-      .leftJoinAndSelect('jobConfig.targetPath', 'targetPath')
-      .leftJoinAndSelect('sourcePath.fileServer', 'sourceFileServer')
-      .leftJoinAndSelect('sourceFileServer.workers', 'sourceWorkers')
-      .leftJoinAndSelect('targetPath.fileServer', 'targetFileServer')
-      .leftJoinAndSelect('targetFileServer.workers', 'targetWorkers')
-      .where('jobConfig.id = :jobConfigId', { jobConfigId: job.id })
+      .createQueryBuilder("jobConfig")
+      .leftJoinAndSelect("jobConfig.sourcePath", "sourcePath")
+      .leftJoinAndSelect("jobConfig.targetPath", "targetPath")
+      .leftJoinAndSelect("sourcePath.fileServer", "sourceFileServer")
+      .leftJoinAndSelect("sourceFileServer.workers", "sourceWorkers")
+      .leftJoinAndSelect("targetPath.fileServer", "targetFileServer")
+      .leftJoinAndSelect("targetFileServer.workers", "targetWorkers")
+      .where("jobConfig.id = :jobConfigId", { jobConfigId: job.id })
       .getOne();
 
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-   
-    if(job.targetPathId) {
-      const workers:string[] = []
-      const workerSet = new Set<string>()
-      sourceWorkers.forEach(worker=> workerSet.add(worker.workerId))
-      targetWorkers?.forEach(worker=> {
-        if(workerSet.has(worker.workerId))
-          workers.push(worker.workerId)
-      })
-      return  workers 
+
+    if (job.targetPathId) {
+      const workers: string[] = [];
+      const workerSet = new Set<string>();
+      sourceWorkers.forEach((worker) => workerSet.add(worker.workerId));
+      targetWorkers?.forEach((worker) => {
+        if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
+      });
+      return workers;
     }
-    return sourceWorkers.map(worker=> worker.workerId)
-  
+    return sourceWorkers.map((worker) => worker.workerId);
   }
-  
+
   // ------------------ Create job run  -------------------- //
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
     const workers = await this.getSourceAndTargetWorkersByJobConfigId(job)
@@ -104,12 +103,12 @@ export class JobRunService {
       return
     }
 
-    const workerMap = workers.map(worker => 
+    const workerMap = workers.map((worker) =>
       this.workerJobRunMapRepo.create({
         workerId: worker,
-        isActive: true
+        isActive: true,
       })
-    )
+    );
 
     const jobRunRecord = this.jobRunRepo.create({
       status: JobRunStatus.Ready,
@@ -117,21 +116,20 @@ export class JobRunService {
       endTime: null,
       iterationNumber: 1,
       jobConfigId: job.id,
-      workerMap: workerMap
+      workerMap: workerMap,
     });
     const update = await this.jobRunRepo.save(jobRunRecord);
-  
-    this.eventEmitter.emit(EmitterEvents.TaskCreate, 
-      {
-        jobRunId: update.id,
-        status: update.status,
-        sPath: job.sourcePath.volumePath,
-        tPath: job.targetPath?.volumePath,
-        taskType: job.jobType,
-        workers : workers
-    })
-  }
 
+    this.eventEmitter.emit(EmitterEvents.TaskCreate, {
+      jobRunId: update.id,
+      status: update.status,
+      sPath: job.sourcePath.volumePath,
+      tPath: job.targetPath?.volumePath,
+      taskType: job.jobType,
+      workers: workers,
+    });
+  }
+ 
   //  ------------------- JobRun actions ------------------ //
   async actions( jobRunActions: JobRunActionsReq) {
     switch (jobRunActions.action) {
@@ -192,6 +190,7 @@ export class JobRunService {
     return {details: 'Operation Completed Successfully'}
   }
 
+
   //  ------------------- get JobRun Details ------------------ //
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
     const jobRun = await this.jobRunRepo.findOne({ where: { id } });
@@ -200,24 +199,114 @@ export class JobRunService {
     return this.jobRunRepo.save(jobRun);
   }
 
- //  ------------------- get JobRun Details ------------------ //
-  async getJobRun(condition: FindManyOptions<JobRunEntity>): Promise<JobRunEntity[]> {
-    const jobRun = await this.jobRunRepo.find(condition);
-    if (!jobRun.length) throw new Error(`Job run not found`);
-    return jobRun;
+  //  ------------------- get JobRun Details ------------------ //
+  async getJobRun(id: string): Promise<JobRunDetailsDTO> {
+    const jobRun = await this.jobRunRepo.findOne({
+      select: {
+        id: true,
+        status: true,
+        startTime: true,
+        endTime: true,
+        jobConfigId: true,
+        tasks: {
+          id: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          taskType: true,
+          workerId: true,
+          worker: {
+            workerName: true,
+          },
+        },
+      },
+      where: { id },
+      relations: ["tasks", "tasks.worker"],
+    });
+    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
+    const jobConfigDetails = await this.jobConfigRepo.findOne({
+      where: { id: jobRun.jobConfigId },
+      relations: [
+        "jobRuns",
+        "sourcePath",
+        "sourcePath.fileServer",
+        "sourcePath.fileServer.config",
+        "targetPath",
+        "targetPath.fileServer",
+        "targetPath.fileServer.config",
+      ],
+    });
+    const inventoryCounts = await this.inventoryRepo
+      .createQueryBuilder("inventory")
+      .select([
+        "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+        "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+        "SUM(inventory.fileSize) AS totalSize",
+      ])
+      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRun.id })
+      .getRawOne();
+
+    const jobRunDetails: JobRunDetailsDTO = {
+      jobRunId: jobRun.id,
+      jobConfigId: jobRun.jobConfigId,
+      status: jobRun.status,
+      startTime: jobRun.startTime,
+      endTime: jobRun.endTime,
+      jobType: jobConfigDetails.jobType,
+      sourceServer: {
+        serverName: jobConfigDetails.sourcePath.fileServer.config.configName,
+        path: jobConfigDetails.sourcePath.volumePath,
+        protocol: jobConfigDetails.sourcePath.fileServer.protocol,
+      },
+      destinationServer: jobConfigDetails.targetPath
+        ? {
+            serverName:
+              jobConfigDetails.targetPath.fileServer.config.configName,
+            path: jobConfigDetails.targetPath.volumePath,
+            protocol: jobConfigDetails.targetPath.fileServer.protocol,
+          }
+        : undefined,
+      timeElapsed: jobRun.endTime
+        ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
+        : Date.now() - jobRun.startTime.getTime(),
+      scannedFilesCount: BigInt(inventoryCounts?.filecount || "0")?.toString(),
+      scannedDirectoriesCount: BigInt(
+        inventoryCounts?.directorycount || "0"
+      )?.toString(),
+      totalScannedSize: BigInt(inventoryCounts?.totalsize || "0")?.toString(),
+      errors: [],
+      tasks: jobRun.tasks.map((task) => ({
+        taskId: task.id,
+        taskType: task.taskType,
+        status: task.status,
+        startTime: task.createdAt,
+        endTime: task.updatedAt,
+        worker: task.worker.workerName,
+        errors: [],
+      })),
+    };
+    return jobRunDetails;
   }
 
   async findAllJobRuns(jobRunPageDto: JobRunPageDto) {
-    const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = jobRunPageDto;
-    
+    const {
+      page,
+      limit,
+      sort = "createdAt",
+      order = "ASC",
+      ...filter
+    } = jobRunPageDto;
+
     const findOptions: FindManyOptions<JobRunEntity> = {
-      where: filter, order: { [sort]: order }, 
+      where: filter,
+      order: { [sort]: order },
     };
 
-    let data = [], total = 0;
+    let data = [],
+      total = 0;
     if (page && limit) {
-      findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
-      findOptions.take = parseInt(limit); 
+      findOptions.skip = (parseInt(page) - 1) * parseInt(limit);
+      findOptions.take = parseInt(limit);
       data = await this.jobRunRepo.find(findOptions);
       total = await this.jobRunRepo.count({ where: filter });
     } else {
@@ -227,72 +316,87 @@ export class JobRunService {
     return { data, total };
   }
 
-  async getJobAllRuns(
-    filter: JobRunPageDto,
-  ) {
-    const jobRuns = await this.jobRunRepo.createQueryBuilder('jobRun')
-    .leftJoinAndSelect('jobRun.jobConfig', 'jobConfig')
-    .leftJoinAndSelect('jobConfig.sourcePath', 'sourceVolume')
-    .leftJoinAndSelect('jobConfig.targetPath', 'targetVolume') 
-    .leftJoinAndSelect('sourceVolume.fileServer', 'sourceFileServer')
-    .leftJoinAndSelect('targetVolume.fileServer', 'targetFileServer')
-    .leftJoinAndSelect('sourceFileServer.config', 'sourceConfig')
-    .leftJoinAndSelect('targetFileServer.config', 'targetConfig')
-    .where('sourceConfig.projectId = :projectId', { projectId:filter?.projectId })
-    .orWhere('targetConfig.projectId = :projectId', { projectId:filter.projectId })
-    .select([
-      'jobRun.id AS jobRunId',
-      'jobConfig.jobType AS jobType', 
-      'jobConfig.id AS jobConfigId',
-      'sourceVolume.volumePath AS volumePath',
-      'sourceFileServer.protocol AS sourceFileServerProtocol',
-      'sourceConfig.configName AS sourceConfigName',
-      'targetVolume.volumePath AS targetVolumePath',
-      'targetFileServer.protocol AS targetFileServerProtocol',
-      'targetConfig.configName AS targetConfigName',
-      'jobRun.status AS status',
-      'jobRun.startTime AS startTime',
-      'jobRun.endTime AS endTime',
-    ])
-    .getRawMany();
+  async getJobAllRuns(filter: JobRunPageDto) {
+    const jobRuns = await this.jobRunRepo
+      .createQueryBuilder("jobRun")
+      .leftJoinAndSelect("jobRun.jobConfig", "jobConfig")
+      .leftJoinAndSelect("jobConfig.sourcePath", "sourceVolume")
+      .leftJoinAndSelect("jobConfig.targetPath", "targetVolume")
+      .leftJoinAndSelect("sourceVolume.fileServer", "sourceFileServer")
+      .leftJoinAndSelect("targetVolume.fileServer", "targetFileServer")
+      .leftJoinAndSelect("sourceFileServer.config", "sourceConfig")
+      .leftJoinAndSelect("targetFileServer.config", "targetConfig")
+      .where("sourceConfig.projectId = :projectId", {
+        projectId: filter.projectId,
+      })
+      .orWhere("targetConfig.projectId = :projectId", {
+        projectId: filter.projectId,
+      })
+      .select([
+        "jobRun.id AS jobRunId",
+        "jobConfig.jobType AS jobType",
+        "jobConfig.id AS jobConfigId",
+        "sourceVolume.volumePath AS volumePath",
+        "sourceFileServer.protocol AS sourceFileServerProtocol",
+        "sourceConfig.configName AS sourceConfigName",
+        "targetVolume.volumePath AS targetVolumePath",
+        "targetFileServer.protocol AS targetFileServerProtocol",
+        "targetConfig.configName AS targetConfigName",
+        "jobRun.status AS status",
+        "jobRun.startTime AS startTime",
+        "jobRun.endTime AS endTime",
+      ])
+      .getRawMany();
 
-    const runStats = await Promise.all(jobRuns.map(async (jobRun) => {
+    const allJobsRuns = await Promise.all(
+      jobRuns.map(async (jobRun) => {
+        const inventoryCounts = await this.inventoryRepo
+          .createQueryBuilder("inventory")
+          .select([
+            "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+            "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+            "SUM(inventory.fileSize) AS totalSize",
+          ])
+          .where("inventory.jobRunId = :jobRunId", {
+            jobRunId: jobRun.jobrunid,
+          })
+          .getRawOne();
 
-      const inventoryCounts = await this.inventoryRepo
-        .createQueryBuilder('inventory')
-        .select([
-          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-          "SUM(inventory.fileSize) AS totalSize",
-        ])
-        .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRun.jobrunid })
-        .getRawOne();
-
-      return {
-        jobRunId: jobRun.id,
-        status: jobRun.status,
-        startTime: jobRun.starttime,
-        endTime: jobRun.endtime,
-        jobType: jobRun.jobtype,
-        sourceServer: {
-          serverName: jobRun.sourceconfigname,
-          path: jobRun.volumepath,
-          protocol: jobRun.sourcefileserverprotocol,
-        },
-        destinationServer: jobRun.targetvolumepath ? {
-          serverName: jobRun.targetconfigname,
-          path: jobRun.targetvolumepath,
-          protocol: jobRun.targetfileserverprotocol,
-        }:{},
-        timeElapsed: jobRun.endtime ? jobRun.endtime.getTime() - jobRun.starttime.getTime() : Date.now() - jobRun.starttime.getTime(),
-        scannedFilesCount: BigInt(inventoryCounts?.filecount || '0')?.toString(),
-        scannedDirectoriesCount: BigInt(inventoryCounts?.directorycount || '0')?.toString(),
-        totalScannedSize: BigInt(inventoryCounts?.totalsize || '0')?.toString(),
-        errors: []
-      };
-    }));
-    return runStats;
-
+        const response: JobRunsDTO = {
+          jobRunId: jobRun.jobrunid,
+          status: jobRun.status,
+          startTime: jobRun.starttime,
+          endTime: jobRun.endtime,
+          jobType: jobRun.jobtype,
+          sourceServer: {
+            serverName: jobRun.sourceconfigname,
+            path: jobRun.volumepath,
+            protocol: jobRun.sourcefileserverprotocol,
+          },
+          destinationServer: jobRun.targetvolumepath
+            ? {
+                serverName: jobRun.targetconfigname,
+                path: jobRun.targetvolumepath,
+                protocol: jobRun.targetfileserverprotocol,
+              }
+            : undefined,
+          timeElapsed: jobRun.endtime
+            ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
+            : Date.now() - jobRun.starttime.getTime(),
+          scannedFilesCount: BigInt(
+            inventoryCounts?.filecount || "0"
+          )?.toString(),
+          scannedDirectoriesCount: BigInt(
+            inventoryCounts?.directorycount || "0"
+          )?.toString(),
+          totalScannedSize: BigInt(
+            inventoryCounts?.totalsize || "0"
+          )?.toString(),
+          errors: [],
+        };
+        return response;
+      })
+    );
+    return allJobsRuns;
   }
-
 }
