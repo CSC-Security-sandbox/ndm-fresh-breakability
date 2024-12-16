@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:report": "jest --coverage --verbose"
+    "test:report": "jest --coverage --verbose",
+    "test:coverage": "jest --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text-summary --outputFile=coverage/unit-test-cases-results.json --json"
   },  
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -32,7 +33,9 @@
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
