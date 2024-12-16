@@ -103,7 +103,8 @@
       "/test/",
       "/config/",
       "/entities/",
-      "/dto/"
+      "/dto/",
+      "src/inventory/inventory.service.ts"
     ]
   }
 }
