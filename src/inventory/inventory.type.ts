@@ -5,23 +5,23 @@ export enum InventoryPayloadType {
 
 
 export interface CreateInventory {
-    pathId: string;
-    jobRunId: string;
     path: string;
-    isFolder: boolean;
-    status: string;
+    isDirectory: boolean;
+    sourceChecksum: string;
+    targetChecksum: string;
     parentPath: string;
     depth: number;
     fileName: string;
-    uid: number;
-    gid: number;
-    size: number;
-    blocks: number;
-    mtime: string;
-    atime: string;
-    birthtime: string;
-    extension: string;
-    permission: string;
+    uid: string;
+    gid: string;
+    fileSize: bigint,
+    fileType: string;
+    modifiedTime: string;
+    accessTime: string;
+    filePermission: string;
+    fileServerPathId: string;
+    jobRunId: string;
+    birthTime:string
 }
 
 export interface DiscoveryCompletedPayload {
@@ -29,7 +29,6 @@ export interface DiscoveryCompletedPayload {
 }
 
 
-  
 
 export interface InventoryPayload {
     type: InventoryPayloadType
