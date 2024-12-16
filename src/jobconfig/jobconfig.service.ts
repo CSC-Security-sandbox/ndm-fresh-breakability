@@ -86,7 +86,7 @@ export class JobConfigService {
     }));
   
     const payload={
-      id: jobConfig.id,
+      jobConfigId: id,
       jobType: jobConfig.jobType,
       sourceServer: {
         serverName: jobConfig.sourcePath?.fileServer?.config?.configName || null,

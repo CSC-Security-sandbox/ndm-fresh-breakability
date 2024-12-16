@@ -403,7 +403,7 @@ describe('JobConfigService', () => {
     const result = await service.getJobConfigById(jobConfigId);
 
     expect(result).toEqual({
-      id: jobConfigId,
+      jobConfigId: jobConfigId,
       jobType: 'COPY',
       sourceServer: {
         serverName: 'SourceServer',
@@ -438,7 +438,7 @@ describe('JobConfigService', () => {
   it('should return job configuration by ID with job runs and stats 2', async () => {
     const jobConfigId = '123';
     const mockJobConfig = {
-      id: jobConfigId,
+      jobConfigId: jobConfigId,
       jobType: 'COPY',
       status: 'ACTIVE',
       sourcePath: null,
@@ -468,7 +468,7 @@ describe('JobConfigService', () => {
     const result = await service.getJobConfigById(jobConfigId);
 
     expect(result).toEqual({
-      id: jobConfigId,
+      jobConfigId:'123',
       jobType: 'COPY',
       sourceServer: {
         serverName: null,

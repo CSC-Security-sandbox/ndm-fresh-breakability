@@ -3,6 +3,7 @@ import { TaskStatus, TaskType } from 'src/constants/enums';
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { JobRunEntity } from './jobrun.entity';
 import { OperationsEntity } from './operation.entity';
+import { WorkerEntity } from './worker.entity';
 
 
 @Entity({ name: 'tasks', schema: 'migrateadmin' })
@@ -43,5 +44,9 @@ export class TaskEntity  {
 
   @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
   operations: OperationsEntity[]
+
+  @ManyToOne(()=> WorkerEntity, worker=>worker.tasks, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
+  @JoinColumn({ name: 'worker_id' })
+  worker:WorkerEntity
 
 }
