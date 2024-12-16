@@ -2,8 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { RequestTrackEntity } from "src/entities/requesttrack.entity";
 import { Repository } from "typeorm";
-import { ListPathRes, ValidateConnectionRes } from "../events.type";
-import { FileConfigService } from "./config.service";
+import { FileConfigService } from "../config/config.service";
+import { ListPathRes, ValidateConnectionRes } from "src/events/events.type";
 
 
 

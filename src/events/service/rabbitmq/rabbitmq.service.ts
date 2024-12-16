@@ -1,7 +1,13 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { OnEvent } from "@nestjs/event-emitter";
+import { ClientProxy, ClientProxyFactory, Transport } from "@nestjs/microservices";
 import amqp, { ChannelWrapper } from 'amqp-connection-manager';
 import { ConfirmChannel } from 'amqplib';
-import { EventsGateway } from "../getway/events.gateway";
+import { EmitterEvents, InventoryPayloadType, InventoryQueueEvents } from "src/constants/events";
+import { EventsGateway } from "src/events/getway/events.gateway";
+import { DiscoveryCompletePayload } from "./rabbitmq.service.types";
+
 
 
 @Injectable()
@@ -11,10 +17,29 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private exchange = process.env.RABBITMQ_URL_EXCHANGE || 'defaultEX';
   private routingKey =  process.env.RABBITMQ_URL_ROUTING_KEY || 'socketConnetion'
   private queueWorkerNotify = `worker_notification_queue_${process.env.REPLICA_INDEX || 'default'}`;
+  private inventoryClient: ClientProxy;
 
-  constructor(private readonly eventsGateway: EventsGateway) {
-    const connection = amqp.connect([process.env.RABBITMQ_URL]);
-    this.channelWrapper = connection.createChannel();
+  constructor(
+    private readonly eventsGateway: EventsGateway,
+    private readonly configService: ConfigService
+    ) {
+      const connection = amqp.connect([process.env.RABBITMQ_URL]);
+      this.channelWrapper = connection.createChannel();
+
+      const urls: any = this.configService.get<string[]>('app.rabbitmq.urls') || '';
+      this.inventoryClient = ClientProxyFactory.create({
+        transport: Transport.RMQ,
+        options: {
+          urls: [urls],
+          queue: this.configService.get<string>('app.rabbitmq.inventoryQueue') || '',
+          queueOptions: {
+            durable: true,
+            arguments: {
+              'x-queue-type': 'quorum',
+          },
+        },
+        },
+      });
   }
 
   // Create and Attach Queue to exchange
@@ -28,7 +53,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           if (message) {
             const content = JSON.parse(message.content.toString());
             this.logger.log('Received message:', content);
-            this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
+            await this.eventsGateway.sendToClient(content?.workerId, content?.action?.eventType, content?.action?.message)
             channel.ack(message);
           }
         });
@@ -42,8 +67,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   // Send Message to exchange
   async publishToExchange(message: any): Promise<void> {
     try {
+      // this.logger.debug(`Message published to exchange `)
       await this.channelWrapper.publish(this.exchange, this.routingKey, Buffer.from(JSON.stringify(message)), { persistent: true } as any);
-      this.logger.log(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
+      // this.logger.debug(`Message published to exchange "${this.exchange}" with routing key "${this.routingKey}": ${JSON.stringify(message)}`);
     } catch (err) {
       this.logger.error('Error publishing message:', err);
     }
@@ -63,4 +89,14 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       this.logger.error('Error unbinding or deleting queue:', err);
     }
   }
+
+  @OnEvent(EmitterEvents.DiscoveryComplete, { async: true })
+  async generateDiscoveryReport(data: DiscoveryCompletePayload) {
+    const om = await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
+      {
+        type: InventoryPayloadType.DISCOVERY_COMPLETED ,data
+      }).toPromise()
+    this.logger.error(`------------- DiscoveryComplete  -----------------`)
+  }
+
 }

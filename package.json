@@ -25,20 +25,26 @@
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.0.0",
+    "@nestjs/event-emitter": "^2.1.1",
     "@nestjs/microservices": "^10.4.1",
     "@nestjs/mongoose": "^10.0.10",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/platform-socket.io": "^10.4.1",
+    "@nestjs/schedule": "^4.1.1",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.4.1",
+    "@netapp-cloud-datamigrate/logger-lib": "^0.0.1",
     "@types/jsonwebtoken": "^9.0.6",
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cron-parser": "^4.9.0",
     "dotenv": "^16.4.5",
     "jest-junit": "^16.0.0",
+    "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.3",
     "mysql2": "^3.11.2",
@@ -108,7 +114,19 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
+      "/test/",
+      "/config/",
+      "/entities/"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      ".*\\.module\\.ts$",
+      "/coverage",
+      "/dist",
+      "/test/",
+      "/config/",
+      "/entities/",
+      "/dto/"
     ]
   }
 }

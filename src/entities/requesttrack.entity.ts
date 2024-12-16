@@ -5,7 +5,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 't
 import { Base } from './base.entity';
 import { WorkerEntity } from './worker.entity';
 
-@Entity({name:'request_track', schema:'migrate'})
+@Entity({name:'request_track', schema:'migrateadmin'})
 export class RequestTrackEntity extends Base {
   @ApiProperty({ description: 'Unique identifier for the request' })
   @PrimaryGeneratedColumn('uuid')
@@ -24,7 +24,7 @@ export class RequestTrackEntity extends Base {
   status: ResponseStatus;
 
   @ApiProperty({ description: 'Operation of the request',  name:'operation'  })
-  @Column({ type: 'text', enum: Protocol, nullable: false })
+  @Column({ type: 'varchar', nullable: false })
   operation: Operations;
 
   @ApiProperty({ description: 'Worker ID' })

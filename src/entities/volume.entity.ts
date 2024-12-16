@@ -3,8 +3,9 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { InventoryEntity } from "./inventory.entity";
+import { JobConfigEntity } from "./jobconfig.entity";
 
-@Entity({name:'volume', schema:'migrate'})
+@Entity({name:'volume', schema:'migrateadmin'})
 export class VolumeEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
@@ -34,6 +35,12 @@ export class VolumeEntity extends Base {
     @JoinColumn({ name: 'file_server_id' }) 
     fileServer: FileServerEntity;
 
-    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: true})
+    @OneToMany(()=> JobConfigEntity, inventory=>inventory.sourcePath,{ cascade: true,  eager: false})
+    sourcePath: JobConfigEntity[]
+
+    @OneToMany(()=> JobConfigEntity, inventory=>inventory.targetPath,{ cascade: true,  eager: false})
+    targetPath: JobConfigEntity[]
+
+    @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: false})
     inventory: InventoryEntity[]
 }

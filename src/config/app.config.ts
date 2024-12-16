@@ -10,7 +10,8 @@ export default registerAs(
     rabbitmq: {
         urls: process.env.RABBITMQ_URL?.split(',') || [],
         queue: process.env.RABBITMQ_QUEUE || '',
-        durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false
+        durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false,
+        inventoryQueue: process.env.RABBITMQ_INVENTORY_QUEUE
     }
   }),
 );

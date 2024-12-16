@@ -10,8 +10,10 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { ListPathRes, ValidateConnectionRes } from '../events.type';
-import { RequestTrackService } from '../service/requesttrack.service';
+import { ListPathRes, UnScannedRes, ValidateConnectionRes } from '../events.type';
+import { WorkManager } from '../workmanager/workmanager.service';
+import { RequestTrackService } from '../service/requesttack/requesttrack.service';
+import { ScanCompletedPayload } from '../workmanager/workmanager.types';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -26,7 +28,8 @@ export class EventsGateway implements OnGatewayInit{
     private readonly workerEntity: Repository<WorkerEntity>,
     @InjectRepository(ProjectEntity) 
     private readonly projectEntity: Repository<ProjectEntity>,
-    private readonly requestTrackService: RequestTrackService
+    private readonly requestTrackService: RequestTrackService,
+    private readonly workManager: WorkManager
   ){}
   
 
@@ -50,8 +53,7 @@ export class EventsGateway implements OnGatewayInit{
       return;
     }
    
-    this.logger.log(`Client connected: ${workerId}`);
-    this.clients.set(workerId, client.id);
+    this.logger.log(`Client connected: ${workerId} socket Id ${client.id}`);
 
     const worker = await this.workerEntity.findOne({where: {workerId: workerId}})
     if(worker) {
@@ -59,6 +61,7 @@ export class EventsGateway implements OnGatewayInit{
         this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
         await this.workerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
         this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
+        this.clients.set(workerId, client.id);
       }catch(e){
         this.logger.error(`Error occurred during worker details update`, e);
       }
@@ -75,6 +78,7 @@ export class EventsGateway implements OnGatewayInit{
     try{ // Add new worker
       const registerWorker =  this.workerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
       await this.workerEntity.save(registerWorker)
+      this.clients.set(workerId, client.id);
     }
     catch(e) {
       this.logger.error(`Error occurred during worker registration`, e);
@@ -100,7 +104,7 @@ export class EventsGateway implements OnGatewayInit{
 
   // Send Message to workers by worker Id
   sendToClient(workerId: string, eventType: string, message: any,) {
-    this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}`)
+    this.logger.log(`Sending Message to worker ${workerId} : ${this.clients.get(workerId)}, ${JSON.stringify(message)}`)
     const clientId = this.clients.get(workerId);
     if (clientId) {
       this.logger.log('sendToClient',{workerId, eventType, message})
@@ -120,5 +124,27 @@ export class EventsGateway implements OnGatewayInit{
     await this.requestTrackService.listPathAck(ack)
   }
 
+   // --------------------- TASK --------------------- //
+   @SubscribeMessage(SocketEvents.TASK)
+   async handleTask(client: Socket, ack: any) {
+    const task = await this.workManager.assignWork(client.handshake.query.worker as string)
+    if(task) {
+      this.logger.error(`sending Task jobRun: ${task?.jobRunId} - taskId:  ${task.id}`)
+      this.server.to(client.id).emit(SocketEvents.TASK_ACK, task)
+    }
+    else this.logger.error(`task not found`)
+   }
+
+   @SubscribeMessage(SocketEvents.TASK_COMPLETED)
+   async taskCompleted(client: Socket, ack: ScanCompletedPayload) {
+    await this.workManager.updateTask(ack)
+   }
+
+   @SubscribeMessage(SocketEvents.TASK_UN_SCANNED)
+   async taskUnScanned(client: Socket, ack: UnScannedRes) {
+    await this.workManager.createUnScannedTask(ack)
+   }
+
+   
 }
 

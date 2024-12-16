@@ -3,9 +3,10 @@ import { RequestTrackService } from './requesttrack.service';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestTrackEntity } from 'src/entities/requesttrack.entity';
-import { FileConfigService } from './config.service';
-import { ValidateConnectionRes, ListPathRes } from '../events.type';
+
+import { ValidateConnectionRes, ListPathRes } from '../../events.type';
 import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
+import { FileConfigService } from '../config/config.service';
 
 describe('RequestTrackService', () => {
   let service: RequestTrackService;
