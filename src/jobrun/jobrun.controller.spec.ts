@@ -50,9 +50,7 @@ describe('JobRunController', () => {
       const result = await controller.getJobById('1');
 
       expect(result).toEqual([jobRun]);
-      expect(mockJobRunService.getJobRun).toHaveBeenCalledWith({
-        where: { id: '1' },
-      });
+      expect(mockJobRunService.getJobRun).toHaveBeenCalledWith("1");
     });
   });
 

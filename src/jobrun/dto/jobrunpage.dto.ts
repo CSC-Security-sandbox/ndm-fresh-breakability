@@ -58,7 +58,6 @@ export class JobRunPageDto {
   @ApiPropertyOptional({ description: 'Project Id'})
   @IsUUID()
   projectId: string;
-
 }
 
 
