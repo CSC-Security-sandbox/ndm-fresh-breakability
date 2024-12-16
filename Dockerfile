@@ -24,4 +24,6 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD [ "pm2", "start", "dist/main.js", "--name", "config-service", "--watch",  "--ignore-watch", "node_modules", "--no-daemon"]
+COPY entrypoint.sh .
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
