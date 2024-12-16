@@ -4,7 +4,7 @@ import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiRespon
 
 import { JobRunEntity } from './../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
-import { JobRunFilterDto } from './dto/jobrun.dto';
+import { JobRunDetailsDTO } from './dto/jobrun.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunActionsReq } from './dto/jobrunactions.dto';
 
@@ -34,8 +34,8 @@ export class JobRunController {
   @ApiResponse({ status: 200, description: 'Returns a job run by its ID.' })
   @ApiResponse({ status: 404, description: 'Job run not found.' })
   @Get(':id')
-  async getJobById(@Param('id') id: string): Promise<JobRunEntity[]> {
-    return await this.jobRunService.getJobRun({ where: { id } });
+  async getJobById(@Param('id') id: string): Promise<JobRunDetailsDTO> {
+    return await this.jobRunService.getJobRun(id);
   }
 
 

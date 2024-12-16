@@ -5,6 +5,7 @@ import { Base } from './base.entity';
 import { ProjectEntity } from './project.entity';
 import { FileServerEntity } from './fileserver.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
+import { TaskEntity } from './task.entity';
 
 
 @Entity({name:'worker', schema:'migrateadmin'})
@@ -44,4 +45,6 @@ export class WorkerEntity extends Base  {
   @OneToMany(()=>WorkerJobRunMap, jobRunMap=>jobRunMap.worker, { cascade: true,  eager: false})
   jobRunMap: WorkerJobRunMap[]
 
+  @OneToMany(()=>TaskEntity, task=>task.worker, { cascade: true,  eager: false})
+  tasks:TaskEntity[]
 }
