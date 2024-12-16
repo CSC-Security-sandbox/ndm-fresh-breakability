@@ -1,22 +1,29 @@
-FROM node:22-alpine AS production
+FROM public.ecr.aws/docker/library/alpine:3.21.0 
 
-# Set the working directory
+RUN apk update && \
+    apk upgrade --no-cache --purge && \
+    apk add --no-cache npm nodejs && \
+    rm -vrf /var/cache/apk/* && \
+    npm i -g @nestjs/cli && \
+    npm i -g pm2@latest 
+
 WORKDIR /app
 
-COPY . .
+COPY ["package.json", "./"]
+COPY [".npmrc", "./"]
 
-RUN npm install
+RUN npm install 
+RUN rm -f ./.npmrc
 
-# Build the application
+COPY ./src ./src
+COPY tsconfig.json .
+COPY tsconfig.build.json .
+COPY nest-cli.json .
+
 RUN npm run build
 
-# Expose the port
 EXPOSE 3000
 
-# Copy entrypoint script and set permissions
-COPY entrypoint.sh /entrypoint.sh
-# RUN chmod +x /entrypoint.sh
-
-# Set the entrypoint and default command
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["npm", "run", "start:prod"]
+COPY entrypoint.sh .
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
