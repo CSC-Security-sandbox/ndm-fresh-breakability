@@ -1,86 +1,90 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp, UpdateDateColumn } from 'typeorm';
 
-@Entity({ name: 'inventory', schema: 'inventory' })
+@Entity({name:'inventory', schema:'migrateadmin'})
+@Index('idx_id', ['id'])
+@Index('idx_path', ['path'])
+@Index('idx_file_server_path_id', ['fileServerPathId'])
+@Index('idx_inventory_job_run_id', ['jobRunId'])
 export class InventoryEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+    @ApiProperty({ description: 'UUID of the inventory' })
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
 
-  // commenting because from discovery pathId comming as string instead of uuid
-  // so for testing purpose making it as string
-  // @ApiProperty()
-  // @Column({ name: 'pathId', type: 'uuid' })
-  // pathId: string;
+    @ApiProperty({ description: 'Path from where inventory has been discovered' })
+    @Column({ name: 'path',type:'text' })
+    path: string;
 
-  @ApiProperty()
-  @Column({ name: 'pathId', type: 'text' })
-  pathId: string;
+    @ApiProperty({ description: 'Is Directory' })
+    @Column({ name: 'is_directory',type:'boolean' })
+    isDirectory: boolean;
 
-  @ApiProperty()
-  @Column({ name: 'jobRunId', type: 'uuid' })
-  jobRunId: string;
+    @ApiProperty({ description: 'Source Server file checksum' })
+    @Column({ name: 'source_checksum',type:'text' , nullable : true})
+    sourceChecksum: string;
 
-  @ApiProperty()
-  @Column({ name: 'path', type: 'text' })
-  path: string;
+    @ApiProperty({ description: 'Target Server file checksum' })
+    @Column({ name: 'target_checksum' ,type:'text',nullable : true})
+    targetChecksum: string;
 
-  @ApiProperty()
-  @Column({ name: 'is_folder' })
-  isFolder: boolean;
+    @ApiProperty({ description: 'Parent Path', type: 'text' })
+    @Column({ name: 'parent_path' })
+    parentPath: string;
 
-  @ApiProperty()
-  @Column({ name: 'status' })
-  status: string;
+    @ApiProperty({ description: 'Depth of the file in tree  hierarchy' })
+    @Column({ name: 'depth' ,type:'int'})
+    depth: number;
 
-  @ApiProperty()
-  @Column({ name: 'source_checksum', type: 'text', nullable: true })
-  sourceChecksum: string | null;
+    @ApiProperty({ description: 'File Name' })
+    @Column({ name: 'file_name' ,type:'text'})
+    fileName: string;
 
-  @ApiProperty()
-  @Column({ name: 'target_checksum', type: 'text', nullable: true })
-  targetChecksum: string | null;
+    @ApiProperty({ description: 'UID of the inventory' })
+    @Column({ name: 'uid' ,type:'text'})
+    uid: string;
 
-  @ApiProperty()
-  @Column({ name: 'parent_path', type: 'text' })
-  parentPath: string;
+    @ApiProperty({ description: 'GID of the inventory' })
+    @Column({ name: 'gid',type:'text' })
+    gid: string;
 
-  @ApiProperty()
-  @Column({ name: 'depth' })
-  depth: number;
+    @ApiProperty({ description: 'File Size' })
+    @Column({ name: 'file_size' ,type:'bigint'})
+    fileSize: bigint
 
-  @ApiProperty()
-  @Column({ name: 'fileName', type: 'text' })
-  fileName: string;
+    @ApiProperty({ description: 'File Type' })
+    @Column({ name: 'file_type',type:'text' })
+    fileType: string;
 
-  @ApiProperty()
-  @Column({ name: 'uid' })
-  uid: number;
+    @ApiProperty({ description: 'Modified Time' })
+    @Column({ name: 'modified_time',type:'timestamp' })
+    modifiedTime: string;
 
-  @ApiProperty()
-  @Column({ name: 'gid' })
-  gid: number;
+    @ApiProperty({ description: 'Access Time' })
+    @Column({ name: 'access_time',type:'timestamp' })
+    accessTime: string;
 
-  @ApiProperty()
-  @Column({ name: 'size', default: 0 })
-  size: number;
+    @ApiProperty({ description: 'File Permission' })
+    @Column({ name: 'file_permission' })    
+    filePermission: string;
 
-  @ApiProperty()
-  @Column({ name: 'mtime' })
-  mtime: string;
+    @ApiProperty({ description: 'File Server Exports/Shared Path ID' })
+    @Column({ name: 'path_id',type:'uuid' })    
+    fileServerPathId: string;
 
-  @ApiProperty()
-  @Column({ name: 'atime' })
-  atime: string;
+    @ApiProperty({ description: 'Birth Time' })
+    @Column({ name: 'birth_time',type:'timestamp' })
+    birthTime: string;
 
-  @ApiProperty()
-  @Column({ name: 'birthtime' })
-  birthtime: string;
+    @ApiProperty({ description: 'Job Run ID' })
+    @Column({ name: 'job_run_id',type:'uuid' })
+    jobRunId: string;
 
-  @ApiProperty()
-  @Column({ name: 'extension' })
-  extension: string;
+    @ApiProperty({ description: 'created_at' })
+    @CreateDateColumn({ name: 'created_at' })
+    createdAt: Date;
 
-  @ApiProperty()
-  @Column({ name: 'permission' })
-  permission: string;
+    @ApiProperty({ description: 'updated_at' })
+    @UpdateDateColumn({ name: 'updated_at',nullable:true })
+    updatedAt: Date;
+  
 }

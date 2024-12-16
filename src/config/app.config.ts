@@ -10,6 +10,7 @@ export default registerAs(
         rabbitmq: {
             urls: process.env.RABBITMQ_URLS?.split(',') || [],
             inventoryQueue: process.env.RABBITMQ_INVENTORY_QUEUE,
+            reportsQueue:  process.env.RABBITMQ_REPORTS_QUEUE,
         }
     }),
 );

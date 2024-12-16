@@ -1,196 +1,115 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InventoryService } from './inventory.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { InventoryService } from './inventory.service';
 import { InventoryEntity } from '../entities/inventory.entity';
-import { NotFoundException, Logger } from '@nestjs/common';
-import { CreateInventoryDto } from '../dto/create-inventory.dto';
-import { UpdateInventoryDto } from '../dto/update-inventory.dto';
+import { ConfigService } from '@nestjs/config';
+import { ClientProxy } from '@nestjs/microservices';
+import { InventoryPayload, InventoryPayloadType } from './inventory.type';
+import { Pattern } from '../enum/queues.enum';
 
 describe('InventoryService', () => {
   let service: InventoryService;
   let inventoryRepo: Repository<InventoryEntity>;
-
-  const mockInventory: InventoryEntity = {
-    id: '1',
-    pathId: 'path-1',
-    jobRunId: 'run-1',
-    path: '/test/path',
-    isFolder: true,
-    status: 'active',
-    sourceChecksum: null,
-    targetChecksum: null,
-    parentPath: '/parent/path',
-    depth: 2,
-    fileName: 'file.txt',
-    uid: 1001,
-    gid: 1002,
-    size: 1024,
-    mtime: '2023-12-01T12:00:00.000Z',
-    atime: '2023-12-01T12:00:00.000Z',
-    birthtime: '2023-12-01T12:00:00.000Z',
-    extension: '.txt',
-    permission: 'rw-r--r--',
-  };
+  let configService: ConfigService;
+  let reportsClient: ClientProxy;
 
   const mockInventoryRepo = {
     create: jest.fn(),
-    save: jest.fn(),
-    findOne: jest.fn(),
-    remove: jest.fn(),
-    find: jest.fn(),
+    insert: jest.fn(),
   };
+
+  const mockConfigService = {
+    get: jest.fn().mockImplementation((key) => {
+      if (key === 'app.rabbitmq.urls') return ['amqp://localhost'];
+      if (key === 'app.rabbitmq.reportsQueue') return 'reports_queue';
+    }),
+  };
+
+  const mockClientProxy = {
+    send: jest.fn().mockReturnValue({
+      toPromise: jest.fn().mockResolvedValue('success'),
+    }),
+  };
+
+  const mockPayload = {
+    type: InventoryPayloadType.DATA_INSERT,
+    data: [{ path: '/path/to/file', fileName: 'file.txt', isDirectory: false }],
+  } as InventoryPayload;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryService,
-        {
-          provide: getRepositoryToken(InventoryEntity),
-          useValue: mockInventoryRepo,
-        },
+        { provide: getRepositoryToken(InventoryEntity), useValue: mockInventoryRepo },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: ClientProxy, useValue: mockClientProxy },
       ],
     }).compile();
 
     service = module.get<InventoryService>(InventoryService);
     inventoryRepo = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
-
-    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => { });
-    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => { });
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => { });
+    configService = module.get<ConfigService>(ConfigService);
+    reportsClient = module.get<ClientProxy>(ClientProxy);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('findInventoryById', () => {
-    it('should return inventory if it exists', async () => {
-      mockInventoryRepo.findOne.mockResolvedValue(mockInventory);
 
-      const result = await service['findInventoryById']('1');
-      expect(result).toEqual(mockInventory);
-      expect(mockInventoryRepo.findOne).toHaveBeenCalledWith({ where: { id: '1' } });
-    });
-
-    it('should throw NotFoundException if inventory does not exist', async () => {
-      mockInventoryRepo.findOne.mockResolvedValue(null);
-
-      await expect(service['findInventoryById']('1')).rejects.toThrow(NotFoundException);
-    });
-  });
+  
 
   describe('createInventory', () => {
-    it('should create and save an inventory', async () => {
-      const dto: CreateInventoryDto = {
-        ...mockInventory,
-        blocks: 0
-      };
-      mockInventoryRepo.create.mockReturnValue(dto);
-      mockInventoryRepo.save.mockResolvedValue(mockInventory);
+    it('should save inventory records successfully', async () => {
+      mockInventoryRepo.create.mockReturnValueOnce(mockPayload.data);
+      await service.createInventory(mockPayload.data);
 
-      const result = await service.createInventory(dto);
-      expect(result).toEqual(mockInventory);
-      expect(mockInventoryRepo.create).toHaveBeenCalledWith(dto);
-      expect(mockInventoryRepo.save).toHaveBeenCalledWith(dto);
+      expect(mockInventoryRepo.create).toHaveBeenCalledWith(mockPayload.data);
+      expect(mockInventoryRepo.insert).toHaveBeenCalledWith(mockPayload.data);
     });
 
-    it('should log an error and throw an exception if save fails', async () => {
-      const dto: CreateInventoryDto = {
-        ...mockInventory,
-        blocks: 0
-      };
-      mockInventoryRepo.create.mockReturnValue(dto);
-      mockInventoryRepo.save.mockRejectedValue(new Error('Database Error'));
-      jest.spyOn(service['logger'], 'error');
+    it('should log an error and throw when insert fails', async () => {
+      mockInventoryRepo.create.mockReturnValueOnce(mockPayload.data);
+      mockInventoryRepo.insert.mockRejectedValueOnce(new Error('Insert failed'));
 
-      await expect(service.createInventory(dto)).rejects.toThrow('Error while saving inventory to the database');
-      expect(service['logger'].error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to save inventory: Database Error'),
-        expect.anything()
+      await expect(service.createInventory(mockPayload.data)).rejects.toThrow(
+        'Error while saving inventory records to the database',
       );
+
+      expect(mockInventoryRepo.create).toHaveBeenCalledWith(mockPayload.data);
+      expect(mockInventoryRepo.insert).toHaveBeenCalledWith(mockPayload.data);
     });
   });
 
-  describe('getInventoryById', () => {
-    it('should return inventory by ID', async () => {
-      jest.spyOn(service as any, 'findInventoryById').mockResolvedValue(mockInventory);
+  describe('operate', () => {
+    it('should process DATA_INSERT type payload', async () => {
+      jest.spyOn(service, 'createInventory').mockResolvedValueOnce(undefined);
+      const consoleSpy = jest.spyOn(console, 'debug');
 
-      const result = await service.getInventoryById('1');
-      expect(result).toEqual(mockInventory);
+      await service.operate(mockPayload);
+
+      expect(consoleSpy).toHaveBeenCalledWith(mockPayload);
+      expect(service.createInventory).toHaveBeenCalledWith(mockPayload.data);
+    });
+
+    it('should process DISCOVERY_COMPLETED type payload', async () => {
+      const discoveryPayload = {
+        type: InventoryPayloadType.DISCOVERY_COMPLETED,
+        data: { jobId: '1234', timestamp: new Date().toISOString() },
+      } as InventoryPayload;
+      jest.spyOn(service, 'notifyDiscoveryCompleted').mockResolvedValueOnce(undefined);
+
+      await service.operate(discoveryPayload);
+
+      expect(service.notifyDiscoveryCompleted).toHaveBeenCalledWith(discoveryPayload.data);
+    });
+
+    it('should throw an error for invalid type', async () => {
+      const invalidPayload = { type: 'INVALID', data: [] } as any;
+
+      await expect(service.operate(invalidPayload)).rejects.toThrow('Invalid Type');
     });
   });
-
-  describe('updateInventory', () => {
-    it('should update and save the inventory', async () => {
-      const dto: UpdateInventoryDto = { status: 'updated' };
-      const updatedInventory = { ...mockInventory, ...dto };
-
-      jest.spyOn(service as any, 'findInventoryById').mockResolvedValue(mockInventory);
-      mockInventoryRepo.save.mockResolvedValue(updatedInventory);
-
-      const result = await service.updateInventory('1', dto);
-      expect(result).toEqual(updatedInventory);
-      expect(mockInventoryRepo.save).toHaveBeenCalledWith(updatedInventory);
-    });
-
-    it('should log an error and throw an exception if update fails', async () => {
-      const dto: UpdateInventoryDto = { status: 'updated' };
-
-      jest.spyOn(service as any, 'findInventoryById').mockResolvedValue(mockInventory);
-      mockInventoryRepo.save.mockRejectedValue(new Error('Database Error'));
-      jest.spyOn(service['logger'], 'error');
-
-      await expect(service.updateInventory('1', dto)).rejects.toThrow('Error while updating inventory in the database');
-      expect(service['logger'].error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to update inventory: Database Error'),
-        expect.anything()
-      );
-    });
-  });
-
-  describe('deleteInventory', () => {
-    it('should delete the inventory and return a success message', async () => {
-      jest.spyOn(service as any, 'findInventoryById').mockResolvedValue(mockInventory);
-      mockInventoryRepo.remove.mockResolvedValue(mockInventory);
-
-      const result = await service.deleteInventory('1');
-      expect(result).toEqual({ message: `Inventory with ID 1 has been deleted` });
-      expect(mockInventoryRepo.remove).toHaveBeenCalledWith(mockInventory);
-    });
-
-    it('should log an error and throw an exception if delete fails', async () => {
-      jest.spyOn(service as any, 'findInventoryById').mockResolvedValue(mockInventory);
-      mockInventoryRepo.remove.mockRejectedValue(new Error('Database Error'));
-      jest.spyOn(service['logger'], 'error');
-
-      await expect(service.deleteInventory('1')).rejects.toThrow('Error while deleting inventory from the database');
-      expect(service['logger'].error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to delete inventory: Database Error'),
-        expect.anything()
-      );
-    });
-  });
-
-  describe('getAllInventories', () => {
-    it('should return all inventories', async () => {
-      const mockInventories = [mockInventory, { ...mockInventory, id: '2' }];
-      mockInventoryRepo.find.mockResolvedValue(mockInventories);
-
-      const result = await service.getAllInventories();
-      expect(result).toEqual(mockInventories);
-      expect(mockInventoryRepo.find).toHaveBeenCalled();
-    });
-
-    it('should log an error and throw an exception if retrieval fails', async () => {
-      mockInventoryRepo.find.mockRejectedValue(new Error('Database Error'));
-      jest.spyOn(service['logger'], 'error');
-
-      await expect(service.getAllInventories()).rejects.toThrow('Error while fetching inventories');
-      expect(service['logger'].error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to retrieve inventories: Database Error'),
-        expect.anything()
-      );
-    });
-  });
+  
 });
