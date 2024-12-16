@@ -1,17 +1,33 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
-
-const mockInventoryService = {
-  createInventory: jest.fn(),
-  getInventoryById: jest.fn(),
-  updateInventory: jest.fn(),
-  deleteInventory: jest.fn(),
-  getAllInventories: jest.fn(),
-};
+import { RmqContext } from '@nestjs/microservices';
+import { Pattern } from '../enum/queues.enum';
+import { InventoryPayload, InventoryPayloadType } from './inventory.type';
 
 describe('InventoryController', () => {
   let controller: InventoryController;
+  let service: InventoryService;
+
+  // Mock services and dependencies
+  const mockInventoryService = {
+    operate: jest.fn(),
+  };
+
+  const mockChannel = {
+    ack: jest.fn(),
+  };
+
+  const mockRmqContext: Partial<RmqContext> = {
+    getChannelRef: jest.fn().mockReturnValue(mockChannel),
+    getMessage: jest.fn().mockReturnValue({}),
+  };
+
+  const payload: InventoryPayload = {
+    type: InventoryPayloadType.DATA_INSERT,
+    data: { key: 'value' },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -22,39 +38,37 @@ describe('InventoryController', () => {
     }).compile();
 
     controller = module.get<InventoryController>(InventoryController);
+    service = module.get<InventoryService>(InventoryService);
   });
 
-  it('should create an inventory', async () => {
-    const dto = { fileName: 'file1.txt' } as any;
-    const result = { id: '1', ...dto };
-    mockInventoryService.createInventory.mockResolvedValue(result);
-
-    expect(await controller.createInventory(dto)).toEqual(result);
-    expect(mockInventoryService.createInventory).toHaveBeenCalledWith(dto);
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should get inventory by ID', async () => {
-    const result = { id: '1', fileName: 'file1.txt' };
-    mockInventoryService.getInventoryById.mockResolvedValue(result);
+  it('should process the message successfully', async () => {
+    mockInventoryService.operate.mockResolvedValueOnce(undefined);
 
-    expect(await controller.getInventoryById('1')).toEqual(result);
-    expect(mockInventoryService.getInventoryById).toHaveBeenCalledWith('1');
+    await controller.handleInventoryMessage(payload, mockRmqContext as RmqContext);
+
+    expect(mockInventoryService.operate).toHaveBeenCalledWith(payload);
+    expect(mockChannel.ack).toHaveBeenCalledWith(mockRmqContext.getMessage());
   });
 
-  it('should update an inventory', async () => {
-    const dto = { fileName: 'file2.txt' } as any;
-    const result = { id: '1', ...dto };
-    mockInventoryService.updateInventory.mockResolvedValue(result);
+  it('should handle errors during message processing', async () => {
+    const error = new Error('Test error');
+    mockInventoryService.operate.mockRejectedValueOnce(error);
+    await controller.handleInventoryMessage(payload, mockRmqContext as RmqContext);
+    expect(mockInventoryService.operate).toHaveBeenCalledWith(payload);
+    expect(mockChannel.ack).toHaveBeenCalledWith(mockRmqContext.getMessage());
 
-    expect(await controller.updateInventory('1', dto)).toEqual(result);
-    expect(mockInventoryService.updateInventory).toHaveBeenCalledWith('1', dto);
   });
 
-  it('should delete an inventory', async () => {
-    const result = { message: 'Inventory with ID 1 has been deleted' };
-    mockInventoryService.deleteInventory.mockResolvedValue(result);
+  it('should log the payload', async () => {
+    jest.spyOn(Logger.prototype, 'error');
+    mockInventoryService.operate.mockResolvedValueOnce(undefined);
+    await controller.handleInventoryMessage(payload, mockRmqContext as RmqContext);
 
-    expect(await controller.deleteInventory('1')).toEqual(result);
-    expect(mockInventoryService.deleteInventory).toHaveBeenCalledWith('1');
   });
+
+
 });

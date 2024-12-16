@@ -11,9 +11,9 @@ import { Pattern } from 'src/enum/queues.enum';
 export class InventoryService {
 
     // debugs
-    private counter = 0;
-    private totalObjects = 0;
-    private completedCount = 0;
+    // private counter = 0;
+    // private totalObjects = 0;
+    // private completedCount = 0;
 
     private readonly logger = new Logger(InventoryService.name);
     private reportsClient: ClientProxy;
@@ -54,14 +54,14 @@ export class InventoryService {
         console.debug(payload)
         switch(payload.type) {
             case InventoryPayloadType.DATA_INSERT:
-                this.totalObjects += (payload?.data.length || 0)
-                this.logger.debug(`Inserting Message of length:  ${payload?.data.length} | total count:${++this.counter} | totalObjects : ${this.totalObjects} | Completed Count : ${this.completedCount} `)
+                // this.totalObjects += (payload?.data.length || 0)
+                // this.logger.debug(`Inserting Message of length:  ${payload?.data.length} | total count:${++this.counter} | totalObjects : ${this.totalObjects} | Completed Count : ${this.completedCount} `)
                 await this.createInventory(payload.data);
                 break
             case InventoryPayloadType.DISCOVERY_COMPLETED:
-                this.completedCount++;
+                // this.completedCount++;
                 this.notifyDiscoveryCompleted(payload.data)
-                this.logger.debug(`------------------ ${JSON.stringify(payload.data)} ----------------`)
+                // this.logger.debug(`------------------ ${JSON.stringify(payload.data)} ----------------`)
                 break;
             default: 
                 throw new Error('Invalid Type')
@@ -69,7 +69,6 @@ export class InventoryService {
     }
 
     async notifyDiscoveryCompleted(data: DiscoveryCompletedPayload) {
-        const re =  await this.reportsClient.send(Pattern.DISCOVERY_COMPLETED, data).toPromise()
-
+        await this.reportsClient.send(Pattern.DISCOVERY_COMPLETED, data).toPromise()
     }  
 }

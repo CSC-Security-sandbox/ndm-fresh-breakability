@@ -7,7 +7,7 @@ describe('App Config', () => {
         const config = appConfig();
         expect(config).toEqual({
             http: { host: '0.0.0.0', port: 3000 },
-            rabbitmq: { urls: [], inventoryQueue: undefined },
+            rabbitmq: { urls: [], inventoryQueue: undefined ,  reportsQueue:  undefined},
         });
     });
 
