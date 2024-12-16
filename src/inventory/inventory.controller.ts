@@ -19,7 +19,6 @@ export class InventoryController {
         const channel = context.getChannelRef();
         const originalMsg = context.getMessage();
         try {
-            this.logger.error(payload)
             await this.inventoryService.operate(payload);
             channel.ack(originalMsg);
         } catch (err) {

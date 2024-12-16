@@ -4,7 +4,7 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, Long, ManyToOne, P
 @Entity({name:'inventory', schema:'migrateadmin'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
-@Index('idx_file_server_path_id', ['fileServerPathId'])
+@Index('idx_file_server_path_id', ['pathId'])
 @Index('idx_inventory_job_run_id', ['jobRunId'])
 export class InventoryEntity {
     @ApiProperty({ description: 'UUID of the inventory' })
@@ -53,7 +53,7 @@ export class InventoryEntity {
 
     @ApiProperty({ description: 'File Type' })
     @Column({ name: 'file_type',type:'text' })
-    fileType: string;
+    extension: string;
 
     @ApiProperty({ description: 'Modified Time' })
     @Column({ name: 'modified_time',type:'timestamp' })
@@ -65,11 +65,11 @@ export class InventoryEntity {
 
     @ApiProperty({ description: 'File Permission' })
     @Column({ name: 'file_permission' })    
-    filePermission: string;
+    permission: string;
 
     @ApiProperty({ description: 'File Server Exports/Shared Path ID' })
     @Column({ name: 'path_id',type:'uuid' })    
-    fileServerPathId: string;
+    pathId: string;
 
     @ApiProperty({ description: 'Birth Time' })
     @Column({ name: 'birth_time',type:'timestamp' })
