@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { InventoryEntity } from './inventory.entity';
 import { JobConfigEntity } from './jobconfig.entity';
@@ -33,5 +33,6 @@ export class JobRunEntity extends Base {
   inventoryDetails: InventoryEntity[];
 
   @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
+  @JoinColumn({ name: 'job_config_id' })
   jobConfig: JobConfigEntity; 
 }
