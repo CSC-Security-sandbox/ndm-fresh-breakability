@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { Repository } from 'typeorm';
-import { CreateJobConfigDto } from '../dto/jobconfig.dto';
+
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
@@ -28,7 +28,7 @@ const mockJobEntity = {
 
 };
 
-const mockJobDto: CreateJobConfigDto = {
+const mockJobDto = {
   createdBy: '',
   updatedBy: '',
   jobType: JobType.Scan,
