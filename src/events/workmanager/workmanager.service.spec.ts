@@ -382,6 +382,10 @@ describe('WorkManager', () => {
       jest.spyOn(operationsRepo, 'count').mockResolvedValue(0);
       jest.spyOn(taskRepo, 'count').mockResolvedValue(0);
 
+      jest.spyOn(operationsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(taskRepo, 'findOne').mockResolvedValue(null);
+
+
       await workManager.updateScanTask(mockTask as  any);
 
       expect(operationsRepo.update).toHaveBeenCalled(
@@ -429,6 +433,8 @@ describe('WorkManager', () => {
       jest.spyOn(taskRepo, 'update').mockResolvedValue(undefined);
       jest.spyOn(operationsRepo, 'count').mockResolvedValue(1);
       jest.spyOn(taskRepo, 'count').mockResolvedValue(1);
+      jest.spyOn(operationsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(taskRepo, 'findOne').mockResolvedValue(null);
 
       await workManager.updateScanTask(mockTask as any);
     });

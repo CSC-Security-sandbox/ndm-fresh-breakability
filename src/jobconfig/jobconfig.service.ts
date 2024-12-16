@@ -31,10 +31,10 @@ export class JobConfigService {
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
     const existingList = await this.jobConfigRepo.find({
-      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, select: {sourcePathId:true}
+      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true}
     })
    
-    await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds)}, {
+    await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery?.sourcePathIds)}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,

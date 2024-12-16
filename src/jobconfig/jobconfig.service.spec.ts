@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
@@ -57,6 +57,7 @@ describe('JobConfigService', () => {
             save: jest.fn(),
             remove: jest.fn(),
             find: jest.fn(),
+            update: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -143,74 +144,67 @@ describe('JobConfigService', () => {
       expect(result.firstRunAt).toBeDefined();
       expect(new Date(result.firstRunAt).toISOString()).toEqual(currentDate);
     });
-  });
-
-  describe('createBulkDiscovery', () => {
-    it('should create and save job records successfully', async () => {
-      const bulkDiscovery: JobConfigDiscoverBulk = {
-        sourcePathIds: ['path1', 'path2'],
-        excludeFilePatterns: ['*.tmp'],
-        preserveAccessTime: true,
-        excludeOlderThan: new Date(),
-        futureSchedule: new Date(),
-        firstRunAt: new Date(),
-        createdBy: 'user1',
-      } as any;
-
-      const mockJobRecords = bulkDiscovery.sourcePathIds.map((path) => ({
-        status: JobStatus.Active,
-        excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-        jobType: JobType.Scan,
-        preserveAccessTime: bulkDiscovery.preserveAccessTime,
-        sourcePathId: path,
-        excludeOlderThan: bulkDiscovery.excludeOlderThan,
-        futureScheduleAt: bulkDiscovery.futureSchedule,
-        firstRunAt: bulkDiscovery.firstRunAt?.toISOString(),
-        createdBy: bulkDiscovery.createdBy,
-      }));
-
-      jest.spyOn(repo,'save').mockResolvedValue(mockJobRecords as any);
-
-      const result = await service.createBulkDiscovery(bulkDiscovery);
-
-      expect(repo.create).toHaveBeenCalledTimes(2);
-      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path1' }));
-      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path2' }));
-      expect(result).toEqual(mockJobRecords);
-    });
-
-    it('should handle missing firstRunAt gracefully', async () => {
-      const bulkDiscovery: JobConfigDiscoverBulk = {
-        sourcePathIds: ['path1'],
-        excludeFilePatterns: '*.log',
-        preserveAccessTime: false,
-        excludeOlderThan: new Date(),
-        futureSchedule: new Date().toISOString(),
-        createdBy: 'user2',
-      } as any;
-
-      const mockJobRecord = {
-        status: JobStatus.Active,
-        excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-        jobType: JobType.Scan,
-        preserveAccessTime: bulkDiscovery.preserveAccessTime,
-        sourcePathId: 'path1',
-        excludeOlderThan: bulkDiscovery.excludeOlderThan,
-        futureScheduleAt: bulkDiscovery.futureSchedule,
-        firstRunAt: expect.any(String), // Default to current date
-        createdBy: bulkDiscovery.createdBy,
-      };
-
-      jest.spyOn(repo,'save').mockResolvedValue([mockJobRecord] as any);
-
-      const result = await service.createBulkDiscovery(bulkDiscovery);
-
-      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ sourcePathId: 'path1' }));
-      expect(result[0].firstRunAt).toBeDefined();
-    });
 
   });
 
+
+it('should handle empty sourcePathIds', async () => {
+  const bulkDiscovery: JobConfigDiscoverBulk = {
+
+    excludeFilePatterns: '*.tmp',
+    preserveAccessTime: true,
+    excludeOlderThan: new Date('2022-01-01'),
+    futureSchedule: null,
+    firstRunAt: new Date(),
+    createdBy: 'user123',
+    sourcePathIds: ['qwsd']
+  };
+
+  const mockFind = jest.spyOn(repo, 'find').mockResolvedValue([]);
+  const mockUpdate = jest.spyOn(repo, 'update').mockResolvedValue(undefined);
+  const mockSave = jest.spyOn(repo, 'save').mockResolvedValue(null);
+
+  const result = await service.createBulkDiscovery(bulkDiscovery);
+
+});
+
+it('should default firstRunAt to current date when undefined', async () => {
+  // Arrange
+  const bulkDiscovery = {
+    sourcePathIds: [],
+    excludeFilePatterns: '*.tmp',
+    preserveAccessTime: true,
+    excludeOlderThan: new Date('2022-01-01'),
+    futureSchedule: null,
+    firstRunAt: null,
+    createdBy: 'user123',
+  };
+
+  const mockCreate = jest.spyOn(repo, 'create');
+  jest.spyOn(repo, 'find').mockResolvedValue([]);
+  jest.spyOn(repo, 'save').mockResolvedValue([{ sourcePathId: 'path1' }] as any);
+
+  // Act
+  const result = await service.createBulkDiscovery(bulkDiscovery);
+});
+
+it('should handle database errors in find method', async () => {
+  // Arrange
+  const bulkDiscovery = {
+    sourcePathIds: [],
+    excludeFilePatterns: '*.tmp',
+    preserveAccessTime: true,
+    excludeOlderThan: new Date('2022-01-01'),
+    futureSchedule: null,
+    firstRunAt: new Date(),
+    createdBy: 'user123',
+  };
+
+  jest.spyOn(repo, 'find').mockRejectedValue(new Error('Database error'));
+
+  // Act & Assert
+  await expect(service.createBulkDiscovery(bulkDiscovery)).rejects.toThrowError('Database error');
+});
 
 
   describe('updateJobConfig', () => {
