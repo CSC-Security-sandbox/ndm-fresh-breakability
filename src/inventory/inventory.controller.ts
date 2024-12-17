@@ -23,7 +23,7 @@ export class InventoryController {
             channel.ack(originalMsg);
         } catch (err) {
             this.logger.error(`Error processing inventory message: ${err.message}`);
-            channel.ack(originalMsg);
+            channel.nack(originalMsg);
         }
     }
 }

@@ -17,6 +17,7 @@ describe('InventoryController', () => {
 
   const mockChannel = {
     ack: jest.fn(),
+    nack: jest.fn()
   };
 
   const mockRmqContext: Partial<RmqContext> = {
@@ -59,7 +60,7 @@ describe('InventoryController', () => {
     mockInventoryService.operate.mockRejectedValueOnce(error);
     await controller.handleInventoryMessage(payload, mockRmqContext as RmqContext);
     expect(mockInventoryService.operate).toHaveBeenCalledWith(payload);
-    expect(mockChannel.ack).toHaveBeenCalledWith(mockRmqContext.getMessage());
+    expect(mockChannel.nack).toHaveBeenCalledWith(mockRmqContext.getMessage());
 
   });
 
