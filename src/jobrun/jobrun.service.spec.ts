@@ -105,93 +105,181 @@ describe("JobRunService", () => {
     });
   });
 
-  describe("getSourceAndTargetWorkersByJobConfigId", () => {
-    it("should return overlapping workers when targetPathId is present", async () => {
+  describe("getSourceAndTargetCredWorkersByJobConfigId", () => {
+    it("should return overlapping workers and include target credential details when targetPathId is present", async () => {
       const job = { id: "1", targetPathId: "2" } as JobConfigEntity;
       const mockJobConfig = {
+        id: "1",
         sourcePath: {
+          id: "sourcePathId",
+          volumePath: "/source/path",
           fileServer: {
+            protocol: "NFS",
+            userName: "sourceUser",
+            password: "sourcePass",
             workers: [{ workerId: "worker1" }, { workerId: "worker2" }],
           },
         },
         targetPath: {
+          id: "targetPathId",
+          volumePath: "/target/path",
           fileServer: {
+            protocol: "NFS",
+            userName: "targetUser",
+            password: "targetPass",
             workers: [{ workerId: "worker1" }, { workerId: "worker3" }],
           },
         },
       };
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockJobConfig),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual(["worker1"]);
-      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "jobConfig"
-      );
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: "/source/path",
+            pathId: "sourcePathId",
+            protocol: "NFS",
+            username: "sourceUser",
+            password: "sourcePass",
+            host: "sourcePass",
+          },
+          targetCredential: {
+            path: "/target/path",
+            pathId: "targetPathId",
+            protocol: "NFS",
+            username: "targetUser",
+            password: "targetPass",
+            host: "targetPass",
+          },
+        },
+        workers: ["worker1"],
+      });
     });
-
-    it("should return only source workers when targetPathId is not present", async () => {
-      const job = { id: "1" } as JobConfigEntity; // targetPathId is not defined
+  
+    it("should return all source workers when targetPathId is not present", async () => {
+      const job = { id: "1" } as JobConfigEntity;
       const mockJobConfig = {
+        id: "1",
         sourcePath: {
+          id: "sourcePathId",
+          volumePath: "/source/path",
           fileServer: {
+            protocol: "NFS",
+            userName: "sourceUser",
+            password: "sourcePass",
             workers: [{ workerId: "worker1" }, { workerId: "worker2" }],
           },
         },
         targetPath: null,
       };
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockJobConfig),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual(["worker1", "worker2"]);
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: "/source/path",
+            pathId: "sourcePathId",
+            protocol: "NFS",
+            username: "sourceUser",
+            password: "sourcePass",
+            host: "sourcePass",
+          },
+        },
+        workers: ["worker1", "worker2"],
+      });
     });
-
-    it("should return an empty array when jobConfig is null", async () => {
+  
+    it("should return an empty array and no credentials when jobConfig is null", async () => {
       const job = { id: "1", targetPathId: "2" } as JobConfigEntity;
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(null),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual([]);
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          },
+          targetCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          }
+        },
+        workers: [],
+      });
     });
-
-    it("should return an empty array when no workers are present in source or target", async () => {
+  
+    it("should return an empty array of workers when no workers exist in source or target", async () => {
       const job = { id: "1", targetPathId: "2" } as JobConfigEntity;
       const mockJobConfig = {
+        id: "1",
         sourcePath: { fileServer: { workers: [] } },
         targetPath: { fileServer: { workers: [] } },
       };
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockJobConfig),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual([]);
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          },
+          targetCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          }
+        },
+        workers: [],
+      });
     });
-
-    it("should handle workers in source but not in target when targetPathId is present", async () => {
+  
+    it("should return workers from the source only when target has no workers", async () => {
       const job = { id: "1", targetPathId: "2" } as JobConfigEntity;
       const mockJobConfig = {
+        id: "1",
         sourcePath: {
           fileServer: {
             workers: [{ workerId: "worker1" }, { workerId: "worker2" }],
@@ -199,21 +287,42 @@ describe("JobRunService", () => {
         },
         targetPath: { fileServer: { workers: [] } },
       };
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockJobConfig),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual([]);
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          },
+          targetCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          }
+        },
+        workers: [],
+      });
     });
-
-    it("should return only unique workers when both source and target are the same", async () => {
+  
+    it("should return unique workers when source and target workers overlap completely", async () => {
       const job = { id: "1", targetPathId: "2" } as JobConfigEntity;
       const mockJobConfig = {
+        id: "1",
         sourcePath: {
           fileServer: {
             workers: [{ workerId: "worker1" }, { workerId: "worker2" }],
@@ -225,18 +334,39 @@ describe("JobRunService", () => {
           },
         },
       };
-
+  
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockJobConfig),
       } as any);
-
-      const result = await service.getSourceAndTargetWorkersByJobConfigId(job);
-
-      expect(result).toEqual(["worker1", "worker2"]);
+  
+      const result = await service.getSourceAndTargetCredWorkersByJobConfigId(job);
+  
+      expect(result).toEqual({
+        connection: {
+          sourceCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          },
+          targetCredential: {
+            path: undefined,
+            pathId : undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+          }
+        },
+        workers: ["worker1", "worker2"],
+      });
     });
   });
+  
 
   describe("createJobRun", () => {
     it("should create a job run if workers exist", async () => {
@@ -245,11 +375,11 @@ describe("JobRunService", () => {
         sourcePath: { volumePath: "src" },
         targetPath: { volumePath: "tgt" },
       } as any;
-      const mockWorkers = ["worker1", "worker2"];
+      const mockWorkers ={workers: ["worker1", "worker2"]};
 
       jest
-        .spyOn(service, "getSourceAndTargetWorkersByJobConfigId")
-        .mockResolvedValue(mockWorkers);
+        .spyOn(service, "getSourceAndTargetCredWorkersByJobConfigId")
+        .mockResolvedValue(mockWorkers as any);
       jest
         .spyOn(workerJobRunMapRepo, "create")
         .mockImplementation((data) => data as any);
@@ -272,8 +402,8 @@ describe("JobRunService", () => {
       const mockJob = { id: "1" } as any;
 
       jest
-        .spyOn(service, "getSourceAndTargetWorkersByJobConfigId")
-        .mockResolvedValue([]);
+        .spyOn(service, "getSourceAndTargetCredWorkersByJobConfigId" )
+        .mockResolvedValue({workers: []} as any);
 
       const loggerSpy = jest.spyOn(service["logger"], "warn");
 

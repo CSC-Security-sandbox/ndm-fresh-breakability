@@ -16,7 +16,7 @@ import {
 } from "./dto/jobrun.dto";
 import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { UpdateJobRunMappingPayload } from "./jobrun.types";
+import { MountConnection, UpdateJobRunMappingPayload } from "./jobrun.types";
 
 @Injectable()
 export class JobRunService {
@@ -65,9 +65,9 @@ export class JobRunService {
   }
 
   // ------------------ Get list of workers -------------------- //
-  async getSourceAndTargetWorkersByJobConfigId(
+  async getSourceAndTargetCredWorkersByJobConfigId(
     job: JobConfigEntity
-  ): Promise<string[]> {
+  ): Promise<MountConnection> {
     const jobConfig = await this.jobConfigRepo
       .createQueryBuilder("jobConfig")
       .leftJoinAndSelect("jobConfig.sourcePath", "sourcePath")
@@ -82,6 +82,20 @@ export class JobRunService {
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
 
+    const details : MountConnection = {
+      connection: {
+        sourceCredential: {
+          path: jobConfig?.sourcePath?.volumePath ,
+          pathId : jobConfig?.sourcePath?.id ,
+          protocol: jobConfig?.sourcePath?.fileServer?.protocol ,
+          username: jobConfig?.sourcePath?.fileServer?.userName,
+          password: jobConfig?.sourcePath?.fileServer?.password,
+          host: jobConfig?.sourcePath?.fileServer?.password,
+        }
+      },
+      workers: sourceWorkers.map((worker) => worker.workerId)
+    }
+
     if (job.targetPathId) {
       const workers: string[] = [];
       const workerSet = new Set<string>();
@@ -89,21 +103,32 @@ export class JobRunService {
       targetWorkers?.forEach((worker) => {
         if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
       });
-      return workers;
+
+      details.connection['targetCredential'] = {
+        path: jobConfig?.targetPath?.volumePath ,
+        pathId : jobConfig?.targetPath?.id ,
+        protocol: jobConfig?.targetPath?.fileServer?.protocol ,
+        username: jobConfig?.targetPath?.fileServer?.userName,
+        password: jobConfig?.targetPath?.fileServer?.password,
+        host: jobConfig?.targetPath?.fileServer?.password,
+      }
+      details['workers'] = workers
+      return details;
     }
-    return sourceWorkers.map((worker) => worker.workerId);
+    this.logger.debug(details)
+    return details
   }
 
   // ------------------ Create job run  -------------------- //
   async createJobRun(job: JobConfigEntity , currentTime: Date) {
-    const workers = await this.getSourceAndTargetWorkersByJobConfigId(job)
+    const details = await this.getSourceAndTargetCredWorkersByJobConfigId(job)
     
-    if(workers.length === 0) {
+    if(details.workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)
       return
     }
 
-    const workerMap = workers.map((worker) =>
+    const workerMap = details.workers.map((worker) =>
       this.workerJobRunMapRepo.create({
         workerId: worker,
         isActive: true,
@@ -120,14 +145,27 @@ export class JobRunService {
     });
     const update = await this.jobRunRepo.save(jobRunRecord);
 
+    await this.sendMountMessage(details, update.id)
+
     this.eventEmitter.emit(EmitterEvents.TaskCreate, {
       jobRunId: update.id,
       status: update.status,
       sPath: job.sourcePath.volumePath,
       tPath: job.targetPath?.volumePath,
       taskType: job.jobType,
-      workers: workers,
+      workers: details.workers,
     });
+  }
+  //  ------------------- JobRun actions ------------------ //
+  async sendMountMessage(details: MountConnection, jobRunId: string) {
+    this.logger.error(details)
+    details.workers.forEach(worker => 
+      this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+        workerId: worker,
+        socketEvents: SocketEvents.MOUNT_PATH,
+        payload: { jobRunId: jobRunId, ...details.connection}
+    })
+      )
   }
  
   //  ------------------- JobRun actions ------------------ //
@@ -273,7 +311,7 @@ export class JobRunService {
       scannedDirectoriesCount: BigInt(
         inventoryCounts?.directorycount || "0"
       )?.toString(),
-      totalScannedSize: BigInt(inventoryCounts?.totalsize || "0")?.toString(),
+      totalScannedSize:  this.covertBytes(Number(inventoryCounts?.totalsize || "0")),
       errors: [],
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -389,9 +427,9 @@ export class JobRunService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts?.directorycount || "0"
           )?.toString(),
-          totalScannedSize: BigInt(
+          totalScannedSize: this.covertBytes(Number(
             inventoryCounts?.totalsize || "0"
-          )?.toString(),
+          )),
           errors: [],
         };
         return response;
@@ -399,4 +437,28 @@ export class JobRunService {
     );
     return allJobsRuns;
   }
+
+
+  covertBytes(bytes: number): string {
+    const bytesInKB = 1024;
+    const bytesInMB = bytesInKB ** 2;
+    const bytesInGB = bytesInMB ** 2;
+    const bytesInTB = bytesInGB ** 2;
+    const bytesInPB = bytesInTB ** 2;
+
+    if (bytes < bytesInKB) {
+        return `${bytes} B`;
+    } else if (bytes < bytesInMB) {
+        return `${(bytes / bytesInKB).toFixed(2)} KB`;
+    } else if (bytes < bytesInGB) {
+        return `${(bytes / bytesInMB).toFixed(2)} MB`;
+    } else if (bytes < bytesInTB) {
+        return `${(bytes / bytesInGB).toFixed(2)} GB`;
+    } else if (bytes < bytesInPB) {
+        return `${(bytes / bytesInTB).toFixed(2)} TB`;
+    } else {
+        return `${(bytes / bytesInPB).toFixed(2)} PB`;
+    }
+  }
+
 }
