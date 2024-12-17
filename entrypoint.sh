@@ -9,4 +9,4 @@ echo "Starting replica with index: $REPLICA_INDEX"
 export REPLICA_INDEX
 
 # Run the NestJS application
-exec npm run start
+exec pm2 start dist/main.js --name "job-service" --watch --ignore-watch "node_modules" --no-daemon
