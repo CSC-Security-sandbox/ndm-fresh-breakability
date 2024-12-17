@@ -406,6 +406,7 @@ export class JobRunService {
           startTime: jobRun.starttime,
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
+          jobConfigId: jobRun.jobconfigid,
           sourceServer: {
             serverName: jobRun.sourceconfigname,
             path: jobRun.volumepath,
