@@ -11,6 +11,7 @@ export enum SocketEvents{
     LIST_PATH_ACK='LIST_PATH_ACK',
     ERROR='ERROR',
     WAKE_UP='WAKE_UP',
+    MOUNT_PATH='MOUNT_PATH',
     TASK='TASK',
     TASK_ACK='TASK_ACK',
     TASK_COMPLETED='TASK_COMPLETED',
