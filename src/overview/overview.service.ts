@@ -80,12 +80,12 @@ export class OverviewService {
                 const inventoryQueryBuilder =
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(inventory.fileSize)', 'totalSize')
-                        .addSelect('SUM(inventory.fileSize)', 'totalSize');
+
                 const jobRunId = lastScanRun[0].id;
                 if (lastScanRun[0].id) {
                     inventoryQueryBuilder.andWhere('job_run_id = :jobRunId', { jobRunId });
                 }
-                inventoryQueryBuilder.groupBy('inventory.fileSize');
+
                 const discoveredSize = await inventoryQueryBuilder.getRawMany();
                 totalDiscoveredSize = discoveredSize[0]?.totalSize || 0;
             }
@@ -116,7 +116,6 @@ export class OverviewService {
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(MAX(inventory.fileSize))', 'totalMigratedSize')
                         .addSelect('SUM(inventory.filePath)', 'filePath')
-                        .addSelect('SUM(inventory.fileSize)', 'latestFileSize')
                         .where('inventory.job_run_id IN(:...jobRunId)', { jobRunId: migrateRun.map(run => run.id) })
                         .groupBy('inventory.filePath')
                 const migratedSize = await migrationQueryBuilder.getRawMany();
