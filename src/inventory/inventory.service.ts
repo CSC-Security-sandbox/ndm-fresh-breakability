@@ -28,7 +28,7 @@ export class InventoryService {
         this.reportsClient = ClientProxyFactory.create({
           transport: Transport.RMQ,
           options: {
-            urls: [urls],
+            urls: urls,
             queue: this.configService.get<string>('app.rabbitmq.reportsQueue') || '',
             queueOptions: {
               durable: true,
