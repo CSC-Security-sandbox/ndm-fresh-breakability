@@ -68,7 +68,7 @@ export class InventoryEntity {
     permission: string;
 
     @ApiProperty({ description: 'File Server Exports/Shared Path ID' })
-    @Column({ name: 'path_id',type:'uuid' })    
+    @Column({ name: 'volume_id',type:'uuid' })    
     pathId: string;
 
     @ApiProperty({ description: 'Birth Time' })
