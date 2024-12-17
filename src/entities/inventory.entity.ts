@@ -71,7 +71,7 @@ export class InventoryEntity extends BaseEntity {
     filePermission: string;
 
     @ApiProperty({ description: 'File Server Exports/Shared Path ID' })
-    @Column({ name: 'path_id',type:'uuid' })    
+    @Column({ name: 'volume_id',type:'uuid' })    
     fileServerPathId: string;
 
     @ApiProperty({ description: 'Job Run ID' })
