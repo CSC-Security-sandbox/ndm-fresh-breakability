@@ -38,6 +38,7 @@ export class ConfigurationService {
             projectId: true,
             createdAt: true,
             createdBy: true,
+            scannedDate: true,
             fileServers:{
                 id: true,
                 host: true,
@@ -75,6 +76,7 @@ export class ConfigurationService {
                 configName: true,
                 configType: true,
                 projectId: true,
+                scannedDate: true,
                 fileServers:{
                     id: true,
                     host: true,
