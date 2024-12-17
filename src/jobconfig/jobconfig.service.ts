@@ -116,7 +116,7 @@ export class JobConfigService {
         timeElapsed : jobRun.endTime ? jobRun.endTime.getTime() - jobRun.startTime.getTime()  : Date.now() - jobRun.startTime.getTime(),
         scannedFilesCount: BigInt(inventoryCounts.filecount || '0')?.toString(),
         scannedDirectoriesCount: BigInt(inventoryCounts.directorycount || '0')?.toString(),
-        totalScannedSize: BigInt(inventoryCounts.totalsize || '0')?.toString(),
+        totalScannedSize: this.covertBytes(Number(inventoryCounts.totalsize || '0')),
         errors: []
       };
     }));
@@ -211,4 +211,26 @@ export class JobConfigService {
     });
     return payload
   }
+
+  covertBytes(bytes: number): string {
+    const bytesInKB = 1024;
+    const bytesInMB = bytesInKB ** 2;
+    const bytesInGB = bytesInMB ** 2;
+    const bytesInTB = bytesInGB ** 2;
+    const bytesInPB = bytesInTB ** 2;
+
+    if (bytes < bytesInKB) {
+        return `${bytes} B`;
+    } else if (bytes < bytesInMB) {
+        return `${(bytes / bytesInKB).toFixed(2)} KB`;
+    } else if (bytes < bytesInGB) {
+        return `${(bytes / bytesInMB).toFixed(2)} MB`;
+    } else if (bytes < bytesInTB) {
+        return `${(bytes / bytesInGB).toFixed(2)} GB`;
+    } else if (bytes < bytesInPB) {
+        return `${(bytes / bytesInTB).toFixed(2)} TB`;
+    } else {
+        return `${(bytes / bytesInPB).toFixed(2)} PB`;
+    }
+}
 }
