@@ -188,9 +188,8 @@ export class ConfigurationService {
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
-                const workers = await this.WorkerEntity.find({where: {workerId : In(fileServer.workers)}});
-
                 const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
+                const workers = await this.WorkerEntity.find({where: {workerId : In(update?.workers)}});
 
                 credentials.push({
                     details: {
