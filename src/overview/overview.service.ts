@@ -21,9 +21,7 @@ export class OverviewService {
             if (fileServerId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
-                    fileServers: {
                         id: fileServerId,
-                    },
                 };
             }
         
@@ -80,14 +78,13 @@ export class OverviewService {
                 const inventoryQueryBuilder =
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(inventory.fileSize)', 'totalSize')
-
                 const jobRunId = lastScanRun[0].id;
                 if (lastScanRun[0].id) {
                     inventoryQueryBuilder.andWhere('job_run_id = :jobRunId', { jobRunId });
                 }
-
                 const discoveredSize = await inventoryQueryBuilder.getRawMany();
                 totalDiscoveredSize = discoveredSize[0]?.totalSize || 0;
+
             }
             const migrateRun = projectDetails.flatMap(project =>
                 project.configs.flatMap(config =>

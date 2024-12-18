@@ -63,8 +63,12 @@ export class InventoryEntity extends BaseEntity {
     modifiedTime: Timestamp;
 
     @ApiProperty({ description: 'Access Time' })
-    @Column({ name: 'access_time',type:'timestamp' })
-    accessTime: Timestamp;
+    @Column({ name: 'access_time',type:'text' })
+    accessTime: string;
+
+    @ApiProperty({ description: 'Access Time' })
+    @Column({ name: 'birth_time',type:'text' })
+    birthTime: string;
 
     @ApiProperty({ description: 'File Permission' })
     @Column({ name: 'file_permission' })    
