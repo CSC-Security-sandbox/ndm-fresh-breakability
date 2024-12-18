@@ -498,5 +498,45 @@ it('should handle database errors in find method', async () => {
     await expect(service.getJobConfigById(jobConfigId)).rejects.toThrow(`Job with id ${jobConfigId} not found`);
   });
 
+  describe('convertBytes', () => {
+    it('should return bytes for values less than 1024', () => {
+        expect(convertBytes(500)).toBe('500 B');
+        expect(convertBytes(0)).toBe('0 B');
+    });
+
+    it('should return kilobytes for values between 1024 and 1 MB', () => {
+        expect(convertBytes(1024)).toBe('1.00 KB');
+        expect(convertBytes(1536)).toBe('1.50 KB');
+    });
+
+    it('should return megabytes for values between 1 MB and 1 GB', () => {
+        expect(convertBytes(1048576)).toBe('1.00 MB'); // 1 MB
+        expect(convertBytes(2097152)).toBe('2.00 MB'); // 2 MB
+        expect(convertBytes(1572864)).toBe('1.50 MB'); // 1.5 MB
+    });
+
+    it('should return gigabytes for values between 1 GB and 1 TB', () => {
+        expect(convertBytes(1073741824)).toBe('1.00 GB'); // 1 GB
+        expect(convertBytes(2147483648)).toBe('2.00 GB'); // 2 GB
+        expect(convertBytes(1610612736)).toBe('1.50 GB'); // 1.5 GB
+    });
+
+    it('should return terabytes for values between 1 TB and 1 PB', () => {
+        expect(convertBytes(1099511627776)).toBe('1.00 TB'); // 1 TB
+        expect(convertBytes(2199023255552)).toBe('2.00 TB'); // 2 TB
+        expect(convertBytes(1649267441664)).toBe('1.50 TB'); // 1.5 TB
+    });
+
+    it('should return petabytes for values greater than or equal to 1 PB', () => {
+        expect(convertBytes(1125899906842624)).toBe('1.00 PB'); // 1 PB
+        expect(convertBytes(2251799813685248)).toBe('2.00 PB'); // 2 PB
+        expect(convertBytes(1693247244558336)).toBe('1.50 PB'); // 1.5 PB
+    });
+
+    it('should handle very large numbers gracefully', () => {
+        expect(convertBytes(1125899906842624000)).toBe('1000.00 PB'); // 1000 PB
+    });
+});
+
 
 });
