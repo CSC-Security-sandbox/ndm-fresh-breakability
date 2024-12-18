@@ -193,7 +193,7 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate: parser.parseExpression(job.futureschedule).next().toDate(),
+        nextScheduleDate: job.futureschedule? parser.parseExpression(job.futureschedule).next().toDate(): null,
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
