@@ -148,7 +148,7 @@ describe("JobRunService", () => {
             protocol: "NFS",
             username: "sourceUser",
             password: "sourcePass",
-            host: "sourcePass",
+            host: undefined,
           },
           targetCredential: {
             path: "/target/path",
@@ -156,7 +156,7 @@ describe("JobRunService", () => {
             protocol: "NFS",
             username: "targetUser",
             password: "targetPass",
-            host: "targetPass",
+            host: undefined,
           },
         },
         workers: ["worker1"],
@@ -196,7 +196,7 @@ describe("JobRunService", () => {
             protocol: "NFS",
             username: "sourceUser",
             password: "sourcePass",
-            host: "sourcePass",
+            host: undefined
           },
         },
         workers: ["worker1", "worker2"],
@@ -630,7 +630,7 @@ describe("JobRunService", () => {
         },
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
-        totalScannedSize: "2048",
+        totalScannedSize: "2.00 KB",
         errors: [],
       },
     ]);
@@ -806,7 +806,7 @@ describe("JobRunService", () => {
         timeElapsed: endTime.getTime() - startTime.getTime(),
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
-        totalScannedSize: totalSize,
+        totalScannedSize: "0 B",
         errors: [],
         tasks: [],
       });

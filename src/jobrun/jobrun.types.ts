@@ -13,6 +13,7 @@ interface Credential {
     username: string,
     path:string,
     host: string,
+    workingDirectory:string
 }
 
 export interface MountConnection{
