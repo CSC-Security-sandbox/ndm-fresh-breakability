@@ -21,9 +21,9 @@ export class OverviewService {
             if (fileServerId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
-                    fileServers: {
+                  //  fileServers: {
                         id: fileServerId,
-                    },
+                 //   },
                 };
             }
         
