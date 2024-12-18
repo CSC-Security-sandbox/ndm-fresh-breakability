@@ -22,10 +22,34 @@ export class DiscoveryService {
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
-  async createReportFile(
-    jobRunId: string,
-    reportType: string
-  ): Promise<any> {
+  async createReportFile(jobRunId: string, reportType: string): Promise<any> {
+    function formatAndWriteToFile(data: any[], filePath: string): void {
+        const groupedData = data.reduce((acc, entry) => {
+          if (!acc[entry.category]) {
+            acc[entry.category] = [];
+          }
+          acc[entry.category].push(entry);
+          return acc;
+        }, {});
+       
+        const formattedString = Object.entries(groupedData)
+          .map(([category, entries]) => {
+            let categoryString = `== ${category} ==\n`;
+       
+            const tableRows = (entries as any[])
+              .map(
+                (entry) => `${entry.sub_category.padEnd(20)} | ${entry.count_or_space}`
+              )
+              .join("\n");
+       
+            return `${categoryString}${tableRows}\n`;
+          })
+          .join("\n");
+       
+        fs.writeFileSync(filePath, formattedString);
+        console.log(`Data has been written to ${filePath}`);
+      }
+
     try {
       if (!fs.existsSync(this.reportsDirectory)) {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
@@ -34,21 +58,23 @@ export class DiscoveryService {
         "CALL migrateadmin.generate_discovery_report($1)",
         [jobRunId]
       );
-      if (result) {
-        const latestReport = await this.reportsRepo.find({
-          order: { createdAt: "DESC" },
-          take: 1,
-        });
-        const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
-        const filePath = path.join(this.reportsDirectory, fileName);
 
-        if (!fs.existsSync(filePath)) {
-          fs.writeFileSync(filePath, JSON.stringify(latestReport[0].reportData));
-        }
+      const latestReport = await this.reportsRepo.find({
+        order: { createdAt: "DESC" },
+        take: 1,
+      });
+
+
+      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
+      const filePath = path.join(this.reportsDirectory, fileName);
+
+      if (latestReport) {
+        formatAndWriteToFile(JSON.parse(latestReport[0].reportData), filePath)
       }
+
       return {
         message: "Report generated successfully",
-      }
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`

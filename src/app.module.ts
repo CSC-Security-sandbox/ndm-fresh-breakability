@@ -7,8 +7,6 @@ import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OverviewModule } from './overview/overview.module';
 import appConfig from './config/app.config';
-import { ReportsController } from './reports/reports.controller';
-import { ReportService } from './reports/reports.service';
 import { InventoryEntity } from './entities/inventory.entity';
 import { ReportsEntity } from './entities/reports.entity';
 
@@ -25,7 +23,7 @@ import { ReportsEntity } from './entities/reports.entity';
     OverviewModule,
     TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]) 
   ],
-  controllers: [AppController, ReportsController],
-  providers: [AppService, ReportService],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

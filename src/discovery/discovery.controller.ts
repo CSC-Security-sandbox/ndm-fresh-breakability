@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Res, Header, StreamableFile,Logger } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Res, Header, StreamableFile,Logger, InternalServerErrorException } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
@@ -130,6 +130,8 @@ export class DiscoveryController {
     @Body('jobRunId') jobRunId: string,
     @Body('report-type') reportType: string,
   ): Promise<Buffer> {
+    this.logger.log("reached here in controller");
+
     if (!jobRunId) {
       throw new BadRequestException('jobRunId is required');
     }
