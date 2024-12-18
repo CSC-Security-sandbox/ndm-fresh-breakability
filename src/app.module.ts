@@ -6,10 +6,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OverviewModule } from './overview/overview.module';
+import appConfig from './config/app.config';
+import { ReportsController } from './reports/reports.controller';
+import { ReportService } from './reports/reports.service';
+import { InventoryEntity } from './entities/inventory.entity';
+import { ReportsEntity } from './entities/reports.entity';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ load: [databaseConfig] }),
+    ConfigModule.forRoot({ load: [databaseConfig, appConfig] }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) =>
@@ -17,9 +22,10 @@ import { OverviewModule } from './overview/overview.module';
       inject: [ConfigService],
     }),
     DiscoveryModule,
-    OverviewModule
+    OverviewModule,
+    TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]) 
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, ReportsController],
+  providers: [AppService, ReportService],
 })
 export class AppModule {}

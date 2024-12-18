@@ -1,10 +1,19 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Res, Header, StreamableFile } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Res, Header, StreamableFile,Logger } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
+import {
+  Ctx,
+  MessagePattern,
+  Payload,
+  RmqContext,
+} from "@nestjs/microservices";
+import { DiscoveryCompletedPayload } from 'src/discovery/discovery.interface';
+import { Pattern } from 'src/discovery/pattern.enum';
 
 @ApiTags('Get discovery inventory')
 @Controller('inventory')
 export class DiscoveryController {
+  private readonly logger = new Logger(DiscoveryController.name);
   constructor(
     private readonly discoveryService: DiscoveryService,
   ) { }
@@ -129,6 +138,22 @@ export class DiscoveryController {
     }
 
     return this.discoveryService.createReportFile(jobRunId, reportType);
+  }
+
+  @MessagePattern(Pattern.DISCOVERY_COMPLETED)
+  async generateDiscoveryReport(@Payload() payload: DiscoveryCompletedPayload, @Ctx() context: RmqContext) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    try {
+      this.logger.log(
+        `Received discovery completed message: ${JSON.stringify(payload)}`
+      );
+      this.discoveryService.createReportFile(payload.jobRunId, 'discovery');
+      channel.ack(originalMsg);
+    } catch (err) {
+      this.logger.error(`Error processing inventory message: ${err.message}`);
+      channel.nack(originalMsg);
+    }
   }
 
 }
