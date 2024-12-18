@@ -76,6 +76,8 @@ export class JobRunService {
       .leftJoinAndSelect("sourceFileServer.workers", "sourceWorkers")
       .leftJoinAndSelect("targetPath.fileServer", "targetFileServer")
       .leftJoinAndSelect("targetFileServer.workers", "targetWorkers")
+      .leftJoinAndSelect("sourceFileServer.config", "SourceConfig")
+      .leftJoinAndSelect("targetFileServer.config", "TargetConfig")
       .where("jobConfig.id = :jobConfigId", { jobConfigId: job.id })
       .getOne();
 
@@ -90,7 +92,8 @@ export class JobRunService {
           protocol: jobConfig?.sourcePath?.fileServer?.protocol ,
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
-          host: jobConfig?.sourcePath?.fileServer?.password,
+          host: jobConfig?.sourcePath?.fileServer?.host,
+          workingDirectory: jobConfig?.sourcePath?.fileServer?.config?.workingDirectory
         }
       },
       workers: sourceWorkers.map((worker) => worker.workerId)
@@ -110,7 +113,8 @@ export class JobRunService {
         protocol: jobConfig?.targetPath?.fileServer?.protocol ,
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,
-        host: jobConfig?.targetPath?.fileServer?.password,
+        host: jobConfig?.targetPath?.fileServer?.host,
+        workingDirectory: jobConfig?.targetPath?.fileServer?.config?.workingDirectory
       }
       details['workers'] = workers
       return details;

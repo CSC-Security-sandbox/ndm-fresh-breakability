@@ -18,6 +18,10 @@ export class ConfigEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'config_type' })
     configType: string;
 
+    @ApiProperty({ description: 'Working Directory' })
+    @Column({ type: 'text', nullable: true,  name:'working_directory' })
+    workingDirectory: string;
+
     @ApiProperty({ description: 'projectId' })
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
