@@ -36,9 +36,10 @@ export class JobRunService {
 
   @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    await this.jobRunRepo.update({id: payload.jobRunId},{status: payload.status})
-    if(payload.status === JobRunStatus.Completed) 
-      await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
+    const updateData: any  = { status: payload.status }
+    if(payload.status === JobRunStatus.Completed) updateData.endTime = new Date();
+    await this.jobRunRepo.update({id: payload.jobRunId}, updateData)
+    if(payload.status === JobRunStatus.Completed) await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
   }
 
   @OnEvent(EmitterEvents.UpdateJobRunMapping, { async: true })
