@@ -14,3 +14,16 @@ export interface FetchMountMsg{
     configId: string;
     credentials: Credentials[]
 }
+
+export type UserDetails = {
+    user: {
+        id: string;
+        roles: Role[];
+    };
+};
+   
+type Role = {
+    role_name: string;
+    projects: string[];
+    permissions: string[];
+};

@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, ValidationPipe } from "@nestjs/common";
-import { ApiBadRequestResponse, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe } from "@nestjs/common";
+import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
-import { ConfigResponseDto, FindallConfigPageDto } from "./dto/findallconfig.dto";
+import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
-import { RabbitMQService } from "src/rabbitmq/rabbitmq.service";
+import { ConfigResponseDto, FindallConfigPageDto } from "./dto/findallconfig.dto";
 
 @ApiTags("Configuration")
 @Controller('servers')
@@ -14,13 +15,16 @@ export class ConfigurationController{
 
     @ApiOperation({ summary: 'Create Configuration' })
     @ApiCreatedResponse({ description: 'Configuration Created Successfully.' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
     @Post('')
     @HttpCode(HttpStatus.CREATED)
     @ApiBody({ description: 'Configuration data', type: ConfigDTO })
     async createConfiguration(
-        @Body() createConfigurationDto: ConfigDTO
+        @Body() createConfigurationDto: ConfigDTO,
+        @Request() userDetails: UserDetails
     ) {
-        const createdConfiguration = await this.configurationService.createConfiguration(createConfigurationDto);
+        const createdConfiguration = await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id);
         return createdConfiguration;
     }
 
@@ -30,15 +34,18 @@ export class ConfigurationController{
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
+    @ApiBearerAuth()
+    @Auth(Permission.ViewConfig)
     @Get('/')
     async getAllConfiguration(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findallConfigPageDto: FindallConfigPageDto) {
-        
         return await this.configurationService.getAllConfig(findallConfigPageDto);
     }
 
     @ApiOperation({ summary: 'Get Configuration by ID' })
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ViewConfig)
     @Get(':id')
     async getConfiguration(@Param('id') id: string) {
         return await this.configurationService.getConfigById(id)
@@ -49,17 +56,22 @@ export class ConfigurationController{
     @ApiOkResponse({ description: 'Configuration Updated Successfully' })
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBody({ description: 'Configuration data to update', type: ConfigDTO })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
     @Put(':id')
     async update(
         @Param('id') id: string,
-        @Body() updateConfig: ConfigDTO
+        @Body() updateConfig: ConfigDTO,
+        @Request() userDetails: UserDetails
     ) {
-        return await this.configurationService.updateConfiguration(id,updateConfig);
+        return await this.configurationService.updateConfiguration(id,updateConfig, userDetails.user.id);
     }
 
     @ApiOperation({ summary: 'Delete Configuration by ID' })
     @ApiOkResponse({ description: 'Configuration Deleted Successfully' })
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
     @Delete(':id')
     async remove(@Param('id') id: string) {
         return await this.configurationService.remove(id);

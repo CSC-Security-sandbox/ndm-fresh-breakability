@@ -9,10 +9,12 @@ import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import appConfig from 'src/config/app.config';
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 @Module({
     imports: [
         ConfigModule.forRoot({ load: [appConfig] }),
         TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity]),
+        AuthKeycloakModule
     ],
     providers:[ConfigurationService, RabbitMQService],
     controllers: [ConfigurationController]

@@ -23,6 +23,7 @@ async function bootstrap() {
   .setDescription('Configuration Management')
   .setVersion('1.0')
   .addServer(serverEndpoint, `Environment`)
+  .addBearerAuth()
   .build();
   
   const document = SwaggerModule.createDocument(app, config);

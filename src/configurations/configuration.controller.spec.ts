@@ -6,6 +6,8 @@ import { FindallConfigPageDto } from './dto/findallconfig.dto';
 
 import { ConfigurationType } from 'src/constants/enums';
 import { ConfigDTO } from './dto/config.dto';
+import { UserDetails } from './configuration.types';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
@@ -26,7 +28,12 @@ describe('ConfigurationController', () => {
         {
           provide: ConfigurationService,
           useValue: mockConfigurationService,
+         
         },
+        {
+          provide: JwtService,
+          useValue: {},
+        }
       ],
     }).compile();
 
@@ -43,6 +50,7 @@ describe('ConfigurationController', () => {
       const createConfigDTO: ConfigDTO = {
         configName: "testConfig",
         configType: ConfigurationType.file,
+        workingDirectory: '/temp',
         fileServers: [],
         projectId: "2345678",
       };
@@ -50,14 +58,21 @@ describe('ConfigurationController', () => {
         configName: "testConfig",
         configType: ConfigurationType.file,
         fileServers: [],
+        workingDirectory: '/temp',
         projectId: "2345678",
         stage: "212"
        };
+       const user: UserDetails = {
+        user: {
+          id: '23',
+          roles: []
+        }
+       }
       mockConfigurationService.createConfiguration.mockResolvedValue(createdConfig);
 
-      const result = await controller.createConfiguration(createConfigDTO);
+      const result = await controller.createConfiguration(createConfigDTO, user);
       expect(result).toEqual(createdConfig);
-      expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO);
+      expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO, user.user.id);
     });
   });
 
@@ -108,11 +123,18 @@ describe('ConfigurationController', () => {
         stage: "212"
        };
 
+       const user: UserDetails = {
+        user: {
+          id: '23',
+          roles: []
+        }
+       }
+
       mockConfigurationService.updateConfiguration.mockResolvedValue(updatedConfig);
 
-      const result = await controller.update(configId, updateConfigDTO);
+      const result = await controller.update(configId, updateConfigDTO, user);
       expect(result).toEqual(updatedConfig);
-      expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO);
+      expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO, user.user.id);
     });
   });
 
