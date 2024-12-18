@@ -70,7 +70,7 @@ describe('ConfigurationController', () => {
        }
       mockConfigurationService.createConfiguration.mockResolvedValue(createdConfig);
 
-      const result = await controller.createConfiguration(createConfigDTO, user);
+      const result = await controller.createConfiguration(createConfigDTO);
       expect(result).toEqual(createdConfig);
       expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO, user.user.id);
     });
@@ -132,7 +132,7 @@ describe('ConfigurationController', () => {
 
       mockConfigurationService.updateConfiguration.mockResolvedValue(updatedConfig);
 
-      const result = await controller.update(configId, updateConfigDTO, user);
+      const result = await controller.update(configId, updateConfigDTO);
       expect(result).toEqual(updatedConfig);
       expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO, user.user.id);
     });
