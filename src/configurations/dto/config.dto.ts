@@ -55,6 +55,11 @@ export class ConfigDTO {
     @IsNotEmpty()
     configName: string;
 
+    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
+    @IsString()
+    @IsOptional()
+    workingDirectory?: string;
+
     @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
     @IsEnum(ConfigurationType)
     @IsNotEmpty()
@@ -65,6 +70,7 @@ export class ConfigDTO {
     @ValidateNested({ each: true })
     @Type(() => FileServersDTO)
     fileServers: FileServersDTO[];
+
 
     @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
     @IsString()

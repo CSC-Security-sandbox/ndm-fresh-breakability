@@ -134,6 +134,7 @@ describe('ConfigurationService', () => {
         projectId:"123456",
         createdBy: "123123",
         stage:"",
+        workingDirectory: '/temp',
         configName: 'Updated Config',
         configType: ConfigurationType.file,
         fileServers: [{
@@ -147,7 +148,7 @@ describe('ConfigurationService', () => {
         }]
       };
 
-      const result = await service.createConfiguration(createConfigDTO);
+      const result = await service.createConfiguration(createConfigDTO, uuidv4());
 
       expect(result).toEqual(mockConfig);
       expect(mockConfigRepository.save).toHaveBeenCalled();
@@ -162,6 +163,7 @@ describe('ConfigurationService', () => {
         projectId:"123456",
         createdBy: "123123",
         configName: 'Updated Config',
+        workingDirectory: '/temp',
         configType: ConfigurationType.file,
         fileServers: [{
           id: mockFileServer.id,
@@ -179,7 +181,7 @@ describe('ConfigurationService', () => {
       mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
 
     
-      const result = await service.updateConfiguration(mockConfig.id, config);
+      const result = await service.updateConfiguration(mockConfig.id, config, mockConfig.id);
 
       expect(result).toEqual(config);
       expect(mockConfigRepository.save).toHaveBeenCalled();
@@ -187,7 +189,7 @@ describe('ConfigurationService', () => {
 
     it('should throw NotFoundException if config is not found', async () => {
       mockConfigRepository.findOne.mockResolvedValue(null);
-      await expect(service.updateConfiguration(uuidv4(), {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.updateConfiguration(uuidv4(), {} as any, uuidv4())).rejects.toThrow(NotFoundException);
     });
   });
 

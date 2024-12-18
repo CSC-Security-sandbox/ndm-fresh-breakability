@@ -12,6 +12,7 @@ import { FindallConfigPageDto } from './dto/findallconfig.dto';
 import { RabbitMq } from 'src/constants/enums';
 
 
+
 @Injectable()
 export class ConfigurationService {
     private logger: Logger = new Logger(ConfigurationService.name)
@@ -76,6 +77,7 @@ export class ConfigurationService {
                 configName: true,
                 configType: true,
                 projectId: true,
+                workingDirectory: true,
                 scannedDate: true,
                 fileServers:{
                     id: true,
@@ -118,8 +120,7 @@ export class ConfigurationService {
         return config
     }
 
-    async createConfiguration(createConfig: ConfigDTO) {
-        const userId = uuidv4();
+    async createConfiguration(createConfig: ConfigDTO, userId: string) {
         const credentials:Credentials[] = []
         try {
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
@@ -150,6 +151,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
+                workingDirectory: createConfig.workingDirectory,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId
             });
@@ -163,11 +165,10 @@ export class ConfigurationService {
         }
     }
 
-    async updateConfiguration(id: string, updateConfig: ConfigDTO) {
+    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
-        const userId = uuidv4();
         const config = await this.configEntity.findOne({
             where: { id },
             relations: {
@@ -187,6 +188,7 @@ export class ConfigurationService {
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
         config.updatedBy = userId
+        config.workingDirectory = updateConfig.workingDirectory
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
