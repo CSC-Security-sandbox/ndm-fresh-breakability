@@ -30,7 +30,7 @@ export class FileServersDTO {
 
     @ApiPropertyOptional({ description: 'password', example: '***' })
     @IsString()
-    @IsNotEmpty()
+    @IsOptional()
     password?: string;
 
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
