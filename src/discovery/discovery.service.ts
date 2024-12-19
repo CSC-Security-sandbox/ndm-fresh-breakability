@@ -34,15 +34,24 @@ export class DiscoveryService {
        
         const formattedString = Object.entries(groupedData)
           .map(([category, entries]) => {
-            let categoryString = `== ${category} ==\n`;
+            const subCategories = (entries as any[]).map((entry) => entry.sub_category);
+            const values = (entries as any[]).map((entry) => entry.count_or_space.toString());
+            
+            const columnWidths = subCategories.map((subCategory, index) => {
+              const maxHeaderWidth = subCategory.length;
+              const maxValueWidth = values[index]?.toString().length || 0;
+              return Math.max(maxHeaderWidth, maxValueWidth) + 2;
+            });
        
-            const tableRows = (entries as any[])
-              .map(
-                (entry) => `${entry.sub_category.padEnd(20)} | ${entry.count_or_space}`
-              )
-              .join("\n");
+            const headerRow = subCategories
+              .map((subCategory, index) => subCategory.padEnd(columnWidths[index]))
+              .join(" | ");
        
-            return `${categoryString}${tableRows}\n`;
+            const valueRow = values
+              .map((value, index) => value.padEnd(columnWidths[index]))
+              .join(" | ");
+       
+            return `== ${category} ==\n${headerRow}\n${valueRow}\n`;
           })
           .join("\n");
        
@@ -69,7 +78,7 @@ export class DiscoveryService {
       const filePath = path.join(this.reportsDirectory, fileName);
 
       if (latestReport) {
-        formatAndWriteToFile(JSON.parse(latestReport[0].reportData), filePath)
+        formatAndWriteToFile(JSON.parse(latestReport[0].reportData), filePath);
       }
 
       return {
