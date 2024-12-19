@@ -21,9 +21,7 @@ export class OverviewService {
             if (fileServerId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
-                    fileServers: {
                         id: fileServerId,
-                    },
                 };
             }
         
@@ -73,10 +71,10 @@ export class OverviewService {
             totalDiscoverJobs = scanRunDetails.length;
             
             const lastScanRun = scanRunDetails
-            .sort((a, b) => b.endTime.getTime() - a.endTime.getTime())
+            .sort((a, b) => b.endTime?.getTime() - a.endTime?.getTime())
             .slice(0, 1);
         
-            if (lastScanRun.length > 0) {
+            if (lastScanRun && lastScanRun.length > 0) {
                 const inventoryQueryBuilder =
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(inventory.fileSize)', 'totalSize')
