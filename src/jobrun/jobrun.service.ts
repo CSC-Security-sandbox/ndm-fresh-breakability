@@ -3,7 +3,7 @@ import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobStatus } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
-import { SocketEvents } from "src/constants/status";
+import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
@@ -16,7 +16,7 @@ import {
 } from "./dto/jobrun.dto";
 import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { MountConnection, UpdateJobRunMappingPayload } from "./jobrun.types";
+import { JobRunConfig, UpdateJobRunMappingPayload } from "./jobrun.types";
 
 @Injectable()
 export class JobRunService {
@@ -36,10 +36,17 @@ export class JobRunService {
 
   @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    const updateData: any  = { status: payload.status }
-    if(payload.status === JobRunStatus.Completed) updateData.endTime = new Date();
-    await this.jobRunRepo.update({id: payload.jobRunId}, updateData)
-    if(payload.status === JobRunStatus.Completed) await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
+
+    switch(payload.status) {
+      case JobRunStatus.Completed: 
+        await this.jobRunRepo.update({id: payload.jobRunId}, {endTime: new Date(), status: JobRunStatus.Completed})
+        await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
+        await this.reScheduleJobConfigById(payload.jobRunId)
+        break;
+      default:
+        await this.jobRunRepo.update({id: payload.jobRunId}, { status: payload.status})
+        break
+    }
   }
 
   @OnEvent(EmitterEvents.UpdateJobRunMapping, { async: true })
@@ -47,45 +54,57 @@ export class JobRunService {
     await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
   }
 
+
+
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
     const jobs: JobConfigEntity[] = await this.jobConfigRepo
       .createQueryBuilder("jobConfig")
-      .leftJoinAndSelect("jobConfig.jobRuns", "jobRuns")
-      .leftJoinAndSelect("jobConfig.sourcePath", "sourcePath")
-      .leftJoinAndSelect("jobConfig.targetPath", "targetPath")
+      .select('jobConfig.id')
       .where("jobConfig.status = :status", { status: JobStatus.Active })
+      .andWhere("jobConfig.scheduler = :scheduler", { scheduler: ScheduleStatus.SCHEDULING })
       .andWhere("jobConfig.firstRunAt <= :currentTime", {
         currentTime: currentTime.toISOString(),
       })
-      .andWhere("jobRuns.id IS NULL")
       .getMany();
-    jobs.forEach(async (job) => await this.createJobRun(job, currentTime));
+    jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
     return jobs;
   }
 
+  // ------------------ Update Job Config by Job Run Id ---------------//
+  async reScheduleJobConfigById(jobRunId: string) {
+    const jobConfig = await this.jobRunRepo.findOne({where: {id: jobRunId}, select: {jobConfigId: true}})
+    await this.jobConfigRepo.update({id: jobConfig.jobConfigId}, {scheduler: ScheduleStatus.READY_TO_SCHEDULED})
+  }
+
+
   // ------------------ Get list of workers -------------------- //
-  async getSourceAndTargetCredWorkersByJobConfigId(
-    job: JobConfigEntity
-  ): Promise<MountConnection> {
-    const jobConfig = await this.jobConfigRepo
-      .createQueryBuilder("jobConfig")
-      .leftJoinAndSelect("jobConfig.sourcePath", "sourcePath")
-      .leftJoinAndSelect("jobConfig.targetPath", "targetPath")
-      .leftJoinAndSelect("sourcePath.fileServer", "sourceFileServer")
-      .leftJoinAndSelect("sourceFileServer.workers", "sourceWorkers")
-      .leftJoinAndSelect("targetPath.fileServer", "targetFileServer")
-      .leftJoinAndSelect("targetFileServer.workers", "targetWorkers")
-      .leftJoinAndSelect("sourceFileServer.config", "SourceConfig")
-      .leftJoinAndSelect("targetFileServer.config", "TargetConfig")
-      .where("jobConfig.id = :jobConfigId", { jobConfigId: job.id })
-      .getOne();
+  async getJobConfig(
+    jobConfigId
+  ): Promise<JobRunConfig> {
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where : {id: jobConfigId},
+      relations: {
+        sourcePath: {
+          fileServer: {
+            config: true,
+            workers:true
+          }
+        },
+        targetPath: {
+          fileServer: {
+            config: true,
+            workers:true
+          }
+        }
+      },
+    })
 
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
 
-    const details : MountConnection = {
+    const details : JobRunConfig = {
       connection: {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath ,
@@ -97,10 +116,11 @@ export class JobRunService {
           workingDirectory: jobConfig?.sourcePath?.fileServer?.config?.workingDirectory
         }
       },
-      workers: sourceWorkers.map((worker) => worker.workerId)
+      workers: sourceWorkers.map((worker) => worker.workerId),
+      jobType: jobConfig.jobType
     }
 
-    if (job.targetPathId) {
+    if (jobConfig.targetPathId) {
       const workers: string[] = [];
       const workerSet = new Set<string>();
       sourceWorkers.forEach((worker) => workerSet.add(worker.workerId));
@@ -120,49 +140,49 @@ export class JobRunService {
       details['workers'] = workers
       return details;
     }
-    this.logger.debug(details)
     return details
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(job: JobConfigEntity , currentTime: Date) {
-    const details = await this.getSourceAndTargetCredWorkersByJobConfigId(job)
+  async createJobRun(jobConfigId: string , currentTime: Date) {
+    const details:JobRunConfig = await this.getJobConfig(jobConfigId)
     
     if(details.workers.length === 0) {
-      this.logger.warn(`Unable to create Job Run for Job Config ${job.id} does not has workers`)
+      this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)
       return
     }
-
     const workerMap = details.workers.map((worker) =>
       this.workerJobRunMapRepo.create({
         workerId: worker,
         isActive: true,
       })
-    );
-
+    )
     const jobRunRecord = this.jobRunRepo.create({
       status: JobRunStatus.Ready,
       startTime: currentTime,
       endTime: null,
       iterationNumber: 1,
-      jobConfigId: job.id,
+      jobConfigId: jobConfigId,
       workerMap: workerMap,
     });
     const update = await this.jobRunRepo.save(jobRunRecord);
-
+    // make JobConfig Active
+    await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
     await this.sendMountMessage(details, update.id)
 
     this.eventEmitter.emit(EmitterEvents.TaskCreate, {
       jobRunId: update.id,
       status: update.status,
-      sPath: job.sourcePath.volumePath,
-      tPath: job.targetPath?.volumePath,
-      taskType: job.jobType,
+      sPath: details.connection.sourceCredential.path,
+      tPath: details.connection.targetCredential?.path,
+      taskType: details.jobType,
       workers: details.workers,
+      sPathId: details.connection.sourceCredential.pathId,
+      workingDirectory: details.connection.sourceCredential?.workingDirectory
     });
   }
-  //  ------------------- JobRun actions ------------------ //
-  async sendMountMessage(details: MountConnection, jobRunId: string) {
+  //  ------------------- sendMountMessage ------------------ //
+  async sendMountMessage(details: JobRunConfig, jobRunId: string) {
     this.logger.error(details)
     details.workers.forEach(worker => 
       this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
@@ -203,7 +223,9 @@ export class JobRunService {
       worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
-    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
+    await this.jobRunRepo.update(
+      {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped}
+      )
     worker.forEach((jobRuns, workerId)=>
       this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
         workerId: workerId,
@@ -211,6 +233,7 @@ export class JobRunService {
         payload: { jobRuns }
       })
     )
+
     return {details: 'Operation Completed Successfully'}
   }
 
@@ -411,7 +434,7 @@ export class JobRunService {
           startTime: jobRun.starttime,
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
-          jobConfigId: jobRun.jobconfigid,
+          jobConfigId: jobRun?.jobconfigid,
           sourceServer: {
             serverName: jobRun.sourceconfigname,
             path: jobRun.volumepath,

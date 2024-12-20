@@ -15,14 +15,6 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new job' })
   @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
-  @Post()
-  async createJobConfig(@Body() jobConfigData: JobConfigDto): Promise<JobConfigEntity> {
-    const jobConfig = await this.jobConfigService.createJobConfig(jobConfigData);
-    return jobConfig;
-  }
-
-  @ApiOperation({ summary: 'Create a new job' })
-  @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);

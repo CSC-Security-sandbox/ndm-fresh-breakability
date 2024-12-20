@@ -1,4 +1,4 @@
-import { Protocol } from "src/constants/enums"
+import { JobType, Protocol } from "src/constants/enums"
 
 export interface UpdateJobRunMappingPayload {
     jobRunId: string,
@@ -16,10 +16,11 @@ interface Credential {
     workingDirectory:string
 }
 
-export interface MountConnection{
+export interface JobRunConfig{
     connection: {
         sourceCredential:Credential,
         targetCredential?: Credential
     }
+    jobType: JobType,
     workers: string[]
 }

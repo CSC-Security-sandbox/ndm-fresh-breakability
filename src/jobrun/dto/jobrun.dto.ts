@@ -84,6 +84,7 @@ export interface JobRunsDTO {
   status: string;
   startTime: Date;
   endTime?: Date;
+  jobConfigId?: string;
   jobType: string;
   sourceServer: ServerDetailsDTO;
   destinationServer?: ServerDetailsDTO;
@@ -92,7 +93,6 @@ export interface JobRunsDTO {
   scannedDirectoriesCount: string;
   totalScannedSize: string;
   errors: string[];
-  jobConfigId: string;
 }
 
 export interface ServerDetailsDTO {

@@ -31,3 +31,10 @@ export enum Operations {
     LIST_NFS_PATHS='LIST_NFS_PATHS',
     LIST_SMB_PATHS='LIST_SMB_PATHS'
 }
+
+
+export enum ScheduleStatus {
+    SCHEDULING = 'SCHEDULING',
+    SCHEDULED = 'SCHEDULED',
+    READY_TO_SCHEDULED = 'READY_TO_SCHEDULED'
+}

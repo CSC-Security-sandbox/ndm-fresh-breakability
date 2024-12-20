@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
-import { JobConfigService } from './jobconfig.service';
 import { JobConfigController } from './jobconfig.controller';
+import { JobConfigService } from './jobconfig.service';
 
-import { JobIdMappingEntity } from '../entities/jobmapping.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { JobIdMappingEntity } from '../entities/jobmapping.entity';
 
 @Module({
     imports: [

@@ -59,4 +59,7 @@ export class JobConfigEntity extends Base {
   @ManyToOne(() => VolumeEntity, volume => volume.targetPath, { onDelete:'CASCADE'})
   @JoinColumn({ name: 'target_path_id' }) 
   targetPath: VolumeEntity;
+
+  @Column({ name: 'scheduler', type: 'varchar', nullable: true })
+  scheduler: string;
 }
