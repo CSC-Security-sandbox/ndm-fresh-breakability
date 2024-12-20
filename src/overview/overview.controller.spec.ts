@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OverviewController } from './overview.controller';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { OverviewService } from './overview.service';
 
 describe('OverviewController', () => {
@@ -27,7 +27,7 @@ describe('OverviewController', () => {
     it('should throw NotFoundException if no query params are provided', async () => {
       await expect(
         controller.getStorageAndJobsOverview(undefined, undefined, undefined),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

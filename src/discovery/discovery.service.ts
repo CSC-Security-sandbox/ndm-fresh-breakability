@@ -19,6 +19,10 @@ export class DiscoveryService {
     private readonly reportsRepo: Repository<ReportsEntity>
   ) {}
 
+  get getReportsDirectory():string {
+    return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
+  }
+
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 

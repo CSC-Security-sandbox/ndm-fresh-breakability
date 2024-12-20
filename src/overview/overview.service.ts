@@ -8,6 +8,9 @@ import { JobRunStatus, JobType } from 'src/constants/enums';
 
 @Injectable()
 export class OverviewService {
+  getReportsAsZip(getReportsAsZip: any) {
+    throw new Error('Method not implemented.');
+  }
   
     constructor(@InjectRepository(InventoryEntity) private readonly inventoryRepository: Repository<InventoryEntity>,
         @InjectRepository(ProjectEntity) private readonly projectRepository: Repository<ProjectEntity>) { }
