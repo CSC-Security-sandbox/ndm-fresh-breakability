@@ -40,18 +40,6 @@ describe('JobConfigController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('createJobConfig', () => {
-    it('should create a job config', async () => {
-      const jobConfigDto: JobConfigDto = { id: 'asd', status: JobStatus.Active } as any;
-      const jobConfigEntity: JobConfigEntity = { id: '1' } as JobConfigEntity;
-
-      mockJobConfigService.createJobConfig.mockResolvedValue(jobConfigEntity);
-
-      const result = await controller.createJobConfig(jobConfigDto);
-      expect(result).toEqual(jobConfigEntity);
-      expect(mockJobConfigService.createJobConfig).toHaveBeenCalledWith(jobConfigDto);
-    });
-  });
 
   describe('createBulkDiscovery', () => {
     it('should create bulk discovery jobs', async () => {

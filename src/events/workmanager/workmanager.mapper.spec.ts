@@ -55,12 +55,14 @@ describe("buildScanPayload", () => {
 describe("buildRequest", () => {
     it("should build a scan payload when taskType is Scan", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: "/test/path",
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {
@@ -84,7 +86,9 @@ describe("buildRequest", () => {
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const result = buildRequest(payload);
@@ -94,12 +98,14 @@ describe("buildRequest", () => {
 
     it("should handle undefined sPath gracefully", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: undefined,
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {
@@ -118,12 +124,14 @@ describe("buildRequest", () => {
 
     it("should handle empty sPath gracefully", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: "",
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {

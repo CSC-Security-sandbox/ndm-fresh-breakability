@@ -12,7 +12,7 @@ import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
 import { buildRequest, buildScanPayload } from "./workmanager.mapper";
 import { RMQTask, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
-
+import { setTimeout as delay } from 'timers/promises';
 
 
 @Injectable()
@@ -53,12 +53,11 @@ export class WorkManager{
     }
 
 
-
     // --------------------------- Create init Operation --------------------------------//
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
     async createOperation(payload: TaskEventPayload){
         try{
-            const request = buildRequest(payload)
+            const request =  buildScanPayload(payload.sPath)
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
@@ -68,8 +67,8 @@ export class WorkManager{
                 request: request
             })
             await this.operationsRepo.save(operation)
-
             // notify to workers
+
             payload.workers.forEach(worker => {
                 this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
                     workerId: worker,

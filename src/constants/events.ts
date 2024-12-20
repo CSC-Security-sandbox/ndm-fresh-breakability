@@ -4,7 +4,8 @@ export const enum EmitterEvents{
     NotifyWorker='worker.message',
     JobRunStatusUpdate='jobrun.status.update',
     DiscoveryComplete='discovery.completed',
-    UpdateJobRunMapping = 'update.jobrun.worker.mapping'
+    UpdateJobRunMapping = 'update.jobrun.worker.mapping',
+    InActivateJobConfig = 'inactivate.jobconfig'
 } 
 
 

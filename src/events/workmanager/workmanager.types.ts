@@ -15,6 +15,8 @@ export interface TaskEventPayload {
   tPath: string | null;
   workers: string[]
   taskType: JobType;
+  sPathId: string,
+  workingDirectory: string
 }
   
 

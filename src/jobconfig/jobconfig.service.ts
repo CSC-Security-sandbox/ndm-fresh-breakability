@@ -9,6 +9,10 @@ import * as parser from 'cron-parser';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
+import { InActivateJobConfigPayload } from './jobconfig.types';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EmitterEvents } from 'src/constants/events';
+import { ScheduleStatus } from 'src/constants/status';
 
 @Injectable()
 export class JobConfigService {
@@ -20,24 +24,25 @@ export class JobConfigService {
     private inventoryRepo: Repository<InventoryEntity>,
   ) { }
 
-  async createJobConfig(jobConfigData: JobConfigDto): Promise<JobConfigEntity> {
-    const jobRecord = this.jobConfigRepo.create({
-      ...jobConfigData,
-      firstRunAt: jobConfigData?.firstRunAt?.toISOString() ?? new Date().toISOString()
-    });
-    return await this.jobConfigRepo.save(jobRecord);
+  // ------------ Events ---------------- //
+  @OnEvent(EmitterEvents.InActivateJobConfig)
+  async inActivateJobConfig (payload: InActivateJobConfigPayload) {
+    await this.jobConfigRepo.update({id: payload.jobConfigId}, {status: JobStatus.InActive})
   }
 
+  // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
     const existingList = await this.jobConfigRepo.find({
-      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true}
+      where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
     })
    
-    await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePath: In(bulkDiscovery?.sourcePathIds)}, {
+    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
+      futureScheduleAt: bulkDiscovery.futureSchedule,
+      scheduler: ScheduleStatus.SCHEDULING
     })
 
     const existingSet = new Set(existingList.map(it=>it.sourcePathId))
@@ -48,12 +53,13 @@ export class JobConfigService {
         entries.push(this.jobConfigRepo.create({
           status: JobStatus.Active,
           excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-          jobType:  JobType.Scan,
+          jobType:  JobType.DISCOVER,
           preserveAccessTime: bulkDiscovery.preserveAccessTime,
           sourcePathId: path,
           excludeOlderThan:  bulkDiscovery.excludeOlderThan,
           futureScheduleAt: bulkDiscovery.futureSchedule,
           firstRunAt: firstRunAt,
+          scheduler: ScheduleStatus.SCHEDULING,
           createdBy: bulkDiscovery.createdBy
         })
       )})
@@ -61,6 +67,7 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
+  // ------------ Bulk update ---------------- //
   async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
@@ -70,16 +77,17 @@ export class JobConfigService {
     return this.jobConfigRepo.save(job);
   }
 
+  // ------------ Bulk delete ---------------- //
   async deleteJobConfig(id: string): Promise<{ message: string }> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
     }
-
     await this.jobConfigRepo.remove(job);
     return { message: `Job with id ${id} has been deleted` };
   }
 
+  // ------------ Job Config By Id ---------------- //
   async getJobConfigById(id: string): Promise<any> {
     const jobConfig = await this.jobConfigRepo.findOne({ where: { id },  
       relations: [
@@ -145,7 +153,7 @@ export class JobConfigService {
     return payload;
   }
 
- 
+  // ------------ Job Config All ---------------- //
   async getAllJobConfig(projectId:string): Promise<JobListingDTO[]> {
     const allJobsDetails = await this.jobConfigRepo.createQueryBuilder('jobconfig')
       .leftJoin('jobconfig.jobRuns', 'jobRun')
@@ -214,10 +222,10 @@ export class JobConfigService {
 
   covertBytes(bytes: number): string {
     const bytesInKB = 1024;
-    const bytesInMB = bytesInKB ** 2;
-    const bytesInGB = bytesInMB ** 2;
-    const bytesInTB = bytesInGB ** 2;
-    const bytesInPB = bytesInTB ** 2;
+    const bytesInMB = bytesInKB * 1024;
+    const bytesInGB = bytesInMB * 1024;
+    const bytesInTB = bytesInGB * 1024;
+    const bytesInPB = bytesInTB * 1024;
 
     if (bytes < bytesInKB) {
         return `${bytes} B`;
@@ -233,4 +241,6 @@ export class JobConfigService {
         return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
 }
+
+
 }
