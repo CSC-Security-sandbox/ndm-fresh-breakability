@@ -36,5 +36,5 @@ export enum Operations {
 export enum ScheduleStatus {
     SCHEDULING = 'SCHEDULING',
     SCHEDULED = 'SCHEDULED',
-    READY_TO_SCHEDULED = 'READY_TO_SCHEDULED'
+    READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
 }

@@ -34,10 +34,10 @@ export class JobConfigService {
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
     const existingList = await this.jobConfigRepo.find({
-      where: { jobType: JobType.Scan, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
+      where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
     })
    
-    const a = await this.jobConfigRepo.update({jobType: JobType.Scan, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: ScheduleStatus.READY_TO_SCHEDULED}, {
+    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
@@ -53,7 +53,7 @@ export class JobConfigService {
         entries.push(this.jobConfigRepo.create({
           status: JobStatus.Active,
           excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-          jobType:  JobType.Scan,
+          jobType:  JobType.DISCOVER,
           preserveAccessTime: bulkDiscovery.preserveAccessTime,
           sourcePathId: path,
           excludeOlderThan:  bulkDiscovery.excludeOlderThan,

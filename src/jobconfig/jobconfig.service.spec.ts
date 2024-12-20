@@ -16,7 +16,7 @@ const mockJobEntity = {
   updatedAt: new Date(),
   createdBy: '',
   updatedBy: '',
-  jobType: JobType.Scan,
+  jobType: JobType.DISCOVER,
   sourcePathId: '',
   targetPathId: '',
   excludeFilePatterns: '',
@@ -31,7 +31,7 @@ const mockJobEntity = {
 const mockJobDto = {
   createdBy: '',
   updatedBy: '',
-  jobType: JobType.Scan,
+  jobType: JobType.DISCOVER,
   sourcePathId: '',
   status: JobStatus.Active, 
   preserveAccessTime: false, 

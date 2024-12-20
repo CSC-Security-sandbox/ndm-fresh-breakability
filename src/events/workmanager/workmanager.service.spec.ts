@@ -102,7 +102,7 @@ describe('WorkManager', () => {
       const mockPayload = {
         jobRunId: '1234',
         sPath: '/source/path',
-        taskType: 'SCAN',
+        taskType: 'DISCOVER',
         workers: ['worker1', 'worker2'],
       };
 

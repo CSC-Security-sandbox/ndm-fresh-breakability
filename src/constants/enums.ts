@@ -32,7 +32,7 @@ export enum JobStatus {
 }
   
 export enum JobType {
-    Scan = 'SCAN',
+    DISCOVER = 'DISCOVER',
     Migrate = 'MIGRATE',
     CutOver = 'CUT_OVER',
 }

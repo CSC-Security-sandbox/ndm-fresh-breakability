@@ -55,7 +55,7 @@ describe("buildScanPayload", () => {
 describe("buildRequest", () => {
     it("should build a scan payload when taskType is Scan", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: "/test/path",
             jobRunId:"asd",
             status: "Ads",
@@ -98,7 +98,7 @@ describe("buildRequest", () => {
 
     it("should handle undefined sPath gracefully", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: undefined,
             jobRunId:"asd",
             status: "Ads",
@@ -124,7 +124,7 @@ describe("buildRequest", () => {
 
     it("should handle empty sPath gracefully", () => {
         const payload: TaskEventPayload = {
-            taskType: JobType.Scan,
+            taskType: JobType.DISCOVER,
             sPath: "",
             jobRunId:"asd",
             status: "Ads",

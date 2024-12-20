@@ -26,7 +26,7 @@ export const operationsTypeToTaskType = (op: OperationType) => {
 
 export const jobTypeToOperationType = (type: JobType) => {
     switch(type){
-        case JobType.Scan:
+        case JobType.DISCOVER:
             return OperationType.SCAN
         default:
             throw new Error('Invalid Operation'); 

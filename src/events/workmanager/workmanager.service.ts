@@ -57,13 +57,10 @@ export class WorkManager{
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
     async createOperation(payload: TaskEventPayload){
         try{
-            // const path =  `${payload.workingDirectory}/${payload.jobRunId}/${payload.sPathId}`
-            // const request =  buildScanPayload(path)
             const request =  buildScanPayload(payload.sPath)
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
-                // fPath: payload.workingDirectory,//payload.sPath,
                 fPath: payload.sPath,
                 retryCount: 0,
                 operationType: jobTypeToOperationType(payload.taskType),
@@ -71,7 +68,7 @@ export class WorkManager{
             })
             await this.operationsRepo.save(operation)
             // notify to workers
-            await delay(3000)
+
             payload.workers.forEach(worker => {
                 this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
                     workerId: worker,
