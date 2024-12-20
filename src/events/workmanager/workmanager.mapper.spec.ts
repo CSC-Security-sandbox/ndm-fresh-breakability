@@ -60,7 +60,9 @@ describe("buildRequest", () => {
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {
@@ -84,7 +86,9 @@ describe("buildRequest", () => {
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const result = buildRequest(payload);
@@ -99,7 +103,9 @@ describe("buildRequest", () => {
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {
@@ -123,7 +129,9 @@ describe("buildRequest", () => {
             jobRunId:"asd",
             status: "Ads",
             tPath: "123",
-            workers: []
+            workers: [],
+            sPathId: '3456789',
+            workingDirectory: '345689'
         };
 
         const expectedPayload = {

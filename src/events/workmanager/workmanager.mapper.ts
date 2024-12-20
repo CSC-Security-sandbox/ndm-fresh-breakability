@@ -14,7 +14,7 @@ export const buildRequest = (payload: TaskEventPayload) => {
     switch (payload.taskType){
         case JobType.Scan: 
             const path =  `${payload.workingDirectory}/${payload.jobRunId}/${payload.sPathId}`
-            return buildScanPayload(path)
+            return buildScanPayload(payload.sPath)
         default: return
     }
 }

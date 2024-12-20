@@ -169,7 +169,7 @@ export class JobRunService {
     // make JobConfig Active
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
     await this.sendMountMessage(details, update.id)
-
+    this.logger.error(details)
     this.eventEmitter.emit(EmitterEvents.TaskCreate, {
       jobRunId: update.id,
       status: update.status,
@@ -177,8 +177,8 @@ export class JobRunService {
       tPath: details.connection.targetCredential?.path,
       taskType: details.jobType,
       workers: details.workers,
-      sPathId: details.connection.sourceCredential.pathId,
-      workingDirectory: details.connection.sourceCredential?.workingDirectory
+      // sPathId: details.connection.sourceCredential.pathId,
+      // workingDirectory: details.connection.sourceCredential?.workingDirectory
     });
   }
   //  ------------------- sendMountMessage ------------------ //
@@ -470,10 +470,10 @@ export class JobRunService {
 
   covertBytes(bytes: number): string {
     const bytesInKB = 1024;
-    const bytesInMB = bytesInKB ** 2;
-    const bytesInGB = bytesInMB ** 2;
-    const bytesInTB = bytesInGB ** 2;
-    const bytesInPB = bytesInTB ** 2;
+    const bytesInMB = bytesInKB * 1024;
+    const bytesInGB = bytesInMB * 1024;
+    const bytesInTB = bytesInGB * 1024;
+    const bytesInPB = bytesInTB * 1024;
 
     if (bytes < bytesInKB) {
         return `${bytes} B`;
