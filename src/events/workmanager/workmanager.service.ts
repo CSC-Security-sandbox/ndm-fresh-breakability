@@ -8,12 +8,11 @@ import { OperationsEntity } from "src/entities/operation.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
-import { setTimeout as delay } from 'timers/promises';
-import {  In, Not, Repository } from "typeorm";
+import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
+import { FileLogger } from "./logger.service";
 import { buildScanPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
-import { FileLogger } from "./logger.service";
 
 
 @Injectable()
@@ -34,15 +33,17 @@ export class WorkManager{
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
         try{
-            const path =  `${payload.workingDirectory}/${payload.jobRunId}/${payload.sPathId}`
+            const path =  `${payload.details.connection.sourceCredential.workingDirectory}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            this.logger.error(path)
             const request =  buildScanPayload(path)
-            // const request =  buildScanPayload(payload.sPath)
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
                 fPath: path,
+                sPathId: payload.details.connection.sourceCredential?.pathId,
+                tPathId: payload.details.connection.targetCredential?.pathId,
                 retryCount: 0,
-                operationType: jobTypeToOperationType(payload.taskType),
+                operationType: jobTypeToOperationType(payload.details.jobType),
                 request: request
             })
             await this.operationsRepo.save(operation)
@@ -93,11 +94,13 @@ export class WorkManager{
         .select([
             'workerJobRunMap',
             'jobRun',
+            'options',
             'jobConfig.sourcePathId',
-            'jobConfig.targetPathId'
+            'jobConfig.targetPathId',
         ])
-        .leftJoin('workerJobRunMap.jobRun', 'jobRun',)
+        .leftJoin('workerJobRunMap.jobRun', 'jobRun')
         .leftJoin('jobRun.jobConfig', 'jobConfig')
+        .leftJoin('jobRun.options', 'options')
         .where('workerJobRunMap.isActive = :isActive', { isActive: true })
         .andWhere('workerJobRunMap.workerId = :workerId', { workerId })
         .andWhere('workerJobRunMap.isPathMounted = true')
@@ -107,7 +110,8 @@ export class WorkManager{
             jobRunId: it.jobRunId,
             sPathId: it.jobRun?.jobConfig?.sourcePathId,
             tPathId: it.jobRun?.jobConfig?.targetPathId,
-            status: it.jobRun?.status
+            status: it.jobRun?.status,
+            options: it.jobRun.options,
         }))
 
         for(const job of jobRun) {
@@ -157,6 +161,7 @@ export class WorkManager{
         })
     }
 
+    
     buildTaskPayload = (task: TaskEntity, operation: OperationsEntity[], jobRun: WorkerJobRuns): TaskPayload => {
         return ({
             id: task.id,
@@ -166,7 +171,10 @@ export class WorkManager{
             status: task.status,
             workerId: task.workerId,
             tPath: jobRun.tPathId,
-            commands : operation.map(op=> op.request)
+            excludeFilePatterns: jobRun.options?.excludeFilePatterns,
+            sourceWorkingDir: jobRun.options?.sourceWorkingDir,
+            targetWorkingDir: jobRun.options?.targetWorkingDir,
+            commands : operation.map(op=> op.request),
         })
     }
 

@@ -1,9 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { JobStatus, JobType } from 'src/constants/enums';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
-import { VolumeEntity } from './volume.entity';
 
 
 
@@ -24,6 +22,18 @@ export class JobOptionsEntity extends Base {
   @ApiProperty({ description: 'Preserve access time flag' })
   @Column({ name: 'preserve_access_time', type: 'boolean', default: false })
   preserveAccessTime: boolean;
+
+  @ApiProperty({ description: 'Source Working Directory' })
+  @Column({ name: 'source_working_dir', type: 'text', nullable: true })
+  sourceWorkingDir: string | null;
+
+  @ApiProperty({ description: 'Target Working Directory' })
+  @Column({ name: 'target_working_dir', type: 'text', nullable: true })
+  targetWorkingDir: string | null;
+
+  @ApiProperty({ description: 'Job Run Id' })
+  @Column({ name: 'job_run_id', type: 'uuid', nullable: true })
+  jobRunId: string | null;
 
   @OneToOne(()=> JobRunEntity,jobRun=> jobRun.options, {orphanedRowAction: 'delete', onDelete:'CASCADE'})
   @JoinColumn({ name: 'job_run_id' }) 

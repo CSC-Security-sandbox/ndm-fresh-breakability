@@ -23,5 +23,8 @@ export interface JobRunConfig{
         targetCredential?: Credential
     }
     jobType: JobType,
+    excludeFilePatterns?: string,
+    excludeOlderThan?: Date,
+    preserveAccessTime: boolean
     workers: string[]
 }
