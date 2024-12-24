@@ -95,3 +95,9 @@ export interface UnScannedRes {
     paths: string[]
 }
 
+
+
+export interface MountedStatus{
+    jobRunId: string,
+    status: boolean
+}

@@ -2,7 +2,8 @@ import { JobType, Protocol } from "src/constants/enums"
 
 export interface UpdateJobRunMappingPayload {
     jobRunId: string,
-    isActive: boolean
+    isActive?: boolean,
+    isMounted?: true,
 }
 
 

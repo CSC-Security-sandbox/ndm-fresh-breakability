@@ -1,10 +1,9 @@
 import { JobType } from "src/constants/enums";
 
-// -------------------------- RMQ TASK --------------------------- //
-export interface RMQTask{
+export interface MountedStatus{
   jobRunId: string,
-  pathId: string,
-  folder: string
+  workerId: string
+  status: boolean
 }
 
 

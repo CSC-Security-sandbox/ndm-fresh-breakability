@@ -11,9 +11,9 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ListPathRes, UnScannedRes, ValidateConnectionRes } from '../events.type';
-import { WorkManager } from '../workmanager/workmanager.service';
 import { RequestTrackService } from '../service/requesttack/requesttrack.service';
-import { ScanCompletedPayload } from '../workmanager/workmanager.types';
+import { WorkManager } from '../workmanager/workmanager.service';
+import { MountedStatus, ScanCompletedPayload } from '../workmanager/workmanager.types';
 
 @WebSocketGateway({namespace: 'event'})
 @UseGuards(WsJwtGuard)
@@ -145,6 +145,12 @@ export class EventsGateway implements OnGatewayInit{
     await this.workManager.createUnScannedTask(ack)
    }
 
-   
+   @SubscribeMessage(SocketEvents.MOUNT_PATH_ACK)
+   async mountedPathStatus(client: Socket, ack: MountedStatus) {
+    await this.workManager.updateMountStatus(ack)
+    this.server.to(client.id).emit(SocketEvents.WAKE_UP, {})
+   }
+
+
 }
 

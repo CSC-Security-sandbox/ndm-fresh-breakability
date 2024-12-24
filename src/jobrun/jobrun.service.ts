@@ -54,8 +54,6 @@ export class JobRunService {
     await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
   }
 
-
-
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
@@ -152,10 +150,7 @@ export class JobRunService {
       return
     }
     const workerMap = details.workers.map((worker) =>
-      this.workerJobRunMapRepo.create({
-        workerId: worker,
-        isActive: true,
-      })
+      this.workerJobRunMapRepo.create({ workerId: worker, isActive: true, isPathMounted: false })
     )
     const jobRunRecord = this.jobRunRepo.create({
       status: JobRunStatus.Ready,
@@ -169,7 +164,7 @@ export class JobRunService {
     // make JobConfig Active
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
     await this.sendMountMessage(details, update.id)
-    this.logger.error(details)
+
     this.eventEmitter.emit(EmitterEvents.TaskCreate, {
       jobRunId: update.id,
       status: update.status,
@@ -177,20 +172,19 @@ export class JobRunService {
       tPath: details.connection.targetCredential?.path,
       taskType: details.jobType,
       workers: details.workers,
-      // sPathId: details.connection.sourceCredential.pathId,
-      // workingDirectory: details.connection.sourceCredential?.workingDirectory
+      sPathId: details.connection.sourceCredential.pathId,
+      workingDirectory: details.connection.sourceCredential?.workingDirectory
     });
   }
   //  ------------------- sendMountMessage ------------------ //
   async sendMountMessage(details: JobRunConfig, jobRunId: string) {
-    this.logger.error(details)
-    details.workers.forEach(worker => 
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
-        workerId: worker,
-        socketEvents: SocketEvents.MOUNT_PATH,
-        payload: { jobRunId: jobRunId, ...details.connection}
-    })
-      )
+      details.workers.forEach(worker => 
+        this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+          workerId: worker,
+          socketEvents: SocketEvents.MOUNT_PATH,
+          payload: { jobRunId: jobRunId, ...details.connection}
+      })
+    )
   }
  
   //  ------------------- JobRun actions ------------------ //
