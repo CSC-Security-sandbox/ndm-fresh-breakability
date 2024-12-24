@@ -10,6 +10,7 @@ import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
+import { log } from "console";
 @Injectable()
 export class DiscoveryService {
   constructor(
@@ -19,7 +20,7 @@ export class DiscoveryService {
     private readonly reportsRepo: Repository<ReportsEntity>
   ) {}
 
-  get getReportsDirectory():string {
+  get getReportsDirectory(): string {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
   }
 
@@ -27,74 +28,85 @@ export class DiscoveryService {
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
   async createReportFile(jobRunId: string, reportType: string): Promise<any> {
-    function formatAndWriteToFile(data: any[], filePath: string): void {
-        const groupedData = data.reduce((acc, entry) => {
-          if (!acc[entry.category]) {
-            acc[entry.category] = [];
-          }
-          acc[entry.category].push(entry);
-          return acc;
-        }, {});
-       
-        const formattedString = Object.entries(groupedData)
-          .map(([category, entries]) => {
-            const subCategories = (entries as any[]).map((entry) => entry.sub_category);
-            const values = (entries as any[]).map((entry) => entry.count_or_space.toString());
-            
-            const columnWidths = subCategories.map((subCategory, index) => {
-              const maxHeaderWidth = subCategory.length;
-              const maxValueWidth = values[index]?.toString().length || 0;
-              return Math.max(maxHeaderWidth, maxValueWidth) + 2;
-            });
-       
-            const headerRow = subCategories
-              .map((subCategory, index) => subCategory.padEnd(columnWidths[index]))
-              .join(" | ");
-       
-            const valueRow = values
-              .map((value, index) => value.padEnd(columnWidths[index]))
-              .join(" | ");
-       
-            return `== ${category} ==\n${headerRow}\n${valueRow}\n`;
-          })
-          .join("\n");
-       
-        fs.writeFileSync(filePath, formattedString);
-        console.log(`Data has been written to ${filePath}`);
-      }
-
+    log(
+      `Creating report for jobRunIdooo: ${jobRunId} and reportType: ${reportType}`
+    );
     try {
       if (!fs.existsSync(this.reportsDirectory)) {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
+
       const result = await this.inventoryRepo.query(
         "CALL migrateadmin.generate_discovery_report($1)",
         [jobRunId]
       );
 
       const latestReport = await this.reportsRepo.find({
+        where: { jobRunId: jobRunId, reportType: reportType },
         order: { createdAt: "DESC" },
         take: 1,
       });
-
 
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
       const filePath = path.join(this.reportsDirectory, fileName);
 
       if (latestReport) {
-        formatAndWriteToFile(JSON.parse(latestReport[0].reportData), filePath);
+        this.formatAndWriteToFile(
+          JSON.parse(latestReport[0].reportData),
+          filePath
+        );
       }
 
       return {
         message: "Report generated successfully",
       };
     } catch (error) {
+      console.log(error);
       throw new InternalServerErrorException(
         `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
       );
     }
   }
 
+  formatAndWriteToFile(data: any[], filePath: string): void {
+    const groupedData = data.reduce((acc, entry) => {
+      if (!acc[entry.category]) {
+        acc[entry.category] = [];
+      }
+      acc[entry.category].push(entry);
+      return acc;
+    }, {});
+
+    const formattedString = Object.entries(groupedData)
+      .map(([category, entries]) => {
+        const subCategories = (entries as any[]).map(
+          (entry) => entry.sub_category
+        );
+        const values = (entries as any[]).map((entry) =>
+          entry.count_or_space.toString()
+        );
+
+        const columnWidths = subCategories.map((subCategory, index) => {
+          const maxHeaderWidth = subCategory.length;
+          const maxValueWidth = values[index]?.toString().length || 0;
+          return Math.max(maxHeaderWidth, maxValueWidth) + 2;
+        });
+
+        const headerRow = subCategories
+          .map((subCategory, index) => subCategory.padEnd(columnWidths[index]))
+          .join(" | ");
+
+        const valueRow = values
+          .map((value, index) => value.padEnd(columnWidths[index]))
+          .join(" | ");
+
+        return `== ${category} ==\n${headerRow}\n${valueRow}\n`;
+      })
+      .join("\n");
+
+    fs.writeFileSync(filePath, formattedString);
+    console.log(`Data has been written to ${filePath}`);
+  }
   async getReportsAsZip(
     jobRunIds: string[],
     reportType: string
