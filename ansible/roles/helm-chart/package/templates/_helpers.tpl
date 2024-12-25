@@ -110,6 +110,48 @@ spec:
     app: {{ .Values.appName }}
 {{- end }}
 
+{{/* Default Template for Ingress. All Sub-Charts under this Chart can include the below template. */}}
+{{- define "datamigrate.ingresstemplate" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.appName }}-ingress
+  annotations:
+    {{- if .Values.ingress.userDefinedAnnotations }}
+    {{- toYaml .Values.ingress.userDefinedAnnotations | nindent 4 }}
+    {{- else }}
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- if .Values.ingress.pathPrefix }}
+    nginx.ingress.kubernetes.io/rewrite-target: /{{ .Values.ingress.pathPrefix }}/$2
+    {{- else }}
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    {{- end }}
+    kubernetes.io/ingress.class: public
+    {{- end }}
+spec:
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      {{- if .Values.ingress.pathPrefix }}
+      - path: /{{ .Values.ingress.pathPrefix }}{{ .Values.ingress.trailingPath }}
+      {{- else }}
+      - path: /
+      {{- end }}
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.appName }}-service
+            port:
+              number: {{ .Values.service.port }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.host }}
+    secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" .Values.appName) }}
+  {{- end }}
+{{- end }}
+
 {{/* Default Template for StatefulSet. All Sub-Charts under this Chart can include the below template. */}}
 {{- define "datamigrate.statefulsettemplate" }}
 apiVersion: {{ .Values.kubeApiVersion }}

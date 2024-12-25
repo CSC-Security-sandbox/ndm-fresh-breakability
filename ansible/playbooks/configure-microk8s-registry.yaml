@@ -4,4 +4,4 @@
   become: yes
   gather_facts: yes
   roles:
-    - { role:  ../roles/kubernetes/configure-registry, tags: 'configure-registry' }
+    - { role:  ../roles/kubernetes/microk8s/configure-registry, tags: 'configure-registry' }

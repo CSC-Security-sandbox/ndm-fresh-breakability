@@ -1,0 +1,20 @@
+---
+
+- name: delete rabbitmq-data directory if uninstall flag is defined 
+  file:
+    path: /data/rabbitmq-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: rabbitmq_uninstall is defined
+
+- name: create rabbitmq-data directory 
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: /data/rabbitmq-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: 0755

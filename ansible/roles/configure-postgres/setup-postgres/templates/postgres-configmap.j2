@@ -11,14 +11,13 @@ data:
     
     createSchema.sql: |
 
-        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        -- DROP SCHEMA migrateadmin;
+        -- migrateadmin.account definition
 
-        -- public.account definition
+        -- Drop table
 
-        -- Create schema migrateadmin
-        CREATE SCHEMA IF NOT EXISTS "migrateadmin";
+        -- DROP TABLE migrateadmin.account;
 
-        -- Create account table in the migrateadmin schema
         CREATE TABLE migrateadmin.account (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -29,8 +28,79 @@ data:
             CONSTRAINT "PK_54115ee388cdb6d86bb4bf5b2ea" PRIMARY KEY (id)
         );
 
-        -- Create permission table in the migrateadmin schema
-        CREATE TABLE migrateadmin.permission (
+        -- Permissions
+
+
+
+        -- migrateadmin.inventory definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.inventory;
+
+        CREATE TABLE migrateadmin.inventory (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            "path" text NOT NULL,
+            volume_id uuid NULL,
+            is_directory bool NOT NULL,
+            source_checksum text NULL,
+            target_checksum text NULL,
+            parent_path varchar NOT NULL,
+            "depth" int4 NOT NULL,
+            file_name text NOT NULL,
+            uid text NOT NULL,
+            gid text NOT NULL,
+            file_size int8 NOT NULL,
+            file_type text NOT NULL,
+            modified_time timestamp NOT NULL,
+            access_time timestamp NOT NULL,
+            file_permission varchar NOT NULL,
+            job_run_id uuid NOT NULL,
+            birth_time timestamp NULL,
+            CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY (id)
+        );
+        CREATE INDEX idx_id ON migrateadmin.inventory USING btree (id);
+        CREATE INDEX idx_inventory_job_run_id ON migrateadmin.inventory USING btree (job_run_id);
+        CREATE INDEX idx_path ON migrateadmin.inventory USING btree (path);
+
+        -- Permissions
+
+
+
+
+        -- migrateadmin.jobidmapping definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.jobidmapping;
+
+        CREATE TABLE migrateadmin.jobidmapping (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            file_server_id uuid NOT NULL,
+            "type" varchar NOT NULL,
+            source_id varchar NOT NULL,
+            destination_id varchar NOT NULL,
+            CONSTRAINT "PK_49659c592bf37c883fca075529c" PRIMARY KEY (id)
+        );
+
+        -- Permissions
+
+
+        -- migrateadmin."permission" definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin."permission";
+
+        CREATE TABLE migrateadmin."permission" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
             updated_at timestamp DEFAULT now() NOT NULL,
@@ -41,8 +111,16 @@ data:
             CONSTRAINT "PK_3b8b97af9d9d8807e41e6f48362" PRIMARY KEY (id)
         );
 
-        -- Create role table in the migrateadmin schema
-        CREATE TABLE migrateadmin.role (
+        -- Permissions
+
+
+        -- migrateadmin."role" definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin."role";
+
+        CREATE TABLE migrateadmin."role" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
             updated_at timestamp DEFAULT now() NOT NULL,
@@ -53,8 +131,17 @@ data:
             CONSTRAINT "PK_b36bcfe02fc8de3c57a8b2391c2" PRIMARY KEY (id)
         );
 
-        -- Create user table in the migrateadmin schema
-        CREATE TABLE migrateadmin.user (
+        -- Permissions
+
+
+
+        -- migrateadmin."user" definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin."user";
+
+        CREATE TABLE migrateadmin."user" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
             updated_at timestamp DEFAULT now() NOT NULL,
@@ -67,7 +154,16 @@ data:
             CONSTRAINT "PK_cace4a159ff9f2512dd42373760" PRIMARY KEY (id)
         );
 
-        -- Create project table in the migrateadmin schema
+        -- Permissions
+
+
+
+        -- migrateadmin.project definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.project;
+
         CREATE TABLE migrateadmin.project (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -82,7 +178,17 @@ data:
             CONSTRAINT "FK_76eea9da615605bb68d1ffc995c" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id)
         );
 
-        -- Create role_permission table in the migrateadmin schema
+        -- Permissions
+
+
+
+
+        -- migrateadmin.role_permission definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.role_permission;
+
         CREATE TABLE migrateadmin.role_permission (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -92,11 +198,20 @@ data:
             role_id uuid NOT NULL,
             permission_id uuid NOT NULL,
             CONSTRAINT "PK_96c8f1fd25538d3692024115b47" PRIMARY KEY (id),
-            CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES migrateadmin.role(id),
-            CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin.permission(id)
+            CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES migrateadmin."role"(id),
+            CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin."permission"(id)
         );
 
-        -- Create user_role table in the migrateadmin schema
+        -- Permissions
+
+
+
+        -- migrateadmin.user_role definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.user_role;
+
         CREATE TABLE migrateadmin.user_role (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -108,12 +223,298 @@ data:
             project_id uuid NULL,
             account_id uuid NOT NULL,
             CONSTRAINT "PK_fb2e442d14add3cefbdf33c4561" PRIMARY KEY (id),
-            CONSTRAINT "FK_32a6fc2fcb019d8e3a8ace0f55f" FOREIGN KEY (role_id) REFERENCES migrateadmin.role(id),
+            CONSTRAINT "FK_32a6fc2fcb019d8e3a8ace0f55f" FOREIGN KEY (role_id) REFERENCES migrateadmin."role"(id),
             CONSTRAINT "FK_7b6db8740e8e0e2916ac5c7d089" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id),
             CONSTRAINT "FK_8541d9c873a5883eca10c3822e4" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id),
-            CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES migrateadmin.user(id)
+            CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES migrateadmin."user"(id)
         );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.worker definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.worker;
+
+        CREATE TABLE migrateadmin.worker (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid NOT NULL,
+            project_id uuid NOT NULL,
+            client_id varchar(255) NOT NULL,
+            worker_name varchar(255) NOT NULL,
+            ip_address varchar(255) NOT NULL,
+            status varchar NOT NULL,
+            CONSTRAINT "PK_dc8175fa0e34ce7a39e4ec73b94" PRIMARY KEY (id),
+            CONSTRAINT "FK_787ef3391e00fbbd3c127e0f3a2" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.config definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.config;
+
+        CREATE TABLE migrateadmin.config (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            config_name text NULL,
+            config_type text NULL,
+            project_id uuid NOT NULL,
+            scanned_date timestamp NULL,
+            working_directory text NULL,
+            CONSTRAINT "PK_d0ee79a681413d50b0a4f98cf7b" PRIMARY KEY (id),
+            CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.file_server definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.file_server;
+
+        CREATE TABLE migrateadmin.file_server (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            hostname text NULL,
+            username text NULL,
+            protocol varchar NULL,
+            server_type varchar NOT NULL,
+            "password" text NULL,
+            config_id uuid NULL,
+            is_refreshed bool NULL,
+            CONSTRAINT "PK_533d54ec32cba35b21c5a2092fc" PRIMARY KEY (id),
+            CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES migrateadmin.config(id) ON DELETE CASCADE
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.file_server_worker definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.file_server_worker;
+
+        CREATE TABLE migrateadmin.file_server_worker (
+            file_server_id uuid NOT NULL,
+            worker_id uuid NOT NULL,
+            CONSTRAINT "PK_718ecaa44104452bec9b0f4604d" PRIMARY KEY (file_server_id, worker_id),
+            CONSTRAINT "FK_000b409f7a5fe4210cf89b958d5" FOREIGN KEY (file_server_id) REFERENCES migrateadmin.file_server(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT "FK_25cbd3119a71ce7db80d60e9039" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id) ON DELETE CASCADE ON UPDATE CASCADE
+        );
+        CREATE INDEX "IDX_000b409f7a5fe4210cf89b958d" ON migrateadmin.file_server_worker USING btree (file_server_id);
+        CREATE INDEX "IDX_25cbd3119a71ce7db80d60e903" ON migrateadmin.file_server_worker USING btree (worker_id);
+
+        -- Permissions
+
+
+
+
+        -- migrateadmin.request_track definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.request_track;
+
+        CREATE TABLE migrateadmin.request_track (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            task_type text NOT NULL,
+            response text NULL,
+            status text NOT NULL,
+            operation varchar NOT NULL,
+            worker_id uuid NOT NULL,
+            transaction_id uuid NOT NULL,
+            config_id uuid NULL,
+            CONSTRAINT "PK_4c631e80b0eba97b1af5cba5655" PRIMARY KEY (id),
+            CONSTRAINT "FK_8363d1ef7f84cc88ec34d6dfec7" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id)
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.volume definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.volume;
+
+        CREATE TABLE migrateadmin.volume (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            volume_path text NULL,
+            reachable_count int4 NULL,
+            file_server_id uuid NULL,
+            is_discovery_done bool DEFAULT false NULL,
+            is_baseline_migration_done bool DEFAULT false NULL,
+            CONSTRAINT "PK_666025cd0c36727216bb7f2a680" PRIMARY KEY (id),
+            CONSTRAINT "FK_556b3e916c55734c6f7424c9280" FOREIGN KEY (file_server_id) REFERENCES migrateadmin.file_server(id) ON DELETE CASCADE
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.jobconfig definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.jobconfig;
+
+        CREATE TABLE migrateadmin.jobconfig (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            job_type varchar NOT NULL,
+            status varchar NOT NULL,
+            exclude_older_than timestamp NULL,
+            exclude_file_patterns text NULL,
+            preserve_access_time bool DEFAULT false NOT NULL,
+            first_run_at timestamptz NULL,
+            future_schedule_at text NULL,
+            source_path_id uuid NOT NULL,
+            target_path_id uuid NULL,
+            CONSTRAINT "PK_ac392abad1e1801da9a4cf027d6" PRIMARY KEY (id),
+            CONSTRAINT "FK_6d8681dac974befcdd07f6cf59a" FOREIGN KEY (target_path_id) REFERENCES migrateadmin.volume(id) ON DELETE CASCADE,
+            CONSTRAINT "FK_cea32c3ed1e83116df4ef3c689a" FOREIGN KEY (source_path_id) REFERENCES migrateadmin.volume(id) ON DELETE CASCADE
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.jobrun definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.jobrun;
+
+        CREATE TABLE migrateadmin.jobrun (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            status varchar NOT NULL,
+            start_time timestamp NOT NULL,
+            end_time timestamp NULL,
+            iteration_number int4 NOT NULL,
+            job_config_id uuid NOT NULL,
+            job_options_id uuid NULL,
+            CONSTRAINT "PK_39c91b190948f08d1d392f404e6" PRIMARY KEY (id),
+            CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES migrateadmin.jobconfig(id) ON DELETE CASCADE
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.tasks definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.tasks;
+
+        CREATE TABLE migrateadmin.tasks (
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            job_run_id uuid NOT NULL,
+            status varchar NOT NULL,
+            task_type varchar NULL,
+            worker_id uuid NULL,
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            CONSTRAINT "PK_8d12ff38fcc62aaba2cab748772" PRIMARY KEY (id),
+            CONSTRAINT "FK_e1d40541e2ee780839fb3f95c4a" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_job_run_id ON migrateadmin.tasks USING btree (job_run_id);
+        CREATE INDEX idx_job_run_status ON migrateadmin.tasks USING btree (job_run_id, status);
+        CREATE INDEX idx_task_type ON migrateadmin.tasks USING btree (task_type);
+
+        -- Permissions
+
+
+
+        -- migrateadmin.worker_jobrun_mapping definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.worker_jobrun_mapping;
+
+        CREATE TABLE migrateadmin.worker_jobrun_mapping (
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            status bool DEFAULT false NOT NULL,
+            worker_id uuid NOT NULL,
+            job_run_id uuid NOT NULL,
+            CONSTRAINT "PK_98b8d5dc06ff2e1e408f3020be2" PRIMARY KEY (id),
+            CONSTRAINT "FK_06c32b99d7b638ac00e416bd3fa" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id) ON DELETE CASCADE,
+            CONSTRAINT "FK_0e30585297eabf24ea031fb784f" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
+        );
+
+        -- Permissions
+
+
+
+        -- migrateadmin.operations definition
+
+        -- Drop table
+
+        -- DROP TABLE migrateadmin.operations;
+
+        CREATE TABLE migrateadmin.operations (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            task_id uuid NULL,
+            job_run_id uuid NULL,
+            status varchar NOT NULL,
+            operation_type varchar NOT NULL,
+            request jsonb NOT NULL,
+            error_details text NULL,
+            f_path text NOT NULL,
+            retry_count int4 NULL,
+            CONSTRAINT "PK_7b62d84d6f9912b975987165856" PRIMARY KEY (id),
+            CONSTRAINT "FK_7d416e8bb958cabd9256e9a8e5e" FOREIGN KEY (task_id) REFERENCES migrateadmin.tasks(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_file_path_task ON migrateadmin.operations USING btree (f_path, task_id);
+        CREATE INDEX idx_operation_run_status ON migrateadmin.operations USING btree (job_run_id, status);
+        CREATE INDEX idx_operation_type ON migrateadmin.operations USING btree (operation_type);
+
+        -- Permissions
+    
     seedDb.sql: |
+
         DO $$
         DECLARE
             user_id UUID;
@@ -205,19 +606,12 @@ data:
             -- Insert accounts
             INSERT INTO "migrateadmin"."account" (id, account_name, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'Demo Account 1', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Account 2', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Account 3', now(), user_id, now(), user_id);
+                (uuid_generate_v4(), 'NetApp UAT', now(), user_id, now(), user_id);
 
             -- Insert projects
             INSERT INTO "migrateadmin"."project" (id, project_name, account_id, start_date, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'Demo Project 10', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Project 11', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Project 12', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Project 13', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Project 2', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 2'), now(), now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Demo Project 3', (SELECT id FROM migrateadmin.account WHERE account_name = 'Demo Account 3'), now(), now(), user_id, now(), user_id);
+                (uuid_generate_v4(), 'NetApp UAT project', (SELECT id FROM migrateadmin.account WHERE account_name = 'NetApp UAT'), now(), now(), user_id, now(), user_id);
 
             -- Insert users
             INSERT INTO "migrateadmin"."user" (id, email, user_status, created_at, created_by, updated_at, updated_by)

@@ -10,6 +10,18 @@
 - name: Install and configure microk8s cluster, users, addons
   import_playbook: configure-microk8s.yaml
 
+- name: Configure vault
+  import_playbook: configure-vault.yaml
+  
+- name: Configure postgres
+  import_playbook: configure-postgres.yaml
+
+- name: Configure rabbitmq
+  import_playbook: configure-rabbitmq.yaml
+
+- name: Configure keycloak
+  import_playbook: configure-keycloak.yaml
+
 - name: Configure microk8s image registry with datamigrate application images
   import_playbook: configure-microk8s-registry.yaml
 

@@ -10,18 +10,19 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export POSTGRES_ROOT_PASSWORD=$(tr -dc 'A-Za-z0-9#*_-' </dev/urandom | head -c 20  ; echo)
-    export DMADMIN_PASSWORD=$(tr -dc 'A-Za-z0-9#*_-' </dev/urandom | head -c 20  ; echo)
+    export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
+    export DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
     echo "ROOT_PASSWORD:$POSTGRES_ROOT_PASSWORD"
     echo "DMADMIN_PASSWORD:$DMADMIN_PASSWORD"
   args:
     executable: /bin/bash      
   register: postgres_passwords
   
-- name: Create a variable postgres password
+- name: Set Base64-encoded passwords as facts
   set_fact:
-    postgres_root_password: "{{ postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first }}"
-    dmadmin_password: "{{ postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first }}"
+    postgres_root_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    dmadmin_password: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) }}"
+    dmadmin_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
 - name: postgres-namespace template
   become: yes
@@ -43,6 +44,11 @@
   become_user: "{{ vm_username }}"
   template: src=./templates/postgres-configmap.j2 dest=$HOME/postgres/postgres-configmap.yaml
 
+- name: postgres-secret template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/postgres-secret.j2 dest=$HOME/postgres/postgres-secret.yaml
+
 - name: postgres-values template
   become: yes
   become_user: "{{ vm_username }}"
@@ -58,6 +64,7 @@
     kubectl delete -f $HOME/postgres/postgres-primary-pv.yaml
     kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
     kubectl delete -f $HOME/postgres/postgres-namespace.yaml
+    kubectl delete -f $HOME/postgres/postgres-secret.yaml
   when: postgres_uninstall is defined    
   args:
     chdir: $HOME
@@ -70,10 +77,10 @@
     kubectl apply -f $HOME/postgres/postgres-storageclass.yaml
     kubectl apply -f $HOME/postgres/postgres-primary-pv.yaml
     kubectl apply -f $HOME/postgres/postgres-configmap.yaml
+    kubectl apply -f $HOME/postgres/postgres-secret.yaml
   args:
     chdir: $HOME
 
-##export POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault-{{ lifecycle }} -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
 
 - name: Deploy postgres helm chart
   become: yes

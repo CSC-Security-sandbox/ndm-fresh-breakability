@@ -1,0 +1,6 @@
+- name: Configure keycloak init setup job
+  hosts: servers
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/post-install, tags: 'post-install' }

@@ -4,10 +4,12 @@ architecture: standalone
 global:
   postgresql:
     auth:
-      postgresPassword: "{{ postgres_root_password }}"
       username: "dmadmin"
-      password: "{{ dmadmin_password }}"
       database: "datamigrate"
+      existingSecret: "postgres-credentials"
+      secretKeys:
+        adminPasswordKey: "postgres-password"
+        userPasswordKey: "user-password"
 
 primary:
   persistence:
