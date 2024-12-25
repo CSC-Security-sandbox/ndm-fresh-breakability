@@ -9,6 +9,7 @@ import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
+import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 
 const mockJobEntity = {
   id: 'uuid1',
@@ -44,6 +45,7 @@ describe('JobConfigService', () => {
   let service: JobConfigService;
   let repo: Repository<JobConfigEntity>;
   let inventoryRepo: Repository<InventoryEntity>;
+  let jobOptions: Repository<JobOptionsEntity>
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -51,6 +53,18 @@ describe('JobConfigService', () => {
         JobConfigService,
         {
           provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobOptionsEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),

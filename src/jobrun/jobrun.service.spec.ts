@@ -10,6 +10,7 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { Repository } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
+import { JobOptionsEntity } from "src/entities/joboptions.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -18,6 +19,7 @@ describe("JobRunService", () => {
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
   let inventoryRepo: Repository<InventoryEntity>;
+  let jobOptions: Repository<JobOptionsEntity>
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -59,6 +61,18 @@ describe("JobRunService", () => {
             count: jest.fn(),
             createQueryBuilder: jest.fn(),
             update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobOptionsEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {

@@ -17,7 +17,7 @@ import { EventsService } from './service/events/events.service';
 import { FileConfigService } from './service/config/config.service';
 import { RequestTrackService } from './service/requesttack/requesttrack.service';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { FileLogger } from './workmanager/logger.service';
+
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 
 
@@ -25,7 +25,7 @@ import { JobOptionsEntity } from 'src/entities/joboptions.entity';
   imports: [
     TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity,OperationsEntity, WorkerJobRunMap, JobOptionsEntity])],
   exports: [EventsGateway],
-  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, WorkManager, FileLogger],
+  providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, WorkManager],
   controllers: [EventsController, RabbiMqController]
 })
 export class EventsModule {}

@@ -1,7 +1,7 @@
 
 import { Operations } from 'src/constants/status';
-import { Protocol } from 'src/constants/enums';
-import { OperationToProtocol } from './mapper';
+import { OperationType, Protocol, TaskType } from 'src/constants/enums';
+import { operationsTypeToTaskType, OperationToProtocol } from './mapper';
 
 describe('OperationToProtocol', () => {
 
@@ -44,4 +44,17 @@ describe('OperationToProtocol', () => {
     expect(() => OperationToProtocol(null)).toThrowError('Invalid Operation');
   });
 
+});
+
+
+describe('operationsTypeToTaskType', () => {
+  it('should return TaskType.Scan when OperationType.SCAN is provided', () => {
+    const result = operationsTypeToTaskType(OperationType.SCAN);
+    expect(result).toBe(TaskType.Scan);
+  });
+
+  it('should throw an error for an invalid operation type', () => {
+    const invalidOperation = 'INVALID_OPERATION' as OperationType;
+    expect(() => operationsTypeToTaskType(invalidOperation)).toThrowError('Invalid Operation');
+  });
 });

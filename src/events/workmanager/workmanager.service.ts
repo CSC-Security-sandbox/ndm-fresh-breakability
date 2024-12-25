@@ -10,7 +10,6 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
-import { FileLogger } from "./logger.service";
 import { buildScanPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 
@@ -26,7 +25,7 @@ export class WorkManager{
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
         private readonly eventEmitter: EventEmitter2,
-        private readonly fileLogger: FileLogger
+
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
@@ -201,8 +200,6 @@ export class WorkManager{
             {fPath: In(successOperations), taskId: task.id}, {status : OperationStatus.COMPLETED}
         )
         await this.taskRepo.update({id: task.id}, {status: TaskStatus.Completed})
-
-        this.fileLogger.log(`TASK ID -> ${task.id} | status -> ${TaskStatus.Completed}`)
 
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
