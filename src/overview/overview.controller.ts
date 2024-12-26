@@ -6,6 +6,9 @@ import { OverviewDTO } from './overview.dto';
 
 @Controller('overview')
 export class OverviewController {
+  downloadReports(arg0: undefined[], arg1: string): any {
+    throw new Error('Method not implemented.');
+  }
     constructor(private readonly overviewService: OverviewService) {}
 
 @ApiTags('overview')

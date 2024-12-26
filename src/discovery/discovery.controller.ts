@@ -135,8 +135,8 @@ export class DiscoveryController {
     if (!jobRunId) {
       throw new BadRequestException('jobRunId is required');
     }
-    if (!reportType || !['COC', 'discovery'].includes(reportType)) {
-      throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
+    if (!reportType || !['COC', 'DISCOVERY'].includes(reportType)) {
+      throw new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY');
     }
 
     return this.discoveryService.createReportFile(jobRunId, reportType);

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscoveryController } from './discovery.controller';
 import { DiscoveryService } from './discovery.service';
 import { BadRequestException } from '@nestjs/common';
+import { ReportsEntity } from 'src/entities/reports.entity';
 
 describe('DiscoveryController', () => {
   let discoveryController: DiscoveryController;
@@ -14,7 +15,7 @@ describe('DiscoveryController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [DiscoveryController],
+      controllers: [DiscoveryController, ReportsEntity],
       providers: [
         {
           provide: DiscoveryService,
