@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
@@ -10,9 +11,9 @@ import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
-import { log } from "console";
 @Injectable()
 export class DiscoveryService {
+  private logger: Logger = new Logger(DiscoveryService.name);
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
@@ -28,7 +29,7 @@ export class DiscoveryService {
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
   async createReportFile(jobRunId: string, reportType: string): Promise<any> {
-    log(
+    this.logger.log(
       `Creating report for jobRunIdooo: ${jobRunId} and reportType: ${reportType}`
     );
     try {
@@ -50,7 +51,7 @@ export class DiscoveryService {
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
       const filePath = path.join(this.reportsDirectory, fileName);
 
-      if (latestReport) {
+      if (latestReport?.length > 0) {
         this.formatAndWriteToFile(
           JSON.parse(latestReport[0].reportData),
           filePath
@@ -61,7 +62,7 @@ export class DiscoveryService {
         message: "Report generated successfully",
       };
     } catch (error) {
-      console.log(error);
+      this.logger.log(error);
       throw new InternalServerErrorException(
         `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
       );
