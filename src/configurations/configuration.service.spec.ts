@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConfigurationType, Protocol, ServerType } from 'src/constants/enums';
+import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
@@ -134,11 +134,15 @@ describe('ConfigurationService', () => {
         projectId:"123456",
         createdBy: "123123",
         stage:"",
-        workingDirectory: '/temp',
+        workingDirectory: {
+          path: '/temp',
+          pathId: '123123',
+        },
         configName: 'Updated Config',
         configType: ConfigurationType.file,
         fileServers: [{
           host: 'localhost',
+          protocolVersion: ProtocolVersion.NFSv2,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
           volumes: [{  volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
@@ -163,11 +167,15 @@ describe('ConfigurationService', () => {
         projectId:"123456",
         createdBy: "123123",
         configName: 'Updated Config',
-        workingDirectory: '/temp',
+        workingDirectory: {
+          path: '/temp',
+          pathId: '123123',
+        },
         configType: ConfigurationType.file,
         fileServers: [{
           id: mockFileServer.id,
           host: 'localhost',
+          protocolVersion: ProtocolVersion.NFSv2,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
           createdBy:"1234567",

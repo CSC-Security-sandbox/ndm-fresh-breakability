@@ -50,7 +50,10 @@ describe('ConfigurationController', () => {
       const createConfigDTO: ConfigDTO = {
         configName: "testConfig",
         configType: ConfigurationType.file,
-        workingDirectory: '/temp',
+        workingDirectory: {
+          path: '/temp',
+          pathId: '123123',
+        },
         fileServers: [],
         projectId: "2345678",
       };
@@ -58,7 +61,10 @@ describe('ConfigurationController', () => {
         configName: "testConfig",
         configType: ConfigurationType.file,
         fileServers: [],
-        workingDirectory: '/temp',
+        workingDirectory: {
+          path: '/temp',
+          pathId: '123123',
+        },
         projectId: "2345678",
         stage: "212"
        };
