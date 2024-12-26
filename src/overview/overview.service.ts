@@ -24,7 +24,10 @@ export class OverviewService {
             if (fileServerId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
+                    fileServers: {
+                        ...whereClause['configs?.fileServers'],
                         id: fileServerId,
+                    },
                 };
             }
         
@@ -81,6 +84,9 @@ export class OverviewService {
                 const inventoryQueryBuilder =
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(inventory.fileSize)', 'totalSize')
+                        .innerJoin('jobrun', 'jobRun', 'inventory.jobRunId = jobRun.id')
+                        .where('jobRun.status = :status', { status: JobRunStatus.Completed });
+
                 const jobRunId = lastScanRun[0].id;
                 if (lastScanRun[0].id) {
                     inventoryQueryBuilder.andWhere('job_run_id = :jobRunId', { jobRunId });
