@@ -1,7 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
-import { ConfigurationType, Protocol, ServerType } from "src/constants/enums";
+import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
+
+export class WorkingDirDTO {
+    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
+    @IsString()
+    @IsOptional()
+    path: string;
+
+    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
+    @IsString()
+    @IsOptional()
+    pathId: string;
+}
 
 export class FileServersDTO {
     @ApiProperty({ description: 'UUID of fileserver', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
@@ -18,6 +30,11 @@ export class FileServersDTO {
     @IsNotEmpty()
     @IsEnum(Protocol)
     protocol: Protocol;
+
+    @ApiProperty({ description: 'Protocol version', enum: ProtocolVersion, example: ProtocolVersion.NFSv4 })
+    @IsNotEmpty()
+    @IsEnum(ProtocolVersion)
+    protocolVersion: ProtocolVersion;
 
     @ApiProperty({ description: 'Username', example: 'admin' })
     @IsNotEmpty()
@@ -55,10 +72,9 @@ export class ConfigDTO {
     @IsNotEmpty()
     configName: string;
 
-    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
-    @IsString()
+    @ApiPropertyOptional({ description: 'Working Directory', example: { path: '/temp', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
     @IsOptional()
-    workingDirectory?: string;
+    workingDirectory?: WorkingDirDTO;
 
     @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
     @IsEnum(ConfigurationType)
@@ -70,7 +86,6 @@ export class ConfigDTO {
     @ValidateNested({ each: true })
     @Type(() => FileServersDTO)
     fileServers: FileServersDTO[];
-
 
     @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
     @IsString()
