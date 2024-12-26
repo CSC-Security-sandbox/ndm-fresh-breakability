@@ -18,6 +18,12 @@ export class OperationsEntity extends Base {
   @Column({ type: 'uuid', name: 'job_run_id' , nullable: true})
   jobRunId: string;
 
+  @Column({ type: 'uuid', name: 'source_path_id' , nullable: true})
+  sPathId: string;
+
+  @Column({ type: 'uuid', name: 'target_path_id' , nullable: true})
+  tPathId: string;
+
   @Column({ type: 'varchar',  name: 'status' , nullable: false})
   status: OperationStatus;
  

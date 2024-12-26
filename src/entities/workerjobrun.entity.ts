@@ -18,6 +18,9 @@ export class WorkerJobRunMap {
     @Column({ name: 'job_run_id' , type: 'uuid'})
     jobRunId: string;
 
+    @Column({ name: 'is_path_mounted' , type: 'boolean', default: 'false'})
+    isPathMounted: boolean = false;
+
     @ManyToOne(() => WorkerEntity, worker => worker.jobRunMap, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'worker_id' }) 
     worker: WorkerEntity;

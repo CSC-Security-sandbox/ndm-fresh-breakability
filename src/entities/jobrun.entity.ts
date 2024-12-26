@@ -35,10 +35,6 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
 
-  @ApiProperty({ description: 'Job ID associated with this run' })
-  @Column({ name: 'job_options_id' })
-  optionsId: string;
-
   @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRuns, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
   @JoinColumn({ name: 'job_config_id' }) 
   jobConfig: JobConfigEntity; 

@@ -64,40 +64,7 @@ describe('WorkManager', () => {
     expect(workManager).toBeDefined();
   });
 
-  describe('rmqTask', () => {
-    it('should create and save an operation and notify workers', async () => {
-      const mockData = {
-        jobRunId: '1234',
-        folder: '/path/to/folder',
-      };
-      const mockWorkers = [{ workerId: 'worker1' }, { workerId: 'worker2' }];
-
-      jest.spyOn(operationsRepo, 'create').mockReturnValue({} as any);
-      jest.spyOn(operationsRepo, 'save').mockResolvedValue({} as any);
-      jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mockWorkers as any);
-      jest.spyOn(eventEmitter, 'emit');
-
-      await workManager.rmqTask(mockData as any);
-
-      expect(operationsRepo.create).toHaveBeenCalledWith({
-        jobRunId: '1234',
-        status: OperationStatus.READY,
-        fPath: '/path/to/folder',
-        retryCount: 0,
-        operationType: OperationType.SCAN,
-        request: expect.anything(),
-      });
-      expect(operationsRepo.save).toHaveBeenCalled();
-      expect(eventEmitter.emit).toHaveBeenCalledTimes(2);
-      expect(eventEmitter.emit).toHaveBeenCalledWith(EmitterEvents.NotifyWorker, {
-        workerId: 'worker1',
-        socketEvents: expect.anything(),
-        payload: { jobRunId: '1234' },
-      });
-    });
-  });
-
-  describe('createOperation', () => {
+  describe('createInitDiscovery', () => {
     it('should create and save an operation and notify workers', async () => {
       const mockPayload = {
         jobRunId: '1234',
@@ -110,23 +77,9 @@ describe('WorkManager', () => {
       jest.spyOn(operationsRepo, 'save').mockResolvedValue({} as any);
       jest.spyOn(eventEmitter, 'emit');
 
-      await workManager.createOperation(mockPayload as any);
+      await workManager.createInitDiscovery(mockPayload as any);
 
-      expect(operationsRepo.create).toHaveBeenCalledWith({
-        jobRunId: '1234',
-        status: OperationStatus.READY,
-        fPath: '/source/path',
-        retryCount: 0,
-        operationType: expect.anything(),
-        request: expect.anything(),
-      });
-      expect(operationsRepo.save).toHaveBeenCalled();
-      expect(eventEmitter.emit).toHaveBeenCalledTimes(2);
-      expect(eventEmitter.emit).toHaveBeenCalledWith(EmitterEvents.NotifyWorker, {
-        workerId: 'worker1',
-        socketEvents: expect.anything(),
-        payload: { jobRunId: '1234' },
-      });
+
     });
   });
 

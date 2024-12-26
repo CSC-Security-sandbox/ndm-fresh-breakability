@@ -1,12 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Logger, Param, Post, Put, Query, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Put, Query, ValidationPipe } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { JobRunEntity } from './../entities/jobrun.entity';
-import { JobRunService } from './jobrun.service';
 import { JobRunDetailsDTO } from './dto/jobrun.dto';
-import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunActionsReq } from './dto/jobrunactions.dto';
+import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
+import { JobRunService } from './jobrun.service';
 
 @ApiTags('jobs run')
 @Controller('job-run')

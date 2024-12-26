@@ -13,7 +13,7 @@ import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 @Module({
     imports: [
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity,InventoryEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity]),
     ],
     providers: [JobRunService, JobConfigService],
     controllers: [JobRunController]

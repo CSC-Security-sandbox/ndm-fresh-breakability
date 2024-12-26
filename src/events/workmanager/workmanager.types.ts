@@ -1,22 +1,17 @@
 import { JobType } from "src/constants/enums";
+import { JobRunConfig } from "src/jobrun/jobrun.types";
 
-// -------------------------- RMQ TASK --------------------------- //
-export interface RMQTask{
+export interface MountedStatus{
   jobRunId: string,
-  pathId: string,
-  folder: string
+  workerId: string
+  status: boolean
 }
 
 
 export interface TaskEventPayload {
   jobRunId: string;
   status: string;
-  sPath: string;
-  tPath: string | null;
-  workers: string[]
-  taskType: JobType;
-  sPathId: string,
-  workingDirectory: string
+  details: JobRunConfig
 }
   
 
@@ -28,6 +23,10 @@ export interface TaskPayload {
   workerId: string,
   sPath: string,
   tPath: string,
+  sourceWorkingDir: string | null;
+  targetWorkingDir: string | null;
+  excludeFilePatterns: string | null;
+  targetDirectory?:string,
   commands: Record<string, any>[]
 }
 
@@ -35,7 +34,14 @@ export interface WorkerJobRuns {
   jobRunId: string,
   sPathId: string,
   tPathId: string 
-  status: string
+  status: string,
+  options?: {
+    excludeOlderThan: Date,
+    excludeFilePatterns: string | null,
+    preserveAccessTime: boolean,
+    sourceWorkingDir: string | null,
+    targetWorkingDir: string | null;
+  }
 }
 
 

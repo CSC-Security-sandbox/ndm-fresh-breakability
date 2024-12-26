@@ -2,7 +2,8 @@ import { JobType, Protocol } from "src/constants/enums"
 
 export interface UpdateJobRunMappingPayload {
     jobRunId: string,
-    isActive: boolean
+    isActive?: boolean,
+    isMounted?: true,
 }
 
 
@@ -22,5 +23,8 @@ export interface JobRunConfig{
         targetCredential?: Credential
     }
     jobType: JobType,
+    excludeFilePatterns?: string,
+    excludeOlderThan?: Date,
+    preserveAccessTime: boolean
     workers: string[]
 }

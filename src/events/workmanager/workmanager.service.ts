@@ -5,14 +5,13 @@ import { JobRunStatus, OperationStatus, OperationType, TaskStatus, TaskType } fr
 import { EmitterEvents } from "src/constants/events";
 import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
-import { TaskEntity  } from "src/entities/task.entity";
+import { TaskEntity } from "src/entities/task.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
-import { buildRequest, buildScanPayload } from "./workmanager.mapper";
-import { RMQTask, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
-import { setTimeout as delay } from 'timers/promises';
+import { buildScanPayload } from "./workmanager.mapper";
+import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 
 
 @Injectable()
@@ -25,62 +24,41 @@ export class WorkManager{
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
-        private readonly eventEmitter: EventEmitter2
+        private readonly eventEmitter: EventEmitter2,
+
     ){}
-
-
-    /* @Deprecated */
-    rmqTask = async (data: RMQTask) => {
-        const operation = this.operationsRepo.create({
-            jobRunId: data.jobRunId,
-            status: OperationStatus.READY,
-            fPath: data.folder,
-            retryCount: 0,
-            operationType: OperationType.SCAN,
-            request: buildScanPayload(data.folder)
-        })
-        await this.operationsRepo.save(operation)
-        const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
-
-        // Notify worker
-        workers.forEach(async worker => {
-            this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
-                workerId: worker.workerId,
-                socketEvents: SocketEvents.WAKE_UP,
-                payload: { jobRunId: data.jobRunId}
-            })
-        }) 
-    }
-
-
+    
     // --------------------------- Create init Operation --------------------------------//
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
-    async createOperation(payload: TaskEventPayload){
+    async createInitDiscovery(payload: TaskEventPayload){
         try{
-            const request =  buildScanPayload(payload.sPath)
+            const path =  `${payload.details.connection.sourceCredential.workingDirectory}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            this.logger.error(path)
+            const request =  buildScanPayload(path)
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
-                fPath: payload.sPath,
+                fPath: path,
+                sPathId: payload.details.connection.sourceCredential?.pathId,
+                tPathId: payload.details.connection.targetCredential?.pathId,
                 retryCount: 0,
-                operationType: jobTypeToOperationType(payload.taskType),
+                operationType: jobTypeToOperationType(payload.details.jobType),
                 request: request
             })
             await this.operationsRepo.save(operation)
-            // notify to workers
-
-            payload.workers.forEach(worker => {
-                this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
-                    workerId: worker,
-                    socketEvents: SocketEvents.WAKE_UP,
-                    payload: { jobRunId: payload.jobRunId}
-                })
-            })
        
         }catch(e){
             this.logger.error(e)
         }
     }
+
+    // ------------------------------- Update Worker Mount Status -----------------------------------//
+    async updateMountStatus(payload: MountedStatus) {
+        await this.workerJobRunMapRepo.update(
+            {workerId: payload.workerId, jobRunId: payload.jobRunId},
+            {isPathMounted: true}
+        )
+    }  
 
     // --------------------------- Create Un-Scanned Operation --------------------------------//
     createUnScannedTask = async(data:UnScannedRes) => {
@@ -108,7 +86,6 @@ export class WorkManager{
         }
     }
 
-
     // --------------------------- Assign Work --------------------------------//
     assignWork = async (workerId: string) => {
         const jobRunsMapEntity = await this.workerJobRunMapRepo
@@ -116,20 +93,24 @@ export class WorkManager{
         .select([
             'workerJobRunMap',
             'jobRun',
+            'options',
             'jobConfig.sourcePathId',
-            'jobConfig.targetPathId'
+            'jobConfig.targetPathId',
         ])
-        .leftJoin('workerJobRunMap.jobRun', 'jobRun',)
+        .leftJoin('workerJobRunMap.jobRun', 'jobRun')
         .leftJoin('jobRun.jobConfig', 'jobConfig')
+        .leftJoin('jobRun.options', 'options')
         .where('workerJobRunMap.isActive = :isActive', { isActive: true })
         .andWhere('workerJobRunMap.workerId = :workerId', { workerId })
+        .andWhere('workerJobRunMap.isPathMounted = true')
         .getMany();
 
         const jobRun: WorkerJobRuns[] = jobRunsMapEntity.map((it) => ({
             jobRunId: it.jobRunId,
             sPathId: it.jobRun?.jobConfig?.sourcePathId,
             tPathId: it.jobRun?.jobConfig?.targetPathId,
-            status: it.jobRun?.status
+            status: it.jobRun?.status,
+            options: it.jobRun.options,
         }))
 
         for(const job of jobRun) {
@@ -179,6 +160,7 @@ export class WorkManager{
         })
     }
 
+    
     buildTaskPayload = (task: TaskEntity, operation: OperationsEntity[], jobRun: WorkerJobRuns): TaskPayload => {
         return ({
             id: task.id,
@@ -188,7 +170,10 @@ export class WorkManager{
             status: task.status,
             workerId: task.workerId,
             tPath: jobRun.tPathId,
-            commands : operation.map(op=> op.request)
+            excludeFilePatterns: jobRun.options?.excludeFilePatterns,
+            sourceWorkingDir: jobRun.options?.sourceWorkingDir,
+            targetWorkingDir: jobRun.options?.targetWorkingDir,
+            commands : operation.map(op=> op.request),
         })
     }
 
@@ -219,7 +204,7 @@ export class WorkManager{
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            this.logger.warn(isNotCompletedOperation,isNotCompletedTask, task.id)
+            // this.logger.warn(isNotCompletedOperation,isNotCompletedTask, task.id)
             if(!isNotCompletedOperation && !isNotCompletedTask)  {
                 this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
                     jobRunId: task.jobRunId,
