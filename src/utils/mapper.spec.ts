@@ -1,7 +1,7 @@
 
 import { Operations } from 'src/constants/status';
-import { OperationType, Protocol, TaskType } from 'src/constants/enums';
-import { operationsTypeToTaskType, OperationToProtocol } from './mapper';
+import { JobType, OperationType, Protocol, TaskType } from 'src/constants/enums';
+import { jobTypeToOperationType, operationsTypeToTaskType, OperationToProtocol } from './mapper';
 
 describe('OperationToProtocol', () => {
 
@@ -56,5 +56,22 @@ describe('operationsTypeToTaskType', () => {
   it('should throw an error for an invalid operation type', () => {
     const invalidOperation = 'INVALID_OPERATION' as OperationType;
     expect(() => operationsTypeToTaskType(invalidOperation)).toThrowError('Invalid Operation');
+  });
+});
+
+describe('jobTypeToOperationType', () => {
+  it('should return OperationType.SCAN when JobType.DISCOVER is provided', () => {
+    const result = jobTypeToOperationType(JobType.DISCOVER);
+    expect(result).toBe(OperationType.SCAN);
+  });
+
+  it('should throw an error for an invalid job type', () => {
+    const invalidJobType = 'INVALID_JOB_TYPE' as JobType;
+    expect(() => jobTypeToOperationType(invalidJobType)).toThrowError('Invalid Operation');
+  });
+
+  it('should throw an error for an unhandled job type', () => {
+    const unhandledJobType =''; 
+    expect(() => jobTypeToOperationType(unhandledJobType as any)).toThrowError('Invalid Operation');
   });
 });
