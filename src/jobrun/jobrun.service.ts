@@ -18,6 +18,7 @@ import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunConfig, UpdateJobRunMappingPayload } from "./jobrun.types";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class JobRunService {
@@ -34,7 +35,9 @@ export class JobRunService {
     private inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(JobOptionsEntity)
     private optionRepo: Repository<JobOptionsEntity>,
-    private readonly eventEmitter: EventEmitter2
+    private readonly eventEmitter: EventEmitter2,
+
+    private readonly configService: ConfigService
   ) {}
 
   @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
@@ -95,6 +98,7 @@ export class JobRunService {
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
 
+    const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
     const details : JobRunConfig = {
       preserveAccessTime: jobConfig.preserveAccessTime,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
@@ -107,7 +111,7 @@ export class JobRunService {
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: jobConfig?.sourcePath?.fileServer?.config?.workingDirectory
+          workingDirectory: mountBaseDir
         }
       },
       workers: sourceWorkers.map((worker) => worker.workerId),
@@ -122,6 +126,7 @@ export class JobRunService {
         if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
       });
 
+      const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
       details.connection['targetCredential'] = {
         path: jobConfig?.targetPath?.volumePath ,
         pathId : jobConfig?.targetPath?.id ,
@@ -129,7 +134,7 @@ export class JobRunService {
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,
         host: jobConfig?.targetPath?.fileServer?.host,
-        workingDirectory: jobConfig?.targetPath?.fileServer?.config?.workingDirectory
+        workingDirectory: mountBaseDir
       }
       details['workers'] = workers
       return details;
@@ -149,10 +154,11 @@ export class JobRunService {
       this.workerJobRunMapRepo.create({ workerId: worker, isActive: true, isPathMounted: false })
     )
 
+    const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
     const options = this.optionRepo.create({
       excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: details.connection?.sourceCredential?.workingDirectory,
-      targetWorkingDir: details.connection?.targetCredential?.workingDirectory,
+      sourceWorkingDir: mountBaseDir,
+      targetWorkingDir: mountBaseDir,
       preserveAccessTime: details.preserveAccessTime,
       excludeOlderThan: details.excludeOlderThan
     })

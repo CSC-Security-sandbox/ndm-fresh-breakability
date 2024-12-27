@@ -12,6 +12,9 @@ export default registerAs(
         queue: process.env.RABBITMQ_QUEUE || '',
         durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false,
         inventoryQueue: process.env.RABBITMQ_INVENTORY_QUEUE
+    },
+    paths: {
+      mountBaseDir: process.env.MOUNT_BASE_DIR || '/mnt/datamigrate'
     }
   }),
 );
