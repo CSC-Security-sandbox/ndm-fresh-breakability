@@ -151,7 +151,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                workingDirectory: createConfig.workingDirectory.path,
+                workingDirectory: createConfig.workingDirectory?.path || '',
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId
             });
@@ -188,7 +188,7 @@ export class ConfigurationService {
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
         config.updatedBy = userId
-        config.workingDirectory = updateConfig.workingDirectory.path
+        config.workingDirectory = updateConfig.workingDirectory?.path || ''
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {

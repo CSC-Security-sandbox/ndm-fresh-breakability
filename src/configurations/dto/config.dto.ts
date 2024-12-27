@@ -32,7 +32,7 @@ export class FileServersDTO {
     protocol: Protocol;
 
     @ApiProperty({ description: 'Protocol version', enum: ProtocolVersion, example: ProtocolVersion.NFSv4 })
-    @IsNotEmpty()
+    @IsOptional()
     @IsEnum(ProtocolVersion)
     protocolVersion: ProtocolVersion;
 
