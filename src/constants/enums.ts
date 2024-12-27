@@ -8,6 +8,14 @@ export enum Protocol{
     SMB = 'SMB'
 }
 
+export enum ProtocolVersion {
+    NFSv2 = 'NFSv2',
+    NFSv3 = 'NFSv3',
+    NFSv4 = 'NFSv4',
+    SMB2 = 'SMB2',
+    SMB3 = 'SMB3',
+}
+
 export enum ServerType {
     other = 'OtherNAS',
     dell = 'dell',
