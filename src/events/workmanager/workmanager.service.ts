@@ -12,11 +12,12 @@ import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
 import { buildScanPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
+import { ConfigService } from "@nestjs/config";
 
 
 @Injectable()
 export class WorkManager{
-    private readonly logger: Logger = new Logger(WorkManager.name)
+    private readonly logger: Logger = new Logger(WorkManager.name);
     constructor(
         @InjectRepository(OperationsEntity)
         private operationsRepo: Repository<OperationsEntity>,
@@ -25,14 +26,15 @@ export class WorkManager{
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
         private readonly eventEmitter: EventEmitter2,
-
+        private readonly configService: ConfigService
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
     @OnEvent(EmitterEvents.TaskCreate, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
         try{
-            const path =  `${payload.details.connection.sourceCredential.workingDirectory}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
+            const path =  `${mountBaseDir}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
             this.logger.error(path)
             const request =  buildScanPayload(path)
             const operation = this.operationsRepo.create({

@@ -9,6 +9,7 @@ import { TaskEntity } from 'src/entities/task.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { Repository } from 'typeorm';
 import { WorkManager } from './workmanager.service';
+import { ConfigService } from '@nestjs/config';
 
 class MockRepository<T> extends Repository<T> {
     async save(e: any):Promise<any> {
@@ -32,6 +33,7 @@ describe('WorkManager', () => {
   let taskRepo: MockRepository<TaskEntity>;
   let workerJobRunMapRepo: MockRepository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
+  let configService: ConfigService
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -50,10 +52,12 @@ describe('WorkManager', () => {
           useClass: Repository,
         },
         EventEmitter2,
+        ConfigService
       ],
     }).compile();
 
     workManager = module.get<WorkManager>(WorkManager);
+    configService = module.get<ConfigService>(ConfigService);
     operationsRepo = module.get<Repository<OperationsEntity>>(getRepositoryToken(OperationsEntity));
     taskRepo = module.get<MockRepository<TaskEntity>>(getRepositoryToken(TaskEntity));
     workerJobRunMapRepo = module.get<MockRepository<WorkerJobRunMap>>(getRepositoryToken(WorkerJobRunMap));

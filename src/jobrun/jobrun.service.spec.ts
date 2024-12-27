@@ -11,6 +11,7 @@ import { Repository } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
+import { ConfigService } from "@nestjs/config";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -20,6 +21,7 @@ describe("JobRunService", () => {
   let eventEmitter: EventEmitter2;
   let inventoryRepo: Repository<InventoryEntity>;
   let jobOptions: Repository<JobOptionsEntity>
+  let configService: ConfigService
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -86,11 +88,13 @@ describe("JobRunService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        ConfigService,
         EventEmitter2,
       ],
     }).compile();
 
     service = module.get<JobRunService>(JobRunService);
+    configService = module.get<ConfigService>(ConfigService);
     jobRunRepo = module.get<Repository<JobRunEntity>>(
       getRepositoryToken(JobRunEntity)
     );
@@ -218,7 +222,7 @@ describe("JobRunService", () => {
             username: 'source-user',
             password: 'source-pass',
             host: 'source-host',
-            workingDirectory: '/source/working',
+            workingDirectory: undefined,
           },
         },
         workers: ['worker-1', 'worker-2'],
@@ -282,7 +286,7 @@ describe("JobRunService", () => {
             username: 'source-user',
             password: 'source-pass',
             host: 'source-host',
-            workingDirectory: '/source/working',
+            workingDirectory: undefined
           },
           targetCredential: {
             path: '/target/path',
@@ -291,7 +295,7 @@ describe("JobRunService", () => {
             username: 'target-user',
             password: 'target-pass',
             host: 'target-host',
-            workingDirectory: '/target/working',
+            workingDirectory: undefined
           },
         },
         workers: ['worker-2'],
