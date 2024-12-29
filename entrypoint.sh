@@ -6,8 +6,12 @@ if [ "$1" = "--source-vault" ]; then
 fi
 
 if [ "$SOURCE_VAULT" = true ]; then
-  echo "Sourcing vault secrets.."
-  source /vault/secrets/config
+  for env_file in /vault/secrets/*.env; do
+    if [ -f "$env_file" ]; then
+      echo "Sourcing $env_file"
+      source "$env_file"
+    fi
+  done
 fi
 
 echo "Starting admin-service.."
