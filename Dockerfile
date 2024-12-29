@@ -18,9 +18,12 @@ COPY ./src .
 COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
+COPY entrypoint.sh .
         
 RUN npm run build 
 
 EXPOSE 3000
 
-CMD [ "pm2", "start", "dist/main.js", "--name", "admin-service", "--watch",  "--ignore-watch", "node_modules", "--no-daemon"]
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
