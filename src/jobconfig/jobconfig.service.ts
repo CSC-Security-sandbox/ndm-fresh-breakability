@@ -42,6 +42,7 @@ export class JobConfigService {
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
       futureScheduleAt: bulkDiscovery.futureSchedule,
+      firstRunAt: firstRunAt,
       scheduler: ScheduleStatus.SCHEDULING
     })
 
