@@ -1,4 +1,4 @@
-import { JobType } from "src/constants/enums";
+import { JobRunStatus, JobType } from "src/constants/enums";
 import { JobRunConfig } from "src/jobrun/jobrun.types";
 
 export interface MountedStatus{
@@ -34,7 +34,7 @@ export interface WorkerJobRuns {
   jobRunId: string,
   sPathId: string,
   tPathId: string 
-  status: string,
+  status: JobRunStatus,
   options?: {
     excludeOlderThan: Date,
     excludeFilePatterns: string | null,
