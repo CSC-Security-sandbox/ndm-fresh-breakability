@@ -1,5 +1,3 @@
-import { JobType } from "src/constants/enums"
-import { TaskEventPayload } from "./workmanager.types"
 
 export const buildScanPayload = (path: string) => ({
     fPath: path,
