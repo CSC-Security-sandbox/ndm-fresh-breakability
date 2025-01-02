@@ -168,6 +168,7 @@ export class JobConfigService {
         'jobconfig.id AS jobConfigId',
         'jobconfig.jobType AS jobType',
         'jobconfig.status AS jobConfigStatus',
+        'jobconfig.firstRunAt AS firstRunAt',
         'jobconfig.sourcePathId AS sourcePath',
         'jobconfig.targetPathId AS targetPath',
         'jobconfig.futureScheduleAt AS futureSchedule',
@@ -202,7 +203,7 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate: job.futureschedule? parser.parseExpression(job.futureschedule).next().toDate(): null,
+        nextScheduleDate:job.jobtype === JobType.DISCOVER ? job.firstrunat : job.futureschedule? parser.parseExpression(job.futureschedule).next().toDate(): null,
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
