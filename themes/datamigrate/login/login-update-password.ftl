@@ -51,7 +51,7 @@
                 <div class="text-2xl mb-4">
                     Reset Password
                 </div>
-                <div class="text-base-secondary text-sm leading-tight py-2 mb-10">
+                <div class="text-gray-500 text-sm leading-tight py-2 mb-10">
                     Your new password must be different from <br /> previous used password.
                 </div>
 
@@ -63,9 +63,9 @@
                                 ${msg("passwordNew")}
                             </label>
                             <div class="relative ${properties.kcInputWrapperClass!}">
-                                <input type="password" id="password-new" name="password-new" class="${properties.kcInputClass!}" autocomplete="new-password" placeholder="Enter ${msg("passwordNew")}" aria-invalid="<#if messagesPerField.existsError('password')>true</#if>" />
+                                <input type="password" id="password-new" name="password-new" class="${properties.kcInputClass!}" autocomplete="new-password" placeholder="${msg("passwordNew")}" aria-invalid="<#if messagesPerField.existsError('password')>true</#if>" />
                                 <button type="button" id="toggle-password-new" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">
-                                    <i id="eye-icon-new" class="fas fa-eye" style="margin-right:1rem;"></i>
+                                    <i id="eye-icon-new" class="fa-regular fa-eye" style="margin-right:1rem;"></i>
                                 </button>
                             </div>
                             <#if messagesPerField.existsError('password')>
@@ -96,7 +96,7 @@
                             <div class="relative ${properties.kcInputWrapperClass!}">
                                 <input type="password" id="password-confirm" name="password-confirm" class="${properties.kcInputClass!}" autocomplete="new-password" placeholder="Confirm ${msg("password")}" aria-invalid="<#if messagesPerField.existsError('password-confirm')>true</#if>" />
                                 <button type="button" id="toggle-password-confirm" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">
-                                    <i id="eye-icon-confirm" class="fas fa-eye" style="margin-right:1rem;"></i>
+                                    <i id="eye-icon-confirm" class="fa-regular fa-eye" style="margin-right:1rem;"></i>
                                 </button>
                             </div>
                             <#if messagesPerField.existsError('password-confirm')>
