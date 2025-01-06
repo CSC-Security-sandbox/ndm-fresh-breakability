@@ -1,15 +1,15 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { RabbitMq } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { FindManyOptions, In, Repository } from 'typeorm';
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
+import { validate as isUUID } from 'uuid';
 import { Credentials } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
-import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { RabbitMq } from 'src/constants/enums';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 
 
 
@@ -27,8 +27,8 @@ export class ConfigurationService {
         
     ) {}
 
-    async getAllConfig(findallConfigPageDto: FindallConfigPageDto) {
-        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findallConfigPageDto;
+    async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
+        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findAllConfigPageDto;
         
         const findOptions: FindManyOptions<ConfigEntity> = {
           where: filter, order: { [sort]: order }, 
