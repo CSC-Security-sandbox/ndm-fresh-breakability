@@ -49,8 +49,8 @@ export class LoggerModule {
                     })
                 })
             ],
-            exports: [LoggerModule, RequestLoggerMiddleware, LoggerFactory],
-            providers:[RequestLoggerMiddleware, LoggerFactory]
+            exports: [LoggerModule, RequestLoggerMiddleware, LoggerFactory, LoggerService],
+            providers:[RequestLoggerMiddleware, LoggerFactory, LoggerService]
         }
     }
 }

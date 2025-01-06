@@ -3,3 +3,4 @@ export * from "./config/logger.type"
 export * from "./logger/logger.module"
 export * from "./middleware/request-logger.middleware"
 export * from "./logger/logger.factory"
+export * from './logger/logger.service'
