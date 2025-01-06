@@ -5,6 +5,7 @@ import 'winston-daily-rotate-file';
 import loggerConfig from "../config/logger.config";
 import { RequestLoggerMiddleware } from "../middleware/request-logger.middleware";
 import { format, transports } from "winston";
+import { LoggerService } from "./logger.service";
 
 
 @Module({})
@@ -47,8 +48,8 @@ export class LoggerModule {
                     })
                 })
             ],
-            exports: [LoggerModule, RequestLoggerMiddleware],
-            providers:[RequestLoggerMiddleware]
+            exports: [LoggerModule, RequestLoggerMiddleware, LoggerService],
+            providers:[RequestLoggerMiddleware, LoggerService]
         }
     }
 }
