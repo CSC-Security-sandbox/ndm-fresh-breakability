@@ -1,11 +1,12 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 
 @Injectable({ scope: Scope.TRANSIENT }) 
 export class LoggerService {
   private parentContext: string;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger) {}
 
   setParentContext(context: string) {
     this.parentContext = context;
