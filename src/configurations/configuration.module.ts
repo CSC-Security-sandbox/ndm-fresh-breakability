@@ -10,11 +10,14 @@ import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import appConfig from 'src/config/app.config';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+
 @Module({
     imports: [
+        LoggerModule.forRoot(),
         ConfigModule.forRoot({ load: [appConfig] }),
         TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity]),
-        AuthKeycloakModule
+        AuthKeycloakModule,
     ],
     providers:[ConfigurationService, RabbitMQService],
     controllers: [ConfigurationController]

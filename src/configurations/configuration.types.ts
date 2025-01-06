@@ -16,6 +16,7 @@ export interface FetchMountMsg{
 }
 
 export type UserDetails = {
+    trackId?: string;
     user: {
         id: string;
         roles: Role[];

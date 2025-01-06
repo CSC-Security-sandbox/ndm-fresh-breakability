@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RabbitMq } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
@@ -10,12 +10,13 @@ import { validate as isUUID } from 'uuid';
 import { Credentials } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 
 
 @Injectable()
 export class ConfigurationService {
-    private logger: Logger = new Logger(ConfigurationService.name)
+    private logger : LoggerService
     constructor(
         @InjectRepository(ConfigEntity)
         private readonly configEntity: Repository<ConfigEntity>,
@@ -23,9 +24,11 @@ export class ConfigurationService {
         private readonly fileServerEntity: Repository<FileServerEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
-        private rabbitMQService: RabbitMQService
-        
-    ) {}
+        private rabbitMQService: RabbitMQService,
+        private loggerFactory: LoggerFactory
+    ) {
+        this.logger = this.loggerFactory.create(ConfigurationService.name)
+    }
 
     async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
         const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findAllConfigPageDto;
@@ -114,8 +117,7 @@ export class ConfigurationService {
                 }
             }
         });
-
-        
+     
         if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
         return config
     }

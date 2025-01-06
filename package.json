@@ -49,7 +49,7 @@
     "typeorm": "^0.3.20",
     "uuid": "^10.0.0",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.1",
-    "@netapp-cloud-datamigrate/logger-lib": "0.0.2"
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

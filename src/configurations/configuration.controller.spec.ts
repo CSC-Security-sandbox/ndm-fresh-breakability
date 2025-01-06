@@ -2,12 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 
-import { FindallConfigPageDto } from './dto/findallconfig.dto';
+
 
 import { ConfigurationType } from 'src/constants/enums';
 import { ConfigDTO } from './dto/config.dto';
 import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
@@ -76,7 +77,7 @@ describe('ConfigurationController', () => {
        }
       mockConfigurationService.createConfiguration.mockResolvedValue(createdConfig);
 
-      const result = await controller.createConfiguration(createConfigDTO);
+      const result = await controller.createConfiguration(createConfigDTO,user);
       expect(result).toEqual(createdConfig);
       // expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO, user.user.id);
     });
@@ -84,7 +85,7 @@ describe('ConfigurationController', () => {
 
   describe('getConfigs', () => {
     it('should return paginated list of configurations', async () => {
-      const findAllConfigPageDto: FindallConfigPageDto = { page: "1", limit: "10" };
+      const findAllConfigPageDto: FindAllConfigPageDto = { page: "1", limit: "10" };
       const configList = [];
 
       mockConfigurationService.getAllConfig.mockResolvedValue(configList);
@@ -138,7 +139,7 @@ describe('ConfigurationController', () => {
 
       mockConfigurationService.updateConfiguration.mockResolvedValue(updatedConfig);
 
-      const result = await controller.update(configId, updateConfigDTO);
+      const result = await controller.update(configId, updateConfigDTO, user);
       expect(result).toEqual(updatedConfig);
       // expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO, user.user.id);
     });
@@ -147,7 +148,7 @@ describe('ConfigurationController', () => {
   describe('remove', () => {
     it('should delete configuration by ID', async () => {
       const configId = '1';
-      const deleteResult = { /* mock delete response */ };
+      const deleteResult = { };
 
       mockConfigurationService.remove.mockResolvedValue(deleteResult);
 
