@@ -19,7 +19,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       trackId,
       message: `Incoming request: [${req.method}] ${req.url}`,
       ip: req.ip,
-      headers: req.headers,
+      headers: req.headers
     });
 
     res.on('finish', () => {
