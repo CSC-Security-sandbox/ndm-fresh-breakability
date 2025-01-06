@@ -1,0 +1,89 @@
+appName: "job-service"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  repository: jobs-service
+
+annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "datamigrate-role"
+    vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+    vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
+    vault.hashicorp.com/agent-inject-status: "update"
+    vault.hashicorp.com/agent-inject-template-postgres.env: |
+      {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+      export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
+      export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+      {{- end }}
+    vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
+      {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
+      export RABBITMQ_URL=amqp://{{ .Data.RABBITMQ_USERNAME }}:{{ .Data.RABBITMQ_PASSWORD }}@rabbitmq.rabbitmq.svc.cluster.local:5672
+      {{- end }}
+    
+serviceAccountName: datamigrate-vault-sa
+
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+  - name: APP_PORT
+    value: "3000"
+  - name: APP_HOST
+    value: "$(MY_HOST_IP)"
+  - name: DB_PORT
+    value: "5432"
+  - name: DB_NAME
+    value: "datamigrate"
+  - name: DB_HOST
+    value: "postgres-postgresql.postgres.svc.cluster.local"
+  - name: SCHEMA
+    value: "migrateadmin"
+
+  # - name: DB_USER # from secret
+  #   value: "dmadmin"
+  # - name: DB_PASSWORD # from secret
+  #   value: "dmadmin"
+  # - name: RABBITMQ_URL # from secret
+  #   value: "amqp://guest:guest@rabbitmq1:5672"
+
+  - name: REPLICA_INDEX
+    value: "$(POD_NAME)"
+  - name: RABBITMQ_URL_EXCHANGE
+    value: "defaultEX"
+  - name: RABBITMQ_URL_ROUTING_KEY
+    value: "socketConnetion"
+  - name: RABBITMQ_QUEUE
+    value: "jobservice-queue"
+  - name: RABBITMQ_QUEUE_IS_DURABLE
+    value: "true"
+  - name: RABBITMQ_INVENTORY_QUEUE
+    value: "inventory"
+  - name: SERVICE
+    value: "job-service"
+
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(workers|jobs|job-run|bulk-discovery)/*"
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  ingressClassName: public
+  tls:
+    enabled: false
+  host: ""

@@ -13,31 +13,17 @@ export AWS_ACCESS_KEY_ID="<your-access-key>"
 export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
 ```
 
-## Storing Docker Images with MicroK8s Registry
-
-Create "datamigrate" directory at root level to store tar file of docker images
-
-### Building the Docker Image
-
-To build a Docker image with a specific tag for the local MicroK8s registry, use the following command:
+## Exporting Azure Variables 
 ```
-docker build -t localhost:32000/data-migrate-ui:1.0.4 .
+export ARM_CLIENT_ID="<azure_client_id>"
+export ARM_CLIENT_SECRET="<azure_client_secret>"
+export ARM_SUBSCRIPTION_ID="<azure_subscription_id>"
+export ARM_TENANT_ID="<azure_tenant_id>"
 ```
-
-### Saving the Docker Image
-
-Once the image is built, save it to a file in the datamigrate directory. Replace <version> with the appropriate version, e.g., 1.0.4.
-You can add multiple docker images in this tar file by passing additional docker images
-```
-docker save -o datamigrate/datamigrate_1.0.4.tar localhost:32000/data-migrate-ui:1.0.4
-```
-
-Note the version of the tar file as it will be later used in packer configuration.
 
 ## Running the Packer Command
 
 Navigate to the packer/cloud directory to execute the Packer build process.
-In the cloud-packer.json, update the "datamigrate_release_version" variable to the value of version in the tar file
 
 ### Initialize Packer
 

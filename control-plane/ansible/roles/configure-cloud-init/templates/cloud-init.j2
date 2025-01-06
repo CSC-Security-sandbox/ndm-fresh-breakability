@@ -1,0 +1,4 @@
+#cloud-config
+runcmd:
+  - PRIVATE_IP=$(hostname -I | awk '{print $1}')
+  - su -c "microk8s enable metallb:${PRIVATE_IP}/32" - datamigrate

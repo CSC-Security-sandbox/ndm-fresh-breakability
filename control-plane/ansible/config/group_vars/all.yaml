@@ -1,0 +1,110 @@
+---
+
+# Microservices release tags of docker images
+data_migrate_ui_tag: "ova"
+config_service_tag: "ova"
+db_writer_service_tag: "ova"
+job_service_tag: "ova"
+file_service_tag: "ova"
+reports_service_tag: "ova"
+admin_service_tag: "ova"
+keycloak_customizations_tag: "ova"
+
+acr_registry: "datamigratedev.azurecr.io"
+azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
+azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
+
+vm_username: "datamigrate"
+
+# Version management
+microk8s_version: "1.31/stable"
+microk8s_disable_snap_autoupdate: false
+
+# Cluster CIDR Values
+service_cidr: "10.152.183.0/24"
+pod_network_cidr: "10.1.0.0/16"
+
+# Plugin configuration
+microk8s_dns_resolvers: 8.8.8.8,8.8.4.4
+registry_size: 30Gi
+microk8s_plugins:
+  dns: "{{ microk8s_dns_resolvers }}"     # CoreDNS
+  host-access: true                       # Allow Pods connecting to Host services smoothly
+  ingress: true                           # Ingress controller for external access
+  metrics-server: true                    # K8s Metrics Server for API access to service metrics
+  rbac: true                              # Role-Based Access Control for authorisation
+  hostpath-storage: true                  # Storage class; allocates storage from host directory
+  registry: false                         # Private image registry exposed on localhost:32000
+  dashboard: true                         # The Kubernetes dashboard
+  ambassador: false                       # Ambassador API Gateway and Ingress
+  cilium: false                           # SDN, fast with full network policy
+  fluentd: false                          # Elasticsearch-Fluentd-Kibana logging and monitoring
+  gpu: false                              # Automatic enablement of Nvidia CUDA
+  helm: false                             # Helm 2 - the package manager for Kubernetes
+  helm3: true                             # Helm 3 - Kubernetes package manager
+  istio: false                            # Core Istio service mesh services
+  jaeger: false                           # Kubernetes Jaeger operator with its simple config
+  knative: false                          # The Knative framework on Kubernetes.
+  kubeflow: false                         # Kubeflow for easy ML deployments
+  linkerd: false                          # Linkerd is a service mesh for Kubernetes and other frameworks
+  metallb: false                          # Loadbalancer for your Kubernetes cluster
+  multus: false                           # Multus CNI enables attaching multiple network interfaces to pods
+  prometheus: false                       # Prometheus operator for monitoring and logging
+  traefik: false                          # another ingress
+  portainer: false                        # Container management dashboard
+  keda: false                             # Kubernetes Event-driven Autoscaling operator.
+  kata: false                             # A secure container runtime with lightweight virtual machines
+  openebs: false                          # openebs storage
+  openfaas: false                         # serverless
+
+helm3_repositories:
+  - name: stable
+    url: https://charts.helm.sh/stable
+
+# users to make members of microk8s group
+users: 
+  - datamigrate
+
+# for setting up custom certificate request.  Set to template name to enable
+#microk8s_csr_template: null
+
+# when /snap/bin is not in the PATH
+microk8s_bin_path: ""
+
+ports_to_open:
+  - 80/tcp
+  - 8080/tcp
+  - 53/tcp
+  - 53/udp
+  - 123/udp
+  - 179/tcp
+  - 443/tcp
+  - 2379-2381/tcp
+  - 5432/tcp
+  - 6443/tcp
+  - 6781-6784/tcp
+  - 6781-6784/udp
+  - 8090-8091/tcp
+  - 8472/udp
+  - 9153/tcp
+  - 10248-10260/tcp
+  - 4789/udp
+  - 5473/tcp
+  - 8443/tcp
+  - 8472/udp
+  - 9099/tcp
+  - 27017-27019/tcp
+  - 30000-65535/tcp
+  - 9000-9005/tcp
+
+postgres_version: 16.2.5
+postgres_data_volume_size: 8Gi
+
+rabbitmq_version: 15.2.1
+rabbitmq_replicas: 3
+rabbitmq_data_volume_size: 8Gi
+
+vault_version: 0.29.1
+vault_data_volume_size: 8Gi
+
+keycloak_version: 24.3.2

@@ -1,0 +1,20 @@
+---
+
+- name: delete postgres-data directory if uninstall flag is defined 
+  file:
+    path: /data/postgres-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: postgres_uninstall is defined
+
+- name: create postgres-data directory 
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: /data/postgres-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755

@@ -1,0 +1,7 @@
+---
+- name: Configure microk8s image registry with datamigrate application images
+  hosts: default
+  become: yes
+  gather_facts: yes
+  roles:
+    - { role:  ../roles/kubernetes/microk8s/configure-registry, tags: 'configure-registry' }

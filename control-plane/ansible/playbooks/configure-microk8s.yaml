@@ -1,0 +1,9 @@
+---
+- name: Install and configure microk8s cluster, users, addons
+  hosts: default
+  become: yes
+  gather_facts: yes
+  roles:
+    - { role:  ../roles/kubernetes/microk8s/install-microk8s, tags: 'install-microk8s' }
+    - { role:  ../roles/kubernetes/microk8s/configure-microk8s-user, tags: 'configure-microk8s-user' }
+    - { role:  ../roles/kubernetes/microk8s/configure-addons, tags: 'configure-addons' }

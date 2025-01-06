@@ -1,0 +1,89 @@
+appName: "admin-service"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  repository: admin-service
+
+annotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/role: "datamigrate-role"
+  vault.hashicorp.com/agent-inject-status: "update"
+  vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
+  vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-template-keycloak.env: |
+    {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
+    export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
+    export KEYCLOAK_ADMIN_USERNAME="{{ .Data.KEYCLOAK_ADMIN_USER }}"
+    export KEYCLOAK_ADMIN_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-postgres.env: |
+    {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+    export DATABASE_USERNAME="{{ .Data.POSTGRES_DMADMIN_USER }}"
+    export DATABASE_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    {{- end }}
+    
+    
+serviceAccountName: datamigrate-vault-sa
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: DATABASE_HOST
+    value: "postgres-postgresql.postgres.svc.cluster.local"
+  - name: DATABASE_PORT
+    value: "5432"
+
+  # - name: DATABASE_USERNAME # from secret
+  #   value: "dmadmin"
+  # - name: DATABASE_PASSWORD # from secret
+  #   value: "dmadmin"
+  # - name: KEYCLOAK_CLIENT_SECRET # from secret
+  #   value: "123"
+  # - name: KEYCLOAK_ADMIN_USERNAME # from secret
+  #   value: "admin"
+  # - name: KEYCLOAK_ADMIN_PASSWORD # from secret
+  #   value: "admin"
+
+  - name: KEYCLOAK_ADMIN_CLIENT
+    value: "admin-cli"
+  - name: DATABASE_NAME
+    value: "datamigrate"
+  - name: DATABASE_SCHEMA
+    value: "migrateadmin"
+  - name: DATABASE_TYPE
+    value: "postgres"
+  - name: AUTOLOAD_ENTITIES
+    value: "true"
+  - name: SYNCHRONIZE
+    value: "false"
+  - name: KEYCLOAK_BASE_URL
+    value: "https://$(MY_HOST_IP)/keycloak"
+  - name: SWAGGER_BASEURL
+    value: "https://$(MY_HOST_IP)"
+  - name: KEYCLOAK_REALM
+    value: "datamigrate"
+  - name: KEYCLOAK_CLIENT_ID
+    value: "datamigrate-client"
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  
+  trailingPath: "(health|api-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects)/*"
+  ingressClassName: public
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  tls:
+    enabled: false
+  host: ""

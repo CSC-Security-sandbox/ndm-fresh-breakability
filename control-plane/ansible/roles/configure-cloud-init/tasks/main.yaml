@@ -1,0 +1,10 @@
+# File: setup_metallb_cloudinit/tasks/main.yml
+
+- name: Copy cloud-init configuration
+  become: yes
+  copy:
+    src: ./templates/cloud-init.j2
+    dest: /etc/cloud/cloud.cfg.d/99-microk8s-init.cfg
+    owner: root
+    group: root
+    mode: '0644'

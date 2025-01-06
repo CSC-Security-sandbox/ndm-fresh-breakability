@@ -1,0 +1,7 @@
+---
+- name: Configure keycloak
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-keycloak, tags: 'configure-keycloak' }

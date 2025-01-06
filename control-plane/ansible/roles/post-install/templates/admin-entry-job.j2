@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: admin-entry-job
+spec:
+  ttlSecondsAfterFinished: 100
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "datamigrate-role"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
+        vault.hashicorp.com/agent-inject-status: "update"
+    spec:
+      serviceAccountName: datamigrate-vault-sa
+      volumes:
+      - name: admin-entry-volume
+        configMap:
+          name: admin-entry-config  
+      containers:
+      - name: admin-entry-container
+        image: alpine:latest
+        command:
+        - "sh"
+        - "-c"
+        - |
+          apk add --no-cache bash
+          bash /scripts/admin_entry.sh
+        volumeMounts:
+        - name: admin-entry-volume
+          mountPath: /scripts          
+      restartPolicy: Never

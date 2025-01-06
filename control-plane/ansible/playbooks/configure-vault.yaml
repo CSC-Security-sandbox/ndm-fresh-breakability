@@ -1,0 +1,21 @@
+---
+- name: Configure vault data directory
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-vault/vault-data, tags: 'vault-data' }
+
+- name: Install vault
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-vault/install-vault, tags: 'install-vault' }
+
+- name: Setup vault
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-vault/setup-vault, tags: 'setup-vault' }

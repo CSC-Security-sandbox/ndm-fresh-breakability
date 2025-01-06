@@ -1,0 +1,112 @@
+---
+- name: Creates rabbitmq directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/rabbitmq
+    state: directory
+
+- name: generate random passwords for rabbitmq
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export RABBITMQ_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/rabbitmq-secrets/rabbitmq-creds | jq -r .data.RABBITMQ_PASSWORD)
+    echo "RABBITMQ_PASSWORD:$RABBITMQ_PASSWORD"
+  args:
+    executable: /bin/bash      
+  register: rabbitmq_passwords
+  
+- name: Set Base64-encoded passwords as facts
+  set_fact:
+    rabbitmq_root_password_base64: "{{ (rabbitmq_passwords.stdout_lines | select('match', 'RABBITMQ_PASSWORD:.*') | map('regex_replace', 'RABBITMQ_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+
+- name: rabbitmq-namespace template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/rabbitmq-namespace.j2 dest=$HOME/rabbitmq/rabbitmq-namespace.yaml
+
+- name: rabbitmq-storageclass template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/rabbitmq-storageclass.j2 dest=$HOME/rabbitmq/rabbitmq-storageclass.yaml
+
+- name: rabbitmq-pv template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/rabbitmq-pv.j2 dest=$HOME/rabbitmq/rabbitmq-pv.yaml
+
+- name: rabbitmq-secret template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/rabbitmq-secret.j2 dest=$HOME/rabbitmq/rabbitmq-secret.yaml
+
+- name: rabbitmq-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/rabbitmq-values.j2 dest=$HOME/rabbitmq/rabbitmq-values.yaml
+
+- name: remove previous installation
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm delete rabbitmq --namespace "rabbitmq"
+    kubectl delete pvc --all --namespace "rabbitmq"
+    kubectl delete -f $HOME/rabbitmq/rabbitmq-pv.yaml
+    kubectl delete -f $HOME/rabbitmq/rabbitmq-storageclass.yaml
+    kubectl delete -f $HOME/rabbitmq/rabbitmq-secret.yaml
+    kubectl delete -f $HOME/rabbitmq/rabbitmq-namespace.yaml  
+  when: rabbitmq_uninstall is defined
+  ignore_errors: yes 
+  args:
+    chdir: $HOME
+
+- name: setup namespace, persistentvolume for rabbitmq
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/rabbitmq/rabbitmq-namespace.yaml
+    kubectl apply -f $HOME/rabbitmq/rabbitmq-storageclass.yaml
+    kubectl apply -f $HOME/rabbitmq/rabbitmq-pv.yaml
+    kubectl apply -f $HOME/rabbitmq/rabbitmq-secret.yaml
+  args:
+    chdir: $HOME
+
+- name: Deploy rabbitmq helm chart
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm upgrade --install rabbitmq oci://registry-1.docker.io/bitnamicharts/rabbitmq -f $HOME/rabbitmq/rabbitmq-values.yaml --version "{{ rabbitmq_version }}" --namespace "rabbitmq"
+    exit 0
+  args:
+    executable: /bin/bash      
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Helm Install (rabbitmq): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for 20 seconds before waiting for pods to come up
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: wait for pods to come up
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: kubectl wait --namespace="rabbitmq" --for=condition=Ready pod --all 
+  register: kubectl_get_pods
+  until: kubectl_get_pods.stdout|split('\n')|length == rabbitmq_replicas
+  retries: 10
+  delay: 12
+  ignore_errors: yes
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Get pods (rabbitmq): {{ kubectl_get_pods.stdout | split('\n') }}"
+  ignore_errors: yes
+
+- name: Delete rabbitmq directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/rabbitmq
+    state: absent

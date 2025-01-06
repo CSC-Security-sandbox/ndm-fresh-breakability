@@ -1,0 +1,111 @@
+---
+- name: Creates keycloak directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/keycloak
+    state: directory
+  
+- name: get passwords for keycloak from vault
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_ADMIN_PASSWORD)
+    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
+    echo "POSTGRES_DMADMIN_PASSWORD:$POSTGRES_DMADMIN_PASSWORD"
+    echo "KEYCLOAK_ADMIN_PASSWORD:$KEYCLOAK_ADMIN_PASSWORD"
+  register: keycloak_passwords
+  
+- name: Set passwords as facts
+  set_fact:
+    keycloak_admin_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_ADMIN_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_ADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    postgres_dmadmin_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'POSTGRES_DMADMIN_PASSWORD:.*') | map('regex_replace', 'POSTGRES_DMADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+
+- name: Keycloak namespace
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/keycloak-namespace.j2 dest=$HOME/keycloak/keycloak-namespace.yaml
+
+- name: keycloak-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/keycloak-values.j2 dest=$HOME/keycloak/keycloak-values.yaml
+
+- name: keycloak-secret template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/keycloak-secret.j2 dest=$HOME/keycloak/keycloak-secret.yaml
+
+- name: remove previous installation
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm delete keycloak --namespace "keycloak"
+    kubectl delete -f $HOME/keycloak/keycloak-secret.yaml
+    kubectl delete -f $HOME/keycloak/keycloak-namespace.yaml
+  when: keycloak_uninstall is defined    
+  args:
+    chdir: $HOME
+  ignore_errors: yes
+
+- name: setup namespace
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/keycloak/keycloak-namespace.yaml
+    kubectl apply -f $HOME/keycloak/keycloak-secret.yaml
+  args:
+    chdir: $HOME
+  
+- name: Create acr pull secert
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create secret docker-registry azure-dev-acr-creds \
+        --namespace keycloak \
+        --docker-server={{ acr_registry }} \
+        --docker-username={{ azure_client_id }} \
+        --docker-password={{ azure_client_secret }}
+  ignore_errors: yes
+
+- name: Deploy keycloak helm chart
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    
+    helm upgrade --install keycloak oci://registry-1.docker.io/bitnamicharts/keycloak -f $HOME/keycloak/keycloak-values.yaml --version "{{ keycloak_version }}" --namespace "keycloak"
+    exit 0
+  args:
+    executable: /bin/bash      
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Kubectl deployment(keycloak): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for 20 seconds before waiting for pods to come up
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: wait for pods to come up
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: kubectl wait --namespace="keycloak" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  until: kubectl_get_pods.stdout|split('\n')|length == 1
+  retries: 6
+  delay: 20
+  ignore_errors: yes
+
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Get pods (keycloak): {{ kubectl_get_pods.stdout | split('\n') }}"
+  ignore_errors: yes
+
+- name: Delete keycloak directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/keycloak
+    state: absent
