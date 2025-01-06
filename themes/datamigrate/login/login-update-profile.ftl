@@ -25,7 +25,7 @@
                         <div class="text-2xl mb-4">
                             ${msg("Your Details")}
                         </div>
-                        <div class="text-base-secondary text-sm leading-tight py-2 mb-4">
+                        <div class="text-gray-500 text-sm leading-tight py-2 mb-4">
                             Please provide your name and email.
                         </div>
                         <form

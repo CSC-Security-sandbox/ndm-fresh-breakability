@@ -28,7 +28,7 @@
                 <div class="netappLogo"></div>
                 <div class="login-card text-center bg-white shadow-md rounded-lg p-8">
                     <div class="text-2xl mb-2">Welcome!</div>
-                    <div class="text-base-secondary text-sm leading-tight py-2 mb-10">Log in to DataMigrate</div>
+                    <div class="text-gray-500 text-sm leading-tight py-2 mb-10">Log in to DataMigrate</div>
                     <div>
                         <form
                             id="kc-form-login"
@@ -68,7 +68,7 @@
                                             placeholder="Enter ${msg("password")}" />
                                         <!-- Show/Hide Password Button -->
                                         <button type="button" id="toggle-password" class="eyeIconClass right-4" >
-                                            <i id="eye-icon" class="fas fa-eye"></i> <!-- Show Icon -->
+                                            <i id="eye-icon" class="fa-regular fa-eye"></i> <!-- Show Icon -->
                                         </button>
                                         <!-- Display Password Error -->
                                     
@@ -76,9 +76,9 @@
                                 </div>
 
                                 <!-- Submit Button --> 
-                                <#if messagesPerField.existsError('password')>
-                                    <div class="text-red-500 text-sm my-4">
-                                        ${kcSanitize(messagesPerField.get('password'))?no_esc}
+                                <#if message?has_content>
+                                    <div class="text-red-500 text-sm">
+                                      ${kcSanitize(message.summary)?no_esc}
                                     </div>
                                 </#if>
                                 <div class="w-full">
