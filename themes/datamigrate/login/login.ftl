@@ -76,9 +76,9 @@
                                 </div>
 
                                 <!-- Submit Button --> 
-                                <#if messagesPerField.existsError('password')>
-                                    <div class="text-red-500 text-sm my-4">
-                                        ${kcSanitize(messagesPerField.get('password'))?no_esc}
+                                <#if message?has_content>
+                                    <div class="text-red-500 text-sm">
+                                      ${kcSanitize(message.summary)?no_esc}
                                     </div>
                                 </#if>
                                 <div class="w-full">
