@@ -37,7 +37,6 @@ export const jobTypeToOperationType = (type: JobType) => {
 export const nextDate = (jobType: string, runDate: Date, cron: string) => {
     switch(jobType) {
         case JobType.DISCOVER:
-            const res = runDate && runDate > new Date() ? runDate : null;
             return runDate && runDate > new Date() ? runDate : null;
         default:
             return cron ? parser.parseExpression(cron).next().toDate(): null
