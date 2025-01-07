@@ -143,8 +143,8 @@ describe('DiscoveryService', () => {
 
     it('should throw NotFoundException when no files exist', async () => {
       jest.spyOn(fs, 'existsSync')
-        .mockImplementationOnce(() => true) // for directory
-        .mockImplementation(() => false); // for files
+        .mockImplementationOnce(() => true)
+        .mockImplementation(() => false);
 
       await expect(
         service.getReportsAsZip(['job123'], 'TYPE1')
@@ -172,8 +172,8 @@ describe('DiscoveryService', () => {
     it('should log warning when specific file is not found', async () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       jest.spyOn(fs, 'existsSync')
-        .mockImplementationOnce(() => true) // for directory
-        .mockImplementationOnce(() => false); // for file
+        .mockImplementationOnce(() => true)
+        .mockImplementationOnce(() => false);
 
       await expect(
         service.getReportsAsZip(['job123'], 'TYPE1')

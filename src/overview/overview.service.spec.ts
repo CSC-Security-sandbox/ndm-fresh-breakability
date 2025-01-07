@@ -213,35 +213,6 @@ describe('OverviewService', () => {
   });
 
   describe('where clause construction', () => {
-    // it('should build correct where clause with all parameters', async () => {
-    //   await service.getStorageAndJobsOverview('project1', 'server1', 'job1');
-      
-    //   expect(mockProjectRepository.find).toHaveBeenCalledWith({
-    //     where: {
-    //       id: 'project1',
-    //       configs: {
-    //         fileServers: {
-    //           id: 'server1',
-    //           volumes: {
-    //             jobConfig: {
-    //               jobRunDetails: {
-    //                 status: JobRunStatus.Completed
-    //               }
-    //             }
-    //           }
-    //         }
-    //       }
-    //     },
-    //     relations: [
-    //       'configs',
-    //       'configs.fileServers',
-    //       'configs.fileServers.volumes',
-    //       'configs.fileServers.volumes.jobConfig',
-    //       'configs.fileServers.volumes.jobConfig.jobRunDetails'
-    //     ]
-    //   });
-    // });
-
     it('should build correct where clause with fileServerId only', async () => {
       await service.getStorageAndJobsOverview(null, 'server1', null);
       
