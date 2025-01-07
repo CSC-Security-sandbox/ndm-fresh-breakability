@@ -37,7 +37,7 @@ export class JobConfigService {
       where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
     })
    
-    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED}, {
+    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
