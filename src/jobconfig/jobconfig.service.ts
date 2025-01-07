@@ -219,8 +219,6 @@ export class JobConfigService {
         configName: job.configname
       });
     });
-    console.log('kajsbdksajb')
-    this.logger.error('askdhaskdbhaskdbask')
     return payload
   }
 

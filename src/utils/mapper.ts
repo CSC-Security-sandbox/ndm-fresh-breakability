@@ -35,13 +35,9 @@ export const jobTypeToOperationType = (type: JobType) => {
 }
 
 export const nextDate = (jobType: string, runDate: Date, cron: string) => {
-    console.log('asdlnasln')
     switch(jobType) {
         case JobType.DISCOVER:
             const res = runDate && runDate > new Date() ? runDate : null;
-            console.log(res)
-            console.log(runDate)
-            console.log(typeof runDate)
             return runDate && runDate > new Date() ? runDate : null;
         default:
             return cron ? parser.parseExpression(cron).next().toDate(): null
