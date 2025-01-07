@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
-
-
-
 import { ConfigurationType } from 'src/constants/enums';
 import { ConfigDTO } from './dto/config.dto';
 import { UserDetails } from './configuration.types';
@@ -79,7 +76,6 @@ describe('ConfigurationController', () => {
 
       const result = await controller.createConfiguration(createConfigDTO,user);
       expect(result).toEqual(createdConfig);
-      // expect(service.createConfiguration).toHaveBeenCalledWith(createConfigDTO, user.user.id);
     });
   });
 
@@ -141,7 +137,6 @@ describe('ConfigurationController', () => {
 
       const result = await controller.update(configId, updateConfigDTO, user);
       expect(result).toEqual(updatedConfig);
-      // expect(service.updateConfiguration).toHaveBeenCalledWith(configId, updateConfigDTO, user.user.id);
     });
   });
 
