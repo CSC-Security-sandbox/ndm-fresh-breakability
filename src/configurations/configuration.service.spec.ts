@@ -142,7 +142,7 @@ describe('ConfigurationService', () => {
         configType: ConfigurationType.file,
         fileServers: [{
           host: 'localhost',
-          protocolVersion: ProtocolVersion.NFSv2,
+          protocolVersion: ProtocolVersion.NFSv3,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
           volumes: [{  volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
@@ -175,7 +175,7 @@ describe('ConfigurationService', () => {
         fileServers: [{
           id: mockFileServer.id,
           host: 'localhost',
-          protocolVersion: ProtocolVersion.NFSv2,
+          protocolVersion: ProtocolVersion.NFSv3,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
           createdBy:"1234567",
