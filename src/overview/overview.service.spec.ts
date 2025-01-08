@@ -1,151 +1,284 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OverviewService } from './overview.service';
-import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ProjectEntity } from 'src/entities/project.entity';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { OverviewDTO } from 'src/overview/overview.dto';
-import { JobType } from 'src/constants/enums';
+import { InventoryEntity } from '../entities/inventory.entity';
+import { ProjectEntity } from '../entities/project.entity';
+import { JobRunStatus, JobType } from '../constants/enums';
 
 describe('OverviewService', () => {
   let service: OverviewService;
-  let projectRepository: Repository<ProjectEntity>;
-  let inventoryRepository: Repository<InventoryEntity>;
+  let mockInventoryRepository;
+  let mockProjectRepository;
+
+  const mockProjectData = {
+    id: 'project1',
+    configs: [
+      {
+        fileServers: [
+          {
+            id: 'server1',
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Discover,
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                        jobConfigId: 'job1',
+                        createdAt: new Date('2024-01-01')
+                      }
+                    ]
+                  },
+                  {
+                    id: 'job2',
+                    jobType: JobType.Migrate,
+                    jobRunDetails: [
+                      {
+                        id: 'run2',
+                        status: JobRunStatus.Completed,
+                        jobConfigId: 'job2',
+                        createdAt: new Date('2024-01-02')
+                      }
+                    ]
+                  },
+                  {
+                    id: 'job3',
+                    jobType: JobType.CutOver,
+                    jobRunDetails: [
+                      {
+                        id: 'run3',
+                        status: JobRunStatus.Completed,
+                        jobConfigId: 'job3',
+                        createdAt: new Date('2024-01-03')
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
 
   beforeEach(async () => {
+    mockInventoryRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ totalSize: 1024, totalMigratedSize: 512 }])
+      }))
+    };
+
+    mockProjectRepository = {
+      find: jest.fn()
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OverviewService,
         {
-          provide: getRepositoryToken(ProjectEntity),
-          useClass: Repository,
+          provide: getRepositoryToken(InventoryEntity),
+          useValue: mockInventoryRepository
         },
         {
-          provide: getRepositoryToken(InventoryEntity),
-          useClass: Repository,
-        },
+          provide: getRepositoryToken(ProjectEntity),
+          useValue: mockProjectRepository
+        }
       ],
     }).compile();
 
     service = module.get<OverviewService>(OverviewService);
-    projectRepository = module.get<Repository<ProjectEntity>>(getRepositoryToken(ProjectEntity));
-    inventoryRepository = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  it('should return the correct overview data', async () => {
-    const mockProjectDetails = [
-      {
-        configs: [
-          {
-            fileServers: [
-              {
-                volumes: [
-                  {
-                    jobConfig: [
-                      {
-                        jobType: JobType.Scan,
-                        jobRunDetails: [
-                          { id: 'scan1', endTime: new Date('2023-01-01T00:00:00Z') },
-                        ],
-                      },
-                      {
-                        jobType: JobType.Migrate,
-                        jobRunDetails: [
-                          { id: 'migrate1' },
-                          { id: 'migrate2' },
-                        ],
-                      },
-                      {
-                        jobType: JobType.CutOver,
-                        jobRunDetails: [
-                          { id: 'cutover1' },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ];
+  describe('getStorageAndJobsOverview', () => {
+    it('should return overview data with all parameters', async () => {
+      mockProjectRepository.find.mockResolvedValue([mockProjectData]);
 
-    const mockDiscoveredSize = [{ totalSize: 3000 }];
-    const mockMigratedSize = [{ totalMigratedSize: 1000 }];
+      const result = await service.getStorageAndJobsOverview('project1', 'server1', 'job1');
 
-    jest.spyOn(projectRepository, 'find').mockResolvedValue(mockProjectDetails as any);
-
-    const mockInventoryQueryBuilder = {
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValueOnce(mockDiscoveredSize).mockResolvedValueOnce(mockMigratedSize),
-    };
-
-    jest.spyOn(inventoryRepository, 'createQueryBuilder').mockReturnValue(mockInventoryQueryBuilder as any);
-
-    const result: OverviewDTO = await service.getStorageAndJobsOverview('project1', 'fileServer1', 'jobConfig1');
-
-    expect(result).toEqual({
-      storageDetails: {
-        totalDiscoveredSize: "2.93 KB",
-        totalMigratedSize: "1000 B",
-        totalFileServers: 1,
-        totalPendingSize: "1.95 KB",
-      },
-      jobDetails: {
-        totalDiscoverJobs: 1,
-        totalMigrateJobs: {
-          baseLineJob: 1,
-          incrementalJob: 1,
+      expect(result).toEqual({
+        storageDetails: {
+          totalDiscoveredSize: '1 KB',
+          totalMigratedSize: '512 B',
+          totalFileServers: 1,
+          totalPendingSize: '512 B'
         },
-        totalCutoverJobs: 1,
-      },
+        jobDetails: {
+          totalDiscoverJobs: 1,
+          totalMigrateJobs: {
+            baseLineJob: 1,
+            incrementalJob: 0
+          },
+          totalCutoverJobs: 1
+        }
+      });
     });
 
-    expect(projectRepository.find).toHaveBeenCalledWith({
-      where: expect.any(Object),
-      relations: [
-        'configs',
-        'configs.fileServers',
-        'configs.fileServers.volumes',
-        'configs.fileServers.volumes.jobConfig',
-        'configs.fileServers.volumes.jobConfig.jobRunDetails',
-      ],
+    it('should handle empty project data', async () => {
+      mockProjectRepository.find.mockResolvedValue([]);
+      mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }])
+      }));
+
+      const result = await service.getStorageAndJobsOverview('project1', null, null);
+
+      expect(result).toEqual({
+        storageDetails: {
+          totalDiscoveredSize: '0 B',
+          totalMigratedSize: '0 B',
+          totalFileServers: 0,
+          totalPendingSize: '0 B'
+        },
+        jobDetails: {
+          totalDiscoverJobs: 0,
+          totalMigrateJobs: {
+            baseLineJob: 0,
+            incrementalJob: 0
+          },
+          totalCutoverJobs: 0
+        }
+      });
     });
 
-    expect(mockInventoryQueryBuilder.getRawMany).toHaveBeenCalledTimes(2);
+    it('should handle multiple migrate jobs', async () => {
+      const projectWithMultipleMigrations = {
+        ...mockProjectData,
+        configs: [{
+          ...mockProjectData.configs[0],
+          fileServers: [{
+            ...mockProjectData.configs[0].fileServers[0],
+            volumes: [{
+              jobConfig: [
+                {
+                  id: 'job2',
+                  jobType: JobType.Migrate,
+                  jobRunDetails: [
+                    { id: 'run2', status: JobRunStatus.Completed },
+                    { id: 'run3', status: JobRunStatus.Completed }
+                  ]
+                }
+              ]
+            }]
+          }]
+        }]
+      };
+
+      mockProjectRepository.find.mockResolvedValue([projectWithMultipleMigrations]);
+
+      const result = await service.getStorageAndJobsOverview('project1', null, null);
+
+      expect(result.jobDetails.totalMigrateJobs).toEqual({
+        baseLineJob: 1,
+        incrementalJob: 1
+      });
+    });
   });
 
   describe('covertBytes', () => {
-    it('should return bytes in B format if less than 1024', () => {
+    it('should convert bytes to appropriate unit', () => {
+      expect(service.covertBytes(1024)).toBe('1 KB');
+      expect(service.covertBytes(1024 * 1024)).toBe('1 MB');
+      expect(service.covertBytes(1024 * 1024 * 1024)).toBe('1 GB');
       expect(service.covertBytes(500)).toBe('500 B');
-      expect(service.covertBytes(1023)).toBe('1023 B');
-    });
-    it('should return bytes in KB format if less than 1 MB', () => {
-      expect(service.covertBytes(1024)).toBe('1.00 KB');
-      expect(service.covertBytes(1048575)).toBe('1024.00 KB');
-    });
-    it('should return bytes in MB format if less than 1 GB', () => {
-      expect(service.covertBytes(1048576)).toBe('1.00 MB');
-      expect(service.covertBytes(1073741823)).toBe('1024.00 MB');
     });
 
-    it('should return bytes in GB format if less than 1 TB', () => {
-      expect(service.covertBytes(1073741824)).toBe('1024.00 MB');
-      //expect(service.covertBytes(1099511627775)).toBe('1024.00 GB');
+    it('should handle decimal values', () => {
+      expect(service.covertBytes(1536)).toBe('1.50 KB');
+      expect(service.covertBytes(1.5 * 1024 * 1024)).toBe('1.50 MB');
     });
 
-    it('should return bytes in TB format if less than 1 PB', () => {
-      expect(service.covertBytes(1099511627776)).toBe('1.00 GB');
-    //  expect(service.covertBytes(1125899906842623)).toBe('1024.00 TB');
+    it('should handle zero bytes', () => {
+      expect(service.covertBytes(0)).toBe('0 B');
+    });
+
+    it('should handle very large numbers', () => {
+      const petabyte = 1024 * 1024 * 1024 * 1024 * 1024;
+      expect(service.covertBytes(petabyte)).toBe('1 PB');
+    });
+  });
+
+  describe('where clause construction', () => {
+    it('should build correct where clause with fileServerId only', async () => {
+      await service.getStorageAndJobsOverview(null, 'server1', null);
+      
+      expect(mockProjectRepository.find).toHaveBeenCalledWith({
+        where: {
+          configs: {
+            fileServers: {
+              id: 'server1'
+            }
+          }
+        },
+        relations: [
+          'configs',
+          'configs.fileServers',
+          'configs.fileServers.volumes',
+          'configs.fileServers.volumes.jobConfig',
+          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+        ]
+      });
+    });
+
+    it('should build correct where clause with jobConfigId only', async () => {
+      await service.getStorageAndJobsOverview(null, null, 'job1');
+      
+      expect(mockProjectRepository.find).toHaveBeenCalledWith({
+        where: {
+          configs: {
+            fileServers: {
+              volumes: {
+                jobConfig: {
+                  id: 'job1',
+                  jobRunDetails: {
+                    status: JobRunStatus.Completed
+                  }
+                }
+              }
+            }
+          }
+        },
+        relations: [
+          'configs',
+          'configs.fileServers',
+          'configs.fileServers.volumes',
+          'configs.fileServers.volumes.jobConfig',
+          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+        ]
+      });
+    });
+
+    it('should build correct where clause with only projectId', async () => {
+      await service.getStorageAndJobsOverview('project1', null, null);
+      
+      expect(mockProjectRepository.find).toHaveBeenCalledWith({
+        where: {
+          id: 'project1'
+        },
+        relations: [
+          'configs',
+          'configs.fileServers',
+          'configs.fileServers.volumes',
+          'configs.fileServers.volumes.jobConfig',
+          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+        ]
+      });
     });
   });
 });
+
+

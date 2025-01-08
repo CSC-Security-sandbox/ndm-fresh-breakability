@@ -2,20 +2,25 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscoveryController } from './discovery.controller';
 import { DiscoveryService } from './discovery.service';
 import { BadRequestException } from '@nestjs/common';
-import { ReportsEntity } from 'src/entities/reports.entity';
+import { StreamableFile } from '@nestjs/common';
+import { RmqContext } from '@nestjs/microservices';
+import { Logger } from '@nestjs/common';
 
 describe('DiscoveryController', () => {
-  let discoveryController: DiscoveryController;
-  let discoveryService: DiscoveryService;
+  let controller: DiscoveryController;
+  let service: DiscoveryService;
+  let logger: Logger;
 
   const mockDiscoveryService = {
     getDiscoveryByFileServerId: jest.fn(),
     getDiscoveryByFileServerIdAndParentPath: jest.fn(),
+    getReportsAsZip: jest.fn(),
+    createReportFile: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [DiscoveryController, ReportsEntity],
+      controllers: [DiscoveryController],
       providers: [
         {
           provide: DiscoveryService,
@@ -24,45 +29,174 @@ describe('DiscoveryController', () => {
       ],
     }).compile();
 
-    discoveryController = module.get<DiscoveryController>(DiscoveryController);
-    discoveryService = module.get<DiscoveryService>(DiscoveryService);
+    controller = module.get<DiscoveryController>(DiscoveryController);
+    service = module.get<DiscoveryService>(DiscoveryService);
+    logger = controller['logger'];
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
-    expect(discoveryController).toBeDefined();
+    expect(controller).toBeDefined();
   });
 
   describe('discoverFileServerDefault', () => {
-    it('should throw BadRequestException when fileServerId is not provided', async () => {
-      await expect(
-        discoveryController.discoverFileServerDefault(null),
-      ).rejects.toThrow(BadRequestException);
+    it('should get discovery by file server id', async () => {
+      const fileServerId = 'test-id';
+      const expectedResult = [{ id: 'test' }];
+      mockDiscoveryService.getDiscoveryByFileServerId.mockResolvedValue(expectedResult);
+
+      const result = await controller.discoverFileServerDefault(fileServerId);
+
+      expect(result).toBe(expectedResult);
+      expect(service.getDiscoveryByFileServerId).toHaveBeenCalledWith(fileServerId);
     });
 
-    it('should return data from discoveryService', async () => {
-      const mockResponse = [{ root: 'testRoot', childs: [] }];
-      mockDiscoveryService.getDiscoveryByFileServerId.mockResolvedValue(mockResponse);
-
-      const result = await discoveryController.discoverFileServerDefault('testFileServerId');
-      expect(result).toEqual(mockResponse);
-      expect(mockDiscoveryService.getDiscoveryByFileServerId).toHaveBeenCalledWith('testFileServerId');
+    it('should throw BadRequestException when fileServerId is missing', async () => {
+      await expect(controller.discoverFileServerDefault('')).rejects.toThrow(
+        new BadRequestException('fileServerId query parameter is required')
+      );
     });
   });
 
   describe('discoverFileServerWithPath', () => {
-    it('should throw BadRequestException when fileServerId is not provided', async () => {
-      await expect(
-        discoveryController.discoverFileServerWithPath(null, 'testParentPath'),
-      ).rejects.toThrow(BadRequestException);
+    it('should get discovery by file server id and parent path', async () => {
+      const fileServerId = 'test-id';
+      const parentPath = '/test/path';
+      const expectedResult = [{ id: 'test' }];
+      mockDiscoveryService.getDiscoveryByFileServerIdAndParentPath.mockResolvedValue(expectedResult);
+
+      const result = await controller.discoverFileServerWithPath(fileServerId, parentPath);
+
+      expect(result).toBe(expectedResult);
+      expect(service.getDiscoveryByFileServerIdAndParentPath).toHaveBeenCalledWith(
+        fileServerId,
+        parentPath
+      );
     });
 
-    it('should return data from discoveryService with path', async () => {
-      const mockResponse = [{ fileName: 'file1', childs: [] }];
-      mockDiscoveryService.getDiscoveryByFileServerIdAndParentPath.mockResolvedValue(mockResponse);
+    it('should throw BadRequestException when fileServerId is missing', async () => {
+      await expect(controller.discoverFileServerWithPath('', '/test/path')).rejects.toThrow(
+        new BadRequestException('fileServerId query parameter is required')
+      );
+    });
+  });
 
-      const result = await discoveryController.discoverFileServerWithPath('testFileServerId', 'testParentPath');
-      expect(result).toEqual(mockResponse);
-      expect(mockDiscoveryService.getDiscoveryByFileServerIdAndParentPath).toHaveBeenCalledWith('testFileServerId', 'testParentPath');
+  describe('downloadReports', () => {
+    it('should download reports successfully', async () => {
+      const jobRunIds = ['job1', 'job2'];
+      const reportType = 'discovery';
+      const mockBuffer = Buffer.from('test');
+      mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
+
+      const result = await controller.downloadReports(jobRunIds, reportType);
+
+      expect(result).toBeInstanceOf(StreamableFile);
+      expect(service.getReportsAsZip).toHaveBeenCalledWith(jobRunIds, reportType);
+    });
+
+    it('should throw BadRequestException when jobRunIds is empty', async () => {
+      await expect(controller.downloadReports([], 'discovery')).rejects.toThrow(
+        new BadRequestException('jobRunId array must not be empty')
+      );
+    });
+
+    it('should throw BadRequestException when reportType is invalid', async () => {
+      await expect(controller.downloadReports(['job1'], 'INVALID')).rejects.toThrow(
+        new BadRequestException('Invalid report type. Allowed values are COC or discovery')
+      );
+    });
+
+    it('should throw BadRequestException when jobRunIds is null', async () => {
+      await expect(controller.downloadReports(null, 'discovery')).rejects.toThrow(
+        new BadRequestException('jobRunId array must not be empty')
+      );
+    });
+  });
+
+  describe('generateReport', () => {
+    it('should generate report successfully', async () => {
+      const jobRunId = 'job1';
+      const reportType = 'discovery';
+      const expectedResult = { message: 'Report generated successfully' };
+      mockDiscoveryService.createReportFile.mockResolvedValue(expectedResult);
+
+      const result = await controller.generateReport(jobRunId, reportType);
+
+      expect(result).toBe(expectedResult);
+      expect(service.createReportFile).toHaveBeenCalledWith(jobRunId, reportType);
+    });
+
+    it('should throw BadRequestException when jobRunId is missing', async () => {
+      await expect(controller.generateReport('', 'discovery')).rejects.toThrow(
+        new BadRequestException('jobRunId is required')
+      );
+    });
+
+    it('should throw BadRequestException when reportType is invalid', async () => {
+      await expect(controller.generateReport('job1', 'INVALID')).rejects.toThrow(
+        new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY')
+      );
+    });
+
+    it('should throw BadRequestException when reportType is missing', async () => {
+      await expect(controller.generateReport('job1', '')).rejects.toThrow(
+        new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY')
+      );
+    });
+
+    it('should log when generating report', async () => {
+      const logSpy = jest.spyOn(logger, 'log');
+      const jobRunId = 'job1';
+      const reportType = 'discovery';
+      mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
+
+      await controller.generateReport(jobRunId, reportType);
+
+      expect(logSpy).toHaveBeenCalledWith('reached here in controller');
+      logSpy.mockRestore();
+    });
+  });
+
+  describe('generateDiscoveryReport', () => {
+    let mockContext: RmqContext;
+    let mockChannel;
+
+    beforeEach(() => {
+      mockChannel = {
+        ack: jest.fn(),
+        nack: jest.fn(),
+      };
+      mockContext = {
+        getChannelRef: jest.fn().mockReturnValue(mockChannel),
+        getMessage: jest.fn(),
+      } as unknown as RmqContext;
+    });
+
+    it('should process discovery completed message successfully', async () => {
+      const payload = { jobRunId: 'job1' };
+      mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
+
+      await controller.generateDiscoveryReport(payload, mockContext);
+
+      expect(service.createReportFile).toHaveBeenCalledWith(payload.jobRunId, 'discovery');
+      expect(mockChannel.ack).toHaveBeenCalled();
+      expect(mockChannel.nack).not.toHaveBeenCalled();
+    });
+
+    it('should log received message', async () => {
+      const payload = { jobRunId: 'job1' };
+      const logSpy = jest.spyOn(logger, 'log');
+      mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
+
+      await controller.generateDiscoveryReport(payload, mockContext);
+
+      expect(logSpy).toHaveBeenCalledWith(
+        `Received discovery completed message: ${JSON.stringify(payload)}`
+      );
+      logSpy.mockRestore();
     });
   });
 });
