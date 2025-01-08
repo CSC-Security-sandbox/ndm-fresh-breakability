@@ -88,7 +88,7 @@ export class OverviewService {
             .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds: completedJobRunIds.length ? completedJobRunIds : ['00000000-0000-0000-0000-000000000000'] });
 
             const discoveredSize = await inventoryQueryBuilder.getRawMany();
-            totalDiscoveredSize = (discoveredSize && discoveredSize.length > 0) ? discoveredSize[0]?.totalSize : 0;
+            totalDiscoveredSize = (discoveredSize[0]?.totalSize !== null && discoveredSize.length > 0) ? discoveredSize[0]?.totalSize : 0;
 
             const migrateRun = projectDetails?.flatMap(project =>
                 project?.configs?.flatMap(config =>
