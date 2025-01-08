@@ -82,10 +82,10 @@ export class OverviewService {
             totalDiscoverJobs = scanRunDetails?.length;
             const completedJobRunIds = scanRunDetails?.map(run => run.id);
 
-            const inventoryQueryBuilder = this.inventoryRepository
-                .createQueryBuilder('inventory')
-                .select('SUM(inventory.fileSize)', 'totalSize')
-                .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds });
+        const inventoryQueryBuilder = this.inventoryRepository
+            .createQueryBuilder('inventory')
+            .select('SUM(inventory.fileSize)', 'totalSize')
+            .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds: completedJobRunIds.length ? completedJobRunIds : ['00000000-0000-0000-0000-000000000000'] });
 
             const discoveredSize = await inventoryQueryBuilder.getRawMany();
             totalDiscoveredSize = (discoveredSize && discoveredSize.length > 0) ? discoveredSize[0]?.totalSize : 0;
