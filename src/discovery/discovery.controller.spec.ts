@@ -87,7 +87,7 @@ describe('DiscoveryController', () => {
   describe('downloadReports', () => {
     it('should download reports successfully', async () => {
       const jobRunIds = ['job1', 'job2'];
-      const reportType = 'COC';
+      const reportType = 'discovery';
       const mockBuffer = Buffer.from('test');
       mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
 
@@ -98,7 +98,7 @@ describe('DiscoveryController', () => {
     });
 
     it('should throw BadRequestException when jobRunIds is empty', async () => {
-      await expect(controller.downloadReports([], 'COC')).rejects.toThrow(
+      await expect(controller.downloadReports([], 'discovery')).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );
     });
@@ -110,7 +110,7 @@ describe('DiscoveryController', () => {
     });
 
     it('should throw BadRequestException when jobRunIds is null', async () => {
-      await expect(controller.downloadReports(null, 'COC')).rejects.toThrow(
+      await expect(controller.downloadReports(null, 'discovery')).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );
     });
@@ -119,7 +119,7 @@ describe('DiscoveryController', () => {
   describe('generateReport', () => {
     it('should generate report successfully', async () => {
       const jobRunId = 'job1';
-      const reportType = 'COC';
+      const reportType = 'discovery';
       const expectedResult = { message: 'Report generated successfully' };
       mockDiscoveryService.createReportFile.mockResolvedValue(expectedResult);
 
@@ -130,7 +130,7 @@ describe('DiscoveryController', () => {
     });
 
     it('should throw BadRequestException when jobRunId is missing', async () => {
-      await expect(controller.generateReport('', 'COC')).rejects.toThrow(
+      await expect(controller.generateReport('', 'discovery')).rejects.toThrow(
         new BadRequestException('jobRunId is required')
       );
     });
@@ -150,7 +150,7 @@ describe('DiscoveryController', () => {
     it('should log when generating report', async () => {
       const logSpy = jest.spyOn(logger, 'log');
       const jobRunId = 'job1';
-      const reportType = 'COC';
+      const reportType = 'discovery';
       mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
 
       await controller.generateReport(jobRunId, reportType);

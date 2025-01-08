@@ -142,7 +142,7 @@ export class DiscoveryService {
     return zipBuffer;
   }
 
-  public async createZipArchive(filePaths: string[]): Promise<Buffer> {
+  async createZipArchive(filePaths: string[]): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const archive = archiver("zip", { zlib: { level: 9 } });
       const buffers: Buffer[] = [];
