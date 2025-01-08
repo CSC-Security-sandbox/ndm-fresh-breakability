@@ -9,7 +9,7 @@ export default registerAs(
     },
     rabbitmq: {
         urls: process.env.RABBITMQ_URLS?.split(',') || [],
-        durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false,
+        durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || true,
         reportsQueue: process.env.REPORTS_QUEUE || '',
     }
   }),
