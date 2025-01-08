@@ -24,7 +24,7 @@ describe('DiscoveryService', () => {
   const mockReportData = [
     {
       jobRunId: 'job123',
-      reportType: 'TYPE1',
+      reportType: 'discovery',
       reportData: JSON.stringify([
         {
           category: 'Category1',
@@ -83,7 +83,7 @@ describe('DiscoveryService', () => {
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue(mockReportData);
 
-      const result = await service.createReportFile('job123', 'TYPE1');
+      const result = await service.createReportFile('job123', 'discovery');
 
       expect(result).toEqual({ message: 'Report generated successfully' });
       expect(mockInventoryRepo.query).toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe('DiscoveryService', () => {
     it('should throw InternalServerErrorException when report generation fails', async () => {
       mockInventoryRepo.query.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.createReportFile('job123', 'TYPE1')).rejects.toThrow(
+      await expect(service.createReportFile('job123', 'discovery')).rejects.toThrow(
         InternalServerErrorException
       );
     });
@@ -103,7 +103,7 @@ describe('DiscoveryService', () => {
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue(mockReportData);
 
-      await service.createReportFile('job123', 'TYPE1');
+      await service.createReportFile('job123', 'discovery');
 
       expect(fs.mkdirSync).toHaveBeenCalledWith(
         expect.any(String),
@@ -116,7 +116,7 @@ describe('DiscoveryService', () => {
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue(mockReportData);
 
-      await service.createReportFile('job123', 'TYPE1');
+      await service.createReportFile('job123', 'discovery');
 
       expect(fs.mkdirSync).not.toHaveBeenCalled();
     });
@@ -125,7 +125,7 @@ describe('DiscoveryService', () => {
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue([]);
 
-      const result = await service.createReportFile('job123', 'TYPE1');
+      const result = await service.createReportFile('job123', 'discovery');
 
       expect(result).toEqual({ message: 'Report generated successfully' });
       expect(fs.writeFileSync).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe('DiscoveryService', () => {
         .mockImplementation(() => false);
 
       await expect(
-        service.getReportsAsZip(['job123'], 'TYPE1')
+        service.getReportsAsZip(['job123'], 'discovery')
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -155,7 +155,7 @@ describe('DiscoveryService', () => {
       const mockZipBuffer = Buffer.from('mock zip content');
       jest.spyOn(service, 'createZipArchive').mockResolvedValue(mockZipBuffer);
 
-      const result = await service.getReportsAsZip(['job123', 'job456'], 'TYPE1');
+      const result = await service.getReportsAsZip(['job123', 'job456'], 'discovery');
 
       expect(result).toEqual(mockZipBuffer);
       expect(service.createZipArchive).toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('DiscoveryService', () => {
       jest.spyOn(fs, 'existsSync').mockImplementation(() => false);
 
       await expect(
-        service.getReportsAsZip(['job123'], 'TYPE1')
+        service.getReportsAsZip(['job123'], 'discovery')
       ).rejects.toThrow('Reports directory does not exist');
     });
 
@@ -176,7 +176,7 @@ describe('DiscoveryService', () => {
         .mockImplementationOnce(() => false);
 
       await expect(
-        service.getReportsAsZip(['job123'], 'TYPE1')
+        service.getReportsAsZip(['job123'], 'discovery')
       ).rejects.toThrow(NotFoundException);
 
       expect(consoleSpy).toHaveBeenCalled();
