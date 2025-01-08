@@ -24,7 +24,6 @@ import { UserPermissionResponse } from '../auth/user-permission-response-type';
 export class UserRoleController {
   constructor(private readonly userRoleService: UserRoleService) {}
 
-
   @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Post()
@@ -35,11 +34,13 @@ export class UserRoleController {
   @ApiBody({ type: CreateUserRoleDto })
   async create(
     @Body() createUserRoleDto: CreateUserRoleDto,
-    @Request() userPermissionResponse:UserPermissionResponse
+    @Request() userPermissionResponse: UserPermissionResponse,
   ): Promise<UserRole> {
-    return this.userRoleService.create(createUserRoleDto, userPermissionResponse);
+    return this.userRoleService.create(
+      createUserRoleDto,
+      userPermissionResponse,
+    );
   }
-
 
   @Auth(Permission.InviteUser)
   @ApiBearerAuth()
@@ -55,7 +56,6 @@ export class UserRoleController {
     return this.userRoleService.batchCreate(userRoleRelationDto);
   }
 
-  
   @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Patch(':id')
@@ -66,9 +66,13 @@ export class UserRoleController {
   async update(
     @Param('id') id: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
-    @Request() userPermissionResponse:UserPermissionResponse
+    @Request() userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
-    await this.userRoleService.update(id, updateUserRoleDto, userPermissionResponse);
+    await this.userRoleService.update(
+      id,
+      updateUserRoleDto,
+      userPermissionResponse,
+    );
   }
 
   @Auth(Permission.InviteUser)
@@ -91,6 +95,62 @@ export class UserRoleController {
   })
   async findOne(@Param('id') id: string): Promise<UserRole> {
     return this.userRoleService.findOne(id);
+  }
+
+  @Auth(Permission.ListUsers)
+  @ApiBearerAuth()
+  @Get('/grouping')
+  @ApiOperation({
+    summary: 'Get a paginated list of user-role associations',
+    description: UserRoleDescription.GetAllUserAndTheirRolesDescription,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
+  @ApiQuery({
+    name: 'sortField',
+    required: false,
+    type: String,
+    description: 'Field to sort by',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['ASC', 'DESC'],
+    description: 'Sort order',
+  })
+  @ApiQuery({
+    name: 'user_id',
+    required: false,
+    type: String,
+    description: 'User ID',
+  })
+  async fetchUsersAndRoles(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('sortField') sortField: string = 'id',
+    @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
+    @Query('user_id') user_id?: string,
+  ) {
+    const filter: Partial<CreateUserRoleDto> = {
+      user_id,
+    };
+    return this.userRoleService.fetchUsersAndRoles(
+      page,
+      limit,
+      sortField,
+      sortOrder,
+      filter,
+    );
   }
 
   @Auth(Permission.ListUsers)

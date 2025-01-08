@@ -492,6 +492,13 @@ export enum UserRoleDescription {
     '- On success, the API returns a JSON object with detailed information about the user-role association.\n' +
     '- If the association is not found, a 404 Not Found error is returned.\n\n' +
     'This endpoint is crucial for auditing and verifying user-role associations within the system.',
+    
+    GetAllUserAndTheirRolesDescription = 'This endpoint retrieves a paginated list of all user and their role associations stored in the system. ' +
+    'You can filter the results based on various parameters, allowing you to manage and view user roles effectively.\n\n' +
+    '**Response Details**:\n' +
+    '- The API returns a JSON object containing a list of user-role associations along with pagination metadata (total count, current page, etc.).\n' +
+    '- If no user-roles match the criteria, an empty list is returned.\n\n' +
+    'This endpoint is useful for retrieving and displaying all user and their role associations for better management.',
 }
 
 export enum RolePermissionDescription {
