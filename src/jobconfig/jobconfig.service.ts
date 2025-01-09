@@ -5,7 +5,6 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
-import * as parser from 'cron-parser';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -13,6 +12,7 @@ import { InActivateJobConfigPayload } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
+import { nextDate } from 'src/utils/mapper';
 
 @Injectable()
 export class JobConfigService {
@@ -37,7 +37,7 @@ export class JobConfigService {
       where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
     })
    
-    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED}, {
+    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])}, {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
@@ -203,7 +203,7 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate:job.jobtype === JobType.DISCOVER ? job.firstrunat : job.futureschedule? parser.parseExpression(job.futureschedule).next().toDate(): null,
+        nextScheduleDate: nextDate(job.jobtype, job.firstrunat, job.futureschedule),
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
