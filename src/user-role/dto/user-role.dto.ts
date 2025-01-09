@@ -28,3 +28,31 @@ export class UserRoleRelationDto{
     @Type(() => UserRoleMap) 
     users: UserRoleMap[]
 }
+
+export class RoleMap{
+    @ApiProperty({ description: 'Role Id for which project is to be created' })
+    @IsUUID()
+    roleId: string;
+  
+    @ApiProperty({ description: 'Role Name for which project is to be created' })
+    roleName: string;
+
+    @ApiProperty({ description: 'Project Id for which project is to be created' })
+    projectId: string;
+
+}
+export class UserRoleMappingDto{
+    @ApiProperty({ description: 'User Id for which project is to be created' })
+    @IsUUID()
+    userId: string;
+
+    @ApiProperty({ description: 'Name of the user' })
+    userName: string;
+
+    @ApiProperty({ description: 'Array of User roles details', type: [RoleMap] })
+    @IsArray()
+    @ValidateNested({ each: true }) 
+    @Type(() => RoleMap) 
+    roles: RoleMap[]
+}
+

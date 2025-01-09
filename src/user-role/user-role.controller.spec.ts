@@ -11,6 +11,7 @@ import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { UserRoleMappingDto } from './dto/user-role.dto';
 
 describe('UserRoleController', () => {
   let controller: UserRoleController;
@@ -152,5 +153,14 @@ describe('UserRoleController', () => {
       .spyOn(service, 'delete')
       .mockImplementation(async () => userRole as any);
     expect(await controller.delete('1')).toBeUndefined();
+  });
+  it('should find all user and their roles', async () => {
+    const userRole = [{
+      user_id: '1',
+    }];
+    jest
+      .spyOn(service, 'fetchUsersAndRoles')
+      .mockImplementation(async () => [userRole] as any);
+    expect(await controller.fetchUsersAndRoles()).toStrictEqual([userRole]);
   });
 });
