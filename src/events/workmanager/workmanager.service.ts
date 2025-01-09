@@ -25,8 +25,8 @@ export class WorkManager{
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+        private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
-        private readonly configService: ConfigService
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
@@ -219,8 +219,10 @@ export class WorkManager{
     }
 
     async onTaskComplete(task: ScanCompletedPayload) {
+        this.logger.debug(task)
         switch(task.taskType) {
             case TaskType.Scan:
+                this.logger.debug('Sending Message Handler Called !')
                 this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
                     jobRunId: task.jobRunId,
                 })
