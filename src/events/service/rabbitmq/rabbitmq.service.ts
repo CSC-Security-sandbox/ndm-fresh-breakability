@@ -91,13 +91,11 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
 
   @OnEvent(EmitterEvents.DiscoveryComplete, { async: true })
   async generateDiscoveryReport(data: DiscoveryCompletePayload) {
-    this.logger.debug('SENDING COMPLETE REPORT')
-    const response = await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
+    await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
       {
         type: InventoryPayloadType.DISCOVERY_COMPLETED ,data
       }).toPromise()
-    this.logger.debug(`------------- DiscoveryComplete  -----------------`)
-    this.logger.debug(`${JSON.stringify(response)}`)
+    this.logger.debug(`-------------  Generate Discovery Report  -----------------`)
   }
 
 }
