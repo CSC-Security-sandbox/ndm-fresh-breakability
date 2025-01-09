@@ -29,7 +29,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       this.inventoryClient = ClientProxyFactory.create({
         transport: Transport.RMQ,
         options: {
-          urls: [urls],
+          urls: urls,
           queue: this.configService.get<string>('app.rabbitmq.inventoryQueue') || '',
           queueOptions: {
             durable: true,
