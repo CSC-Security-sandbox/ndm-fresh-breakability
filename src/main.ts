@@ -12,37 +12,20 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-    app.connectMicroservice({
-      transport: Transport.RMQ,
-      options: {
-        urls: configService.get('app.rabbitmq.urls'),
-        queue: configService.get('app.rabbitmq.queue'),
-        noAck: false,
-        queueOptions: {
-          durable: configService.get('app.rabbitmq.durable'),
-          arguments: {
-            'x-queue-type': 'quorum',
-          },
+  app.connectMicroservice({
+    transport: Transport.RMQ,
+    options: {
+      urls: configService.get('app.rabbitmq.urls'),
+      queue: configService.get('app.rabbitmq.queue'),
+      noAck: false,
+      queueOptions: {
+        durable: configService.get('app.rabbitmq.durable'),
+        arguments: {
+          'x-queue-type': 'quorum',
         },
       },
-    });
-
-    /* deprecated 
-     app.connectMicroservice({
-      transport: Transport.RMQ,
-      options: {
-        urls: configService.get('app.rabbitmq.urls'),
-        queue: configService.get('app.rabbitmq.taskqueue'),
-        noAck: false,
-        queueOptions: {
-          durable: true,
-          arguments: {
-            'x-queue-type': 'quorum',
-          },
-        },
-      },
-    });
-    */
+    },
+  });
 
   await app.startAllMicroservices()
 
@@ -52,11 +35,9 @@ async function bootstrap() {
   
   app.useGlobalPipes(new ValidationPipe())
 
-  const serverEndpoint = `http://${host}:${port}`;
   const config = new DocumentBuilder()
     .setTitle('Job service')
     .setDescription('Job Management')
-    // .addServer(serverEndpoint, `Environment`) 
     .setVersion('1.0')
     .build();
 
@@ -71,10 +52,9 @@ async function bootstrap() {
   
   app.enableCors();
 
-  // await serviceQueue.listen();
   Logger.log('Service Queue Microservice is listening...');
-  // await taskQueue.listen();
   Logger.log('Task Queue Microservice is listening...');
   await app.listen(port, '0.0.0.0');
+  Logger.log(`Service started on port ${port}`);
 }
 bootstrap();
