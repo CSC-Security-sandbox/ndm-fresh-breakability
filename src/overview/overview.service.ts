@@ -11,19 +11,16 @@ export class OverviewService {
     constructor(@InjectRepository(InventoryEntity) private readonly inventoryRepository: Repository<InventoryEntity>,
         @InjectRepository(ProjectEntity) private readonly projectRepository: Repository<ProjectEntity>) { }
 
-    async getStorageAndJobsOverview(projectId: string, fileServerId: string, jobConfigId: string) {
+    async getStorageAndJobsOverview(projectId: string, configId: string, jobConfigId: string) {
         const whereClause ={};
             if (projectId) {
                 whereClause['id'] = projectId;
             }
         
-            if (fileServerId) {
+            if (configId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
-                    fileServers: {
-                        ...whereClause['configs?.fileServers'],
-                        id: fileServerId,
-                    },
+                    id: configId,
                 };
             }
         
