@@ -206,7 +206,6 @@ export class WorkManager{
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            // this.logger.warn(isNotCompletedOperation,isNotCompletedTask, task.id)
             if(!isNotCompletedOperation && !isNotCompletedTask)  {
                 this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
                     jobRunId: task.jobRunId,
@@ -219,10 +218,8 @@ export class WorkManager{
     }
 
     async onTaskComplete(task: ScanCompletedPayload) {
-        this.logger.debug(task)
         switch(task.taskType) {
             case TaskType.Scan:
-                this.logger.debug('Sending Message Handler Called !')
                 this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
                     jobRunId: task.jobRunId,
                 })
