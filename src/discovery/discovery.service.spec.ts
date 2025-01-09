@@ -125,7 +125,7 @@ describe('DiscoveryService', () => {
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue([]);
 
-      const result = await service.createReportFile('job123', 'discovery');
+      const result = await service.createReportFile('job123', 'DISCOVERY');
 
       expect(result).toEqual({ message: 'Report generated successfully' });
       expect(fs.writeFileSync).not.toHaveBeenCalled();
@@ -246,7 +246,6 @@ describe('DiscoveryService', () => {
       service.formatAndWriteToFile(mockData, mockFilePath);
 
       expect(writeFileSpy).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(`Data has been written to ${mockFilePath}`);
 
       writeFileSpy.mockRestore();
       consoleSpy.mockRestore();

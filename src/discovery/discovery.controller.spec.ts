@@ -119,7 +119,7 @@ describe('DiscoveryController', () => {
   describe('generateReport', () => {
     it('should generate report successfully', async () => {
       const jobRunId = 'job1';
-      const reportType = 'discovery';
+      const reportType = 'DISCOVERY';
       const expectedResult = { message: 'Report generated successfully' };
       mockDiscoveryService.createReportFile.mockResolvedValue(expectedResult);
 
@@ -150,7 +150,7 @@ describe('DiscoveryController', () => {
     it('should log when generating report', async () => {
       const logSpy = jest.spyOn(logger, 'log');
       const jobRunId = 'job1';
-      const reportType = 'discovery';
+      const reportType = 'DISCOVERY';
       mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
 
       await controller.generateReport(jobRunId, reportType);
@@ -181,7 +181,7 @@ describe('DiscoveryController', () => {
 
       await controller.generateDiscoveryReport(payload, mockContext);
 
-      expect(service.createReportFile).toHaveBeenCalledWith(payload.jobRunId, 'discovery');
+      expect(service.createReportFile).toHaveBeenCalledWith(payload.jobRunId, 'DISCOVERY');
       expect(mockChannel.ack).toHaveBeenCalled();
       expect(mockChannel.nack).not.toHaveBeenCalled();
     });
