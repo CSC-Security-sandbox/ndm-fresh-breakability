@@ -223,19 +223,17 @@ describe('OverviewService', () => {
       }));
     });
 
-    it('should build correct where clause with fileServerId only', async () => {
+    it('should build correct where clause with configId only', async () => {
       mockProjectRepository.find.mockResolvedValue([{
         configs: [],
       }]);
 
-      await service.getStorageAndJobsOverview(null, 'server1', null);
+      await service.getStorageAndJobsOverview(null, 'config1', null);
       
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           configs: {
-            fileServers: {
-              id: 'server1'
-            }
+            id: 'config1'
           }
         },
         relations: [
@@ -320,12 +318,13 @@ describe('OverviewService', () => {
         }]
       }]);
 
-      await service.getStorageAndJobsOverview('project1', 'server1', 'job1');
+      await service.getStorageAndJobsOverview('project1', 'config1', 'job1');
       
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           id: 'project1',
           configs: {
+            id: 'config1',
             fileServers: {
               volumes: {
                 jobConfig: {
