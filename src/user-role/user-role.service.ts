@@ -9,11 +9,12 @@ import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
-import { UserRoleRelationDto } from './dto/user-role.dto';
+import { UserRoleMappingDto, UserRoleRelationDto } from './dto/user-role.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @Injectable()
 export class UserRoleService {
+ 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -254,4 +255,40 @@ export class UserRoleService {
 
     return this.userRoleRepository.find(options);
   }
+
+ async fetchUsersAndRoles(page: number, limit: number, sortField: string, sortOrder: string, filter: Partial<CreateUserRoleDto>={}): Promise<UserRoleMappingDto[]> {
+    const where: FindOptionsWhere<UserRole> = {};
+    if (filter.user_id) {
+      where.user = { id: filter.user_id };
+    }
+    const options: FindManyOptions<UserRole> = {
+      skip: (page - 1) * limit,
+      take: limit,
+      order: {
+        [sortField]: sortOrder,
+      },
+      where,
+      relations: ['user', 'role','project'],
+    };
+    const userRoles =  await this.userRoleRepository.find(options);
+
+    const userRoleMapping = userRoles.reduce((map, userRole) => {
+      const { user, role, project, account } = userRole;
+      if (!map.has(user.id)) {
+        map.set(user.id, {
+          userId: user.id,
+          userName: user.name,
+          roles: [],
+        });
+      }
+      map.get(user.id).roles.push({
+        roleId: role.id,
+        roleName: role.role_name,
+        projectId: project?.id || null
+      });
+    
+      return map;
+    }, new Map<string, UserRoleMappingDto>());
+  return Array.from(userRoleMapping.values());;
+}
 }
