@@ -62,8 +62,8 @@ export class JobRunService {
   }
 
 
-  @OnEvent(EmitterEvents.UNNOUNT_NOTIFICATION,  {async: true}) 
-  async UNNOUNT_NOTIFICATION(payload: UnMountNotificationPayload){
+  @OnEvent(EmitterEvents.UNMOUNT_NOTIFICATION,  {async: true}) 
+  async UNMOUNT_NOTIFICATION(payload: UnMountNotificationPayload){
     const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
     for(const worker of workers) 
       this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {

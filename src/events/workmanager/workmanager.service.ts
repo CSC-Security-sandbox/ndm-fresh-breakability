@@ -218,7 +218,7 @@ export class WorkManager{
             jobRunId: task.jobRunId,
             status: JobRunStatus.Completed
         })    
-        this.eventEmitter.emit(EmitterEvents.UNNOUNT_NOTIFICATION, {
+        this.eventEmitter.emit(EmitterEvents.UNMOUNT_NOTIFICATION, {
             jobRunId: task.jobRunId,
             sPathId: task.sPath,
             tPathId: task?.tPath

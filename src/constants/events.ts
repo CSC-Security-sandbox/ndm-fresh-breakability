@@ -6,7 +6,7 @@ export const enum EmitterEvents{
     DISCOVERY_COMPLETE='discovery.completed',
     UPDATE_JOB_RUN_MAPPING = 'update.jobrun.worker.mapping',
     IN_ACTIVE_JOB_CONFIG = 'inactivate.jobconfig',
-    UNNOUNT_NOTIFICATION = 'worker.unmount.path'
+    UNMOUNT_NOTIFICATION = 'worker.unmount.path'
 } 
 
 
