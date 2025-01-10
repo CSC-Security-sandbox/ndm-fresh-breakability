@@ -75,7 +75,7 @@ export class DiscoveryController {
         },
         'report-type': {
           type: 'string',
-          enum: ['COC', 'discovery'],
+          enum: ['COC', 'DISCOVERY'],
           description: 'Type of the report to download',
         },
       },
