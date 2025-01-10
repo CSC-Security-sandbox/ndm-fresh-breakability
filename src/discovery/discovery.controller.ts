@@ -75,7 +75,7 @@ export class DiscoveryController {
         },
         'report-type': {
           type: 'string',
-          enum: ['COC', 'discovery'],
+          enum: ['COC', 'DISCOVERY'],
           description: 'Type of the report to download',
         },
       },
@@ -95,7 +95,7 @@ export class DiscoveryController {
       throw new BadRequestException('jobRunId array must not be empty');
     }
 
-    if (!['COC', 'discovery'].includes(reportType)) {
+    if (!['COC', 'DISCOVERY'].includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
     }
 

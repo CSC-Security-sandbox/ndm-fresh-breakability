@@ -87,7 +87,7 @@ describe('DiscoveryController', () => {
   describe('downloadReports', () => {
     it('should download reports successfully', async () => {
       const jobRunIds = ['job1', 'job2'];
-      const reportType = 'discovery';
+      const reportType = 'DISCOVERY';
       const mockBuffer = Buffer.from('test');
       mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
 
