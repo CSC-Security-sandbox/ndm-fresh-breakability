@@ -23,7 +23,7 @@ import { ConfigService } from "@nestjs/config";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
-  private readonly mountBaseDir: string 
+  private readonly mountBasePath: string 
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -39,7 +39,7 @@ export class JobRunService {
     private readonly eventEmitter: EventEmitter2,
     private readonly configService: ConfigService
   ) {
-    this.mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir')
+    this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
 
   @OnEvent(EmitterEvents.JOB_RUN_STATUS_UPDATE, { async: true })
@@ -70,7 +70,7 @@ export class JobRunService {
         workerId: worker.workerId,
         socketEvents: SocketEvents.UNMOUNT_PATH,
         payload: {
-          mountBaseDir: this.mountBaseDir,
+          mountBaseDir: this.mountBasePath,
           ...payload
         }
     });
@@ -128,7 +128,7 @@ export class JobRunService {
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: this.mountBaseDir
+          workingDirectory: this.mountBasePath
         }
       },
       workers: sourceWorkers.map((worker) => worker.workerId),
@@ -150,7 +150,7 @@ export class JobRunService {
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,
         host: jobConfig?.targetPath?.fileServer?.host,
-        workingDirectory: this.mountBaseDir
+        workingDirectory: this.mountBasePath
       }
       details['workers'] = workers
       return details;
@@ -172,8 +172,8 @@ export class JobRunService {
 
     const options = this.optionRepo.create({
       excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: this.mountBaseDir,
-      targetWorkingDir: this.mountBaseDir,
+      sourceWorkingDir: this.mountBasePath,
+      targetWorkingDir: this.mountBasePath,
       preserveAccessTime: details.preserveAccessTime,
       excludeOlderThan: details.excludeOlderThan
     })

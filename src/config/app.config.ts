@@ -14,7 +14,7 @@ export default registerAs(
         inventoryQueue: process.env.RABBITMQ_INVENTORY_QUEUE
     },
     paths: {
-      mountBaseDir: process.env.MOUNT_BASE_DIR || '/mnt/datamigrate'
+      mountBasePath: process.env.MOUNT_BASE_DIR || '/mnt/datamigrate'
     }
   }),
 );

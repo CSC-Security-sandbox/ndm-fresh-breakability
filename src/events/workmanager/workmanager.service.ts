@@ -33,8 +33,8 @@ export class WorkManager{
     @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
         try{
-            const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
-            const path =  `${mountBaseDir}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
+            const path =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
             this.logger.error(path)
             const request =  buildScanPayload(path)
             const operation = this.operationsRepo.create({
