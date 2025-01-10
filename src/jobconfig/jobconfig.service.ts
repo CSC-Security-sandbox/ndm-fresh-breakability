@@ -25,7 +25,7 @@ export class JobConfigService {
   ) { }
 
   // ------------ Events ---------------- //
-  @OnEvent(EmitterEvents.InActivateJobConfig)
+  @OnEvent(EmitterEvents.IN_ACTIVE_JOB_CONFIG)
   async inActivateJobConfig (payload: InActivateJobConfigPayload) {
     await this.jobConfigRepo.update({id: payload.jobConfigId}, {status: JobStatus.InActive})
   }

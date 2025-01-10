@@ -16,13 +16,14 @@ import {
 } from "./dto/jobrun.dto";
 import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { JobRunConfig, UpdateJobRunMappingPayload } from "./jobrun.types";
+import { JobRunConfig, UnMountNotificationPayload, UpdateJobRunMappingPayload } from "./jobrun.types";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
+  private readonly mountBasePath: string 
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -36,13 +37,13 @@ export class JobRunService {
     @InjectRepository(JobOptionsEntity)
     private optionRepo: Repository<JobOptionsEntity>,
     private readonly eventEmitter: EventEmitter2,
-
     private readonly configService: ConfigService
-  ) {}
+  ) {
+    this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
+  }
 
-  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
+  @OnEvent(EmitterEvents.JOB_RUN_STATUS_UPDATE, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-
     switch(payload.status) {
       case JobRunStatus.Completed: 
         await this.jobRunRepo.update({id: payload.jobRunId}, {endTime: new Date(), status: JobRunStatus.Completed})
@@ -55,10 +56,27 @@ export class JobRunService {
     }
   }
 
-  @OnEvent(EmitterEvents.UpdateJobRunMapping, { async: true })
+  @OnEvent(EmitterEvents.UPDATE_JOB_RUN_MAPPING, { async: true })
   async updateJobRunMapping(payload: UpdateJobRunMappingPayload){
     await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
   }
+
+
+  @OnEvent(EmitterEvents.UNMOUNT_NOTIFICATION,  {async: true}) 
+  async UNMOUNT_NOTIFICATION(payload: UnMountNotificationPayload){
+    const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
+    for(const worker of workers) 
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
+        workerId: worker.workerId,
+        socketEvents: SocketEvents.UNMOUNT_PATH,
+        payload: {
+          mountBaseDir: this.mountBasePath,
+          ...payload
+        }
+    });
+
+  }
+
 
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
@@ -98,7 +116,6 @@ export class JobRunService {
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
 
-    const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
     const details : JobRunConfig = {
       preserveAccessTime: jobConfig.preserveAccessTime,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
@@ -107,11 +124,11 @@ export class JobRunService {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath ,
           pathId : jobConfig?.sourcePath?.id ,
-          protocol: jobConfig?.sourcePath?.fileServer?.protocol ,
+          protocol: jobConfig?.sourcePath?.fileServer?.protocol,
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: mountBaseDir
+          workingDirectory: this.mountBasePath
         }
       },
       workers: sourceWorkers.map((worker) => worker.workerId),
@@ -126,7 +143,6 @@ export class JobRunService {
         if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
       });
 
-      const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
       details.connection['targetCredential'] = {
         path: jobConfig?.targetPath?.volumePath ,
         pathId : jobConfig?.targetPath?.id ,
@@ -134,7 +150,7 @@ export class JobRunService {
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,
         host: jobConfig?.targetPath?.fileServer?.host,
-        workingDirectory: mountBaseDir
+        workingDirectory: this.mountBasePath
       }
       details['workers'] = workers
       return details;
@@ -154,15 +170,13 @@ export class JobRunService {
       this.workerJobRunMapRepo.create({ workerId: worker, isActive: true, isPathMounted: false })
     )
 
-    const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
     const options = this.optionRepo.create({
       excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: mountBaseDir,
-      targetWorkingDir: mountBaseDir,
+      sourceWorkingDir: this.mountBasePath,
+      targetWorkingDir: this.mountBasePath,
       preserveAccessTime: details.preserveAccessTime,
       excludeOlderThan: details.excludeOlderThan
     })
-
     const jobRunRecord = this.jobRunRepo.create({
       status: JobRunStatus.Ready,
       startTime: currentTime,
@@ -177,7 +191,7 @@ export class JobRunService {
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
     await this.sendMountMessage(details, update.id)
 
-    this.eventEmitter.emit(EmitterEvents.TaskCreate, {
+    this.eventEmitter.emit(EmitterEvents.CREATE_TASK, {
       jobRunId: update.id,
       status: update.status,
       details: details
@@ -186,7 +200,7 @@ export class JobRunService {
   //  ------------------- sendMountMessage ------------------ //
   async sendMountMessage(details: JobRunConfig, jobRunId: string) {
       details.workers.forEach(worker => 
-        this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+        this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
           workerId: worker,
           socketEvents: SocketEvents.MOUNT_PATH,
           payload: { jobRunId: jobRunId, ...details.connection}
@@ -228,7 +242,7 @@ export class JobRunService {
       {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped}
       )
     worker.forEach((jobRuns, workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
         workerId: workerId,
         socketEvents: SocketEvents.STOP_TASK,
         payload: { jobRuns }
@@ -247,7 +261,7 @@ export class JobRunService {
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
     workerSet.forEach((workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
         workerId: workerId,
         socketEvents: SocketEvents.WAKE_UP,
         payload: { jobRuns }
@@ -255,6 +269,8 @@ export class JobRunService {
     )
     return {details: 'Operation Completed Successfully'}
   }
+
+
 
 
   //  ------------------- get JobRun Details ------------------ //

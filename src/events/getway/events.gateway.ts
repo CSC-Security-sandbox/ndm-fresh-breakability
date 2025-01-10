@@ -147,8 +147,13 @@ export class EventsGateway implements OnGatewayInit{
 
    @SubscribeMessage(SocketEvents.MOUNT_PATH_ACK)
    async mountedPathStatus(client: Socket, ack: MountedStatus) {
-    await this.workManager.updateMountStatus(ack)
+    await this.workManager.updateMountStatus(ack, true)
     this.server.to(client.id).emit(SocketEvents.WAKE_UP, {})
+   }
+
+   @SubscribeMessage(SocketEvents.UNMOUNT_PATH_ACK)
+   async unmountedPathStatus(client: Socket, ack: MountedStatus) {
+    await this.workManager.updateMountStatus(ack, false)
    }
 
 

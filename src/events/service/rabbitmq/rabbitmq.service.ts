@@ -89,7 +89,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  @OnEvent(EmitterEvents.DiscoveryComplete, { async: true })
+  @OnEvent(EmitterEvents.DISCOVERY_COMPLETE, { async: true })
   async generateDiscoveryReport(data: DiscoveryCompletePayload) {
     await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
       {
