@@ -1,12 +1,13 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, In, Repository } from 'typeorm';
 import { Project } from '../entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { UserRole } from 'src/entities/user-role.entity';
 
 @Injectable()
 export class ProjectService {
@@ -17,6 +18,8 @@ export class ProjectService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
   async create(
@@ -122,18 +125,13 @@ export class ProjectService {
     sortField: string = 'id',
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateProjectDto> = {},
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<Project[]> {
     const options: FindManyOptions<Project> = {
       skip: (page - 1) * limit,
       take: limit,
       order: {
         [sortField]: sortOrder,
-      },
-      where: {
-        ...filter,
-        account: {
-          id: account_id,
-        },
       },
       relations: ['account'],
     };
@@ -146,7 +144,32 @@ export class ProjectService {
     if (!account) {
       throw new NotFoundException(`Account with ${account_id} not found`);
     }
-
+   
+    if (userPermissionResponse.user.roles[0].projects.length > 0) {
+      const userId = userPermissionResponse.user.id;
+   
+      const userRoles = await this.userRoleRepository.query(
+        `
+        SELECT project_id 
+        FROM migrateadmin.user_role 
+        WHERE user_id = $1 AND account_id = $2
+        `,
+        [userId, account_id],
+      );
+   
+      const allowedProjectIds = userRoles.map((ur) => ur.project_id);
+   
+      options.where = {
+        id: In(allowedProjectIds),
+        ...filter,
+      };
+    } else {
+      options.where = {
+        account: { id: account_id },
+        ...filter,
+      };
+    }
+   
     const projects = await this.projectRepository.find(options);
 
     const transformedProjects = await Promise.all(

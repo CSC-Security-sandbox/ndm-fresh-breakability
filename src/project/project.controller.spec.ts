@@ -54,6 +54,10 @@ describe('ProjectController', () => {
           provide: getRepositoryToken(User),
           useClass: Repository,
         },
+        {
+          provide: getRepositoryToken(UserRole),
+          useClass: Repository,
+        },
       ],
     }).compile();
 
@@ -182,12 +186,12 @@ describe('ProjectController', () => {
     it('should return an empty list when no projects exist for an account', async () => {
       jest.spyOn(service, 'findByAccount').mockResolvedValue([]);
 
-      const result = await controller.findByAccountId('1', 1, 10, 'id', 'ASC', '{}');
-      const result2 = await controller.findByAccountId(undefined, undefined, undefined, undefined, undefined, undefined);
-      const result3 = await controller.findByAccountId('1', undefined, undefined, undefined, undefined, undefined);
-      const result4 = await controller.findByAccountId('1', 1, undefined, undefined, undefined, undefined);
-      const result5 = await controller.findByAccountId('1', 1, 10, undefined, undefined, undefined);
-      const result6 = await controller.findByAccountId('1', 1, 10, 'ASC', undefined, undefined);
+      const result = await controller.findByAccountId('1', 1, 10, 'id', 'ASC', '{}', undefined);
+      const result2 = await controller.findByAccountId(undefined, undefined, undefined, undefined, undefined, undefined, undefined);
+      const result3 = await controller.findByAccountId('1', undefined, undefined, undefined, undefined, undefined, undefined);
+      const result4 = await controller.findByAccountId('1', 1, undefined, undefined, undefined, undefined, undefined);
+      const result5 = await controller.findByAccountId('1', 1, 10, undefined, undefined, undefined, undefined);
+      const result6 = await controller.findByAccountId('1', 1, 10, 'ASC', undefined, undefined, undefined);
       expect( result ).toEqual([]);
       expect( result2 ).toEqual([]);      
       expect( result3 ).toEqual([]);
@@ -195,7 +199,7 @@ describe('ProjectController', () => {
       expect(result5).toEqual([]);
       expect(result6).toEqual([]);
       expect(result).toEqual([]);
-      expect(service.findByAccount).toHaveBeenCalledWith('1', 1, 10, 'id', 'ASC', {});
+      expect(service.findByAccount).toHaveBeenCalledWith('1', 1, 10, 'id', 'ASC', {}, undefined);
     });
 
     it('should return projects for an account', async () => {
@@ -219,15 +223,15 @@ describe('ProjectController', () => {
       ];
       jest.spyOn(service, 'findByAccount').mockResolvedValue(projects);
 
-      const result = await controller.findByAccountId('1', 1, 10, 'id', 'ASC', '{}');
+      const result = await controller.findByAccountId('1', 1, 10, 'id', 'ASC', '{}', undefined);
       expect(result).toEqual(projects);
-      expect(service.findByAccount).toHaveBeenCalledWith('1', 1, 10, 'id', 'ASC', {});
+      expect(service.findByAccount).toHaveBeenCalledWith('1', 1, 10, 'id', 'ASC', {}, undefined);
     });
 
     it('should handle errors during findByAccountId', async () => {
       jest.spyOn(service, 'findByAccount').mockRejectedValue(new Error('Account not found'));
 
-      await expect(controller.findByAccountId('invalid-id', 1, 10, 'id', 'ASC', '{}')).rejects.toThrow('Account not found');
+      await expect(controller.findByAccountId('invalid-id', 1, 10, 'id', 'ASC', '{}', undefined)).rejects.toThrow('Account not found');
     });
   });
 
