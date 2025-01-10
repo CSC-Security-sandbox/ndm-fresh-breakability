@@ -6,7 +6,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Account } from '../entities/account.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DeleteResult } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
@@ -149,6 +149,93 @@ describe('ProjectService', () => {
       });
       expect(projectRepository.save).toHaveBeenCalledWith(createdProject);
       expect(result).toEqual(createdProject);
+    });
+  });
+
+  describe('projectNameConflict', () => {
+    it('should throw a Conflict Exception if a project with the same name already exists', async () => {
+      const accountId = '12345';
+      const account = {
+        id: '12345',
+        account_name: '',
+        created_at: new Date(),
+        created_by: '1',
+        updated_at: new Date(),
+        updated_by: '1',
+        user_roles: [],
+        projects: [],
+        populateWhoColumns: jest.fn(),
+      } as Account;
+   
+      const createProjectDto: CreateProjectDto = {
+        account_id: accountId,
+        project_name: 'Test Project',
+        project_description: 'Optional description',
+        start_date: new Date(),
+      };
+   
+      const existingProject: Project = {
+        id: '456',
+        project_name: 'Test Project',
+        project_description: '',
+        start_date: new Date(),
+        account: { id: accountId } as Account,
+        created_by: '789',
+        created_at: new Date(),
+        updated_by: '789',
+        updated_at: new Date(),
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      };
+   
+      // Mock repository methods
+      jest.spyOn(accountRepository, 'findOneBy').mockResolvedValueOnce(account);
+      jest.spyOn(projectRepository, 'findOneBy').mockResolvedValueOnce(existingProject);
+      jest.spyOn(accountRepository, 'create').mockReturnValueOnce(account);
+      jest.spyOn(accountRepository, 'save').mockResolvedValueOnce(account);
+   
+      // Run the service method and assert that it throws a ConflictException
+      await expect(
+        service.create(accountId, createProjectDto, userPermissionResponseMock)
+      ).rejects.toThrow(new ConflictException(
+        `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+      ));
+    });
+  });
+
+  describe('accountNotFound', () => {
+    it('should throw a Not Found Exception if a account with the id doest not exists', async () => {
+      const accountId = '12345';
+      
+      const createProjectDto: CreateProjectDto = {
+        account_id: accountId,
+        project_name: 'Test Project',
+        project_description:"Optional description",
+        start_date: new Date(),
+      };
+     
+      const existingProject: Project = {
+        id: '456',
+        project_name: 'Test Project',
+        project_description: '',
+        start_date: new Date(),
+        account: { id: accountId } as Account,
+        created_by: '789',
+        created_at: new Date(),
+        updated_by: '789',
+        updated_at: new Date(),
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      };
+     
+
+      await expect(
+        service.create( accountId, createProjectDto, userPermissionResponseMock),
+      ).rejects.toThrow(
+        new NotFoundException(
+          `Account with ${accountId} not found`,
+        ),
+      );
     });
   });
 
@@ -427,7 +514,16 @@ describe('ProjectService', () => {
         projects: projects,
       } as Account);
       const createdBy="DataMigrateAdmin"
- 
+
+      jest.spyOn(accountRepository, 'findOne').mockResolvedValueOnce({
+        id: accountId,
+        projects: projects,
+      } as Account);
+      jest.spyOn(userRoleRepository, 'query').mockResolvedValueOnce([{ project_id: "1" }]);
+      jest.spyOn(projectRepository, 'find').mockResolvedValueOnce(projects);
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user_1', email: 'user1@test.com' });
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user_2', email: 'user2@test.com' });
+  
       jest.spyOn(projectRepository, 'find').mockResolvedValueOnce(projects);
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(createdBy);
       jest.spyOn(userRoleRepository, 'query').mockResolvedValueOnce(projects);
@@ -446,7 +542,12 @@ describe('ProjectService', () => {
       }
 
       const result = await service.findByAccount(accountId, 1, 1, "", "ASC", {}, userMock);
-
+      const result2 = await service.findByAccount(accountId, undefined, undefined, undefined, undefined, undefined, userMock);
+      expect(accountRepository.findOne).toHaveBeenCalledWith({
+        where: { id: accountId },
+        relations: ['projects'],
+      });
+      expect(result2).toEqual(projects);
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: accountId },
         relations: ['projects'],
