@@ -22,10 +22,6 @@ export class ConfigEntity extends Base {
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
 
-    @ApiProperty({ description: 'Working Directory' })
-    @Column({ type: 'text', nullable: true,  name:'working_directory' })
-    workingDirectory: string;
-
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 

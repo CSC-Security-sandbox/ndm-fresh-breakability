@@ -55,11 +55,12 @@ export class WorkManager{
     }
 
     // ------------------------------- Update Worker Mount Status -----------------------------------//
-    async updateMountStatus(payload: MountedStatus) {
+    async updateMountStatus(payload: MountedStatus, isPathMounted: boolean ) {
         await this.workerJobRunMapRepo.update(
             {workerId: payload.workerId, jobRunId: payload.jobRunId},
-            {isPathMounted: true}
+            {isPathMounted}
         )
+        this.logger.debug(`Path Mount status for worker : ${payload?.workerId} | JobRun Id : ${payload?.jobRunId} | IsMounted : ${isPathMounted}`)
     }  
 
     // --------------------------- Create Un-Scanned Operation --------------------------------//
@@ -206,18 +207,23 @@ export class WorkManager{
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            if(!isNotCompletedOperation && !isNotCompletedTask)  {
-                this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
-                    jobRunId: task.jobRunId,
-                    status: JobRunStatus.Completed
-                })             
-                this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
+            if(!isNotCompletedOperation && !isNotCompletedTask)  
                 this.onTaskComplete(task)
-            }
+            
         }
     }
 
     async onTaskComplete(task: ScanCompletedPayload) {
+        this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+            jobRunId: task.jobRunId,
+            status: JobRunStatus.Completed
+        })    
+        this.eventEmitter.emit(EmitterEvents.UnMountNotification, {
+            jobRunId: task.jobRunId,
+            sPathId: task.sPath,
+            tPathId: task?.tPath
+        })
+        this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         switch(task.taskType) {
             case TaskType.Scan:
                 this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
