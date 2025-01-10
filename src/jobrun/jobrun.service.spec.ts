@@ -337,7 +337,7 @@ describe("JobRunService", () => {
       await service.createJobRun(mockJob, new Date());
 
       expect(emitSpy).toHaveBeenCalledWith(
-        EmitterEvents.TaskCreate,
+        EmitterEvents.CREATE_TASK,
         expect.any(Object)
       );
     });

@@ -42,7 +42,7 @@ export class JobRunService {
     this.mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir')
   }
 
-  @OnEvent(EmitterEvents.JobRunStatusUpdate, { async: true })
+  @OnEvent(EmitterEvents.JOB_RUN_STATUS_UPDATE, { async: true })
   async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
     switch(payload.status) {
       case JobRunStatus.Completed: 
@@ -56,17 +56,17 @@ export class JobRunService {
     }
   }
 
-  @OnEvent(EmitterEvents.UpdateJobRunMapping, { async: true })
+  @OnEvent(EmitterEvents.UPDATE_JOB_RUN_MAPPING, { async: true })
   async updateJobRunMapping(payload: UpdateJobRunMappingPayload){
     await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
   }
 
 
-  @OnEvent(EmitterEvents.UnMountNotification,  {async: true}) 
-  async UnMountNotification(payload: UnMountNotificationPayload){
+  @OnEvent(EmitterEvents.UNNOUNT_NOTIFICATION,  {async: true}) 
+  async UNNOUNT_NOTIFICATION(payload: UnMountNotificationPayload){
     const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
     for(const worker of workers) 
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
         workerId: worker.workerId,
         socketEvents: SocketEvents.UNMOUNT_PATH,
         payload: {
@@ -191,7 +191,7 @@ export class JobRunService {
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
     await this.sendMountMessage(details, update.id)
 
-    this.eventEmitter.emit(EmitterEvents.TaskCreate, {
+    this.eventEmitter.emit(EmitterEvents.CREATE_TASK, {
       jobRunId: update.id,
       status: update.status,
       details: details
@@ -200,7 +200,7 @@ export class JobRunService {
   //  ------------------- sendMountMessage ------------------ //
   async sendMountMessage(details: JobRunConfig, jobRunId: string) {
       details.workers.forEach(worker => 
-        this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+        this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
           workerId: worker,
           socketEvents: SocketEvents.MOUNT_PATH,
           payload: { jobRunId: jobRunId, ...details.connection}
@@ -242,7 +242,7 @@ export class JobRunService {
       {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped}
       )
     worker.forEach((jobRuns, workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
         workerId: workerId,
         socketEvents: SocketEvents.STOP_TASK,
         payload: { jobRuns }
@@ -261,7 +261,7 @@ export class JobRunService {
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
     workerSet.forEach((workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NotifyWorker,{
+      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
         workerId: workerId,
         socketEvents: SocketEvents.WAKE_UP,
         payload: { jobRuns }

@@ -30,7 +30,7 @@ export class WorkManager{
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
-    @OnEvent(EmitterEvents.TaskCreate, { async: true })
+    @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
         try{
             const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
@@ -78,7 +78,7 @@ export class WorkManager{
             const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
             // Notify worker
             workers.forEach(async worker => {
-                this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+                this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
                     workerId: worker.workerId,
                     socketEvents: SocketEvents.WAKE_UP,
                     payload: { jobRunId: data.jobRunId}
@@ -120,7 +120,7 @@ export class WorkManager{
             const task = await this.createTask(job, workerId)
             if(task) {
                 if(job.status === JobRunStatus.Ready)
-                    this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+                    this.eventEmitter.emit(EmitterEvents.JOB_RUN_STATUS_UPDATE, {
                         jobRunId: job.jobRunId,
                         status: JobRunStatus.Running
                     })
@@ -214,11 +214,11 @@ export class WorkManager{
     }
 
     async onTaskComplete(task: ScanCompletedPayload) {
-        this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+        this.eventEmitter.emit(EmitterEvents.JOB_RUN_STATUS_UPDATE, {
             jobRunId: task.jobRunId,
             status: JobRunStatus.Completed
         })    
-        this.eventEmitter.emit(EmitterEvents.UnMountNotification, {
+        this.eventEmitter.emit(EmitterEvents.UNNOUNT_NOTIFICATION, {
             jobRunId: task.jobRunId,
             sPathId: task.sPath,
             tPathId: task?.tPath
@@ -226,7 +226,7 @@ export class WorkManager{
         this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         switch(task.taskType) {
             case TaskType.Scan:
-                this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
+                this.eventEmitter.emit(EmitterEvents.DISCOVERY_COMPLETE, {
                     jobRunId: task.jobRunId,
                 })
                 break;
