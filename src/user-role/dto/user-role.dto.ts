@@ -49,10 +49,28 @@ export class UserRoleMappingDto{
     @ApiProperty({ description: 'Name of the user' })
     userName: string;
 
+    @ApiProperty({ description: 'User Status Active/Inactive' })
+    userStatus: string;
+
     @ApiProperty({ description: 'Array of User roles details', type: [RoleMap] })
     @IsArray()
     @ValidateNested({ each: true }) 
     @Type(() => RoleMap) 
     roles: RoleMap[]
+}
+
+export class UserRoleMappingResponseDto{
+
+    @ApiProperty({ description: 'Total number of records' })
+    total: number;
+
+    @ApiProperty({ description: 'Current page number' })
+    page: number;
+
+    @ApiProperty({ description: 'Number of records per page' })
+    limit: number;
+
+    @ApiProperty({ description: 'Array of User Role Mapping details', type: [UserRoleMappingDto] })
+    data: UserRoleMappingDto[];
 }
 
