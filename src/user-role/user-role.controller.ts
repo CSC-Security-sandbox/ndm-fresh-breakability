@@ -86,7 +86,6 @@ export class UserRoleController {
     await this.userRoleService.delete(id);
   }
 
-  //@Auth(Permission.ListUsers)
   @Auth(Permission.ListUsers)
   @ApiBearerAuth()
   @Get('/grouping')
