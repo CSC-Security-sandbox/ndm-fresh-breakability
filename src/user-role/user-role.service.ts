@@ -259,7 +259,7 @@ export class UserRoleService {
  async fetchUsersAndRoles(page: number, limit: number, sortField: string, sortOrder: string, filter: Partial<CreateUserRoleDto>={}): Promise<UserRoleMappingResponseDto> {
     const where: FindOptionsWhere<UserRole> = {};
     if (filter.user_id) {
-      where.user = { id: filter.user_id };
+      where.id = filter.user_id;
     }
     const options: FindManyOptions<User> = {
       skip: (page - 1) * limit,
@@ -267,6 +267,7 @@ export class UserRoleService {
       order: {
         [sortField]: sortOrder,
       },
+      where,
       relations: ['user_roles', 'user_roles.role'],
     };
     const [users,total] =  await this.userRepository.findAndCount(options);
