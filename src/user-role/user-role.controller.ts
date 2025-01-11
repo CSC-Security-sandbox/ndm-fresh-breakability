@@ -86,17 +86,7 @@ export class UserRoleController {
     await this.userRoleService.delete(id);
   }
 
-  @Auth(Permission.InviteUser)
-  @ApiBearerAuth()
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Get a user-role association by ID',
-    description: UserRoleDescription.GetUserRoleByIdDescription,
-  })
-  async findOne(@Param('id') id: string): Promise<UserRole> {
-    return this.userRoleService.findOne(id);
-  }
-
+  //@Auth(Permission.ListUsers)
   @Auth(Permission.ListUsers)
   @ApiBearerAuth()
   @Get('/grouping')
@@ -151,6 +141,17 @@ export class UserRoleController {
       sortOrder,
       filter,
     );
+  }
+
+  @Auth(Permission.InviteUser)
+  @ApiBearerAuth()
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get a user-role association by ID',
+    description: UserRoleDescription.GetUserRoleByIdDescription,
+  })
+  async findOne(@Param('id') id: string): Promise<UserRole> {
+    return this.userRoleService.findOne(id);
   }
 
   @Auth(Permission.ListUsers)
