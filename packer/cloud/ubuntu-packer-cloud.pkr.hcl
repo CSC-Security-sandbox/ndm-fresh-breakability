@@ -105,71 +105,57 @@ variable "azure_ubuntu_release_version" {
 #   description = "SSH public key to access the VM"
 # }
 
-# Azure source for packer
-# source "azure-arm" "azure_ubuntu" {
-#   client_id       = var.azure_client_id
-#   client_secret   = var.azure_client_secret
-#   tenant_id       = var.azure_tenant_id
-#   subscription_id = var.azure_subscription_id
+#Azure source for packer
+source "azure-arm" "azure_ubuntu" {
+  client_id       = var.azure_client_id
+  client_secret   = var.azure_client_secret
+  tenant_id       = var.azure_tenant_id
+  subscription_id = var.azure_subscription_id
 
-#   os_disk_size_gb = 100
-#   disk_additional_size = [ 150 ]
-#   managed_image_name = "${var.project_name}-control-plane-${local.formatted_timestamp}"
-#   managed_image_resource_group_name = var.azure_resource_group
-#   #public_ip_sku                     = "standard"
-#   image_publisher = "Canonical"
-#   image_offer     = "ubuntu-24_04-lts"
-#   image_sku       = "server"
-#   image_version   = var.azure_ubuntu_release_version
-#   vm_size         = var.azure_packer_vm_size
-#   location        = var.azure_region
-#   virtual_network_name = "datamigrate-dev-vnet"
-#   virtual_network_subnet_name = "default"
-#   virtual_network_resource_group_name = var.azure_resource_group
+  os_disk_size_gb = 100
+  #disk_additional_size = [ 150 ]
+  managed_image_name = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  managed_image_resource_group_name = var.azure_resource_group
+  #public_ip_sku                     = "standard"
+  image_publisher = "Canonical"
+  image_offer     = "ubuntu-24_04-lts"
+  image_sku       = "server"
+  image_version   = var.azure_ubuntu_release_version
+  vm_size         = var.azure_packer_vm_size
+  location        = var.azure_region
+  virtual_network_name = "datamigrate-dev-vnet"
+  virtual_network_subnet_name = "default"
+  virtual_network_resource_group_name = var.azure_resource_group
 
-#   os_type          = "Linux"
-#   ssh_username     = "ubuntu"
-#   #ssh_public_key   = var.ssh_public_key
+  os_type          = "Linux"
+  #ssh_username     = "packer"
+  #ssh_public_key   = var.ssh_public_key
 
-#   ssh_bastion_host     = "20.51.200.139"
-#   ssh_bastion_username = "ubuntu"
-#   ssh_bastion_password = "Hacker@123321"
-#   ssh_file_transfer_method = "scp"
+  ssh_bastion_host     = "20.51.200.139"
+  ssh_bastion_username = "ubuntu"
+  ssh_bastion_password = "Hacker@123321"
+  ssh_file_transfer_method = "scp"
 
 
-#   azure_tags = {
-#     "StackName" = "${var.project_name}-control-plane-ami-${local.formatted_timestamp}"
-#     "CreatedBy" = "Packer"
-#     "Project"   = var.project_name
-#     "Cloud"     = "Azure"
-#   }
-# }
+  azure_tags = {
+    "StackName" = "${var.project_name}-control-plane-ami-${local.formatted_timestamp}"
+    "CreatedBy" = "Packer"
+    "Project"   = var.project_name
+    "Cloud"     = "Azure"
+  }
+}
 
-# build {
-#   sources = [
-#     "source.azure-arm.azure_ubuntu"
-#   ]
-#   provisioner "shell" {
-#     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
-#     inline = [
-#           "lsblk"
-#     ]
-#     inline_shebang = "/bin/sh -x"
-#   }
-#   provisioner "ansible" {
-#     playbook_file       = "../../ansible/playbooks/master-playbook.yaml"
-#     inventory_directory = "../../ansible/config"
-#     user                = "ubuntu"
-#     extra_arguments     = ["-v", "-e", "datamigrate_release_version=${var.datamigrate_release_version}"]
-#   }
-#   provisioner "shell" {
-#     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
-#     inline = [
-#           "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"
-#     ]
-#     inline_shebang = "/bin/sh -x"
-#   }
-#   provisioner "shell" {
+build {
+  sources = [
+    "source.azure-arm.azure_ubuntu"
+  ]
+  provisioner "ansible" {
+    playbook_file       = "../../control-plane/ansible/playbooks/master-playbook.yaml"
+    inventory_directory = "../../control-plane/ansible/config"
+    user                = "packer"
+    extra_arguments     = ["-v"]
+  }
+# provisioner "shell" {
 #     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
 #     inline = [
 #       "cat /etc/passwd",                          # Check the users on the system
@@ -186,8 +172,14 @@ variable "azure_ubuntu_release_version" {
 #     ]
 #     inline_shebang = "/bin/bash -x"
 #   }
-
-# }
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
+    inline = [
+          "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"
+    ]
+    inline_shebang = "/bin/sh -x"
+  }
+}
 
 # source "azure-arm" "azure_ubuntu" {
 #   managed_image_name      = "${var.project_name}-ubuntu-${var.ubuntu_version}-{{timestamp}}"
@@ -209,47 +201,47 @@ variable "azure_ubuntu_release_version" {
 #   image_name       = "${var.project_name}-ubuntu-${var.ubuntu_version}-{{timestamp}}"
 # }
 
-source "amazon-ebs" "aws_ubuntu" {
-  access_key    = var.aws_access_key
-  secret_key    = var.aws_secret_key
-  ami_name      = "${var.project_name}-control-plane-${local.formatted_timestamp}"
-  instance_type = var.aws_packer_instance_type
-  region        = var.aws_region
-  ssh_port      = "22"
-  launch_block_device_mappings {
-    device_name = "/dev/sda1"
-    volume_size = 50
-    volume_type = "gp2"
-    delete_on_termination = true
-  }
-  source_ami_filter {
-    filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-${var.aws_ubuntu_release_version}"
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
-    }
-    owners      = ["099720109477"]
-    #most_recent = true
-  }
-  communicator = "ssh"
-  ssh_username  = "ubuntu"
-  tags = {
-    "StackName" = "${var.project_name}-control-plane-ami-${local.formatted_timestamp}"
-    "CreatedBy" = "Packer"
-    "Project"   = var.project_name
-    "Cloud"     = "AWS"
-  }
-}
+# source "amazon-ebs" "aws_ubuntu" {
+#   access_key    = var.aws_access_key
+#   secret_key    = var.aws_secret_key
+#   ami_name      = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+#   instance_type = var.aws_packer_instance_type
+#   region        = var.aws_region
+#   ssh_port      = "22"
+#   launch_block_device_mappings {
+#     device_name = "/dev/sda1"
+#     volume_size = 50
+#     volume_type = "gp2"
+#     delete_on_termination = true
+#   }
+#   source_ami_filter {
+#     filters = {
+#       name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-${var.aws_ubuntu_release_version}"
+#       root-device-type    = "ebs"
+#       virtualization-type = "hvm"
+#     }
+#     owners      = ["099720109477"]
+#     #most_recent = true
+#   }
+#   communicator = "ssh"
+#   ssh_username  = "packer"
+#   tags = {
+#     "StackName" = "${var.project_name}-control-plane-ami-${local.formatted_timestamp}"
+#     "CreatedBy" = "Packer"
+#     "Project"   = var.project_name
+#     "Cloud"     = "AWS"
+#   }
+# }
 
-build {
-  sources = [
-    "source.amazon-ebs.aws_ubuntu"
-  ]
+# build {
+#   sources = [
+#     "source.amazon-ebs.aws_ubuntu"
+#   ]
 
-  provisioner "ansible" {
-    playbook_file       = "../../control-plane/ansible/playbooks/master-playbook.yaml"
-    inventory_directory = "../../control-plane/ansible/config"
-    user                = "ubuntu"
-    extra_arguments     = ["-v"]
-  }
-}
+#   provisioner "ansible" {
+#     playbook_file       = "../../control-plane/ansible/playbooks/master-playbook.yaml"
+#     inventory_directory = "../../control-plane/ansible/config"
+#     user                = "ubuntu"
+#     extra_arguments     = ["-v"]
+#   }
+# }

@@ -1,4 +1,76 @@
 #cloud-config
+
+hostname: datamigrate
+preserve_hostname: true
+
+# system_info:
+#   distro: ubuntu
+#   default_user:
+#     name: ubuntu
+#     lock_passwd: True
+#     gecos: Ubuntu
+#     groups: [adm, cdrom, dip, lxd, sudo]
+#     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+#     shell: /bin/bash
+
+#ssh_deletekeys: false
+
 runcmd:
+  - echo "Starting Microk8s..."
+  - microk8s start
+
+  - echo "Microk8s Status..."
+  - microk8s status
+
+  # - /snap/bin/microk8s.config -l | tee /home/datamigrate/.kube/config
+  # - chown datamigrate:datamigrate /home/datamigrate/.kube/config
+
+  - microk8s refresh-certs --cert server.crt
+  - microk8s refresh-certs --cert front-proxy-client.crt
+  - microk8s refresh-certs --cert ca.crt
+
+  - echo "Microk8s Status..."
+  - microk8s status --wait-ready
+
+  # Restart Vault statefulset and wait for readiness
+  - echo "Rolling out Vault statefulset..."
+  - kubectl rollout restart statefulset vault -n vault
+  - sleep 80
+
+  # Unseal vault
+  - echo "Unsealing Vault..."
+  - VAULT_UNSEAL_KEY=$(cat /home/datamigrate/vault/cluster-keys.json | jq -r ".unseal_keys_b64[]")
+  - kubectl exec vault-0 -n vault -- vault operator unseal $VAULT_UNSEAL_KEY
+  - kubectl exec vault-1 -n vault -- vault operator unseal $VAULT_UNSEAL_KEY
+  - kubectl exec vault-2 -n vault -- vault operator unseal $VAULT_UNSEAL_KEY
+  - kubectl wait --for=condition=ready pod --all -n vault --timeout=600s
+
+  # Wait for PostgreSQL statefulset to be ready
+  - echo "Rolling out Postgres statefulset..."
+  - kubectl rollout restart statefulset postgres-postgresql -n postgres
+  - kubectl wait --for=condition=ready pod --all -n postgres --timeout=600s
+
+  # Wait for RabbitMQ statefulset to be ready
+  - echo "Rolling out RabbitMQ statefulset..."
+  - kubectl rollout restart statefulset rabbitmq -n rabbitmq
+  - kubectl wait --for=condition=ready pod --all -n rabbitmq --timeout=600s
+
+  # Wait for Keycloak statefulset to be ready
+  - echo "Rolling out Keycloak statefulset..."
+  - kubectl rollout restart statefulset keycloak -n keycloak
+  - kubectl wait --for=condition=ready pod --all -n keycloak --timeout=600s
+
+  - echo "Restarting pods for datamigrate release..."
+  - kubectl delete pod --all -n datamigrate
+  - kubectl wait --for=condition=ready pod --all -n datamigrate --timeout=600s
+
+  # - echo "Triggering admin-entry-job..."
+  # - kubectl delete job admin-entry-job -n datamigrate || true
+  # - kubectl create job --from=cronjob/admin-entry-job admin-entry-job -n datamigrate
+
+  - microk8s start
+  - microk8s status --wait-ready
   - PRIVATE_IP=$(hostname -I | awk '{print $1}')
   - su -c "microk8s enable metallb:${PRIVATE_IP}/32" - datamigrate
+
+  - echo "Cloud Init Completed..."

@@ -1,0 +1,8 @@
+---
+- name: Deploy datamigrate helm chart
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/datamigrate/configure-dm, tags: 'configure-dm' }
+    - { role: ../roles/datamigrate/helm-chart/install, tags: 'helm-chart-install' }

@@ -1,0 +1,6 @@
+- name: Reset the mcirok8s cluster
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/reset-cluster, tags: 'reset-cluster' }

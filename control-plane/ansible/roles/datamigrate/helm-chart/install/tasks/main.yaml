@@ -4,19 +4,19 @@
   local_action:
     module: template
     src: "../../values.j2"
-    dest: "../roles/helm-chart/package/values.yaml"
+    dest: "../roles/datamigrate/helm-chart/package/values.yaml"
 
 - name: Package the tarball
   become: no
   local_action:
     module: command
-    cmd: helm package ../roles/helm-chart/package/ -d ../roles/helm-chart/package/
+    cmd: helm package ../roles/datamigrate/helm-chart/package/ -d ../roles/datamigrate/helm-chart/package/
 
 - name: Copy the tarball to the remote host
   become: yes
   become_user: '{{ vm_username }}'
   copy:
-    src: "../roles/helm-chart/package/datamigrate-0.1.0.tgz"
+    src: "../roles/datamigrate/helm-chart/package/datamigrate-0.1.0.tgz"
     dest: "$HOME/helm-chart.tgz"
 
 - name: Install Helm chart
@@ -37,14 +37,14 @@
   become: no
   local_action:
     module: file
-    path: "../roles/helm-chart/package/datamigrate-0.1.0.tgz"
+    path: "../roles/datamigrate/helm-chart/package/datamigrate-0.1.0.tgz"
     state: absent
 
 - name: Delete the local values.yaml in package folder
   become: no
   local_action:
     module: file
-    path: "../roles/helm-chart/package/values.yaml"
+    path: "../roles/datamigrate/helm-chart/package/values.yaml"
     state: absent
 
 - name: Debug Helm install output

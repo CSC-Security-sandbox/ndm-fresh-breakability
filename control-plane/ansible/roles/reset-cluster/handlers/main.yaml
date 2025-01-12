@@ -1,0 +1,8 @@
+---
+- name: Restart MicroK8s
+  become: yes
+  command: snap restart microk8s
+
+- name: Apply Calico Configuration
+  become: yes
+  command: microk8s kubectl apply -f /var/snap/microk8s/current/args/cni-network/cni.yaml

@@ -22,12 +22,6 @@ data:
             CONSTRAINT "PK_54115ee388cdb6d86bb4bf5b2ea" PRIMARY KEY (id)
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.inventory (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -57,13 +51,6 @@ data:
         CREATE INDEX idx_inventory_job_run_id ON migrateadmin.inventory USING btree (job_run_id);
         CREATE INDEX idx_path ON migrateadmin.inventory USING btree (path);
 
-
-
-
-
-
-
-
         CREATE TABLE migrateadmin.jobidmapping (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -78,10 +65,6 @@ data:
         );
 
 
-
-
-
-
         CREATE TABLE migrateadmin."permission" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -94,10 +77,6 @@ data:
         );
 
 
-
-
-
-
         CREATE TABLE migrateadmin."role" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -108,11 +87,6 @@ data:
             role_status varchar(255) NOT NULL,
             CONSTRAINT "PK_b36bcfe02fc8de3c57a8b2391c2" PRIMARY KEY (id)
         );
-
-
-
-
-
 
 
         CREATE TABLE migrateadmin."user" (
@@ -129,11 +103,6 @@ data:
         );
 
 
-
-
-
-
-
         CREATE TABLE migrateadmin.project (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -148,13 +117,6 @@ data:
             CONSTRAINT "FK_76eea9da615605bb68d1ffc995c" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id)
         );
 
-
-
-
-
-
-
-
         CREATE TABLE migrateadmin.role_permission (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -167,11 +129,6 @@ data:
             CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES migrateadmin."role"(id),
             CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin."permission"(id)
         );
-
-
-
-
-
 
 
         CREATE TABLE migrateadmin.user_role (
@@ -191,12 +148,6 @@ data:
             CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES migrateadmin."user"(id)
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.worker (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -212,12 +163,6 @@ data:
             CONSTRAINT "FK_787ef3391e00fbbd3c127e0f3a2" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.config (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -232,12 +177,6 @@ data:
             CONSTRAINT "PK_d0ee79a681413d50b0a4f98cf7b" PRIMARY KEY (id),
             CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
         );
-
-
-
-
-
-
 
         CREATE TABLE migrateadmin.file_server (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -257,11 +196,6 @@ data:
         );
 
 
-
-
-
-
-
         CREATE TABLE migrateadmin.file_server_worker (
             file_server_id uuid NOT NULL,
             worker_id uuid NOT NULL,
@@ -271,13 +205,6 @@ data:
         );
         CREATE INDEX "IDX_000b409f7a5fe4210cf89b958d" ON migrateadmin.file_server_worker USING btree (file_server_id);
         CREATE INDEX "IDX_25cbd3119a71ce7db80d60e903" ON migrateadmin.file_server_worker USING btree (worker_id);
-
-
-
-
-
-
-
 
         CREATE TABLE migrateadmin.request_track (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -296,12 +223,6 @@ data:
             CONSTRAINT "FK_8363d1ef7f84cc88ec34d6dfec7" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id)
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.volume (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -316,12 +237,6 @@ data:
             CONSTRAINT "PK_666025cd0c36727216bb7f2a680" PRIMARY KEY (id),
             CONSTRAINT "FK_556b3e916c55734c6f7424c9280" FOREIGN KEY (file_server_id) REFERENCES migrateadmin.file_server(id) ON DELETE CASCADE
         );
-
-
-
-
-
-
 
         CREATE TABLE migrateadmin.jobconfig (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -343,12 +258,6 @@ data:
             CONSTRAINT "FK_cea32c3ed1e83116df4ef3c689a" FOREIGN KEY (source_path_id) REFERENCES migrateadmin.volume(id) ON DELETE CASCADE
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.jobrun (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -365,12 +274,6 @@ data:
             CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES migrateadmin.jobconfig(id) ON DELETE CASCADE
         );
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.tasks (
             id uuid DEFAULT uuid_generate_v4() NOT NULL,
             job_run_id uuid NOT NULL,
@@ -386,12 +289,6 @@ data:
         CREATE INDEX idx_job_run_status ON migrateadmin.tasks USING btree (job_run_id, status);
         CREATE INDEX idx_task_type ON migrateadmin.tasks USING btree (task_type);
 
-
-
-
-
-
-
         CREATE TABLE migrateadmin.worker_jobrun_mapping (
             id uuid DEFAULT uuid_generate_v4() NOT NULL,
             status bool DEFAULT false NOT NULL,
@@ -401,12 +298,6 @@ data:
             CONSTRAINT "FK_06c32b99d7b638ac00e416bd3fa" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id) ON DELETE CASCADE,
             CONSTRAINT "FK_0e30585297eabf24ea031fb784f" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
         );
-
-
-
-
-
-
 
         CREATE TABLE migrateadmin.operations (
             created_at timestamp DEFAULT now() NOT NULL,

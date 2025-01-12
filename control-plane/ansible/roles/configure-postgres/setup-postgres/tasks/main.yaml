@@ -68,7 +68,6 @@
   when: postgres_uninstall is defined    
   args:
     chdir: $HOME
-  ignore_errors: yes
 
 - name: setup namespace, persistentvolume for postgres
   become: yes
@@ -82,6 +81,18 @@
   args:
     chdir: $HOME
 
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n postgres postgres-sa
+  when: postgres_uninstall is defined
+
+- name: Create service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create serviceaccount -n postgres postgres-sa
 
 - name: Deploy postgres helm chart
   become: yes
@@ -110,12 +121,10 @@
   until: kubectl_get_pods.stdout|split('\n')|length == 1
   retries: 6
   delay: 10
-  ignore_errors: yes
 
 - name: debug output
   ansible.builtin.debug: 
     msg: "Get pods (postgres): {{ kubectl_get_pods.stdout | split('\n') }}"
-  ignore_errors: yes
 
 - name: Delete postgres directory
   become: yes

@@ -1,4 +1,3 @@
----
 - name: Admin entry configmap template
   become: yes
   become_user: "{{ vm_username }}"
@@ -26,6 +25,16 @@
     kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrate
     sleep 5
     kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrate
+
+- name: Wait for job to complete successfully
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrate
+  register: job_wait_result
+  retries: 5
+  delay: 10
+  until: job_wait_result.rc == 0
 
 - name: Clean up admin entry configmap and job files
   become: yes

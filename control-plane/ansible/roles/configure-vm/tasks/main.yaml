@@ -64,3 +64,5 @@
     default: true
     state: present
   
+- name: 2.9. Set the hostname
+  command: hostnamectl set-hostname datamigrate

@@ -56,7 +56,6 @@
     kubectl delete -f $HOME/rabbitmq/rabbitmq-secret.yaml
     kubectl delete -f $HOME/rabbitmq/rabbitmq-namespace.yaml  
   when: rabbitmq_uninstall is defined
-  ignore_errors: yes 
   args:
     chdir: $HOME
 
@@ -70,6 +69,19 @@
     kubectl apply -f $HOME/rabbitmq/rabbitmq-secret.yaml
   args:
     chdir: $HOME
+
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n rabbitmq rabbitmq-sa
+  when: rabbitmq_uninstall is defined
+
+- name: Create service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create serviceaccount -n rabbitmq rabbitmq-sa
 
 - name: Deploy rabbitmq helm chart
   become: yes
@@ -97,12 +109,10 @@
   until: kubectl_get_pods.stdout|split('\n')|length == rabbitmq_replicas
   retries: 10
   delay: 12
-  ignore_errors: yes
 
 - name: debug output
   ansible.builtin.debug: 
     msg: "Get pods (rabbitmq): {{ kubectl_get_pods.stdout | split('\n') }}"
-  ignore_errors: yes
 
 - name: Delete rabbitmq directory
   become: yes

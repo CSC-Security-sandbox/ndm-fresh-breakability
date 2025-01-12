@@ -29,7 +29,7 @@ microk8s_dns_resolvers: 8.8.8.8,8.8.4.4
 registry_size: 30Gi
 microk8s_plugins:
   dns: "{{ microk8s_dns_resolvers }}"     # CoreDNS
-  host-access: true                       # Allow Pods connecting to Host services smoothly
+  host-access: false                       # Allow Pods connecting to Host services smoothly
   ingress: true                           # Ingress controller for external access
   metrics-server: true                    # K8s Metrics Server for API access to service metrics
   rbac: true                              # Role-Based Access Control for authorisation

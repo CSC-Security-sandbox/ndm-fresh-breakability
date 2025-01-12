@@ -95,43 +95,15 @@
 #     - keycloak
 #     - postgres
 
-- name: Cleanup service account
-  become: yes
-  become_user: "{{ vm_username }}"
-  shell: |
-    kubectl delete serviceaccount -n keycloak keycloak-sa
-    kubectl delete serviceaccount -n postgres postgres-sa
-    kubectl delete serviceaccount -n rabbitmq rabbitmq-sa
-    kubectl delete serviceaccount -n datamigrate datamigrate-vault-sa
-  ignore_errors: yes
-  when: vault_uninstall is defined
-
-- name: Create service account
-  become: yes
-  become_user: "{{ vm_username }}"
-  shell: |
-    kubectl create namespace datamigrate
-    kubectl create serviceaccount -n datamigrate datamigrate-vault-sa
-    kubectl create serviceaccount -n keycloak keycloak-sa
-    kubectl create serviceaccount -n postgres postgres-sa
-    kubectl create serviceaccount -n rabbitmq rabbitmq-sa
-  ignore_errors: yes
-
-- name: Create acr pull secert
-  become: yes
-  become_user: "{{ vm_username }}"
-  shell: |
-    kubectl create secret docker-registry azure-dev-acr-creds \
-        --namespace datamigrate \
-        --docker-server={{ acr_registry }} \
-        --docker-username={{ azure_client_id }} \
-        --docker-password={{ azure_client_secret }}
-  ignore_errors: yes
-
 - name: Create Vault password policy file
   become: yes
   become_user: "{{ vm_username }}"
   template: src=./templates/password-policy.hcl.j2 dest=$HOME/vault/password-policy.hcl
+
+- name: Create Vault keycloak client policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/keycloak-secret.hcl.j2 dest=$HOME/vault/keycloak-secret.hcl
 
 - name: Create Vault password policy file
   become: yes
@@ -139,11 +111,18 @@
   shell: |
     kubectl cp $HOME/vault/password-policy.hcl vault-0:/tmp/password-policy.hcl -n vault 
 
+- name: Create Vault keycloak client policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl cp $HOME/vault/keycloak-secret.hcl vault-0:/tmp/keycloak-secret.hcl -n vault 
+
 - name: Vault password policy 
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
     kubectl exec -i vault-0 -n vault -- vault write sys/policies/password/datamigrate policy=@/tmp/password-policy.hcl
+    kubectl exec -i vault-0 -n vault -- vault write sys/policies/password/keycloak policy=@/tmp/keycloak-secret.hcl
 
 - name: Generate password for postgres
   become: yes
@@ -161,7 +140,7 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
+    export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/keycloak/generate | jq -r '.data.password')
     export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/keycloak-secrets/keycloak-creds \
       KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \

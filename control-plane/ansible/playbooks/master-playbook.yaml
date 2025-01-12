@@ -25,11 +25,14 @@
 # - name: Configure microk8s image registry with datamigrate application images
 #   import_playbook: configure-microk8s-registry.yaml
 
-- name: Deploy datamigrate helm chart
-  import_playbook: helm-chart-install.yaml
+- name: Configure datamigrate helm chart and resources
+  import_playbook: configure-datamigrate.yaml
 
 - name: Configure keycloak realm
   import_playbook: post-install.yaml
 
 - name: Configure cloud init
   import_playbook: configure-cloud-init.yaml
+
+- name: Reset Cluster
+  import_playbook: reset-cluster.yaml
