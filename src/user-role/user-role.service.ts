@@ -11,8 +11,6 @@ import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
 import { UserRoleMappingDto, UserRoleMappingResponseDto, UserRoleRelationDto } from './dto/user-role.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { emit } from 'process';
-import { IsEmail } from 'class-validator';
 
 @Injectable()
 export class UserRoleService {
