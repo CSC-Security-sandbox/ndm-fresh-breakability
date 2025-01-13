@@ -38,7 +38,7 @@ export class ProjectController {
     );
   }
 
-  @Auth(Permission.ManageProject)
+  @Auth()
   @ApiBearerAuth()
   @Get()
   @ApiOperation({
@@ -91,7 +91,7 @@ export class ProjectController {
     );
   }
 
-  @Auth(Permission.ManageProject)
+  @Auth()
   @ApiBearerAuth()
   @Get('/accounts/:account_id/projects')
   @ApiOperation({
@@ -128,13 +128,15 @@ export class ProjectController {
     type: String,
     description: 'Filter conditions',
   })
+  @Get('/accounts/:account_id/projects')
   findByAccountId(
+    @Request() userPermissionResponse: UserPermissionResponse,
     @Param('account_id') account_id: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
-    @Query('sortField') sortField: string = 'id',
-    @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
-    @Query('filter') filter: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('sortField') sortField?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('filter') filter?: string,
   ) {
     return this.projectService.findByAccount(
       account_id,
@@ -143,6 +145,7 @@ export class ProjectController {
       sortField,
       sortOrder,
       filter != null ? JSON.parse(filter) : {},
+      userPermissionResponse,
     );
   }
 
