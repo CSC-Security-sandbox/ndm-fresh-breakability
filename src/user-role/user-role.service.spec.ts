@@ -952,7 +952,7 @@ describe('UserRoleService', () => {
       {
         id: '1',
         user_roles: [{ role: { id: '1', role_name: 'App Admin' } }],
-        email: 'Test User',
+        email:'test@test.com',
         user_status: 'active',
         created_at: new Date(),
         created_by: randomUUID(),
@@ -972,6 +972,7 @@ describe('UserRoleService', () => {
         {
           userId: '1',
           userName: 'Test User',
+          email:'test@test.com',
           userStatus: 'active',
           roles: [
             {
@@ -997,7 +998,7 @@ describe('UserRoleService', () => {
       {
         id: '1',
         user_roles: [{role: {id: '1', role_name: 'App Admin'}}],
-        email: 'Test User',
+        email: 'test@test.com',
         user_status: 'active',
         created_at: new Date(),
         created_by: randomUUID(),
@@ -1016,6 +1017,7 @@ describe('UserRoleService', () => {
     {
       userId: '1',
       userName: 'Test User',
+      email: 'test@test.com',
       userStatus: 'active', 
       roles: [
         {

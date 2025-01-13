@@ -49,6 +49,9 @@ export class UserRoleMappingDto{
     @ApiProperty({ description: 'Name of the user' })
     userName: string;
 
+    @ApiProperty({ description: 'Email of the user' })
+    email: string;
+
     @ApiProperty({ description: 'User Status Active/Inactive' })
     userStatus: string;
 
