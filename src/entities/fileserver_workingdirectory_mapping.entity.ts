@@ -1,10 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
+import { VolumeEntity } from "./volume.entity";
 
 @Entity({name:'fileserver_workingdirectory_mapping', schema:'migrateadmin'})
 export class FileServerWorkingDirectoryMappingEntity extends Base {
-    @ApiProperty({ description: 'UUID of the ' })
+    @ApiProperty({ description: 'UUID of the fileserver working directory mapping' })
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
@@ -19,4 +20,8 @@ export class FileServerWorkingDirectoryMappingEntity extends Base {
     @ApiProperty({ description: 'pathId' })
     @Column({ type: 'uuid', nullable:true,  name: 'path_id'})
     pathId: string;
+
+    @OneToOne(() => VolumeEntity, volume => volume.fileServerWorkingDirectoryMapping)
+    @JoinColumn({ name: 'path_id' })
+    volume: VolumeEntity;
 }

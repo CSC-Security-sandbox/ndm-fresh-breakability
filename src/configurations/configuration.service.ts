@@ -231,7 +231,18 @@ export class ConfigurationService {
                     updatedBy: userId,
                     isRefreshed: false
                 });
-            })
+            });
+
+            const { workingDirectory } = updateConfig;
+
+            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOneByOrFail({ pathId: workingDirectory?.pathId });
+
+            Object.assign(mapping, {
+                pathName: workingDirectory?.pathName ?? mapping.pathName,
+                workingDirectory: workingDirectory?.workingDirectory ?? mapping.workingDirectory,
+            });
+
+            await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
             config.fileServers = await Promise.all(fileServerPromises);
             const update = await this.configEntity.save(config)

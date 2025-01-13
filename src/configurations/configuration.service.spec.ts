@@ -47,6 +47,7 @@ const mockWorkerRepository = {
 const mockMappingRepository = {
   create: jest.fn(),
   save: jest.fn(),
+  findOneByOrFail: jest.fn(),
 };
 
 describe('ConfigurationService', () => {
@@ -274,9 +275,22 @@ describe('ConfigurationService', () => {
   describe('updateConfiguration', () => {
     
     it('should update and save the configuration', async () => {
+      const existingConfig = {
+        id: uuidv4(),
+        configName: 'Old Config',
+        configType: ConfigurationType.file,
+        fileServers: [{
+          id: mockFileServer.id,
+          host: 'localhost',
+          protocol: Protocol.NFS,
+          createdBy: '1234567',
+          volumes: [],
+          workers: []
+        }]
+      };
 
-      const config:ConfigDTO = {
-        projectId:"123456",
+      const updateConfigDTO: ConfigDTO = {
+        projectId: "123456",
         createdBy: "123123",
         configName: 'Updated Config',
         workingDirectory: {
@@ -291,26 +305,89 @@ describe('ConfigurationService', () => {
           protocolVersion: ProtocolVersion.NFSv3,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
-          createdBy:"1234567",
+          createdBy: "1234567",
           protocol: Protocol.NFS,
           userName: "TEST"
         }]
       };
 
-      mockConfigRepository.findOne.mockResolvedValue(config);
-      mockConfigRepository.save.mockResolvedValue(config);
-      mockWorkerRepository.findByIds.mockResolvedValue([mockWorker]);
+      const existingMapping = {
+        pathId: '123',
+        pathName: '/old/path',
+        workingDirectory: '/old/dir'
+      };
 
-    
-      const result = await service.updateConfiguration(mockConfig.id, config, mockConfig.id);
+      const updatedMapping = {
+        ...existingMapping,
+        pathName: '/test/path',
+        workingDirectory: '/working/dir'
+      };
 
-      expect(result).toEqual(config);
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockConfigRepository.save.mockResolvedValue({ ...existingConfig, ...updateConfigDTO });
+      mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
+      mockFileServerRepository.create.mockReturnValue(updateConfigDTO.fileServers[0]);
+      mockMappingRepository.findOneByOrFail.mockResolvedValue(existingMapping);
+      mockMappingRepository.save.mockResolvedValue(updatedMapping);
+
+      const result = await service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId');
+
+      expect(mockMappingRepository.findOneByOrFail).toHaveBeenCalledWith({ 
+        pathId: updateConfigDTO.workingDirectory.pathId 
+      });
+      expect(mockMappingRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+        pathName: updateConfigDTO.workingDirectory.pathName,
+        workingDirectory: updateConfigDTO.workingDirectory.workingDirectory
+      }));
+
       expect(mockConfigRepository.save).toHaveBeenCalled();
+      expect(result).toBeDefined();
+      expect(result.configName).toBe(updateConfigDTO.configName);
     });
 
     it('should throw NotFoundException if config is not found', async () => {
       mockConfigRepository.findOne.mockResolvedValue(null);
-      await expect(service.updateConfiguration(uuidv4(), {} as any, uuidv4())).rejects.toThrow(NotFoundException);
+      await expect(service.updateConfiguration(uuidv4(), {} as ConfigDTO, uuidv4()))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should handle working directory mapping not found', async () => {
+      const existingConfig = {
+        id: uuidv4(),
+        fileServers: [{
+          id: mockFileServer.id,
+          protocol: Protocol.NFS,
+          host: 'localhost',
+          workers: []
+        }]
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: "123456",
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathId: 'non-existent',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir'
+        },
+        fileServers: [{
+          id: mockFileServer.id,
+          host: 'localhost',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          workers: [mockWorker.id],
+          userName: "TEST"
+        }]
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockMappingRepository.findOneByOrFail.mockRejectedValue(new Error('Not found'));
+
+      await expect(service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId'))
+        .rejects
+        .toThrow('Error Occurred during updating Config');
     });
   });
 

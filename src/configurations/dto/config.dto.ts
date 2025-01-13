@@ -77,8 +77,8 @@ export class ConfigDTO {
     @IsNotEmpty()
     configName: string;
 
-    @ApiPropertyOptional({ description: 'Working Directory', example: { pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
-    workingDirectory?: WorkingDirDTO;
+    @ApiProperty({ description: 'Working Directory', example: { pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
+    workingDirectory: WorkingDirDTO;
 
     @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
     @IsEnum(ConfigurationType)

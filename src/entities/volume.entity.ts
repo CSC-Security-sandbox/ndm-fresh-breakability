@@ -1,8 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, OneToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { JobConfigEntity } from "./jobconfig.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
 @Entity({name:'volume', schema:'migrateadmin'})
 export class VolumeEntity extends Base {
@@ -35,6 +36,9 @@ export class VolumeEntity extends Base {
     fileServer: FileServerEntity;
 
     @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: false})
-    jobConfig: JobConfigEntity[]
+    jobConfig: JobConfigEntity[];
 
+    @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.volume, { cascade: true, onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'path_id' })
+    fileServerWorkingDirectoryMapping: FileServerWorkingDirectoryMappingEntity;
 }

@@ -120,6 +120,11 @@ describe('ConfigurationController', () => {
         configName: "testConfigUpdate",
         configType: ConfigurationType.file,
         fileServers: [],
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working-directory'
+        },
         projectId: "2345678",
         createdBy: "1234"
       };
