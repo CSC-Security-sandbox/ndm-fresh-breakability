@@ -88,6 +88,7 @@ export class ConfigurationService {
                     serverType: true,
                     protocol: true,
                     userName: true,
+                    password: true,
                     isRefreshed: true,
                     volumes:{
                         id: true,
