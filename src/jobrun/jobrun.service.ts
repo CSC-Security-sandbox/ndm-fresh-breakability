@@ -106,7 +106,7 @@ export class JobRunService {
 
   // ------------------ Update Job Config by Job Run Id ---------------//
   async reScheduleJobConfigById(jobRunId: string) {
-    const jobConfig = await this.jobRunRepo.findOne({where: {id: jobRunId}, select: {jobConfigId: true}})
+    const jobConfig = await this.jobRunRepo.findOne({where: {id: jobRunId}, select: {jobConfigId: true, startTime: true}})
     if(jobConfig.startTime > new Date())
       await this.jobConfigRepo.update({id: jobConfig.jobConfigId}, {scheduler: ScheduleStatus.SCHEDULING})
     else
