@@ -130,13 +130,13 @@ export class ProjectController {
   })
   @Get('/accounts/:account_id/projects')
   findByAccountId(
-    @Param('account_id') account_id: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
-    @Query('sortField') sortField: string = 'id',
-    @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
-    @Query('filter') filter: string,
     @Request() userPermissionResponse: UserPermissionResponse,
+    @Param('account_id') account_id: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('sortField') sortField?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('filter') filter?: string,
   ) {
     return this.projectService.findByAccount(
       account_id,

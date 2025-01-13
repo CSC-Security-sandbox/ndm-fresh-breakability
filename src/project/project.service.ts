@@ -147,18 +147,17 @@ export class ProjectService {
    
     if (userPermissionResponse.user.roles[0].projects.length > 0) {
       const userId = userPermissionResponse.user.id;
-   
-      const userRoles = await this.userRoleRepository.query(
-        `
-        SELECT project_id 
-        FROM migrateadmin.user_role 
-        WHERE user_id = $1 AND account_id = $2
-        `,
-        [userId, account_id],
-      );
-   
-      const allowedProjectIds = userRoles.map((ur) => ur.project_id);
-   
+  
+      const userRoles = await this.userRoleRepository.find({
+        where: {
+          userId: userId,
+          accountId: account_id,
+        },
+        select: ['projectId'],
+      });
+  
+      const allowedProjectIds = userRoles.map((ur) => ur.projectId);
+  
       options.where = {
         id: In(allowedProjectIds),
         ...filter,

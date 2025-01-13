@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProjectService } from './project.service';
-import { Repository } from 'typeorm';
+import { FindOperator, Repository } from 'typeorm';
 import { Project } from '../entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -413,12 +413,12 @@ describe('ProjectService', () => {
   describe('findByAccount', () => {
     it('should return all projects associated with the specified account', async () => {
       const accountId = '123';
-
+     
       const projects: Project[] = [
         {
           id: '456',
           project_name: 'Project 1',
-          project_description:'',
+          project_description: '',
           start_date: new Date(),
           created_by: 'DataMigrateAdmin',
           updated_by: 'DataMigrateAdmin',
@@ -431,7 +431,7 @@ describe('ProjectService', () => {
         {
           id: '789',
           project_name: 'Project 2',
-          project_description:'',
+          project_description: '',
           start_date: new Date(),
           created_by: 'DataMigrateAdmin',
           updated_by: 'DataMigrateAdmin',
@@ -442,39 +442,85 @@ describe('ProjectService', () => {
           populateWhoColumns: jest.fn(),
         } as Project,
       ];
-
+     
+      const userRoles = [
+        { projectId: '789' } as UserRole,
+      ];
+     
       jest.spyOn(accountRepository, 'findOne').mockResolvedValueOnce({
         id: accountId,
         projects: projects,
       } as Account);
-      //needs to be updar
-      const createdBy="DataMigrateAdmin"
- 
-
-      jest.spyOn(projectRepository, 'find').mockResolvedValueOnce(projects);
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(createdBy);
-      jest.spyOn(userRoleRepository, 'query').mockResolvedValueOnce(projects);
-
+     
+      const createdBy = 'DataMigrateAdmin';
+     
+      jest.spyOn(projectRepository, 'find').mockResolvedValueOnce([projects[1]]);
+     
+      jest.spyOn(userRoleRepository, 'find').mockResolvedValueOnce(userRoles);
+     
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({
+        id: createdBy,
+        email: 'admin@example.com',
+        user_status: 'active',
+      });
+     
       const userMock = {
         user: {
           roles: [
             {
               permissions: ['permission1', 'permission2'],
-              projects: ["789"],
-              role_name:"Some Role"
+              projects: ['789'],
+              role_name: 'Some Role',
             },
           ],
-          id:"123-abc-456-def"
-        }
-      }
-
-      const result = await service.findByAccount(accountId, 1, 1, "", "ASC", {}, userMock);
-
+          id: '123-abc-456-def',
+        },
+      };
+     
+      const result = await service.findByAccount(accountId, 1, 1, 'created_at', 'ASC', {}, userMock);
+     
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: accountId },
         relations: ['projects'],
       });
-      expect(result).toEqual(projects);
+     
+      expect(userRoleRepository.find).toHaveBeenCalledWith({
+        where: {
+          userId: userMock.user.id,
+          accountId: accountId,
+        },
+        select: ['projectId'],
+      });
+     
+      expect(projectRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: expect.any(FindOperator),
+          },
+          skip: 0,
+          take: 1,
+          order: {
+            created_at: 'ASC',
+          },
+          relations: ['account'],
+        }),
+      );
+     
+      expect(result).toEqual([
+        {
+          ...projects[1],
+          created_by: {
+            id: createdBy,
+            email: 'admin@example.com',
+            user_status: 'active',
+          },
+          updated_by: {
+            id: createdBy,
+            email: 'admin@example.com',
+            user_status: 'active',
+          },
+        },
+      ]);
     });
 
     it('should return all projects associated with the specified account for app admin', async () => {
