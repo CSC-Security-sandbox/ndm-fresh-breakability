@@ -3,6 +3,11 @@ export enum WorkerStatus {
     Offline = 'Offline',
 }
 
+export enum FileServerStatus {
+    Active = 'active',
+    Draft = 'draft',
+}
+
 export enum Protocol{
     NFS = 'NFS',
     SMB = 'SMB'

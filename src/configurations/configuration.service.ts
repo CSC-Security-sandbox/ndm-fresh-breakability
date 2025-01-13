@@ -9,7 +9,8 @@ import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { Credentials } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { RabbitMq } from 'src/constants/enums';
+import { FileServerStatus, RabbitMq } from 'src/constants/enums';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 
 
@@ -21,6 +22,8 @@ export class ConfigurationService {
         private readonly configEntity: Repository<ConfigEntity>,
         @InjectRepository(FileServerEntity)
         private readonly fileServerEntity: Repository<FileServerEntity>,
+        @InjectRepository(FileServerWorkingDirectoryMappingEntity)
+        private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
         private rabbitMQService: RabbitMQService
@@ -49,6 +52,7 @@ export class ConfigurationService {
                 isRefreshed: true,
                 createdAt: true,
                 createdBy: true,
+                protocolVersion: true
             }
           },
           relations: {
@@ -77,7 +81,6 @@ export class ConfigurationService {
                 configName: true,
                 configType: true,
                 projectId: true,
-                workingDirectory: true,
                 scannedDate: true,
                 fileServers:{
                     id: true,
@@ -140,18 +143,27 @@ export class ConfigurationService {
                     workers: workers,
                     createdBy: userId,
                     protocol: fileServer.protocol,  
+                    protocolVersion:fileServer.protocolVersion,
                     userName: fileServer.userName,
                     password: fileServer?.password,
                     isRefreshed: false,
-                    volumes: []
+                    volumes: [],
+                    status: createConfig?.workingDirectory?.pathName.length > 0 ? FileServerStatus.Draft : FileServerStatus.Active
                 });
             });
+
+            const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
+                pathName: createConfig?.workingDirectory?.pathName,
+                pathId: createConfig?.workingDirectory?.pathId,
+                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+            });
+        
+            await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
 
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                workingDirectory: createConfig.workingDirectory?.path || '',
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId
             });
@@ -188,7 +200,6 @@ export class ConfigurationService {
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
         config.updatedBy = userId
-        config.workingDirectory = updateConfig.workingDirectory?.path || ''
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
@@ -212,6 +223,7 @@ export class ConfigurationService {
                     workers: workers,
                     createdBy: fileServer.createdBy,
                     protocol: fileServer.protocol,  
+                    protocolVersion:update?.protocolVersion,
                     userName: update.userName || fileServer.userName,
                     volumes: fileServer.volumes,
                     password: update.password,

@@ -11,6 +11,7 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigurationService } from './configuration.service';
 import { ConfigDTO } from './dto/config.dto';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 
 // Mock data for entities
@@ -43,10 +44,16 @@ const mockWorkerRepository = {
   find: jest.fn(),
 };
 
+const mockMappingRepository = {
+  create: jest.fn(),
+  save: jest.fn(),
+};
+
 describe('ConfigurationService', () => {
   let service: ConfigurationService;
   let configRepository: Repository<ConfigEntity>;
   let rabbitMqService: RabbitMQService;
+  let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -69,6 +76,10 @@ describe('ConfigurationService', () => {
           useValue: mockWorkerRepository,
         },
         {
+          provide: getRepositoryToken(FileServerWorkingDirectoryMappingEntity),
+          useValue: mockMappingRepository,
+        },
+        {
           provide: RabbitMQService,
           useValue: {
             sendMessage: jest.fn(),
@@ -79,6 +90,7 @@ describe('ConfigurationService', () => {
 
     service = module.get<ConfigurationService>(ConfigurationService);
     configRepository = module.get(getRepositoryToken(ConfigEntity));
+    mappingRepository = module.get(getRepositoryToken(FileServerWorkingDirectoryMappingEntity));
   });
 
   describe('getAllConfig', () => {
@@ -135,8 +147,10 @@ describe('ConfigurationService', () => {
         createdBy: "123123",
         stage:"",
         workingDirectory: {
-          path: '/temp',
+          pathName: '/temp',
           pathId: '123123',
+          workingDirectory: '/working/dir'
+          
         },
         configName: 'Updated Config',
         configType: ConfigurationType.file,
@@ -157,6 +171,104 @@ describe('ConfigurationService', () => {
       expect(result).toEqual(mockConfig);
       expect(mockConfigRepository.save).toHaveBeenCalled();
     });
+
+    it('should create working directory mapping when workingDirectory is provided', async () => {
+      const workingDirData = {
+        pathName: '/test/path',
+        pathId: '123',
+        workingDirectory: '/working/dir'
+      };
+
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: '123456',
+        workingDirectory: workingDirData,
+        fileServers: [{
+          host: 'test.com',
+          serverType: ServerType.emc,
+          protocol: Protocol.NFS,
+          userName: 'test',
+          protocolVersion: ProtocolVersion.NFSv3,
+          workers: ['worker1']
+        }]
+      };
+
+      mockMappingRepository.create.mockReturnValue(workingDirData);
+      mockMappingRepository.save.mockResolvedValue(workingDirData);
+      mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
+      mockConfigRepository.create.mockReturnValue({ id: uuidv4(), ...createConfigDTO });
+      mockConfigRepository.save.mockResolvedValue({ id: uuidv4(), ...createConfigDTO });
+
+      await service.createConfiguration(createConfigDTO, 'userId');
+
+      expect(mockMappingRepository.create).toHaveBeenCalledWith(workingDirData);
+      expect(mockMappingRepository.save).toHaveBeenCalledWith(workingDirData);
+    });
+
+    it('should handle null/undefined working directory fields', async () => {
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: '123456',
+        workingDirectory: null,
+        fileServers: [{
+          host: 'test.com',
+          serverType: ServerType.emc,
+          protocol: Protocol.NFS,
+          userName: 'test',
+          workers: ['worker1'],
+          protocolVersion: ProtocolVersion.NFSv3,
+        }]
+      };
+
+      const expectedWorkingDir = {
+        pathName: undefined,
+        pathId: undefined,
+        workingDirectory: undefined,
+      };
+
+      mockMappingRepository.create.mockReturnValue(expectedWorkingDir);
+      mockMappingRepository.save.mockResolvedValue(expectedWorkingDir);
+      mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
+      mockConfigRepository.create.mockReturnValue({ id: uuidv4(), ...createConfigDTO });
+      mockConfigRepository.save.mockResolvedValue({ id: uuidv4(), ...createConfigDTO });
+
+      await service.createConfiguration(createConfigDTO, 'userId');
+
+      expect(mockMappingRepository.create).toHaveBeenCalledWith(expectedWorkingDir);
+      expect(mockMappingRepository.save).toHaveBeenCalledWith(expectedWorkingDir);
+    });
+
+    it('should handle database error during working directory save', async () => {
+      const workingDirData = {
+        pathName: '/test/path',
+        pathId: '123',
+        workingDirectory: '/working/dir'
+      };
+
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: '123456',
+        workingDirectory: workingDirData,
+        fileServers: [{
+          host: 'test.com',
+          serverType: ServerType.emc,
+          protocol: Protocol.NFS,
+          userName: 'test',
+          workers: ['worker1'],
+          protocolVersion: ProtocolVersion.NFSv3,
+        }]
+      };
+
+      mockMappingRepository.create.mockReturnValue(workingDirData);
+      mockMappingRepository.save.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.createConfiguration(createConfigDTO, 'userId'))
+        .rejects
+        .toThrow('Error Occurred during creating Config');
+    });
   });
 
   describe('updateConfiguration', () => {
@@ -168,8 +280,9 @@ describe('ConfigurationService', () => {
         createdBy: "123123",
         configName: 'Updated Config',
         workingDirectory: {
-          path: '/temp',
-          pathId: '123123',
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir'
         },
         configType: ConfigurationType.file,
         fileServers: [{

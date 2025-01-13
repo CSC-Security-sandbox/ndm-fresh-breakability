@@ -14,10 +14,6 @@ export class ConfigEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'config_name' })
     configName: string;
 
-    @ApiProperty({ description: 'Working Directory' })
-    @Column({ type: 'text', nullable: true,  name:'working_directory' })
-    workingDirectory: string;
-
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_type' })
     configType: string;

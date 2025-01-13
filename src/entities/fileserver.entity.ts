@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Protocol, ServerType } from "src/constants/enums";
+import { FileServerStatus, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
@@ -45,6 +45,14 @@ export class FileServerEntity extends Base {
     @ApiProperty({ description: 'is Refreshed Config' })
     @Column({ name: 'is_refreshed' , nullable : true, type : 'boolean'})
     isRefreshed: boolean;
+
+    @ApiProperty({ description: 'status' })
+    @Column({ type: 'varchar', nullable: true,  name: 'status'})
+    status: FileServerStatus;
+
+    @ApiProperty({ description: 'protocol version' })
+    @Column({ type: 'varchar', nullable: true,  name: 'protocol_version'})
+    protocolVersion: ProtocolVersion;
 
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
