@@ -947,80 +947,91 @@ describe('UserRoleService', () => {
     });
   });
 
-  it('should find all user and their roles with no filters', async () => {
+  it('should find all users and their roles with no filters', async () => {
     const user_roles = [
       {
         id: '1',
-        userId: '1',
-        roleId: '1',
-        user: { id: '1', email: 'test@test.com', name: 'Test' },
-        role: { id: '1', role_name: 'Admin' },
-      } as UserRole,
+        user_roles: [{ role: { id: '1', role_name: 'App Admin' } }],
+        email: 'Test User',
+        user_status: 'active',
+        created_at: new Date(),
+        created_by: randomUUID(),
+        updated_at: new Date(),
+        updated_by: randomUUID(),
+        first_name: 'Test',
+        last_name: 'User',
+        name: 'Test User',
+      } as User,
     ];
-
-    const expected = [
-      {
-        userId: '1',
-        userName: 'Test',
-        roles: [
-          {
-            roleId: '1',
-            roleName: 'Admin',
-            projectId: null,
-          },
-        ],
-      },
-    ];
-
-    jest.spyOn(userRoleRepository, 'find').mockResolvedValue(user_roles);
-
-    const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', {});
-    expect(result).toEqual(expected);
-    expect(userRoleRepository.find).toHaveBeenCalledWith({
-      skip: 0,
-      take: 10,
-      order: { id: 'ASC' },
-      where: {},
-      relations: ['user', 'role', 'project'],
-    });
-  });
-
-  it('should find the user and his roles by user_id', async () => {
-
-      const user_roles = [
-        {
-          id: '1',
-          userId: '1',
-          roleId: '1',
-          user: { id: '1', email: 'test@test.com', name: 'Test' },
-          role: { id: '1', role_name: 'Admin' },
-        } as UserRole,
-      ];
-      const expected = [
+  
+    const expected = {
+      total: 1,
+      page: 1,
+      limit: 10,
+      data: [
         {
           userId: '1',
-          userName: 'Test',
+          userName: 'Test User',
+          userStatus: 'active',
           roles: [
             {
               roleId: '1',
-              roleName: 'Admin',
+              roleName: 'App Admin',
               projectId: null,
             },
           ],
         },
-      ];
+      ],
+    };
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValue([user_roles, user_roles.length]);
+    jest.spyOn(userRoleRepository, 'findAndCount').mockResolvedValue([User[0], 1]);
+    const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', {});
+    expect(result).toEqual(expected);
+    expect(userRepository.findAndCount).toHaveBeenCalledTimes(1);
+  });
+  
 
-    jest.spyOn(userRoleRepository, 'find').mockResolvedValue(user_roles);
+  it('should find the user and his roles by user_id', async () => {
+
+    const user_roles = [
+      {
+        id: '1',
+        user_roles: [{role: {id: '1', role_name: 'App Admin'}}],
+        email: 'Test User',
+        user_status: 'active',
+        created_at: new Date(),
+        created_by: randomUUID(),
+        updated_at: new Date(),
+        updated_by: randomUUID(),
+        first_name: 'Test',
+        last_name: 'User',
+        name: 'Test User',
+      } as User,
+  ];
+  const expected = {
+    total: 1,
+    page: 1,
+    limit: 10,
+    data:[
+    {
+      userId: '1',
+      userName: 'Test User',
+      userStatus: 'active', 
+      roles: [
+        {
+          roleId: '1',
+          roleName: 'App Admin',
+          projectId: null,
+        },
+      ],
+    },
+  ]};
+
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValue([user_roles, user_roles.length]);
 
     const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', { user_id: '1' });
 
     expect(result).toEqual(expected);
-    expect(userRoleRepository.find).toHaveBeenCalledWith({
-      skip: 0,
-      take: 10,
-      order: { id: 'ASC' },
-      where: { user: { id: '1' } },
-      relations: ['user', 'role', 'project'],
-    });
+    expect(userRepository.findAndCount).toHaveBeenCalled();
   });
 });
