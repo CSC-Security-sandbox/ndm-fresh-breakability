@@ -10,8 +10,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DeleteResult } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
-import { UserRole } from 'src/entities/user-role.entity';
+import { UserRole } from '../entities/user-role.entity';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any):Promise<any> {

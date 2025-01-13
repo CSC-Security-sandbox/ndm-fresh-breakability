@@ -7,7 +7,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { UserRole } from 'src/entities/user-role.entity';
+import { UserRole } from '../entities/user-role.entity';
 
 @Injectable()
 export class ProjectService {
