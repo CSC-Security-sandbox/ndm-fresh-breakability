@@ -115,13 +115,7 @@ describe("JobRunService", () => {
       const mockJobs = [
         { id: "1", status: JobStatus.Active, firstRunAt: new Date() },
       ];
-      jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockJobs),
-      } as any);
+      jest.spyOn(jobConfigRepo, "find").mockReturnValue(mockJobs as any);
 
       const createJobRunSpy = jest
         .spyOn(service, "createJobRun")
@@ -137,13 +131,7 @@ describe("JobRunService", () => {
     });
 
     it("should return an empty array if no jobs match", async () => {
-      jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      } as any);
+      jest.spyOn(jobConfigRepo, "find").mockReturnValue([] as any);
 
       const result = await service.scheduleAJob();
 
@@ -157,9 +145,14 @@ describe("JobRunService", () => {
       const payload = {
         jobRunId: '123',
         status: JobRunStatus.Completed,
+        jobConfig : {
+          firstRunAt: 'undefined'
+        }
       };
 
-      jest.spyOn(jobRunRepo,'findOne').mockResolvedValue({jobConfigId: "4567"} as any)
+      jest.spyOn(jobRunRepo,'findOne').mockResolvedValue({jobConfigId: "4567",  jobConfig : {
+        firstRunAt: 'undefined'
+      }} as any)
   
       await service.jobRunStatusUpdate(payload);
 
@@ -169,6 +162,9 @@ describe("JobRunService", () => {
       const payload = {
         jobRunId: '456',
         status: JobRunStatus.Failed, 
+        jobConfig : {
+          firstRunAt: 'undefined'
+        }
       };
   
       await service.jobRunStatusUpdate(payload);

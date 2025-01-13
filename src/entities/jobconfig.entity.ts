@@ -35,7 +35,7 @@ export class JobConfigEntity extends Base {
 
   @ApiProperty({ description: 'Job schedule configuration' })
   @Column({ name: 'first_run_at', type: 'timestamp with time zone' , nullable: true})
-  firstRunAt: string;
+  firstRunAt: Date;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
   @Column({ name: 'future_schedule_at', type: 'text', nullable: true })

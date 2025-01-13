@@ -32,7 +32,7 @@ export class JobConfigService {
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
-    const firstRunAt = bulkDiscovery?.firstRunAt?.toISOString() ?? new Date().toISOString()
+    const firstRunAt = bulkDiscovery?.firstRunAt ?? new Date()
     const existingList = await this.jobConfigRepo.find({
       where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
     })
@@ -41,7 +41,6 @@ export class JobConfigService {
       excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
       preserveAccessTime: bulkDiscovery.preserveAccessTime,
       excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-      futureScheduleAt: bulkDiscovery.futureSchedule,
       firstRunAt: firstRunAt,
       scheduler: ScheduleStatus.SCHEDULING
     })
@@ -58,7 +57,6 @@ export class JobConfigService {
           preserveAccessTime: bulkDiscovery.preserveAccessTime,
           sourcePathId: path,
           excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-          futureScheduleAt: bulkDiscovery.futureSchedule,
           firstRunAt: firstRunAt,
           scheduler: ScheduleStatus.SCHEDULING,
           createdBy: bulkDiscovery.createdBy
