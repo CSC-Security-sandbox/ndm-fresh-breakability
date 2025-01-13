@@ -1,23 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDate,
   IsEnum,
   IsOptional,
-  IsString,
-  IsUUID,
+  IsString
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { JobStatus, JobType } from 'src/constants/enums';
+import { JobStatus } from 'src/constants/enums';
 
 export class JobConfigDto {
-  @ApiProperty({ description: 'Job type, e.g., discovery', example: JobType.CutOver })
-  @IsEnum(JobType)
-  jobType: JobType;
-
   @ApiProperty({ description: 'Status of the job', example: JobStatus.Active })
   @IsEnum(JobStatus)
-  status: JobStatus;
+  status?: JobStatus;
 
   @ApiProperty({ description: 'Exclude files older than this date', required: false, })
   @IsOptional()
@@ -31,36 +26,18 @@ export class JobConfigDto {
   excludeFilePatterns?: string;
 
   @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsOptional()
   @IsBoolean()
-  preserveAccessTime: boolean;
+  preserveAccessTime?: boolean;
 
   @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  firstRunAt: Date;
+  firstRunAt?: Date;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
   @IsOptional()
   @IsString()
   futureSchedule?: string;
-
-  @ApiProperty({ description: 'UUID of the source path configuration' })
-  @IsUUID()
-  sourcePathId: string;
-
-  @ApiProperty({ description: 'UUID of the target path configuration', required: false })
-  @IsOptional()
-  @IsUUID()
-  targetPathId?: string;
-
-  @ApiProperty({ description: 'UUID of createdBy', required: false })
-  @IsOptional()
-  @IsUUID()
-  createdBy?: string;
-
-  @ApiProperty({ description: 'UUID of createdBy', required: false })
-  @IsOptional()
-  @IsUUID()
-  updatedBy?: string;
 }
