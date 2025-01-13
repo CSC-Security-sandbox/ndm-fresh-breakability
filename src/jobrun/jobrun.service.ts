@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobStatus } from "src/constants/enums";
@@ -63,7 +63,7 @@ export class JobRunService {
 
 
   @OnEvent(EmitterEvents.UNMOUNT_NOTIFICATION,  {async: true}) 
-  async UNMOUNT_NOTIFICATION(payload: UnMountNotificationPayload){
+  async unmountNotification(payload: UnMountNotificationPayload){
     const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
     for(const worker of workers) 
       this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
@@ -74,10 +74,20 @@ export class JobRunService {
           ...payload
         }
     });
-
   }
 
-
+  // ------------------ Ad-hoc Run -------------------- //
+  async addHocRun(jobConfigId: string) {
+    const jobConfig = await this.jobConfigRepo.findOne({where: {id: jobConfigId}})
+    if(!jobConfig) 
+      throw new NotFoundException(`Job config id doesn't exist for id ${jobConfigId}`)
+    if(jobConfig.scheduler === ScheduleStatus.SCHEDULED)
+      throw new BadRequestException(`Job run is already created for ${jobConfigId}`)
+    if(jobConfig.status === JobStatus.InActive)
+      throw new BadRequestException(`Job run can not be created to Inactive Job Config`)
+    return await this.createJobRun(jobConfig.id, new Date())
+  }
+   
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
@@ -196,6 +206,8 @@ export class JobRunService {
       status: update.status,
       details: details
     });
+
+    return update
   }
   //  ------------------- sendMountMessage ------------------ //
   async sendMountMessage(details: JobRunConfig, jobRunId: string) {
@@ -221,6 +233,7 @@ export class JobRunService {
         throw new BadRequestException('Invalid Action Type')
     }
   }
+
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
@@ -269,9 +282,6 @@ export class JobRunService {
     )
     return {details: 'Operation Completed Successfully'}
   }
-
-
-
 
   //  ------------------- get JobRun Details ------------------ //
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
