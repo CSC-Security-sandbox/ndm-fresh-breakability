@@ -7,7 +7,7 @@ import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { FindManyOptions, In, Repository } from "typeorm";
+import { FindManyOptions, In, LessThan, MoreThan, Raw, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
   JobRunDetailsDTO,
@@ -91,26 +91,26 @@ export class JobRunService {
   // ------------------ Cron schedule -------------------- //
   async scheduleAJob() {
     const currentTime = new Date();
-    const jobs: JobConfigEntity[] = await this.jobConfigRepo
-      .createQueryBuilder("jobConfig")
-      .select('jobConfig.id')
-      .where("jobConfig.status = :status", { status: JobStatus.Active })
-      .andWhere("jobConfig.scheduler = :scheduler", { scheduler: ScheduleStatus.SCHEDULING })
-      .andWhere("jobConfig.firstRunAt <= :currentTime", {
-        currentTime: currentTime.toISOString(),
-      })
-      .getMany();
+    const jobs: JobConfigEntity[] = await this.jobConfigRepo.find({
+      select:{id: true},
+      where: {
+        status: JobStatus.Active, scheduler: ScheduleStatus.SCHEDULING, 
+        firstRunAt: LessThan(currentTime)
+      },
+    })
     jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
     return jobs;
   }
 
   // ------------------ Update Job Config by Job Run Id ---------------//
   async reScheduleJobConfigById(jobRunId: string) {
-    const jobConfig = await this.jobRunRepo.findOne({where: {id: jobRunId}, select: {jobConfigId: true, startTime: true}})
-    if(jobConfig.startTime > new Date())
-      await this.jobConfigRepo.update({id: jobConfig.jobConfigId}, {scheduler: ScheduleStatus.SCHEDULING})
+    const jonRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations:{jobConfig: true}})
+    if(jonRun.jobConfig?.firstRunAt > new Date()) {
+      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.SCHEDULING})
+      this.logger.log(`Rescheduling Job ${jonRun.jobConfig.id}}`)
+    }
     else
-      await this.jobConfigRepo.update({id: jobConfig.jobConfigId}, {scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
+      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
   }
 
 

@@ -32,11 +32,6 @@ export class JobConfigDiscoverBulk {
   @IsDate()
   firstRunAt: Date;
 
-  @ApiProperty({ description: 'Incremental job schedule configuration' })
-  @IsOptional()
-  @IsString()
-  futureSchedule?: string;
-
   @ApiProperty({ description: 'List of UUIDs of the source path configurations' })
   @IsArray()
   @ArrayUnique()
