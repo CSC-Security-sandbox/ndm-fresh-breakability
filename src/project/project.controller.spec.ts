@@ -6,9 +6,9 @@ import { Repository } from 'typeorm';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
-import { UserRole } from 'src/entities/user-role.entity';
+import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
-import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('ProjectController', () => {
