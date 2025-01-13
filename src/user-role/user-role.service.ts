@@ -275,6 +275,7 @@ export class UserRoleService {
     const userRoleMapping = users.map((user) => ({
       userId: user.id,
       userName: user.name,
+      email: user.email,
       userStatus: user.user_status,
       roles: user.user_roles.map((userRole) => ({
         roleId: userRole.role.id,
