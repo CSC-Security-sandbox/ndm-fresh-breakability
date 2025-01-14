@@ -235,7 +235,7 @@ export class ConfigurationService {
 
             const { workingDirectory } = updateConfig;
 
-            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOneByOrFail({ pathId: workingDirectory?.pathId });
+            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOneByOrFail({ id: workingDirectory?.id });
 
             Object.assign(mapping, {
                 pathName: workingDirectory?.pathName ?? mapping.pathName,

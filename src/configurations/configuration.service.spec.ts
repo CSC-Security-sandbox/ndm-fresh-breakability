@@ -10,7 +10,7 @@ import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigurationService } from './configuration.service';
-import { ConfigDTO } from './dto/config.dto';
+import { ConfigDTO, UpdateConfigDTO } from './dto/config.dto';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 
@@ -289,11 +289,12 @@ describe('ConfigurationService', () => {
         }]
       };
 
-      const updateConfigDTO: ConfigDTO = {
+      const updateConfigDTO: UpdateConfigDTO = {
         projectId: "123456",
         createdBy: "123123",
         configName: 'Updated Config',
         workingDirectory: {
+          id: 'mapping-123',
           pathName: '/test/path',
           pathId: '123',
           workingDirectory: '/working/dir'
@@ -312,6 +313,7 @@ describe('ConfigurationService', () => {
       };
 
       const existingMapping = {
+        id: 'mapping-123',
         pathId: '123',
         pathName: '/old/path',
         workingDirectory: '/old/dir'
@@ -333,14 +335,32 @@ describe('ConfigurationService', () => {
       const result = await service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId');
 
       expect(mockMappingRepository.findOneByOrFail).toHaveBeenCalledWith({ 
-        pathId: updateConfigDTO.workingDirectory.pathId 
+        id: updateConfigDTO.workingDirectory.id 
       });
       expect(mockMappingRepository.save).toHaveBeenCalledWith(expect.objectContaining({
-        pathName: updateConfigDTO.workingDirectory.pathName,
-        workingDirectory: updateConfigDTO.workingDirectory.workingDirectory
+        id: 'mapping-123',
+        pathName: '/test/path',
+        workingDirectory: '/working/dir',
+        pathId: '123'
       }));
 
-      expect(mockConfigRepository.save).toHaveBeenCalled();
+      expect(mockFileServerRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        id: mockFileServer.id,
+        host: 'localhost',
+        protocol: Protocol.NFS,
+        protocolVersion: ProtocolVersion.NFSv3,
+        userName: "TEST",
+        isRefreshed: false
+      }));
+
+      expect(mockConfigRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+        id: existingConfig.id,
+        configName: updateConfigDTO.configName,
+        configType: updateConfigDTO.configType,
+        createdBy: updateConfigDTO.createdBy,
+        updatedBy: 'userId'
+      }));
+
       expect(result).toBeDefined();
       expect(result.configName).toBe(updateConfigDTO.configName);
     });
