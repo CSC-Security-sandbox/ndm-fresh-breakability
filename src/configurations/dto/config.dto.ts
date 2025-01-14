@@ -98,17 +98,3 @@ export class ConfigDTO {
     @IsOptional()
     createdBy?: string;
 }
-
-export class UpdateWorkingDirDTO extends WorkingDirDTO {
-    @ApiPropertyOptional({ description: 'UUID of Working Directory', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
-    @IsString()
-    @IsUUID()
-    @IsOptional()
-    id?: string;
-}
-
-export class UpdateConfigDTO extends ConfigDTO {
-    @ApiProperty({ description: 'Working Directory', example: { id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f', pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
-    @IsObject()
-    workingDirectory: UpdateWorkingDirDTO;
-}

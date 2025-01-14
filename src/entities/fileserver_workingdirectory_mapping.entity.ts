@@ -2,29 +2,31 @@ import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
-@Entity({name:'fileserver_workingdirectory_mapping', schema:'migrateadmin'})
+import { ConfigEntity } from "./config.entity";
+@Entity({ name: 'fileserver_workingdirectory_mapping', schema: 'migrateadmin' })
 export class FileServerWorkingDirectoryMappingEntity extends Base {
     @ApiProperty({ description: 'UUID of the fileserver working directory mapping' })
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @ApiProperty({ description: 'Path Name' })
-    @Column({ type: 'text', nullable: true,  name:'path_name' })
+    @Column({ type: 'text', nullable: true, name: 'path_name' })
     pathName: string;
 
     @ApiProperty({ description: 'Working Directory' })
-    @Column({ type: 'text', nullable: true,  name:'working_directory' })
+    @Column({ type: 'text', nullable: true, name: 'working_directory' })
     workingDirectory: string;
 
     @ApiProperty({ description: 'Path ID' })
-    @Column({ type: 'uuid', nullable: true,  name: 'path_id'})
+    @Column({ type: 'uuid', nullable: true, name: 'path_id' })
     pathId: string;
 
-    @ApiProperty({ description: 'File Server ID' })
-    @Column({ type: 'uuid', nullable: true, name: 'fileserver_id' })
-    fileserverId: string;
-  
-    @OneToOne(() => FileServerEntity, fileServer => fileServer.workingDirectoryMapping, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'fileserver_id' })
-    fileServer: FileServerEntity;
+    @ApiProperty({ description: 'Config ID' })
+    @Column({ type: 'uuid', nullable: true, name: 'config_id' })
+    configId: string;
+
+    @OneToOne(() => ConfigEntity, config => config.fileServerWorkingDirectoryMapping, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'config_id' })
+    config: ConfigEntity;
 }
+

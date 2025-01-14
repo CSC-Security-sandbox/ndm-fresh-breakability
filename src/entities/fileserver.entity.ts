@@ -52,9 +52,6 @@ export class FileServerEntity extends Base {
     @Column({ type: 'varchar', nullable: true,  name: 'protocol_version'})
     protocolVersion: ProtocolVersion;
 
-    @OneToOne(() => FileServerWorkingDirectoryMappingEntity, workingDirectoryMapping => workingDirectoryMapping.fileServer)
-    workingDirectoryMapping: FileServerWorkingDirectoryMappingEntity;
-
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
         name: 'file_server_worker',

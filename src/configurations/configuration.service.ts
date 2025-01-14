@@ -7,7 +7,7 @@ import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { Credentials } from './configuration.types';
-import { ConfigDTO, UpdateConfigDTO } from './dto/config.dto';
+import { ConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
 import { ConfigStatus, RabbitMq } from 'src/constants/enums';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
@@ -154,33 +154,35 @@ export class ConfigurationService {
                 });
             });
 
-            const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
-                pathName: createConfig?.workingDirectory?.pathName,
-                pathId: createConfig?.workingDirectory?.pathId,
-                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-            });
-        
-            await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
                 status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.Draft : ConfigStatus.Active,
                 fileServers:  await Promise.all(fileServerPromises),
-                createdBy: userId
+                createdBy: userId,
             });
         
-            const update = await this.configEntity.save(config)
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials})
-            return update
+            const update = await this.configEntity.save(config);
+            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials});
+
+            const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
+                pathName: createConfig?.workingDirectory?.pathName,
+                pathId: createConfig?.workingDirectory?.pathId,
+                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+                configId: update.id
+            });
+        
+            await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
+
+            return update;
         }catch(error) {
             this.logger.error(`Error Occurred during creating Config ${error}`)
             throw new InternalServerErrorException('Error Occurred during creating Config')
         }
     }
 
-    async updateConfiguration(id: string, updateConfig: UpdateConfigDTO, userId: string) {
+    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
@@ -237,7 +239,7 @@ export class ConfigurationService {
 
             const { workingDirectory } = updateConfig;
 
-            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOneByOrFail({ id: workingDirectory?.id });
+            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOneByOrFail({ configId: id });
 
             Object.assign(mapping, {
                 pathName: workingDirectory?.pathName ?? mapping.pathName,
