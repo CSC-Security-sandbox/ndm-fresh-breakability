@@ -1,29 +1,31 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { FileServerStatus, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
-import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, JoinTable, OneToOne, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
 @Entity({name:'file_server', schema:'migrateadmin'})
 export class FileServerEntity extends Base {
-    @ApiProperty({ description: 'configId' })
+    @ApiProperty({ description: 'File Server ID' })
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @ApiProperty({ description: 'data' })
+    @ApiProperty({ description: 'Host' })
     @Column({ type: 'text', nullable: true,  name:'hostname' })
     host: string;
 
-    @ApiProperty({ description: 'data' })
+    @ApiProperty({ description: 'Username' })
     @Column({ type: 'text', nullable: true,  name:'username' })
     userName: string;
 
-    @ApiProperty({ description: 'protocol' })
-    @Column({ type: 'varchar', name:'protocol', nullable: true})
+    @ApiProperty({ description: 'Protocol' })
+    @Column({ type: 'varchar', name: 'protocol', nullable: true})
     protocol: Protocol;
 
+    @ApiProperty({ description: 'Server Type' })
     @Column({ type: 'varchar', name:'server_type' })
     serverType: ServerType;
 
@@ -53,6 +55,9 @@ export class FileServerEntity extends Base {
     @ApiProperty({ description: 'protocol version' })
     @Column({ type: 'varchar', nullable: true,  name: 'protocol_version'})
     protocolVersion: ProtocolVersion;
+
+    @OneToOne(() => FileServerWorkingDirectoryMappingEntity, workingDirectoryMapping => workingDirectoryMapping.fileServer)
+    workingDirectoryMapping: FileServerWorkingDirectoryMappingEntity;
 
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
