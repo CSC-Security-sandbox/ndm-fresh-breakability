@@ -65,13 +65,9 @@ export enum TaskType {
 // -------------- Task ------------- //
 
 export enum TaskStatus {
-    Ready = 'READY',
     Pending = 'PENDING',
     Running = 'RUNNING',
-    Paused = 'PAUSED',
-    Stopped = 'STOPPED',
     Errored = 'ERRORED',
-    Failed = 'FAILED',
     Completed = 'COMPLETED',
 }
 
