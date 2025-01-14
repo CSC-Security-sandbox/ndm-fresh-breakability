@@ -1,0 +1,51 @@
+---
+- name: Copy binary file to remote server
+  become: yes
+  ansible.builtin.copy:
+    src: "{{ local_binary_path }}"
+    dest: "{{ remote_binary_path }}"
+    mode: '0755'
+
+- name: Make the binary file executable
+  become: yes
+  ansible.builtin.file:
+    path: "{{ remote_binary_path }}"
+    mode: '0755'
+
+- name: Update systemd service file with the latest binary
+  become: yes
+  ansible.builtin.template:
+    src: ./templates/worker.service.j2
+    dest: /etc/systemd/system/worker.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy setup_worker.sh to /opt/datamigrate/bin/
+  become: yes
+  copy:
+    src: setup_worker.sh
+    dest: /opt/datamigrate/bin/setup_worker.sh
+    mode: '0755'
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+
+
+- name: Copy worker env to /opt/datamigrate/conf/
+  become: yes
+  copy:
+    src: setup_worker.sh
+    dest: /opt/datamigrate/conf/worker.env
+    mode: '0755'
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+
+- name: Reload systemd daemon
+  become: yes
+  ansible.builtin.command: systemctl daemon-reload
+
+- name: Enable the microk8s boot service
+  become: yes
+  systemd:
+    name: worker.service
+    enabled: yes

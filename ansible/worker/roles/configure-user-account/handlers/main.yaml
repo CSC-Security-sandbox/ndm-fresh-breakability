@@ -1,0 +1,7 @@
+---
+- name: Restart SSH
+  become: yes
+  become_user: "{{ vm_username }}"
+  service:
+    name: ssh
+    state: restarted

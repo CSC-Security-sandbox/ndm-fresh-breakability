@@ -1,0 +1,65 @@
+---
+- name: Copy contents of helm-chart values.yaml
+  become: no
+  local_action:
+    module: template
+    src: "../../values.j2"
+    dest: "../roles/datamigrate/helm-chart/package/values.yaml"
+
+- name: Package the tarball
+  become: no
+  local_action:
+    module: command
+    cmd: helm package ../roles/datamigrate/helm-chart/package/ -d ../roles/datamigrate/helm-chart/package/
+
+- name: Copy the tarball to the remote host
+  become: yes
+  become_user: '{{ vm_username }}'
+  copy:
+    src: "../roles/datamigrate/helm-chart/package/datamigrate-0.1.0.tgz"
+    dest: "$HOME/helm-chart.tgz"
+
+- name: Install Helm chart
+  become: yes
+  become_user: '{{ vm_username }}'
+  shell: |
+    helm upgrade --install datamigrate -n datamigrate $HOME/helm-chart.tgz
+  register: helm_install_output
+
+- name: Debug Helm install output
+  debug:
+    var: helm_install_output.stdout_lines
+
+- name: Wait for pods to be in the 'Running' or 'Ready' state
+  become: yes
+  become_user: '{{ vm_username }}'
+  shell: |
+    kubectl wait --namespace datamigrate --for=condition=Ready pod --all --timeout=600s
+  register: wait_pods_output
+  ignore_errors: yes
+
+- name: Debug pod status output
+  debug:
+    var: wait_pods_output.stdout_lines
+
+- name: Delete the tarball from the remote host
+  become: yes
+  become_user: '{{ vm_username }}'
+  file:
+    path: $HOME/helm-chart.tgz
+    state: absent
+
+- name: Delete the local tarball
+  become: no
+  local_action:
+    module: file
+    path: "../roles/datamigrate/helm-chart/package/datamigrate-0.1.0.tgz"
+    state: absent
+
+- name: Delete the local values.yaml in package folder
+  become: no
+  local_action:
+    module: file
+    path: "../roles/datamigrate/helm-chart/package/values.yaml"
+    state: absent
+

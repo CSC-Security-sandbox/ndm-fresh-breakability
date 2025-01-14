@@ -1,0 +1,49 @@
+# File: setup_metallb_cloudinit/tasks/main.yml
+
+- name: Ensure destination directories exist
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /app
+
+- name: Copy cloud-init configuration
+  become: yes
+  copy:
+    src: ./templates/cloud-init.j2
+    dest: /etc/cloud/cloud.cfg.d/99-microk8s-init.cfg
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy boot script for microk8s
+  become: yes
+  template:
+    src: ./templates/boot-script.j2
+    dest: /app/microk8s-boot.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Copy systemd service file for boot script
+  become: yes
+  template:
+    src: ./templates/microk8s-boot-service.j2
+    dest: /etc/systemd/system/boot-microk8s.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload systemd daemon
+  become: yes
+  command: systemctl daemon-reload
+
+- name: Enable the microk8s boot service
+  become: yes
+  systemd:
+    name: boot-microk8s.service
+    enabled: yes

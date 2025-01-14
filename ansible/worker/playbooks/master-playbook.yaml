@@ -1,0 +1,11 @@
+- name: Configure user access on VM
+  import_playbook: configure-user.yaml
+
+- name: Configure VM by upgrading packages
+  import_playbook: configure-vm.yaml
+
+- name: Configure cloud init
+  import_playbook: configure-cloud-init.yaml
+
+- name: Configure Worker
+  import_playbook: configure-worker.yaml

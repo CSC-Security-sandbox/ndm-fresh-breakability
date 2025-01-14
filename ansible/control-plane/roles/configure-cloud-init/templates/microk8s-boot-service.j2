@@ -1,0 +1,14 @@
+[Unit]
+Description=MicroK8s Boot Service (First Boot Only)
+After=network.target cloud-init.service
+
+[Service]
+Type=oneshot
+ExecStart=/app/microk8s-boot.sh
+User=root
+Group=root
+StandardOutput=append:/var/log/microk8s-boot.log
+StandardError=append:/var/log/microk8s-boot.log
+
+[Install]
+WantedBy=multi-user.target

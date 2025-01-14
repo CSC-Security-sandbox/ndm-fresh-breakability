@@ -21,15 +21,41 @@ export ARM_SUBSCRIPTION_ID="<azure_subscription_id>"
 export ARM_TENANT_ID="<azure_tenant_id>"
 ```
 
-## Running the Packer Command
+## Running the Packer Command for control plane
 
-Navigate to the packer/cloud directory to execute the Packer build process.
+Navigate to the packer/control-plane directory to execute the Packer build process.
 
 ### Initialize Packer
 
 Run the following command to initialize the Packer configuration:
 ```
-cd packer/cloud
+cd packer/control-plane
+packer init -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+```
+
+### Validate Configuration
+
+To validate the Packer configuration, run:
+```
+packer validate -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+```
+
+### Build Command
+
+Run the following command to build the cloud image:
+```
+packer build -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+```
+
+## Running the Packer Command for worker
+
+Navigate to the packer/worker directory to execute the Packer build process.
+
+### Initialize Packer
+
+Run the following command to initialize the Packer configuration:
+```
+cd packer/worker
 packer init -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
 ```
 

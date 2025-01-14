@@ -1,0 +1,7 @@
+---
+- name: Configure cloud init
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role:  ../roles/configure-cloud-init, tags: 'configure-cloud-init' }

@@ -1,0 +1,13 @@
+{
+  "project_name": "datamigrate",
+
+  "aws_ubuntu_release_version": "20241109",
+  "aws_packer_instance_type": "t3a.2xlarge",
+  "aws_region": "us-east-1",
+
+  "azure_ubuntu_release_version": "24.04.202411030",
+  "azure_resource_group": "datamigrate-acr-resource-group",
+  "azure_packer_vm_size": "Standard_D8alds_v6",
+  "azure_region": "East US"
+}
+  

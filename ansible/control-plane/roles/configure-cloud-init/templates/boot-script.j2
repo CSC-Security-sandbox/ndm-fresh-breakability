@@ -1,0 +1,48 @@
+#!/bin/bash
+
+echo "Starting MicroK8s..."
+microk8s start
+
+echo "Checking MicroK8s status..."
+microk8s status
+
+echo "Refreshing MicroK8s certificates..."
+microk8s refresh-certs --cert server.crt
+microk8s refresh-certs --cert front-proxy-client.crt
+microk8s refresh-certs --cert ca.crt
+
+echo "Checking MicroK8s status again..."
+microk8s status --wait-ready
+
+sleep 80
+echo "Unsealing Vault..."
+
+kubectl wait --namespace="vault" --for=jsonpath='{.status.phase}'=Running pod --all --timeout=600s
+
+VAULT_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /home/datamigrate/vault/cluster-keys.json)
+kubectl exec vault-0 -n vault -- vault operator unseal "$VAULT_UNSEAL_KEY"
+kubectl exec vault-1 -n vault -- vault operator unseal "$VAULT_UNSEAL_KEY"
+kubectl exec vault-2 -n vault -- vault operator unseal "$VAULT_UNSEAL_KEY"
+
+echo "Restarting PostgreSQL statefulset..."
+kubectl rollout restart statefulset postgres-postgresql -n postgres
+kubectl wait --namespace="postgres" --for=condition=Ready pod --all --timeout=600s
+
+echo "Restarting RabbitMQ statefulset..."
+kubectl rollout restart statefulset rabbitmq -n rabbitmq
+kubectl wait --namespace="rabbitmq" --for=condition=Ready pod --all --timeout=600s
+
+echo "Restarting Keycloak statefulset..."
+kubectl rollout restart statefulset keycloak -n keycloak
+kubectl wait --namespace="keycloak" --for=condition=Ready pod --all --timeout=600s
+
+echo "Restarting Datamigrate pods..."
+kubectl delete pod --all -n datamigrate
+kubectl wait --namespace="datamigrate" --for=condition=Ready pod --all --timeout=600s
+
+# Enable MetalLB
+PRIVATE_IP=$(hostname -I | awk '{print $1}')
+#su -c "microk8s enable metallb:${PRIVATE_IP}/32" - datamigrate
+microk8s enable metallb:${PRIVATE_IP}/32
+
+echo "Microk8s cloud init setup completed successfully."

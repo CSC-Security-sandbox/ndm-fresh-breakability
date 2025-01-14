@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Check if required environment variables are set
+if [[ -z "${CONTROL_PLANE_IP}" || -z "${PROJECT_API_KEY}" ]]; then
+  echo "Error: One or more required environment variables are missing."
+  exit 1
+fi
+
+# Create and write to /opt/datamigrate/conf/worker.env
+echo "FILE_SERVICE_BASEURL=https://${CONTROL_PLANE_IP}/api/v1" > /opt/datamigrate/conf/worker.env
+echo "SOCKET_SERVER=wss://${CONTROL_PLANE_IP}/event" >> /opt/datamigrate/conf/worker.env
+
+# Create and write to /opt/datamigrate/conf/worker-config.json
+cat <<EOF > /opt/datamigrate/conf/worker-config.json
+{
+  "api_key": "${PROJECT_API_KEY}"
+}
+EOF
+
+# Start the worker service
+systemctl start worker.service
+
+# Enable worker service to start on boot
+systemctl enable worker.service
+
+echo "Worker service started successfully."

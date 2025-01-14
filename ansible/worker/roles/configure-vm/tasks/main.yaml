@@ -1,0 +1,25 @@
+---
+- name: 2.1. Update apt package index
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: 2.2. Ensure essential packages are installed
+  apt:
+    name:
+      - nfs-common
+      - smbclient
+    state: present
+
+- name: 2.3. Ensure directories exist and have correct ownership
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: '0755'
+  loop:
+    - { path: "/opt/datamigrate" }
+    - { path: "/opt/datamigrate/bin" }
+    - { path: "/opt/datamigrate/conf" }
+    - { path: "/opt/datamigrate/logs" }
