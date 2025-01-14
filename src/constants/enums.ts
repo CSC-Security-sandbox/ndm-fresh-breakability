@@ -3,9 +3,9 @@ export enum WorkerStatus {
     Offline = 'Offline',
 }
 
-export enum FileServerStatus {
-    Active = 'active',
-    Draft = 'draft',
+export enum ConfigStatus {
+    Active = 'Active',
+    Draft = 'Draft',
 }
 
 export enum Protocol{

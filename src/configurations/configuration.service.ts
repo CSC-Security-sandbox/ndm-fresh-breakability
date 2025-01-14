@@ -9,7 +9,7 @@ import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { Credentials } from './configuration.types';
 import { ConfigDTO, UpdateConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { FileServerStatus, RabbitMq } from 'src/constants/enums';
+import { ConfigStatus, RabbitMq } from 'src/constants/enums';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 
@@ -43,6 +43,7 @@ export class ConfigurationService {
             createdAt: true,
             createdBy: true,
             scannedDate: true,
+            status: true,
             fileServers:{
                 id: true,
                 host: true,
@@ -82,6 +83,7 @@ export class ConfigurationService {
                 configType: true,
                 projectId: true,
                 scannedDate: true,
+                status: true,
                 fileServers:{
                     id: true,
                     host: true,
@@ -149,7 +151,6 @@ export class ConfigurationService {
                     password: fileServer?.password,
                     isRefreshed: false,
                     volumes: [],
-                    status: createConfig?.workingDirectory?.pathName.length > 0 ? FileServerStatus.Draft : FileServerStatus.Active
                 });
             });
 
@@ -165,6 +166,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
+                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.Draft : ConfigStatus.Active,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId
             });

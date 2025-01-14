@@ -21,7 +21,7 @@ export class FileServerWorkingDirectoryMappingEntity extends Base {
     pathId: string;
 
     @ApiProperty({ description: 'File Server ID' })
-    @Column({ type: 'uuid', nullable: false, name: 'fileserver_id' })
+    @Column({ type: 'uuid', nullable: true, name: 'fileserver_id' })
     fileserverId: string;
   
     @OneToOne(() => FileServerEntity, fileServer => fileServer.workingDirectoryMapping, { onDelete: 'CASCADE' })

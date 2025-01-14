@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { ProjectEntity } from "./project.entity";
+import { ConfigStatus } from "src/constants/enums";
 
 @Entity({name:'config', schema:'migrateadmin'})
 export class ConfigEntity extends Base {
@@ -21,6 +22,10 @@ export class ConfigEntity extends Base {
     @ApiProperty({ description: 'projectId' })
     @Column({ type: 'uuid', nullable: false , name: 'project_id'})
     projectId: string;
+
+    @ApiProperty({ description: 'status' })
+    @Column({ type: 'varchar', nullable: true,  name: 'status'})
+    status: ConfigStatus;
 
     @ApiProperty({ description: 'scannedDate' })
     @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
