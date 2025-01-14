@@ -25,7 +25,7 @@ export class ConfigEntity extends Base {
     projectId: string;
 
     @ApiProperty({ description: 'status' })
-    @Column({ type: 'varchar', nullable: true,  name: 'status'})
+    @Column({ type: 'varchar', nullable: true,  name: 'status', default: ConfigStatus.Draft})
     status: ConfigStatus;
 
     @ApiProperty({ description: 'Scanned Date' })
