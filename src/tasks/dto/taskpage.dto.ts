@@ -1,17 +1,14 @@
-import { 
-    IsOptional, 
-    IsString, 
-    IsInt, 
-    IsArray, 
-    ArrayMinSize, 
-    Min, 
-    IsIn, 
-    IsNumberString, 
-    IsEnum, 
-    IsUUID 
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import {
+    ArrayMinSize,
+    IsArray,
+    IsEnum,
+    IsIn,
+    IsNumberString,
+    IsOptional,
+    IsUUID
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskStatus, TaskType } from 'src/constants/enums';
 
 export class TaskQueryParamsDto {
@@ -34,10 +31,10 @@ export class TaskQueryParamsDto {
     @ApiPropertyOptional({ 
         description: 'Field to sort by', 
         example: 'createdAt', 
-        enum: ['createdAt', 'createdBy', 'updatedAt', 'updatedBy'] 
+        enum: ['createdAt',  'updatedAt'] 
     })
     @IsOptional()
-    @IsIn(['createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+    @IsIn(['createdAt',  'updatedAt'])
     sort?: string;
 
     @ApiPropertyOptional({ 
@@ -58,9 +55,9 @@ export class TaskQueryParamsDto {
     @IsOptional()
     @IsArray()
     @IsEnum(TaskType, { each: true }) 
-    @ArrayMinSize(1)                     
-    @Type(() => String)                  
-    operationType?: TaskType[];
+    @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+    @ArrayMinSize(1) 
+    taskType?: TaskType[];
 
     @ApiPropertyOptional({ 
         description: 'Filter by task IDs', 
@@ -70,8 +67,8 @@ export class TaskQueryParamsDto {
     @IsOptional()
     @IsArray()
     @IsUUID('4', { each: true }) 
-    @ArrayMinSize(1)            
-    @Type(() => String)         
+    @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+    @ArrayMinSize(1)
     id?: string[];
 
     @ApiPropertyOptional({ 
@@ -81,9 +78,8 @@ export class TaskQueryParamsDto {
     })
     @IsOptional()
     @IsArray()
+    @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
     @IsUUID('4', { each: true }) 
-    @ArrayMinSize(1)            
-    @Type(() => String)         
     workerId?: string[];
 
     @ApiPropertyOptional({ 
@@ -94,16 +90,14 @@ export class TaskQueryParamsDto {
     })
     @IsOptional()
     @IsArray()
-    @IsEnum(TaskStatus, { each: true }) 
-    @ArrayMinSize(1)                     
-    @Type(() => String)                  
+    @IsEnum(TaskStatus, { each: true })
+    @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
     status?: TaskStatus[];
 
-    @ApiPropertyOptional({ 
-        description: 'Page number for pagination', 
-        example: '1' 
+    @ApiProperty({ 
+        description: 'Job run ID for filtering', 
+        example: '123e4567-e89b-12d3-a456-426614174000' 
     })
-    @IsOptional()
-    @IsNumberString()
+    @IsUUID('4')
     jobRunId?: string;
 }
