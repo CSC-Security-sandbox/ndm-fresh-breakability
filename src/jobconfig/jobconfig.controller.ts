@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
@@ -44,7 +44,7 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
-  @Put(':id')
+  @Patch(':id')
   async updateJobConfig(
     @Param('id') id: string,
     @Body() jobConfigData: JobConfigDto,

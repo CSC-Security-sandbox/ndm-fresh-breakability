@@ -66,7 +66,7 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
-  // ------------ Bulk update ---------------- //
+  // ------------  update ---------------- //
   async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
