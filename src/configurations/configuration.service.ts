@@ -7,7 +7,7 @@ import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { Credentials } from './configuration.types';
-import { ConfigDTO } from './dto/config.dto';
+import { ConfigDTO, UpdateConfigDTO } from './dto/config.dto';
 import { FindallConfigPageDto } from './dto/findallconfig.dto';
 import { FileServerStatus, RabbitMq } from 'src/constants/enums';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
@@ -178,7 +178,7 @@ export class ConfigurationService {
         }
     }
 
-    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string) {
+    async updateConfiguration(id: string, updateConfig: UpdateConfigDTO, userId: string) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
@@ -240,6 +240,7 @@ export class ConfigurationService {
             Object.assign(mapping, {
                 pathName: workingDirectory?.pathName ?? mapping.pathName,
                 workingDirectory: workingDirectory?.workingDirectory ?? mapping.workingDirectory,
+                pathId: workingDirectory?.pathId ?? mapping.pathId,
             });
 
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);

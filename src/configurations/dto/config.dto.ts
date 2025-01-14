@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
+import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
 import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 
 export class WorkingDirDTO {
@@ -78,6 +78,7 @@ export class ConfigDTO {
     configName: string;
 
     @ApiProperty({ description: 'Working Directory', example: { pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
+    @IsObject()
     workingDirectory: WorkingDirDTO;
 
     @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
@@ -96,4 +97,18 @@ export class ConfigDTO {
     @IsUUID()
     @IsOptional()
     createdBy?: string;
+}
+
+export class UpdateWorkingDirDTO extends WorkingDirDTO {
+    @ApiPropertyOptional({ description: 'UUID of Working Directory', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    id?: string;
+}
+
+export class UpdateConfigDTO extends ConfigDTO {
+    @ApiProperty({ description: 'Working Directory', example: { id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f', pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
+    @IsObject()
+    workingDirectory: UpdateWorkingDirDTO;
 }

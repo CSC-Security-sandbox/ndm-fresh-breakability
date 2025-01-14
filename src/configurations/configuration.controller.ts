@@ -3,7 +3,7 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiN
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
-import { ConfigDTO } from "./dto/config.dto";
+import { ConfigDTO, UpdateConfigDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindallConfigPageDto } from "./dto/findallconfig.dto";
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 
@@ -62,7 +62,7 @@ export class ConfigurationController{
     @Put(':id')
     async update(
         @Param('id') id: string,
-        @Body() updateConfig: ConfigDTO,
+        @Body() updateConfig: UpdateConfigDTO,
         // @Request() userDetails: UserDetails
     ) {
         return await this.configurationService.updateConfiguration(id,updateConfig, uuidv4());
