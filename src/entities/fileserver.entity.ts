@@ -7,7 +7,7 @@ import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
-@Entity({name:'file_server', schema:'migrateadmin'})
+@Entity({name:'file_server'})
 export class FileServerEntity extends Base {
     @ApiProperty({ description: 'File Server ID' })
     @PrimaryGeneratedColumn('uuid')

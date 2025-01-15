@@ -49,7 +49,7 @@ const mockWorkerRepository = {
 const mockMappingRepository = {
   create: jest.fn(),
   save: jest.fn(),
-  findOneByOrFail: jest.fn(),
+  findOne: jest.fn(),
 };
 
 const mockRabbitMQService = {
@@ -426,13 +426,13 @@ describe('ConfigurationService', () => {
       mockConfigRepository.save.mockResolvedValue({ ...existingConfig, ...updateConfigDTO });
       mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
       mockFileServerRepository.create.mockReturnValue(updateConfigDTO.fileServers[0]);
-      mockMappingRepository.findOneByOrFail.mockResolvedValue(existingMapping);
+      mockMappingRepository.findOne.mockResolvedValue(existingMapping);
       mockMappingRepository.save.mockResolvedValue(updatedMapping);
 
       const result = await service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId');
 
-      expect(mockMappingRepository.findOneByOrFail).toHaveBeenCalledWith({ 
-        configId: existingConfig.id 
+      expect(mockMappingRepository.findOne).toHaveBeenCalledWith({ 
+        where: { configId: existingConfig.id }
       });
       expect(mockMappingRepository.save).toHaveBeenCalledWith(expect.objectContaining({
         id: 'mapping-123',
@@ -500,7 +500,7 @@ describe('ConfigurationService', () => {
       };
 
       mockConfigRepository.findOne.mockResolvedValue(existingConfig);
-      mockMappingRepository.findOneByOrFail.mockRejectedValue(new Error('Not found'));
+      mockMappingRepository.findOne.mockRejectedValue(new Error('Not found'));
 
       await expect(service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId'))
         .rejects
@@ -548,7 +548,7 @@ describe('ConfigurationService', () => {
       mockConfigRepository.findOne.mockResolvedValue(existingConfig);
       mockConfigRepository.save.mockResolvedValue({ ...existingConfig, ...updateConfigDTO });
       mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
-      mockMappingRepository.findOneByOrFail.mockResolvedValue(existingMapping);
+      mockMappingRepository.findOne.mockResolvedValue(existingMapping);
       mockMappingRepository.save.mockResolvedValue(existingMapping);
 
       const result = await service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId');
@@ -592,7 +592,7 @@ describe('ConfigurationService', () => {
       mockConfigRepository.findOne.mockResolvedValue(existingConfig);
       mockConfigRepository.save.mockImplementation(data => data);
       mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
-      mockMappingRepository.findOneByOrFail.mockResolvedValue({});
+      mockMappingRepository.findOne.mockResolvedValue({});
       mockMappingRepository.save.mockImplementation(data => data);
 
       await service.updateConfiguration(existingConfig.id, updateConfigDTO, 'userId');

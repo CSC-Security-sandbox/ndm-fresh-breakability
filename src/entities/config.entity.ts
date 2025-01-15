@@ -6,7 +6,7 @@ import { ProjectEntity } from "./project.entity";
 import { ConfigStatus } from "src/constants/enums";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
-@Entity({name:'config', schema:'migrateadmin'})
+@Entity({name:'config'})
 export class ConfigEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')

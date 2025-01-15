@@ -5,7 +5,7 @@ import { ProjectEntity } from './project.entity';
 import { Base } from './base.entity';
 import { FileServerEntity } from './fileserver.entity';
 
-@Entity({name:'worker', schema:'migrateadmin'})
+@Entity({name:'worker'})
 export class WorkerEntity extends Base  {
   @ApiProperty({ description: 'workerId' })
   @PrimaryColumn({ type: 'uuid', name: 'id' })

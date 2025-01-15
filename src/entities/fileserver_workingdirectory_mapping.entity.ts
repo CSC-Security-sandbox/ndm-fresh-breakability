@@ -3,7 +3,7 @@ import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "ty
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { ConfigEntity } from "./config.entity";
-@Entity({ name: 'fileserver_workingdirectory_mapping', schema: 'migrateadmin' })
+@Entity({ name: 'fileserver_workingdirectory_mapping' })
 export class FileServerWorkingDirectoryMappingEntity extends Base {
     @ApiProperty({ description: 'UUID of the fileserver working directory mapping' })
     @PrimaryGeneratedColumn('uuid')

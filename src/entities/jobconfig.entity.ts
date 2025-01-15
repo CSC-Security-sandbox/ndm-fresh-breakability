@@ -18,7 +18,7 @@ export enum JobType {
 }
 
 
-@Entity({ name: 'jobconfig', schema: 'migrateadmin' })
+@Entity({ name: 'jobconfig' })
 export class JobConfigEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')
