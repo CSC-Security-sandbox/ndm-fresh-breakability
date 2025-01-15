@@ -2,7 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "t
 import { JobRunEntity } from "./jobrun.entity";
 
 
-@Entity({ name: 'worker_jobrun_mapping', schema: 'migrateadmin' })
+@Entity({ name: 'worker_jobrun_mapping' })
 export class WorkerJobRunMap {
 
     @PrimaryGeneratedColumn('uuid')
@@ -20,7 +20,7 @@ export class WorkerJobRunMap {
     @Column({ name: 'is_path_mounted' , type: 'boolean', default: 'false'})
     isPathMounted: boolean = false;
 
-    @ManyToOne(() => JobRunEntity, jonRun => jonRun.workerMap, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+    @ManyToOne(() => JobRunEntity, jonRun => jonRun.worker, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'job_run_id' }) 
     jobRun: JobRunEntity;
   

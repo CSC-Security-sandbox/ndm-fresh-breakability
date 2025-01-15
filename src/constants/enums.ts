@@ -49,10 +49,10 @@ export enum JobType {
 // -------------- Task ------------- //
 
 export enum TaskStatus {
-    Pending = 'PENDING',
-    Running = 'RUNNING',
-    Errored = 'ERRORED',
-    Completed = 'COMPLETED',
+    PENDING = 'PENDING',
+    RUNNING = 'RUNNING',
+    ERRORED = 'ERRORED',
+    COMPLETED = 'COMPLETED',
 }
 
 export enum TaskOperation {

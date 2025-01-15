@@ -5,7 +5,7 @@ import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
 
 
-@Entity({name:'inventory', schema:'migrateadmin'})
+@Entity({name:'inventory'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['fileServerPathId'])
@@ -79,7 +79,7 @@ export class InventoryEntity extends Base {
     @Column({ name: 'job_run_id',type:'uuid' })
     jobRunId: string;
 
-    @ManyToOne(() => JobRunEntity, jobRun => jobRun.inventoryDetails, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+    @ManyToOne(() => JobRunEntity, jobRun => jobRun.inventories, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'job_run_id' }) 
     jobRuns:  JobRunEntity;
 

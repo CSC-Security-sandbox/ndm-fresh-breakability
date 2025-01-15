@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { JobRunStatus, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
-import { Repository } from 'typeorm';
-import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
-import { capitalize, covertBytes } from 'src/utils/mapper';
-import { TaskEntity } from 'src/entities/task.entity';
-import { JobRunDetailsResponseDto, TaskDto } from './dto/job-rundetails.dto';
 import { ReportsEntity } from 'src/entities/reports.entity';
-import { JobRunStatus, ReportType } from 'src/constants/enums';
+import { TaskEntity } from 'src/entities/task.entity';
+import { covertBytes } from 'src/utils/mapper';
+import { Repository } from 'typeorm';
+import { JobRunDetailsResponseDto, TaskDto } from './dto/job-rundetails.dto';
+import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
 
 @Injectable()
 export class JobRunService {
@@ -38,14 +38,14 @@ export class JobRunService {
           }
         };
 
-        const jobRunRes : JobRunEntity= await this.jobRunRepo.findOne({
+        const jobRun : JobRunEntity= await this.jobRunRepo.findOne({
           where: { id },
           select: {
             id: true,
             startTime: true,
             status: true,
             endTime: true,
-            workerMap: {workerId: true},
+            worker: {workerId: true},
             jobConfig: {
               jobType: true,
               sourcePath: volumeSearch,
@@ -53,7 +53,7 @@ export class JobRunService {
             }
           },
           relations: {
-            workerMap: true,
+            worker: true,
             jobConfig: {
               sourcePath: { fileServer: { config: true } },
               targetPath: { fileServer: { config: true } }
@@ -61,9 +61,9 @@ export class JobRunService {
           }
         });
 
-        let jobRun : JobRunDetailsResponseDto = {
-          ...jobRunRes,
-          worker: jobRunRes.workerMap.map(it=>it.workerId)
+        let response : JobRunDetailsResponseDto = {
+          ...jobRun,
+          worker: jobRun.worker.map(it=>it.workerId)
         }
 
       
@@ -80,10 +80,10 @@ export class JobRunService {
       
         for(let i = 0; i < inventorySummary.length; i++) {
             if(inventorySummary[i].isDirectory) 
-                jobRun['scannedDirectoriesCount'] = inventorySummary[i].counts.toString()
+                response['scannedDirectoriesCount'] = inventorySummary[i].counts.toString()
             else {
-                jobRun['scannedFileCount'] = inventorySummary[i].counts.toString()
-                jobRun['totalScannedSize'] = covertBytes(Number(inventorySummary[i].totalFileSize))
+                response['scannedFileCount'] = inventorySummary[i].counts.toString()
+                response['totalScannedSize'] = covertBytes(Number(inventorySummary[i].totalFileSize))
             }
         }
 
@@ -95,15 +95,15 @@ export class JobRunService {
             .groupBy('t.status')
             .getRawMany();
 
-        jobRun['task'] = new TaskDto()
+        response['task'] = new TaskDto()
         for(let i = 0; i < taskStatusCounts.length; i++) 
-            jobRun['task'][taskStatusCounts[i].status?.toLowerCase()] = Number(taskStatusCounts[i].count)
+            response['task'][taskStatusCounts[i].status?.toLowerCase()] = Number(taskStatusCounts[i].count)
 
-        if(jobRun.status === JobRunStatus.Completed) {
-          const report = this.reportsRepo.create({jobRunId: id, reportData: JSON.stringify(jobRun), reportType: ReportType.JOB_RUN_STATS})
+        if(response.status === JobRunStatus.Completed) {
+          const report = this.reportsRepo.create({jobRunId: id, reportData: JSON.stringify(response), reportType: ReportType.JOB_RUN_STATS})
           await this.reportsRepo.save(report)
         }
-        return jobRun; 
+        return response; 
       }
       
 }

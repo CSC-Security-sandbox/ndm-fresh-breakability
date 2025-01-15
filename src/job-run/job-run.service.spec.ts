@@ -13,7 +13,7 @@ const mockJobRunEntity = {
   startTime: new Date(),
   status: JobRunStatus.Completed,
   endTime: new Date(),
-  workerMap: [{ workerId: 'worker1' }],
+  worker: [{ workerId: 'worker1' }],
   jobConfig: {
     jobType: 'type1',
     sourcePath: { fileServer: { config: { configName: 'source' } } },

@@ -8,7 +8,7 @@ import { WorkerJobRunMap } from './jobrunworker.entity';
 import { TaskEntity } from './task.entity';
 
 
-@Entity({ name: 'jobrun', schema: 'migrateadmin' })
+@Entity({ name: 'jobrun'})
 export class JobRunEntity extends Base {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
@@ -39,10 +39,10 @@ export class JobRunEntity extends Base {
   jobConfig: JobConfigEntity; 
 
   @OneToMany(() => InventoryEntity, inventory => inventory.jobRuns, { cascade: true, eager: false })
-  inventoryDetails: InventoryEntity[];  
+  inventories: InventoryEntity[];  
 
   @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
-  workerMap: WorkerJobRunMap[]
+  worker: WorkerJobRunMap[]
 
   @OneToMany(() => TaskEntity, task => task.jobRun, { cascade: true, eager: false })
   tasks:TaskEntity[];

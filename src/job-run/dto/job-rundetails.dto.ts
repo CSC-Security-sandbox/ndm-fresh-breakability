@@ -78,8 +78,6 @@ export class JobRunDetailsResponseDto {
   @IsString()
   endTime: Date;
 
-  @Exclude() 
-  workerMap: any[];
 
   @ApiProperty({ type: []})
   worker: string[];
