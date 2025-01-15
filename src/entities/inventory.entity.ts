@@ -51,9 +51,13 @@ export class InventoryEntity {
     @Column({ name: 'file_size' ,type:'bigint'})
     fileSize: bigint
 
-    @ApiProperty({ description: 'File Type' })
-    @Column({ name: 'file_type',type:'text' })
+    @ApiProperty({ description: 'Extension' })
+    @Column({ name: 'extension', type:'text' })
     extension: string;
+
+    @ApiProperty({ description: 'File Type' })
+    @Column({ name: 'file_type', type:'text' })
+    fileType: string;
 
     @ApiProperty({ description: 'Modified Time' })
     @Column({ name: 'modified_time',type:'timestamp' })
