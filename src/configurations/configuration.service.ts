@@ -242,6 +242,7 @@ export class ConfigurationService {
             const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
 
             if (!mapping) {
+                this.logger.error(`Mapping for configId ${id} not found`);
                 throw new NotFoundException(`Mapping for configId ${id} not found`);
             }
 
