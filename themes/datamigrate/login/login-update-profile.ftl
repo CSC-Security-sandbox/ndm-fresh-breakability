@@ -11,7 +11,7 @@
                             <div class="netappNavBarLogo"></div>
                             <div>
                                 <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">
-                                    NetApp DataMigrate
+                                    NetApp Data Migrator
                                 </span>
                             </div>
                         </div>
