@@ -236,7 +236,7 @@ describe('OverviewService', () => {
           configs: {
             fileServers: {
               volumes: {
-                jobConfig: {
+                sourceConfig: {
                   id: 'job1',
                   jobRuns: {
                     status: JobRunStatus.Completed
