@@ -90,12 +90,12 @@ describe('JobConfigController', () => {
   describe('updateJobConfig', () => {
     it('should update a job config', async () => {
       const jobId = '1';
-      const jobConfigDto: JobConfigDto = { sourcePathId: '76a4sd76as5d768as' } as JobConfigDto;
+      const jobConfigDto = { firstRunAt: '76a4sd76as5d768as' };
       const updatedJob = { id: jobId, ...jobConfigDto };
 
       mockJobConfigService.updateJobConfig.mockResolvedValue(updatedJob);
 
-      const result = await controller.updateJobConfig(jobId, jobConfigDto);
+      const result = await controller.updateJobConfig(jobId, jobConfigDto as any);
       expect(result).toEqual(updatedJob);
       expect(mockJobConfigService.updateJobConfig).toHaveBeenCalledWith(jobId, jobConfigDto);
     });

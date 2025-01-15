@@ -1,11 +1,12 @@
 //  ------- internal events ------------// 
 export const enum EmitterEvents{
-    TaskCreate='task.create',
-    NotifyWorker='worker.message',
-    JobRunStatusUpdate='jobrun.status.update',
-    DiscoveryComplete='discovery.completed',
-    UpdateJobRunMapping = 'update.jobrun.worker.mapping',
-    InActivateJobConfig = 'inactivate.jobconfig'
+    CREATE_TASK='task.create',
+    NOTIFY_WORKER='worker.message',
+    JOB_RUN_STATUS_UPDATE='jobrun.status.update',
+    DISCOVERY_COMPLETE='discovery.completed',
+    UPDATE_JOB_RUN_MAPPING = 'update.jobrun.worker.mapping',
+    IN_ACTIVE_JOB_CONFIG = 'inactivate.jobconfig',
+    UNMOUNT_NOTIFICATION = 'worker.unmount.path'
 } 
 
 

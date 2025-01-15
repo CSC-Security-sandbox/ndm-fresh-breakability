@@ -28,3 +28,10 @@ export interface JobRunConfig{
     preserveAccessTime: boolean
     workers: string[]
 }
+
+
+export interface UnMountNotificationPayload{
+    jobRunId: string
+    sPathId: string,
+    tPathId?: string | undefined
+}

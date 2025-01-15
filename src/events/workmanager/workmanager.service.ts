@@ -25,16 +25,16 @@ export class WorkManager{
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+        private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
-        private readonly configService: ConfigService
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
-    @OnEvent(EmitterEvents.TaskCreate, { async: true })
+    @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
         try{
-            const mountBaseDir = this.configService.get<string>('app.paths.mountBaseDir');
-            const path =  `${mountBaseDir}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
+            const path =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
             this.logger.error(path)
             const request =  buildScanPayload(path)
             const operation = this.operationsRepo.create({
@@ -55,11 +55,12 @@ export class WorkManager{
     }
 
     // ------------------------------- Update Worker Mount Status -----------------------------------//
-    async updateMountStatus(payload: MountedStatus) {
+    async updateMountStatus(payload: MountedStatus, isPathMounted: boolean ) {
         await this.workerJobRunMapRepo.update(
             {workerId: payload.workerId, jobRunId: payload.jobRunId},
-            {isPathMounted: true}
+            {isPathMounted}
         )
+        this.logger.debug(`Path Mount status for worker : ${payload?.workerId} | JobRun Id : ${payload?.jobRunId} | IsMounted : ${isPathMounted}`)
     }  
 
     // --------------------------- Create Un-Scanned Operation --------------------------------//
@@ -77,7 +78,7 @@ export class WorkManager{
             const workers = await this.workerJobRunMapRepo.find({where: {jobRunId: data.jobRunId}, select: {workerId: true}})
             // Notify worker
             workers.forEach(async worker => {
-                this.eventEmitter.emit(EmitterEvents.NotifyWorker, {
+                this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
                     workerId: worker.workerId,
                     socketEvents: SocketEvents.WAKE_UP,
                     payload: { jobRunId: data.jobRunId}
@@ -119,7 +120,7 @@ export class WorkManager{
             const task = await this.createTask(job, workerId)
             if(task) {
                 if(job.status === JobRunStatus.Ready)
-                    this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
+                    this.eventEmitter.emit(EmitterEvents.JOB_RUN_STATUS_UPDATE, {
                         jobRunId: job.jobRunId,
                         status: JobRunStatus.Running
                     })
@@ -206,22 +207,26 @@ export class WorkManager{
         if(!isErrored){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
-            // this.logger.warn(isNotCompletedOperation,isNotCompletedTask, task.id)
-            if(!isNotCompletedOperation && !isNotCompletedTask)  {
-                this.eventEmitter.emit(EmitterEvents.JobRunStatusUpdate, {
-                    jobRunId: task.jobRunId,
-                    status: JobRunStatus.Completed
-                })             
-                this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
+            if(!isNotCompletedOperation && !isNotCompletedTask)  
                 this.onTaskComplete(task)
-            }
+            
         }
     }
 
     async onTaskComplete(task: ScanCompletedPayload) {
+        this.eventEmitter.emit(EmitterEvents.JOB_RUN_STATUS_UPDATE, {
+            jobRunId: task.jobRunId,
+            status: JobRunStatus.Completed
+        })    
+        this.eventEmitter.emit(EmitterEvents.UNMOUNT_NOTIFICATION, {
+            jobRunId: task.jobRunId,
+            sPathId: task.sPath,
+            tPathId: task?.tPath
+        })
+        this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         switch(task.taskType) {
             case TaskType.Scan:
-                this.eventEmitter.emit(EmitterEvents.DiscoveryComplete, {
+                this.eventEmitter.emit(EmitterEvents.DISCOVERY_COMPLETE, {
                     jobRunId: task.jobRunId,
                 })
                 break;

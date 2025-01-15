@@ -31,7 +31,7 @@ export class EventsService {
         private readonly fileConfigService: FileConfigService,
     ) { }
 
-    @OnEvent(EmitterEvents.NotifyWorker, {async: true})
+    @OnEvent(EmitterEvents.NOTIFY_WORKER, {async: true})
     async notifyWorkerEvent(payload: NotifyWorkerPayload){
         await this.notifyEventToWorker(payload.workerId, payload.socketEvents, payload.payload)
     }

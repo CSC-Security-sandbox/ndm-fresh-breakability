@@ -23,14 +23,13 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly eventsGateway: EventsGateway,
     private readonly configService: ConfigService
     ) {
-      const connection = amqp.connect([process.env.RABBITMQ_URL]);
-      this.channelWrapper = connection.createChannel();
-
       const urls: any = this.configService.get<string[]>('app.rabbitmq.urls') || '';
+      const connection = amqp.connect(urls);
+      this.channelWrapper = connection.createChannel();
       this.inventoryClient = ClientProxyFactory.create({
         transport: Transport.RMQ,
         options: {
-          urls: [urls],
+          urls: urls,
           queue: this.configService.get<string>('app.rabbitmq.inventoryQueue') || '',
           queueOptions: {
             durable: true,
@@ -90,13 +89,13 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  @OnEvent(EmitterEvents.DiscoveryComplete, { async: true })
+  @OnEvent(EmitterEvents.DISCOVERY_COMPLETE, { async: true })
   async generateDiscoveryReport(data: DiscoveryCompletePayload) {
-    const om = await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
+    await this.inventoryClient.emit(InventoryQueueEvents.INVENTORY, 
       {
         type: InventoryPayloadType.DISCOVERY_COMPLETED ,data
       }).toPromise()
-    this.logger.error(`------------- DiscoveryComplete  -----------------`)
+    this.logger.debug(`-------------  Generate Discovery Report  -----------------`)
   }
 
 }

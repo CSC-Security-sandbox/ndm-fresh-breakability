@@ -1,5 +1,6 @@
 import { JobType, OperationType, Protocol, TaskType } from "src/constants/enums";
 import { Operations } from "src/constants/status";
+import * as parser from 'cron-parser'
 
 
 export const OperationToProtocol = (operation : Operations):Protocol => {
@@ -30,5 +31,14 @@ export const jobTypeToOperationType = (type: JobType) => {
             return OperationType.SCAN
         default:
             throw new Error('Invalid Operation'); 
+    }
+}
+
+export const nextDate = (jobType: string, runDate: Date, cron: string) => {
+    switch(jobType) {
+        case JobType.DISCOVER:
+            return runDate && runDate > new Date() ? runDate : null;
+        default:
+            return cron ? parser.parseExpression(cron).next().toDate(): null
     }
 }

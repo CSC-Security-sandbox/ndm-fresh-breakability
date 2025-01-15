@@ -109,7 +109,6 @@ it('should handle empty sourcePathIds', async () => {
     excludeFilePatterns: '*.tmp',
     preserveAccessTime: true,
     excludeOlderThan: new Date('2022-01-01'),
-    futureSchedule: null,
     firstRunAt: new Date(),
     createdBy: 'user123',
     sourcePathIds: ['qwsd']
