@@ -4,8 +4,8 @@ export enum WorkerStatus {
 }
 
 export enum ConfigStatus {
-    Active = 'ACTIVE',
-    Draft = 'DRAFT',
+    ACTIVE = 'ACTIVE',
+    DRAFT = 'DRAFT',
 }
 
 export enum Protocol{

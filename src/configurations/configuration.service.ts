@@ -158,7 +158,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.Draft : ConfigStatus.Active,
+                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
