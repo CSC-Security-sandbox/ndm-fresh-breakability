@@ -2,14 +2,15 @@ import { ApiProperty } from '@nestjs/swagger';
 import { BaseEntity, Column, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
+import { VolumeEntity } from './volume.entity';
 
 
 @Entity({name:'inventory', schema:'migrateadmin'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['fileServerPathId'])
-@Index('idx_job_run_id', ['jobRunId'])
-export class InventoryEntity extends BaseEntity {
+@Index('idx_inventory_job_run_id', ['jobRunId'])
+export class InventoryEntity extends Base {
     @ApiProperty({ description: 'UUID of the inventory' })
     @PrimaryGeneratedColumn('uuid')
     id: string;
@@ -63,12 +64,8 @@ export class InventoryEntity extends BaseEntity {
     modifiedTime: Timestamp;
 
     @ApiProperty({ description: 'Access Time' })
-    @Column({ name: 'access_time',type:'text' })
-    accessTime: string;
-
-    @ApiProperty({ description: 'Access Time' })
-    @Column({ name: 'birth_time',type:'text' })
-    birthTime: string;
+    @Column({ name: 'access_time',type:'timestamp' })
+    accessTime: Timestamp;
 
     @ApiProperty({ description: 'File Permission' })
     @Column({ name: 'file_permission' })    
@@ -84,5 +81,9 @@ export class InventoryEntity extends BaseEntity {
 
     @ManyToOne(() => JobRunEntity, jobRun => jobRun.inventoryDetails, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'job_run_id' }) 
-    jobRunDetails:  JobRunEntity;
+    jobRuns:  JobRunEntity;
+
+    @ManyToOne(() => VolumeEntity, volume => volume.inventory, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+    @JoinColumn({ name: 'volume_id'})
+    volume:VolumeEntity
 }

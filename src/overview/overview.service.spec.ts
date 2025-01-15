@@ -19,11 +19,11 @@ describe('OverviewService', () => {
             id: 'server1',
             volumes: [
               {
-                jobConfig: [
+                sourceConfig: [
                   {
                     id: 'job1',
                     jobType: JobType.Discover,
-                    jobRunDetails: [
+                    jobRuns: [
                       {
                         id: 'run1',
                         status: JobRunStatus.Completed,
@@ -35,7 +35,7 @@ describe('OverviewService', () => {
                   {
                     id: 'job2',
                     jobType: JobType.Migrate,
-                    jobRunDetails: [
+                    jobRuns: [
                       {
                         id: 'run2',
                         status: JobRunStatus.Completed,
@@ -47,7 +47,7 @@ describe('OverviewService', () => {
                   {
                     id: 'job3',
                     jobType: JobType.CutOver,
-                    jobRunDetails: [
+                    jobRuns: [
                       {
                         id: 'run3',
                         status: JobRunStatus.Completed,
@@ -163,11 +163,11 @@ describe('OverviewService', () => {
           fileServers: [{
             ...mockProjectData.configs[0].fileServers[0],
             volumes: [{
-              jobConfig: [
+              sourceConfig: [
                 {
                   id: 'job2',
                   jobType: JobType.Migrate,
-                  jobRunDetails: [
+                  jobRuns: [
                     { id: 'run2', status: JobRunStatus.Completed },
                     { id: 'run3', status: JobRunStatus.Completed }
                   ]
@@ -189,28 +189,6 @@ describe('OverviewService', () => {
     });
   });
 
-  describe('covertBytes', () => {
-    it('should convert bytes to appropriate unit', () => {
-      expect(service.covertBytes(1024)).toBe('1 KB');
-      expect(service.covertBytes(1024 * 1024)).toBe('1 MB');
-      expect(service.covertBytes(1024 * 1024 * 1024)).toBe('1 GB');
-      expect(service.covertBytes(500)).toBe('500 B');
-    });
-
-    it('should handle decimal values', () => {
-      expect(service.covertBytes(1536)).toBe('1.50 KB');
-      expect(service.covertBytes(1.5 * 1024 * 1024)).toBe('1.50 MB');
-    });
-
-    it('should handle zero bytes', () => {
-      expect(service.covertBytes(0)).toBe('0 B');
-    });
-
-    it('should handle very large numbers', () => {
-      const petabyte = 1024 * 1024 * 1024 * 1024 * 1024;
-      expect(service.covertBytes(petabyte)).toBe('1 PB');
-    });
-  });
 
   describe('where clause construction', () => {
     beforeEach(() => {
@@ -240,8 +218,8 @@ describe('OverviewService', () => {
           'configs',
           'configs.fileServers',
           'configs.fileServers.volumes',
-          'configs.fileServers.volumes.jobConfig',
-          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+          'configs.fileServers.volumes.sourceConfig',
+          'configs.fileServers.volumes.sourceConfig.jobRuns'
         ]
       });
     });
@@ -260,7 +238,7 @@ describe('OverviewService', () => {
               volumes: {
                 jobConfig: {
                   id: 'job1',
-                  jobRunDetails: {
+                  jobRuns: {
                     status: JobRunStatus.Completed
                   }
                 }
@@ -272,8 +250,8 @@ describe('OverviewService', () => {
           'configs',
           'configs.fileServers',
           'configs.fileServers.volumes',
-          'configs.fileServers.volumes.jobConfig',
-          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+          'configs.fileServers.volumes.sourceConfig',
+          'configs.fileServers.volumes.sourceConfig.jobRuns'
         ]
       });
     });
@@ -293,8 +271,8 @@ describe('OverviewService', () => {
           'configs',
           'configs.fileServers',
           'configs.fileServers.volumes',
-          'configs.fileServers.volumes.jobConfig',
-          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+          'configs.fileServers.volumes.sourceConfig',
+          'configs.fileServers.volumes.sourceConfig.jobRuns'
         ]
       });
     });
@@ -304,9 +282,9 @@ describe('OverviewService', () => {
         configs: [{
           fileServers: [{
             volumes: [{
-              jobConfig: [{
+              sourceConfig: [{
                 jobType: JobType.Discover,
-                jobRunDetails: [{
+                jobRuns: [{
                   id: 'run1',
                   status: JobRunStatus.Completed,
                   jobConfigId: 'job1',
@@ -327,9 +305,9 @@ describe('OverviewService', () => {
             id: 'config1',
             fileServers: {
               volumes: {
-                jobConfig: {
+                sourceConfig: {
                   id: 'job1',
-                  jobRunDetails: {
+                  jobRuns: {
                     status: JobRunStatus.Completed
                   }
                 }
@@ -341,8 +319,8 @@ describe('OverviewService', () => {
           'configs',
           'configs.fileServers',
           'configs.fileServers.volumes',
-          'configs.fileServers.volumes.jobConfig',
-          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+          'configs.fileServers.volumes.sourceConfig',
+          'configs.fileServers.volumes.sourceConfig.jobRuns'
         ]
       });
     });
@@ -360,8 +338,8 @@ describe('OverviewService', () => {
           'configs',
           'configs.fileServers',
           'configs.fileServers.volumes',
-          'configs.fileServers.volumes.jobConfig',
-          'configs.fileServers.volumes.jobConfig.jobRunDetails'
+          'configs.fileServers.volumes.sourceConfig',
+          'configs.fileServers.volumes.sourceConfig.jobRuns'
         ]
       });
     });

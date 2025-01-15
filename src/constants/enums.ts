@@ -45,3 +45,28 @@ export enum JobType {
     CutOver = 'CUT_OVER',
     SpeedTest = 'SPEED_TEST',
 }
+
+// -------------- Task ------------- //
+
+export enum TaskStatus {
+    Pending = 'PENDING',
+    Running = 'RUNNING',
+    Errored = 'ERRORED',
+    Completed = 'COMPLETED',
+}
+
+export enum TaskOperation {
+    SCAN_PATH = 'SCAN_PATH',
+    COPY_FILE = 'COPY_FILE',
+    META_STAMP = 'META_STAMP'
+}
+
+export enum TaskType {
+    SCAN = 'SCAN',
+    COPY = 'COPY'
+}
+
+export enum ReportType {
+    JOB_RUN_STATS = 'JobRunStats'
+}
+
