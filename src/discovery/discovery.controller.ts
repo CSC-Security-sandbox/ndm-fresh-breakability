@@ -75,7 +75,7 @@ export class DiscoveryController {
         },
         'report-type': {
           type: 'string',
-          enum: ['COC', 'discovery'],
+          enum: ['COC', 'DISCOVERY'],
           description: 'Type of the report to download',
         },
       },
@@ -95,7 +95,7 @@ export class DiscoveryController {
       throw new BadRequestException('jobRunId array must not be empty');
     }
 
-    if (!['COC', 'discovery'].includes(reportType)) {
+    if (!['COC', 'DISCOVERY'].includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
     }
 
@@ -115,7 +115,7 @@ export class DiscoveryController {
         jobRunId: { type: 'string', description: 'The ID of the job run' },
         'report-type': { 
           type: 'string', 
-          enum: ['COC', 'discovery'], 
+          enum: ['COC', 'DISCOVERY'], 
           description: 'The type of the report to generate' 
         },
       },
@@ -150,7 +150,7 @@ export class DiscoveryController {
       this.logger.log(
         `Received discovery completed message: ${JSON.stringify(payload)}`
       );
-      this.discoveryService.createReportFile(payload.jobRunId, 'discovery');
+      this.discoveryService.createReportFile(payload.jobRunId, 'DISCOVERY');
       channel.ack(originalMsg);
     } catch (err) {
       this.logger.error(`Error processing inventory message: ${err.message}`);

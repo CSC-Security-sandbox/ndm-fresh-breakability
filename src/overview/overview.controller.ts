@@ -23,12 +23,12 @@ export class OverviewController {
 @Get()
 async getStorageAndJobsOverview(
     @Query('projectId') projectId: string,
-    @Query('fileServerId') fileServerId: string,
+    @Query('fileServerId') configId: string,
     @Query('jobConfigId') jobConfigId: string,
 ) {
-    if(!projectId && !fileServerId && !jobConfigId) {
-        throw new BadRequestException(`Required parameters['ProjectId or FileServerId or JobConfig Id ' are missing in the request`);  
+    if(!projectId && !configId && !jobConfigId) {
+        throw new BadRequestException(`Required parameters['ProjectId or configId or JobConfig Id ' are missing in the request`);  
     }
-    return await this.overviewService.getStorageAndJobsOverview(projectId, fileServerId, jobConfigId);   
+    return await this.overviewService.getStorageAndJobsOverview(projectId, configId, jobConfigId);   
 }
 }

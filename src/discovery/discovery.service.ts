@@ -37,7 +37,7 @@ export class DiscoveryService {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
 
-      const result = await this.inventoryRepo.query(
+       await this.inventoryRepo.query(
         "CALL migrateadmin.generate_discovery_report($1)",
         [jobRunId]
       );
@@ -106,7 +106,7 @@ export class DiscoveryService {
       .join("\n");
 
     fs.writeFileSync(filePath, formattedString);
-    console.log(`Data has been written to ${filePath}`);
+    this.logger.log(`Data has been written to ${filePath}`);
   }
   async getReportsAsZip(
     jobRunIds: string[],
@@ -142,7 +142,7 @@ export class DiscoveryService {
     return zipBuffer;
   }
 
-  private async createZipArchive(filePaths: string[]): Promise<Buffer> {
+  async createZipArchive(filePaths: string[]): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const archive = archiver("zip", { zlib: { level: 9 } });
       const buffers: Buffer[] = [];

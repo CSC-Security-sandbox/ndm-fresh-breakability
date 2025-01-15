@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
@@ -13,21 +13,22 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-    // app.connectMicroservice({
-    //   transport: Transport.RMQ,
-    //   options: {
-    //     urls: configService.get('app.rabbitmq.urls'),
-    //     queue: configService.get('app.rabbitmq.reportsQueue'),
-    //     noAck: false,
-    //     queueOptions: {
-    //       durable: configService.get('app.rabbitmq.durable'),
-    //       arguments: {
-    //         'x-queue-type': 'quorum',
-    //       },
-    //     },
-    //   },
-    // });
-    // await app.startAllMicroservices()
+  app.connectMicroservice({
+    transport: Transport.RMQ,
+    options: {
+      urls: configService.get('app.rabbitmq.urls'),
+      queue: configService.get('app.rabbitmq.reportsQueue'),
+      noAck: false,
+      queueOptions: {
+        durable: configService.get('app.rabbitmq.durable'),
+        arguments: {
+          'x-queue-type': 'quorum',
+        },
+      },
+    },
+  });
+
+  await app.startAllMicroservices()
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
@@ -49,6 +50,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
   app.set('trust proxy', true);
   
+  Logger.log('Service Queue Microservice is listening...');
   app.enableCors();
 
   await app.listen(3006);

@@ -1,161 +1,279 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscoveryService } from './discovery.service';
-import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { InventoryEntity } from '../entities/inventory.entity';
-import { ReportsEntity } from 'src/entities/reports.entity';
+import { ReportsEntity } from '../entities/reports.entity';
 import * as fs from 'fs';
-import { NotFoundException } from '@nestjs/common';
+import * as path from 'path';
+import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 describe('DiscoveryService', () => {
-  let discoveryService: DiscoveryService;
-  let inventoryRepo: Repository<InventoryEntity>;
-  let reportsRepo: Repository<ReportsEntity>;
+  let service: DiscoveryService;
+  let mockInventoryRepo;
+  let mockReportsRepo;
 
-  const mockInventoryRepo = {
-    findOne: jest.fn(),
-    find: jest.fn(),
-    query: jest.fn(),
-  };
+  const mockInventoryData = [
+    {
+      fileServerPathId: 'server1',
+      path: '/root/path1',
+      parentPath: '/root',
+      name: 'path1'
+    }
+  ];
 
-  const mockReportsRepo = {
-    find: jest.fn(),
-  };
-
-  jest.mock('archiver', () => ({
-    zip: jest.fn(() => {
-      const archive = {
-        file: jest.fn(),
-        on: jest.fn(),
-        finalize: jest.fn(),
-      };
-      return archive;
-    }),
-  }));
+  const mockReportData = [
+    {
+      jobRunId: 'job123',
+      reportType: 'discovery',
+      reportData: JSON.stringify([
+        {
+          category: 'Category1',
+          sub_category: 'SubCat1',
+          count_or_space: '100'
+        }
+      ]),
+      createdAt: new Date()
+    }
+  ];
 
   beforeEach(async () => {
+    mockInventoryRepo = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      query: jest.fn()
+    };
+
+    mockReportsRepo = {
+      find: jest.fn()
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DiscoveryService,
         {
           provide: getRepositoryToken(InventoryEntity),
-          useValue: mockInventoryRepo,
+          useValue: mockInventoryRepo
         },
         {
           provide: getRepositoryToken(ReportsEntity),
-          useValue: mockReportsRepo,
-        },
+          useValue: mockReportsRepo
+        }
       ],
     }).compile();
 
-    discoveryService = module.get<DiscoveryService>(DiscoveryService);
-    inventoryRepo = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
-    reportsRepo = module.get<Repository<ReportsEntity>>(getRepositoryToken(ReportsEntity));
+    service = module.get<DiscoveryService>(DiscoveryService);
   });
 
   it('should be defined', () => {
-    expect(discoveryService).toBeDefined();
+    expect(service).toBeDefined();
   });
 
   describe('createReportFile', () => {
-    it('should create a report file successfully', async () => {
-      const mockJobRunId = '123';
-      const mockReportType = 'discovery';
-      const mockReportData = JSON.stringify([
-        { category: 'Number of Files', sub_category: '<8KiB', count_or_space: 132 },
-      ]);
+    beforeEach(() => {
+      jest.spyOn(fs, 'existsSync').mockImplementation(() => true);
+      jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    });
 
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'mkdirSync').mockImplementation();
-      jest.spyOn(fs, 'writeFileSync').mockImplementation();
-      jest.spyOn(inventoryRepo, 'query').mockResolvedValue([]);
-      jest.spyOn(reportsRepo, 'find').mockResolvedValue([
-        {
-          id: '',
-          createdAt: 'string',
-          reportData: mockReportData,
-        },
-      ]);
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
 
-      const result = await discoveryService.createReportFile(mockJobRunId, mockReportType);
+    it('should create report file successfully', async () => {
+      mockInventoryRepo.query.mockResolvedValue([]);
+      mockReportsRepo.find.mockResolvedValue(mockReportData);
+
+      const result = await service.createReportFile('job123', 'discovery');
 
       expect(result).toEqual({ message: 'Report generated successfully' });
-      expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining(`${mockJobRunId}-${mockReportType.toLowerCase()}-report.txt`),
-        expect.stringContaining('== Number of Files ==')
+      expect(mockInventoryRepo.query).toHaveBeenCalled();
+      expect(mockReportsRepo.find).toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException when report generation fails', async () => {
+      mockInventoryRepo.query.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.createReportFile('job123', 'discovery')).rejects.toThrow(
+        InternalServerErrorException
       );
     });
 
-    it('should throw an error if report generation fails', async () => {
-      jest.spyOn(inventoryRepo, 'query').mockRejectedValue(new Error('Database error'));
+    it('should create directory if it does not exist', async () => {
+      jest.spyOn(fs, 'existsSync').mockImplementationOnce(() => false);
+      mockInventoryRepo.query.mockResolvedValue([]);
+      mockReportsRepo.find.mockResolvedValue(mockReportData);
 
-      await expect(discoveryService.createReportFile('123', 'discovery')).rejects.toThrow(
-        'Failed to generate report for jobRunId: 123 and reportType: discovery'
+      await service.createReportFile('job123', 'discovery');
+
+      expect(fs.mkdirSync).toHaveBeenCalledWith(
+        expect.any(String),
+        { recursive: true }
       );
+    });
+
+    it('should not create directory if it already exists', async () => {
+      jest.spyOn(fs, 'existsSync').mockImplementationOnce(() => true);
+      mockInventoryRepo.query.mockResolvedValue([]);
+      mockReportsRepo.find.mockResolvedValue(mockReportData);
+
+      await service.createReportFile('job123', 'discovery');
+
+      expect(fs.mkdirSync).not.toHaveBeenCalled();
+    });
+
+    it('should handle case when no report data is found', async () => {
+      mockInventoryRepo.query.mockResolvedValue([]);
+      mockReportsRepo.find.mockResolvedValue([]);
+
+      const result = await service.createReportFile('job123', 'DISCOVERY');
+
+      expect(result).toEqual({ message: 'Report generated successfully' });
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
   });
 
   describe('getReportsAsZip', () => {
-    const mockReportsDirectory = './mockReports';
-    const mockJobRunIds = ['123', '456'];
-    const mockReportType = 'discovery';
-
     beforeEach(() => {
-      jest.spyOn(discoveryService as any, 'getReportsDirectory', 'get').mockReturnValue(mockReportsDirectory);
+      jest.spyOn(fs, 'existsSync').mockImplementation(() => true);
     });
 
-    it('should throw NotFoundException if the reports directory does not exist', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-
-      await expect(discoveryService.getReportsAsZip(mockJobRunIds, mockReportType)).rejects.toThrow(
-        NotFoundException
-      );
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
-    it('should throw NotFoundException if no files exist', async () => {
-      jest.spyOn(fs, 'existsSync').mockImplementation((filePath) => filePath === mockReportsDirectory);
+    it('should throw NotFoundException when no files exist', async () => {
+      jest.spyOn(fs, 'existsSync')
+        .mockImplementationOnce(() => true)
+        .mockImplementation(() => false);
 
-      await expect(discoveryService.getReportsAsZip(mockJobRunIds, mockReportType)).rejects.toThrow(
-        NotFoundException
-      );
+      await expect(
+        service.getReportsAsZip(['job123'], 'discovery')
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should successfully create zip with multiple files', async () => {
+      const mockZipBuffer = Buffer.from('mock zip content');
+      jest.spyOn(service, 'createZipArchive').mockResolvedValue(mockZipBuffer);
+
+      const result = await service.getReportsAsZip(['job123', 'job456'], 'discovery');
+
+      expect(result).toEqual(mockZipBuffer);
+      expect(service.createZipArchive).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when reports directory does not exist', async () => {
+      jest.spyOn(fs, 'existsSync').mockImplementation(() => false);
+
+      await expect(
+        service.getReportsAsZip(['job123'], 'discovery')
+      ).rejects.toThrow('Reports directory does not exist');
+    });
+
+    it('should log warning when specific file is not found', async () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      jest.spyOn(fs, 'existsSync')
+        .mockImplementationOnce(() => true)
+        .mockImplementationOnce(() => false);
+
+      await expect(
+        service.getReportsAsZip(['job123'], 'discovery')
+      ).rejects.toThrow(NotFoundException);
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
   });
 
-  
-
   describe('getDiscoveryByFileServerId', () => {
-    it('should return transformed data based on the file server ID', async () => {
-      const mockData = { path: '/test/mount', file_server: 'server1' };
-      mockInventoryRepo.findOne.mockResolvedValue(mockData);
-      mockInventoryRepo.find.mockResolvedValue([{ fileName: 'file1' }]);
+    it('should return formatted discovery data', async () => {
+      mockInventoryRepo.findOne.mockResolvedValue(mockInventoryData[0]);
+      mockInventoryRepo.find.mockResolvedValue(mockInventoryData);
 
-      const result = await discoveryService.getDiscoveryByFileServerId('server1');
-      expect(result).toEqual([{ root: 'mount', childs: [{ fileName: 'file1', childs: [] }] }]);
-      expect(mockInventoryRepo.findOne).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1' } });
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/mount' } });
+      const result = await service.getDiscoveryByFileServerId('server1');
+
+      expect(result).toEqual([
+        {
+          root: path.basename(mockInventoryData[0].path),
+          childs: mockInventoryData.map(item => ({ ...item, childs: [] }))
+        }
+      ]);
     });
   });
 
   describe('getDiscoveryByFileServerIdAndParentPath', () => {
-    it('should return data for the given fileServerId and parentPath', async () => {
-      const mockData = [{ fileName: 'file1' }];
-      mockInventoryRepo.find.mockResolvedValue(mockData);
+    it('should return discovery data with empty childs', async () => {
+      mockInventoryRepo.find.mockResolvedValue(mockInventoryData);
 
-      const result = await discoveryService.getDiscoveryByFileServerIdAndParentPath('server1', '/test/path');
-      expect(result).toEqual([{ fileName: 'file1', childs: [] }]);
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/path' } });
+      const result = await service.getDiscoveryByFileServerIdAndParentPath(
+        'server1',
+        '/root'
+      );
+
+      expect(result).toEqual(
+        mockInventoryData.map(item => ({ ...item, childs: [] }))
+      );
+    });
+  });
+
+  describe('createZipArchive', () => {
+    it('should create zip archive successfully', async () => {
+      const mockFilePaths = ['path1', 'path2'];
+      const result = await service.createZipArchive(mockFilePaths);
+      
+      expect(result).toBeInstanceOf(Buffer);
+    });
+
+  });
+
+  describe('formatAndWriteToFile', () => {
+    it('should format and write data correctly', () => {
+      const mockData = [
+        {
+          category: 'Category1',
+          sub_category: 'SubCat1',
+          count_or_space: '100'
+        },
+        {
+          category: 'Category1',
+          sub_category: 'SubCat2',
+          count_or_space: '200'
+        }
+      ];
+      const mockFilePath = 'test.txt';
+      const writeFileSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      service.formatAndWriteToFile(mockData, mockFilePath);
+
+      expect(writeFileSpy).toHaveBeenCalled();
+
+      writeFileSpy.mockRestore();
+      consoleSpy.mockRestore();
     });
   });
 
   describe('getDataFromParentPath', () => {
-    it('should call find on the inventoryRepo with correct parameters', async () => {
-      const mockData = [{ fileName: 'file1' }];
-      mockInventoryRepo.find.mockResolvedValue(mockData);
+    it('should return data for given fileServerId and parentPath', async () => {
+      mockInventoryRepo.find.mockResolvedValue(mockInventoryData);
 
-      const result = await discoveryService.getDataFromParentPath('server1', '/test/path');
-      expect(result).toEqual(mockData);
-      expect(mockInventoryRepo.find).toHaveBeenCalledWith({ where: { fileServerPathId: 'server1', parentPath: '/test/path' } });
+      const result = await service.getDataFromParentPath('server1', '/root');
+
+      expect(result).toEqual(mockInventoryData);
+      expect(mockInventoryRepo.find).toHaveBeenCalledWith({
+        where: { fileServerPathId: 'server1', parentPath: '/root' }
+      });
+    });
+  });
+
+  describe('getReportsDirectory', () => {
+    it('should return custom directory from environment variable', () => {
+      process.env.REPORT_DOWNLOAD_LOCATION = '/custom/path';
+      expect(service.getReportsDirectory).toBe('/custom/path');
+    });
+
+    it('should return default directory when environment variable is not set', () => {
+      delete process.env.REPORT_DOWNLOAD_LOCATION;
+      expect(service.getReportsDirectory).toBe('./reports');
     });
   });
 });

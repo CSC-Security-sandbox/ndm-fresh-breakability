@@ -8,26 +8,19 @@ import { JobRunStatus, JobType } from 'src/constants/enums';
 
 @Injectable()
 export class OverviewService {
-  getReportsAsZip(getReportsAsZip: any) {
-    throw new Error('Method not implemented.');
-  }
-  
     constructor(@InjectRepository(InventoryEntity) private readonly inventoryRepository: Repository<InventoryEntity>,
         @InjectRepository(ProjectEntity) private readonly projectRepository: Repository<ProjectEntity>) { }
 
-    async getStorageAndJobsOverview(projectId: string, fileServerId: string, jobConfigId: string) {
+    async getStorageAndJobsOverview(projectId: string, configId: string, jobConfigId: string) {
         const whereClause ={};
             if (projectId) {
                 whereClause['id'] = projectId;
             }
         
-            if (fileServerId) {
+            if (configId) {
                 whereClause['configs'] = {
                     ...whereClause['configs'],
-                    fileServers: {
-                        ...whereClause['configs?.fileServers'],
-                        id: fileServerId,
-                    },
+                    id: configId,
                 };
             }
         
@@ -60,64 +53,63 @@ export class OverviewService {
             });
             let totalDiscoveredSize = 0;
             let totalMigratedSize = 0;
-            let totalFileServers =  projectDetails.flatMap(project => project?.configs).length;
+            let totalFileServers = projectDetails?.flatMap(project => project?.configs ?? []).length;
             let totalDiscoverJobs = 0;
-            const scanRunDetails = projectDetails.flatMap(project =>
+            const scanRunDetails = projectDetails?.flatMap(project =>
                 project.configs.flatMap(config =>
                     config.fileServers.flatMap(fileServer =>
                         fileServer.volumes.flatMap(volume =>
                             volume.jobConfig
-                                .filter(jobConfig => jobConfig.jobType === JobType.Scan)
+                                .filter(jobConfig => jobConfig.jobType === JobType.Discover)
                                 .map(jobConfig => jobConfig.jobRunDetails)
                                 .flat()
                         )
                     )
                 )
-            );
-            totalDiscoverJobs = scanRunDetails.length;
-            
-            const lastScanRun = scanRunDetails
-            .sort((a, b) => b.endTime?.getTime() - a.endTime?.getTime())
-            .slice(0, 1);
-        
-            if (lastScanRun && lastScanRun.length > 0) {
-                const inventoryQueryBuilder =
-                    this.inventoryRepository.createQueryBuilder('inventory')
-                        .select('SUM(inventory.fileSize)', 'totalSize')
-                        .innerJoin('jobrun', 'jobRun', 'inventory.jobRunId = jobRun.id')
-                        .where('jobRun.status = :status', { status: JobRunStatus.Completed });
-
-                const jobRunId = lastScanRun[0].id;
-                if (lastScanRun[0].id) {
-                    inventoryQueryBuilder.andWhere('job_run_id = :jobRunId', { jobRunId });
+            )
+            .filter(jobRun => jobRun.status === JobRunStatus.Completed)
+            .reduce((acc, jobRun) => {
+                const existing = acc.find(j => j.jobConfigId === jobRun.jobConfigId);
+                if (!existing || new Date(jobRun.createdAt) > new Date(existing.createdAt)) {
+                    return [...acc.filter(j => j.jobConfigId !== jobRun.jobConfigId), jobRun];
                 }
-                const discoveredSize = await inventoryQueryBuilder.getRawMany();
-                totalDiscoveredSize = discoveredSize[0]?.totalSize || 0;
+                return acc;
+            }, []);
 
-            }
-            const migrateRun = projectDetails.flatMap(project =>
-                project.configs.flatMap(config =>
-                    config.fileServers.flatMap(fileServer =>
-                        fileServer.volumes.flatMap(volume =>
-                            volume.jobConfig.filter(jobConfig => jobConfig.jobType == JobType.Migrate).flatMap(jobConfig =>
+            totalDiscoverJobs = scanRunDetails?.length;
+            const completedJobRunIds = scanRunDetails?.map(run => run.id);
+
+        const inventoryQueryBuilder = this.inventoryRepository
+            .createQueryBuilder('inventory')
+            .select('SUM(inventory.fileSize)', 'totalSize')
+            .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds: completedJobRunIds.length ? completedJobRunIds : ['00000000-0000-0000-0000-000000000000'] });
+
+            const discoveredSize = await inventoryQueryBuilder.getRawMany();
+            totalDiscoveredSize = (discoveredSize[0]?.totalSize !== null && discoveredSize.length > 0) ? discoveredSize[0]?.totalSize : 0;
+
+            const migrateRun = projectDetails?.flatMap(project =>
+                project?.configs?.flatMap(config =>
+                    config?.fileServers?.flatMap(fileServer =>
+                        fileServer?.volumes?.flatMap(volume =>
+                            volume?.jobConfig?.filter(jobConfig => jobConfig.jobType == JobType.Migrate)?.flatMap(jobConfig =>
                                 jobConfig.jobRunDetails
                             )
                         )
                     )
                 )
             )
-            const cutOverRun= projectDetails.flatMap(project =>
-                project.configs.flatMap(config =>
-                    config.fileServers.flatMap(fileServer =>
-                        fileServer.volumes.flatMap(volume =>
-                            volume.jobConfig.filter(jobConfig => jobConfig.jobType == JobType.CutOver).flatMap(jobConfig =>
+            const cutOverRun= projectDetails?.flatMap(project =>
+                project?.configs?.flatMap(config =>
+                    config?.fileServers?.flatMap(fileServer =>
+                        fileServer?.volumes?.flatMap(volume =>
+                            volume?.jobConfig?.filter(jobConfig => jobConfig.jobType == JobType.CutOver)?.flatMap(jobConfig =>
                                 jobConfig.jobRunDetails
                             )
                         )
                     )
                 )
             )
-            if (migrateRun.length > 0) {
+            if (migrateRun?.length > 0) {
                 const migrationQueryBuilder =
                     this.inventoryRepository.createQueryBuilder('inventory')
                         .select('SUM(MAX(inventory.fileSize))', 'totalMigratedSize')
@@ -125,7 +117,7 @@ export class OverviewService {
                         .where('inventory.job_run_id IN(:...jobRunId)', { jobRunId: migrateRun.map(run => run.id) })
                         .groupBy('inventory.filePath')
                 const migratedSize = await migrationQueryBuilder.getRawMany();
-                totalMigratedSize =  migratedSize[0]?.totalMigratedSize || 0;
+                totalMigratedSize = (migratedSize && migratedSize.length > 0) ? migratedSize[0]?.totalMigratedSize : 0;
             }
            let totalPending = totalDiscoveredSize - totalMigratedSize;
            let totalPendingSize = this.covertBytes(totalPending);
@@ -146,32 +138,28 @@ export class OverviewService {
                     baseLineJob: migrateRun?.length>0 ? 1 : 0,
                     incrementalJob: migrateRun?.length>1 ? migrateRun.length - 1 : 0,
                 },
-                totalCutoverJobs: cutOverRun.length,
+                totalCutoverJobs: cutOverRun?.length,
             },
            }
             return overViewData;
         }
 
         covertBytes(bytes: number): string {
-            const bytesInKB = 1024;
-            const bytesInMB = bytesInKB ** 2;
-            const bytesInGB = bytesInMB ** 2;
-            const bytesInTB = bytesInGB ** 2;
-            const bytesInPB = bytesInTB ** 2;
+            if (bytes === 0) return '0 B';
         
-            if (bytes < bytesInKB) {
-                return `${bytes} B`;
-            } else if (bytes < bytesInMB) {
-                return `${(bytes / bytesInKB).toFixed(2)} KB`;
-            } else if (bytes < bytesInGB) {
-                return `${(bytes / bytesInMB).toFixed(2)} MB`;
-            } else if (bytes < bytesInTB) {
-                return `${(bytes / bytesInGB).toFixed(2)} GB`;
-            } else if (bytes < bytesInPB) {
-                return `${(bytes / bytesInTB).toFixed(2)} TB`;
-            } else {
-                return `${(bytes / bytesInPB).toFixed(2)} PB`;
+            const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            let size = bytes;
+            let unitIndex = 0;
+        
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
             }
+        
+            return size === Math.floor(size)
+                ? `${size?.toFixed(0)} ${units[unitIndex]}`
+                : `${size?.toFixed(2)} ${units[unitIndex]}`;
         }
+
     }
 
