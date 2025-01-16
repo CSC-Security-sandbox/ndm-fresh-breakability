@@ -84,7 +84,7 @@ export class ConfigurationService {
                 projectId: true,
                 scannedDate: true,
                 status: true,
-                fileServerWorkingDirectoryMapping: {
+                workingDirectory: {
                     pathName: true,
                     workingDirectory: true
                 },
