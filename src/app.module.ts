@@ -9,6 +9,7 @@ import { OverviewModule } from './overview/overview.module';
 import appConfig from './config/app.config';
 import { InventoryEntity } from './entities/inventory.entity';
 import { ReportsEntity } from './entities/reports.entity';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -21,7 +22,8 @@ import { ReportsEntity } from './entities/reports.entity';
     }),
     DiscoveryModule,
     OverviewModule,
-    TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]) 
+    TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]),
+    PdfModule 
   ],
   controllers: [AppController],
   providers: [AppService],

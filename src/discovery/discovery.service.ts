@@ -37,7 +37,7 @@ export class DiscoveryService {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
 
-       await this.inventoryRepo.query(
+      await this.inventoryRepo.query(
         "CALL migrateadmin.generate_discovery_report($1)",
         [jobRunId]
       );
@@ -48,7 +48,7 @@ export class DiscoveryService {
         take: 1,
       });
 
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
+      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
       const filePath = path.join(this.reportsDirectory, fileName);
 
       if (latestReport?.length > 0) {
@@ -70,44 +70,24 @@ export class DiscoveryService {
   }
 
   formatAndWriteToFile(data: any[], filePath: string): void {
-    const groupedData = data.reduce((acc, entry) => {
-      if (!acc[entry.category]) {
-        acc[entry.category] = [];
-      }
-      acc[entry.category].push(entry);
-      return acc;
-    }, {});
+    const resultRow: { [key: string]: string | number } = {};
 
-    const formattedString = Object.entries(groupedData)
-      .map(([category, entries]) => {
-        const subCategories = (entries as any[]).map(
-          (entry) => entry.sub_category
-        );
-        const values = (entries as any[]).map((entry) =>
-          entry.count_or_space.toString()
-        );
+    data.forEach((entry) => { 
+      resultRow[entry.sub_category] = entry.value;
+    });
+    const headers = Object.keys(resultRow);
+    const values = headers.map((header) => {
+      const value = resultRow[header] || "";
+      return typeof value === 'string' && value.includes(";") ? `"${value}"` : value;
+  });
 
-        const columnWidths = subCategories.map((subCategory, index) => {
-          const maxHeaderWidth = subCategory.length;
-          const maxValueWidth = values[index]?.toString().length || 0;
-          return Math.max(maxHeaderWidth, maxValueWidth) + 2;
-        });
+    const csvData = [headers.join(","), values.join(",")].join("\n");
+    console.log("csvData: ", csvData);
 
-        const headerRow = subCategories
-          .map((subCategory, index) => subCategory.padEnd(columnWidths[index]))
-          .join(" | ");
-
-        const valueRow = values
-          .map((value, index) => value.padEnd(columnWidths[index]))
-          .join(" | ");
-
-        return `== ${category} ==\n${headerRow}\n${valueRow}\n`;
-      })
-      .join("\n");
-
-    fs.writeFileSync(filePath, formattedString);
-    this.logger.log(`Data has been written to ${filePath}`);
+    fs.writeFileSync(filePath, csvData);
+    console.log(`Data has been written to ${filePath}`);
   }
+
   async getReportsAsZip(
     jobRunIds: string[],
     reportType: string
@@ -121,7 +101,7 @@ export class DiscoveryService {
     }
 
     for (const jobRunId of jobRunIds) {
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.txt`;
+      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
       const filePath = path.join(this.reportsDirectory, fileName);
 
       if (fs.existsSync(filePath)) {
