@@ -92,6 +92,7 @@ export class ConfigurationService {
                     userName: true,
                     password: true,
                     isRefreshed: true,
+                    protocolVersion: true,
                     volumes:{
                         id: true,
                         volumePath: true,
