@@ -39,7 +39,6 @@ export class PdfController {
         res.setHeader('Content-Length', pdf.length);  
         res.send(pdf);
       } catch (error) {
-        console.error(error);
         res.status(500).send(error);
       } 
     } 
