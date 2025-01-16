@@ -84,6 +84,10 @@ export class ConfigurationService {
                 projectId: true,
                 scannedDate: true,
                 status: true,
+                fileServerWorkingDirectoryMapping: {
+                    pathName: true,
+                    workingDirectory: true
+                },
                 fileServers:{
                     id: true,
                     host: true,
