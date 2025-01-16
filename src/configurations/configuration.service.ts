@@ -123,7 +123,8 @@ export class ConfigurationService {
                         }    
                     }
                         
-                }
+                },
+                workingDirectory: true 
             }
         });
 
