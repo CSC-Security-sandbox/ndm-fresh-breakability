@@ -83,9 +83,10 @@ export class DiscoveryService {
 
     const csvData = [headers.join(","), values.join(",")].join("\n");
     console.log("csvData: ", csvData);
-
-    fs.writeFileSync(filePath, csvData);
-    console.log(`Data has been written to ${filePath}`);
+    if(filePath.startsWith(this.reportsDirectory)) {
+      fs.writeFileSync(filePath, csvData);
+      console.log(`Data has been written to ${filePath}`);
+    }
   }
 
   async getReportsAsZip(
