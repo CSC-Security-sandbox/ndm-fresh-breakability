@@ -86,7 +86,8 @@ export class ConfigurationService {
                 status: true,
                 workingDirectory: {
                     pathName: true,
-                    workingDirectory: true
+                    workingDirectory: true,
+                    pathId: true
                 },
                 fileServers:{
                     id: true,
