@@ -1,14 +1,13 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { DiscoveryModule } from './discovery/discovery.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { OverviewModule } from './overview/overview.module';
 import appConfig from './config/app.config';
+import databaseConfig from './config/database.config';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { InventoryEntity } from './entities/inventory.entity';
 import { ReportsEntity } from './entities/reports.entity';
+import { JobRunModule } from './job-run/job-run.module';
+import { OverviewModule } from './overview/overview.module';
 
 @Module({
   imports: [
@@ -21,9 +20,10 @@ import { ReportsEntity } from './entities/reports.entity';
     }),
     DiscoveryModule,
     OverviewModule,
-    TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]) 
+    TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]),
+    JobRunModule 
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

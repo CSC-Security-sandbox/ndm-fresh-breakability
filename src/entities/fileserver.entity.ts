@@ -5,7 +5,7 @@ import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
 
-@Entity({name:'file_server', schema:'migrateadmin'})
+@Entity({name:'file_server'})
 export class FileServerEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
@@ -38,7 +38,7 @@ export class FileServerEntity extends Base {
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;
 
-    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
+    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: false})
     volumes: VolumeEntity[]
 
     @ApiProperty({ description: 'is Refreshed Config' })
