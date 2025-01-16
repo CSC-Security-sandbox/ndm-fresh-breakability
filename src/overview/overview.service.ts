@@ -62,14 +62,11 @@ export class OverviewService {
                         fileServer.volumes.flatMap(volume =>
                             volume.sourceConfig
                                 .filter(jobConfig => jobConfig.jobType === JobType.Discover)
-                                .map(jobConfig => jobConfig.jobRuns)
-                                .flat()
+                                .flatMap(jobConfig => jobConfig.jobRuns)
                         )
                     )
                 )
-            )
-            .filter(jobRun => jobRun.status === JobRunStatus.Completed)
-            .reduce((acc, jobRun) => {
+            ).reduce((acc, jobRun) => {
                 const existing = acc.find(j => j.jobConfigId === jobRun.jobConfigId);
                 if (!existing || new Date(jobRun.createdAt) > new Date(existing.createdAt)) {
                     return [...acc.filter(j => j.jobConfigId !== jobRun.jobConfigId), jobRun];
@@ -77,8 +74,10 @@ export class OverviewService {
                 return acc;
             }, []);
 
-            totalDiscoverJobs = scanRunDetails?.length;
-            const completedJobRunIds = scanRunDetails?.map(run => run.id);
+            totalDiscoverJobs = scanRunDetails?.length ?? 0;
+
+            const completedJobRunDetails = scanRunDetails?.filter(jobRun => jobRun.status === JobRunStatus.Completed);
+            const completedJobRunIds = completedJobRunDetails?.map(run => run.id);
 
         const inventoryQueryBuilder = this.inventoryRepository
             .createQueryBuilder('inventory')
@@ -86,7 +85,7 @@ export class OverviewService {
             .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds: completedJobRunIds.length ? completedJobRunIds : ['00000000-0000-0000-0000-000000000000'] });
 
             const discoveredSize = await inventoryQueryBuilder.getRawMany();
-            totalDiscoveredSize = (discoveredSize[0]?.totalSize !== null && discoveredSize.length > 0) ? discoveredSize[0]?.totalSize : 0;
+            totalDiscoveredSize = discoveredSize[0]?.totalSize ?? 0;
 
             const migrateRun = projectDetails?.flatMap(project =>
                 project?.configs?.flatMap(config =>
