@@ -202,9 +202,9 @@ export class WorkManager{
         await this.operationsRepo.update(
             {fPath: In(successOperations), taskId: task.id}, {status : OperationStatus.COMPLETED}
         )
-        await this.taskRepo.update({id: task.id}, {status: TaskStatus.Completed})
+        await this.taskRepo.update({id: task.id}, {status: task.status})
 
-        if(!isErrored){
+        if(!isErrored && task.status === TaskStatus.Completed){
             const isNotCompletedOperation = await this.operationsRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(OperationStatus.COMPLETED)}})
             const isNotCompletedTask = await this.taskRepo.findOne({where: {jobRunId: task.jobRunId, status: Not(TaskStatus.Completed)}})
             if(!isNotCompletedOperation && !isNotCompletedTask)  
@@ -233,4 +233,5 @@ export class WorkManager{
             default: return  
         }
     }
+
 }
