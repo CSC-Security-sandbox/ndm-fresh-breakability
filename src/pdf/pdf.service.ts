@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as path from "path";
 import * as puppeteer from 'puppeteer';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { Repository } from 'typeorm';
-import * as path from "path";
 
 @Injectable()
 export class PdfService {
@@ -17,38 +17,38 @@ export class PdfService {
     private readonly reportsRepo: Repository<ReportsEntity>) {}
 
     async generatePdf(jobRunId:string,reportType:string): Promise<Buffer> {
-        this.logger.log(
-            `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
-          );
+      this.logger.log( `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
 
-          await this.inventoryRepo.query(
-            "CALL migrateadmin.generate_discovery_report($1)",
-            [jobRunId]
-          );
-    
-          const latestReport = await this.reportsRepo.find({
-            where: { jobRunId: jobRunId, reportType: reportType },
-            order: { createdAt: "DESC" },
-            take: 1,
-          });
-        const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
-        const filePath = path.join(this.reportsDirectory, fileName);
-        let htmlOutput = "";
-        if (latestReport?.length > 0) {
-             htmlOutput =    this.generateHtmlTable(
-              JSON.parse(latestReport[0].reportData)
-            );
-          }
-        const browser = await puppeteer.launch();
-        const page = await browser.newPage();
-        await page.setContent(htmlOutput);
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-        });
+      await this.inventoryRepo.query(
+        "CALL migrateadmin.generate_discovery_report($1)",
+        [jobRunId]
+      );
 
-        await browser.close();
-        return Buffer.from(pdfBuffer);
+      const latestReport = await this.reportsRepo.find({
+        where: { jobRunId: jobRunId, reportType: reportType },
+        order: { createdAt: "DESC" },
+        take: 1,
+      });
+
+      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
+      const filePath = path.join(this.reportsDirectory, fileName);
+      let htmlOutput = "";
+
+      if (latestReport?.length > 0) 
+        htmlOutput =   this.generateHtmlTable(JSON.parse(latestReport[0].reportData));
+
+        const browser = await puppeteer.launch({
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });;
+      const page = await browser.newPage();
+      await page.setContent(htmlOutput, { waitUntil: 'networkidle0' });
+      const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+      });
+
+      await browser.close();
+      return Buffer.from(pdfBuffer);
     }
 
     generateHtmlTable(data: any[]): string {
