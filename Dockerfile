@@ -40,5 +40,4 @@ EXPOSE 3000
 
 RUN chmod +x /app/entrypoint.sh
 
-# Set the entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
