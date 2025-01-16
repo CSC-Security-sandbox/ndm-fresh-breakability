@@ -33,6 +33,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.setGlobalPrefix('api/v1/report');
+  app.useGlobalInterceptors()
 
   app.useGlobalPipes(new ValidationPipe());
 

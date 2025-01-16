@@ -1,11 +1,35 @@
 import { Controller, Get, Res, HttpException, HttpStatus, Body } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
+
+@ApiTags('Generate PDF')
 @Controller('pdf')
 export class PdfController {
   constructor(private readonly pdfService: PdfService) {}
+  
+    @ApiOperation({ summary: 'Generate PDF report' })
     @Get('generate')
+    @ApiBody({
+      schema: {
+        type: 'object',
+        properties: {
+          jobRunId: {
+            type: 'string',
+            description: 'jobRunId of the report to download',
+          },
+          'report-type': {
+            type: 'string',
+            enum: ['COC', 'DISCOVERY'],
+            description: 'Type of the report to download',
+          },
+        },
+        required: ['jobRunId', 'report-type'],
+      },
+    })
+    @ApiResponse({ status: 200, description: 'Files downloaded successfully' })
+    @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
     async generatePdf(@Res() res: Response, @Body('jobRunId') jobRunId: string,
     @Body('report-type') reportType: string) {
       try {
