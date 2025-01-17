@@ -47,7 +47,7 @@ export class JobConfigEntity extends Base {
 
   @ApiProperty({ description: 'UUID of the target path configuration' })
   @Column({ type: 'uuid', nullable: true, name: 'target_path_id' })
-  targetPathId: string;
+  destinationPathId: string;
 
   @OneToMany(() => JobRunEntity, jobRun => jobRun.jobConfig, { cascade: true, eager: false })
   jobRuns: JobRunEntity[];
@@ -58,7 +58,7 @@ export class JobConfigEntity extends Base {
 
   @ManyToOne(() => VolumeEntity, volume => volume.targetConfig, { onDelete:'CASCADE'})
   @JoinColumn({ name: 'target_path_id' }) 
-  targetPath: VolumeEntity;
+  destinationPath: VolumeEntity;
 
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;
