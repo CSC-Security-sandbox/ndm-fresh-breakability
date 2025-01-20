@@ -27,6 +27,15 @@ export class WorkManagerService {
         this.workerId = this.configService.get('workers.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout')
     }
+    async onApplicationBootstrap() {
+        this.logger.info('[onApplicationBootstrap] - Starting Worker Service');
+        try {
+            this.connection = await NativeConnection.connect(this.configService.get('temporal'));
+        } catch (err) {
+            this.logger.error(`Error on setting temporal connection: ${err}`);
+            throw err;
+        }
+    }
 
     @Cron(CronExpression.EVERY_SECOND)
     async handleCron() {
