@@ -5,3 +5,13 @@ export class WorkerConfiguration {
     taskQueueId: string;
     dynamicTaskQueue: boolean;    
 }
+
+export enum WorkerState  {
+    INITIALIZED = 'INITIALIZED',
+    RUNNING = 'RUNNING', 
+    STOPPED = 'STOPPED', 
+    STOPPING = 'STOPPING', 
+    DRAINING = 'DRAINING', 
+    DRAINED = 'DRAINED', 
+    FAILED = 'FAILED',
+}

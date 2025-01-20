@@ -88,5 +88,9 @@ export class LoggerService {
   error(message: string): void {
     this.logger.error(message);
   }
+
+  debug(message: string): void {
+    this.logger.debug(message);
+  }
 }
 
