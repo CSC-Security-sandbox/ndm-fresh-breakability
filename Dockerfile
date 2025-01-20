@@ -14,8 +14,7 @@ RUN apk update && \
     ttf-freefont && \
     rm -vrf /var/cache/apk/* && \
     npm i -g @nestjs/cli && \
-    npm i -g pm2@latest && \
-    npm i puppeteer
+    npm i -g pm2@latest 
 
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
