@@ -38,7 +38,7 @@ export class VolumeEntity extends Base {
     @OneToMany(()=> JobConfigEntity, inventory=>inventory.sourcePath,{ cascade: true,  eager: false})
     sourceConfig: JobConfigEntity[]
 
-    @OneToMany(()=> JobConfigEntity, inventory=>inventory.targetPath,{ cascade: true,  eager: false})
+    @OneToMany(()=> JobConfigEntity, inventory=>inventory.destinationPath,{ cascade: true,  eager: false})
     targetConfig: JobConfigEntity[]
 
     @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: false})

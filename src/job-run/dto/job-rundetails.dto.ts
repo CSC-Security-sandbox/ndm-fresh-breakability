@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude, plainToClass } from 'class-transformer';
 import { IsString, IsUUID, IsBoolean, IsNumber, IsOptional, IsObject } from 'class-validator';
+import { Protocol } from 'src/constants/enums';
 
 class FileServerConfigDto {
   @ApiProperty()
@@ -11,36 +12,34 @@ class FileServerConfigDto {
 class FileServerDto {
   @ApiProperty()
   @IsString()
-  protocol: string;
+  protocol: Protocol;
 
-  @ApiProperty()
-  @IsObject()
-  config: FileServerConfigDto;
-}
-
-class PathDto {
   @ApiProperty()
   @IsString()
-  volumePath: string;
+  path: string;
 
   @ApiProperty()
-  @IsObject()
-  fileServer: FileServerDto;
+  @IsString()
+  serverName: string;
 }
 
 class JobConfigDto {
+  @ApiProperty()
+  @IsString()
+  id: string;
+
   @ApiProperty()
   @IsString()
   jobType: string;
 
   @ApiProperty()
   @IsObject()
-  sourcePath: PathDto;
+  sourceServer: FileServerDto;
 
   @ApiProperty({ nullable: true })
   @IsOptional()
   @IsObject()
-  targetPath: PathDto | null;
+  destinationServer: FileServerDto | null;
 }
 
 export class TaskDto {
@@ -61,6 +60,22 @@ export class TaskDto {
   running: number = 0;
 }
 
+export class JobRunStats {
+  @ApiProperty()
+  @IsNumber()
+  fileCount?: string = "0";
+
+  @ApiProperty()
+  @IsString()
+  totalSize?: string = "0";
+
+  @ApiProperty()
+  @IsString()
+  directories?: string = "0";
+}
+
+
+
 export class JobRunDetailsResponseDto {
   @ApiProperty()
   @IsUUID()
@@ -78,25 +93,28 @@ export class JobRunDetailsResponseDto {
   @IsString()
   endTime: Date;
 
-
-  @ApiProperty({ type: []})
-  worker: string[];
+  @ApiProperty()
+  @IsNumber()
+  worker: number;
 
   @ApiProperty()
   @IsObject()
   jobConfig: JobConfigDto;
 
   @ApiProperty()
-  @IsNumber()
-  scannedFileCount?: string;
+  @IsObject()
+  @IsOptional()
+  discovery?: JobRunStats;
 
   @ApiProperty()
-  @IsString()
-  totalScannedSize?: string;
+  @IsObject()
+  @IsOptional()
+  migrate?: JobRunStats;
 
   @ApiProperty()
-  @IsString()
-  scannedDirectoriesCount?: string;
+  @IsObject()
+  @IsOptional()
+  cutOver?: JobRunStats;
 
   @ApiProperty()
   @IsObject()

@@ -1,13 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { JobRunStatus, ReportType } from 'src/constants/enums';
+import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { TaskEntity } from 'src/entities/task.entity';
 import { covertBytes } from 'src/utils/mapper';
 import { Repository } from 'typeorm';
-import { JobRunDetailsResponseDto, TaskDto } from './dto/job-rundetails.dto';
+import { JobRunDetailsResponseDto, JobRunStats, TaskDto } from './dto/job-rundetails.dto';
 import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
 
 @Injectable()
@@ -47,23 +47,39 @@ export class JobRunService {
             endTime: true,
             worker: {workerId: true},
             jobConfig: {
+              id: true,
               jobType: true,
               sourcePath: volumeSearch,
-              targetPath: volumeSearch
+              destinationPath: volumeSearch
             }
           },
           relations: {
             worker: true,
             jobConfig: {
               sourcePath: { fileServer: { config: true } },
-              targetPath: { fileServer: { config: true } }
+              destinationPath: { fileServer: { config: true } }
             }
           }
         });
 
+        if(!jobRun) throw new NotFoundException(`Jon Run Dues not exit for id :${id}`)
         let response : JobRunDetailsResponseDto = {
           ...jobRun,
-          worker: jobRun.worker.map(it=>it.workerId)
+          jobConfig:{
+            id: jobRun.jobConfig.id,
+            jobType: jobRun.jobConfig.jobType,
+            sourceServer: {
+              protocol: jobRun.jobConfig.sourcePath.fileServer.protocol,  
+              path: jobRun.jobConfig.sourcePath.volumePath,  
+              serverName: jobRun.jobConfig.sourcePath.fileServer.config.configName,  
+            },
+            destinationServer:{
+              protocol: jobRun?.jobConfig?.destinationPath?.fileServer?.protocol,  
+              path: jobRun?.jobConfig?.destinationPath?.volumePath,   
+              serverName: jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,  
+            }
+          },
+          worker: jobRun.worker.length ?? 0
         }
 
       
@@ -77,15 +93,18 @@ export class JobRunService {
             .groupBy('i.is_directory')
             .getRawMany();
 
-      
+        const jobRunStatus = new JobRunStats()
         for(let i = 0; i < inventorySummary.length; i++) {
             if(inventorySummary[i].isDirectory) 
-                response['scannedDirectoriesCount'] = inventorySummary[i].counts.toString()
+              jobRunStatus.directories = inventorySummary[i].counts.toString()
             else {
-                response['scannedFileCount'] = inventorySummary[i].counts.toString()
-                response['totalScannedSize'] = covertBytes(Number(inventorySummary[i].totalFileSize))
+              jobRunStatus.fileCount = inventorySummary[i].counts.toString()
+              jobRunStatus.totalSize = covertBytes(Number(inventorySummary[i].totalFileSize)).toString()
             }
         }
+        
+        if(jobRun.jobConfig.jobType===JobType.Discover)
+          response['discovery'] = jobRunStatus
 
         const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
             .createQueryBuilder('t')
