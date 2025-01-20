@@ -7,6 +7,7 @@ import { LoggerService } from 'src/logger/logger.service';
 import { NativeConnection, Worker, State } from '@temporalio/worker';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getWorkerIdentity } from 'src/utils/woker-mapager.mappers';
+import { WorkerOptionsFactory } from './factory/worker-options.factory';
 
 @Injectable()
 export class WorkManagerService {
@@ -40,6 +41,7 @@ export class WorkManagerService {
     @Cron(CronExpression.EVERY_SECOND)
     async handleCron() {
         if(WorkManagerService.loadingConfigs) return;
+        WorkManagerService.loadingConfigs = true
         // Get the worker configuration changes
         this.httpService.get(this.workerConfigUrl)
             .pipe(
@@ -64,15 +66,16 @@ export class WorkManagerService {
                   this.logger.error(`Failed to fetch configurations: ${error}`);
                 },
             });
+        WorkManagerService.loadingConfigs = false;
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {
         let activeConfigs: Set<string> = new Set<string>()
-        let configsToStart: string[] = []
+        let configsToStart: Map<string, WorkerConfiguration> = new Map<string, WorkerConfiguration>()
         for(let i = 0; i < configs.length; i++) {
             const id = getWorkerIdentity(configs[i])
             if(!this.activeWorkers.has(id)) 
-                configsToStart.push(id)
+                configsToStart.set(id, configs[i])
             activeConfigs.add(id)
         }
         for(let [id, worker] of this.activeWorkers) {
@@ -83,9 +86,12 @@ export class WorkManagerService {
                 activeConfigs.delete(id)
             }
         }
-        for(let i = 0; i < configsToStart.length; i++) {
-            this.logger.info(`Starting worker ${configsToStart[i]}`)
-            this.activeWorkers.set(configsToStart[i], null)
+        for(let [id, config] of configsToStart) {
+            this.logger.info(`Starting worker ${id}`)
+            configsToStart.delete(id)
+            const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
+            await this.startWorker(id, workerOptions)
+            this.activeWorkers.set(id,null); // remove after startWorker
         }
     }
 
