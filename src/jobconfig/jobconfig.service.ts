@@ -5,7 +5,7 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { InActivateJobConfigPayload } from './jobconfig.types';
@@ -64,6 +64,24 @@ export class JobConfigService {
       )})
     
     return await this.jobConfigRepo.save(entries);
+  }
+
+  async createBulkMigrate(blkMigrate: JobConfigMigrateBulk): Promise<Partial<JobConfigEntity[]>> {
+    return [
+      {
+        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+        jobType: JobType.Migrate,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
+        excludeFilePatterns: '*.log, *.tmp',
+        preserveAccessTime: false,
+        firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
+        futureScheduleAt: '0 12 * * *',
+        sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+        targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
+        scheduler: '0 12 * * *',
+      }
+    ] as any;
   }
 
   // ------------  update ---------------- //

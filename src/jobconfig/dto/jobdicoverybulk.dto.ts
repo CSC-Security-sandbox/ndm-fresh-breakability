@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
 import {
     ArrayUnique,
     IsArray,
@@ -7,7 +8,8 @@ import {
     IsDate,
     IsOptional,
     IsString,
-    IsUUID
+    IsUUID,
+    ValidateNested
 } from 'class-validator';
 
 export class JobConfigDiscoverBulk {
@@ -42,4 +44,76 @@ export class JobConfigDiscoverBulk {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+}
+
+
+export class MigrateConfig {
+  @ApiProperty({ description: 'UUID of the source path configurations' })
+  @IsUUID()
+  sourcePathId: string;
+
+  @ApiProperty({ description: 'UUID of the destination file servers' })
+  destinationPathId: string;
+}
+
+export class JobConfigOptions {
+  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsBoolean()
+  preserveAccessTime: boolean;
+}
+
+export class JobConfigMigrateBulk {
+  @ApiProperty({ description: 'Exclude files older than this date', required: false })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  excludeOlderThan?: Date;
+
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false , })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  firstRunAt: Date;
+
+  @ApiProperty({ description: 'Future run schedule (incremental sync config)', required: false , })
+  @IsString()
+  futureRunSchedule: string;
+
+  @ApiProperty({ 
+    description: 'Details of all the bulk migrate configs', 
+    isArray: true, 
+    type: MigrateConfig 
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MigrateConfig)
+  migrateConfigs: MigrateConfig[]
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'BLOB data for SID mappings (Excel file content)',
+  })
+  @IsOptional()
+  sidMapping: Buffer;
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'BLOB data for GID mappings (Excel file content)',
+  })
+  @IsOptional()
+  gidMapping: Buffer;
+
+  @ApiProperty({ 
+    description: 'Options for bulk migrate', 
+    type: JobConfigOptions 
+  })
+  @Type(() => JobConfigOptions)
+  options: JobConfigOptions
 }
