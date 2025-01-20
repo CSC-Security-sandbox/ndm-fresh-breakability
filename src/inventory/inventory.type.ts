@@ -3,6 +3,16 @@ export enum InventoryPayloadType {
     DISCOVERY_COMPLETED = 'DISCOVERY_COMPLETED'
 } 
 
+export enum FileType {
+    FILE = "FILE",
+    DIRECTORY = "DIRECTORY",
+    SYMBOLIC_LINK = "SYMBOLIC_LINK",
+    SOCKET = "SOCKET",
+    FIFO = "FIFO",
+    CHARACTER_DEVICE = "CHARACTER_DEVICE",
+    BLOCK_DEVICE = "BLOCK_DEVICE",
+    UNKNOWN = "UNKNOWN"
+}
 
 export interface CreateInventory {
     path: string;
@@ -15,7 +25,8 @@ export interface CreateInventory {
     uid: string;
     gid: string;
     fileSize: bigint,
-    fileType: string;
+    extension: string;
+    fileType: FileType;
     modifiedTime: string;
     accessTime: string;
     filePermission: string;
