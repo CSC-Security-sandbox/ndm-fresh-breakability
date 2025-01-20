@@ -6,6 +6,7 @@ import databaseConfig from './config/database.config';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { InventoryEntity } from './entities/inventory.entity';
 import { ReportsEntity } from './entities/reports.entity';
+import { PdfModule } from './pdf/pdf.module';
 import { JobRunModule } from './job-run/job-run.module';
 import { OverviewModule } from './overview/overview.module';
 
@@ -21,6 +22,7 @@ import { OverviewModule } from './overview/overview.module';
     DiscoveryModule,
     OverviewModule,
     TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]),
+    PdfModule,
     JobRunModule 
   ],
   controllers: [],
