@@ -78,9 +78,9 @@
   ansible.builtin.debug: 
     msg: "Helm Install (vault) => stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
-- name: Pause for 30 seconds to make sure vault is up
+- name: Pause for 45 seconds to make sure vault is up
   ansible.builtin.pause:
-    seconds: 15
+    seconds: 45
 
 - name: Get the unseal keys
   become: yes
@@ -92,9 +92,9 @@
   with_items:
     - 0
 
-- name: Pause for 10 seconds to make sure vault is up
+- name: Pause for 45 seconds to make sure vault is up
   ansible.builtin.pause:
-    seconds: 15
+    seconds: 45
 
 - name: Unseal the vault
   become: yes

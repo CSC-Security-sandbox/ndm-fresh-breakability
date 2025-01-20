@@ -85,15 +85,15 @@ data:
         directAccessGrantsEnabled: true,
         serviceAccountsEnabled: false,
         fullScopeAllowed: true,
-        publicClient: true,
+        publicClient: false,
         frontchannelLogout: true,
         attributes: {
-        'oidc.ciba.grant.enabled': false,
-        'backchannel.logout.session.required': true,
-        'login_theme': 'datamigrate',
-        'oauth2.device.authorization.grant.enabled': true,
-        'display.on.consent.screen': false,
-        'backchannel.logout.revoke.offline.tokens': false
+            'oidc.ciba.grant.enabled': false,
+            'backchannel.logout.session.required': true,
+            'login_theme': 'datamigrate',
+            'oauth2.device.authorization.grant.enabled': true,
+            'display.on.consent.screen': false,
+            'backchannel.logout.revoke.offline.tokens': false
         },
         authenticationFlowBindingOverrides: {},
         fullScopeAllowed: true,

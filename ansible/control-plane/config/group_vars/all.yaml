@@ -1,20 +1,30 @@
 ---
 
 # Microservices release tags of docker images
-data_migrate_ui_tag: "ova"
-config_service_tag: "ova"
-db_writer_service_tag: "ova"
-job_service_tag: "ova"
-file_service_tag: "ova"
-reports_service_tag: "ova"
-admin_service_tag: "ova"
-keycloak_customizations_tag: "ova"
+data_migrate_ui_tag: "local-ova"
+config_service_tag: "local-ova"
+db_writer_service_tag: "local-ova"
+jobs_service_tag: "local-ova"
+file_service_tag: "local-ova"
+reports_service_tag: "local-ova"
+admin_service_tag: "local-ova"
+keycloak_customizations_tag: "local-ova"
 
+# data_migrate_ui_tag: "ova"
+# config_service_tag: "ova"
+# db_writer_service_tag: "ova"
+# jobs_service_tag: "ova"
+# file_service_tag: "ova"
+# reports_service_tag: "ova"
+# admin_service_tag: "ova"
+#keycloak_customizations_tag: "ova"
+
+#acr_registry: "127.0.0.1:32000"
 acr_registry: "datamigratedev.azurecr.io"
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
 azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
 
-vm_username: "datamigrate"
+vm_username: "datamigrator"
 
 # Version management
 microk8s_version: "1.31/stable"
@@ -63,7 +73,7 @@ helm3_repositories:
 
 # users to make members of microk8s group
 users: 
-  - datamigrate
+  - datamigrator
 
 # for setting up custom certificate request.  Set to template name to enable
 #microk8s_csr_template: null

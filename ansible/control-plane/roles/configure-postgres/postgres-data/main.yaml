@@ -1,6 +1,8 @@
 ---
 
 - name: delete postgres-data directory if uninstall flag is defined 
+  become: yes
+  become_user: "{{ vm_username }}"
   file:
     path: /data/postgres-data
     state: absent

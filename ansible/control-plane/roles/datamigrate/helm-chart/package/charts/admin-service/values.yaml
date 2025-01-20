@@ -71,6 +71,8 @@ env:
     value: "datamigrate"
   - name: KEYCLOAK_CLIENT_ID
     value: "datamigrate-client"
+  - name: NODE_TLS_REJECT_UNAUTHORIZED
+    value: '0'
 
 service:
   type: ClusterIP

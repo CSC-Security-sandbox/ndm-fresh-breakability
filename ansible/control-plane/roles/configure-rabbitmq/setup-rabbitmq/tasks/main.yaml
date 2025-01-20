@@ -45,6 +45,13 @@
   become_user: "{{ vm_username }}"
   template: src=./templates/rabbitmq-values.j2 dest=$HOME/rabbitmq/rabbitmq-values.yaml
 
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n rabbitmq rabbitmq-sa
+  when: rabbitmq_uninstall is defined
+
 - name: remove previous installation
   become: yes
   become_user: "{{ vm_username }}"
@@ -69,13 +76,6 @@
     kubectl apply -f $HOME/rabbitmq/rabbitmq-secret.yaml
   args:
     chdir: $HOME
-
-- name: Cleanup service account
-  become: yes
-  become_user: "{{ vm_username }}"
-  shell: |
-    kubectl delete serviceaccount -n rabbitmq rabbitmq-sa
-  when: rabbitmq_uninstall is defined
 
 - name: Create service account
   become: yes

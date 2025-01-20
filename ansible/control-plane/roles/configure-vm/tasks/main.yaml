@@ -17,6 +17,7 @@
       - net-tools
       - acl
       - docker.io
+      - jq
     state: present
   
 - name: 2.3. Ensure Docker is started

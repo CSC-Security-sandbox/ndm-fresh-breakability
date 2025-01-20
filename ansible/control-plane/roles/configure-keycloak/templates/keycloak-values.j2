@@ -18,6 +18,25 @@ auth:
   existingSecret: "keycloak-credentials"
   passwordSecretKey: "keycloak-admin-password"
 
+command:
+  - "/opt/bitnami/scripts/keycloak/entrypoint.sh"
+
+args:
+  - 'bash'
+  - '-c'
+  - |
+      #!/bin/bash
+
+      # Run the init_vault.sh logic
+      for env_file in /vault/secrets/*.env; do
+        if [ -f "$env_file" ]; then
+          echo "Sourcing $env_file"
+          source "$env_file"
+        fi
+      done
+
+      # Execute the entrypoint script
+      /opt/bitnami/scripts/keycloak/run.sh
 
 podAnnotations:
   vault.hashicorp.com/agent-inject: "true"
@@ -29,13 +48,13 @@ podAnnotations:
     {{`{{- with secret "secrets/postgres-secrets/postgres-creds" -}}
     export DATAMIGRATE_DB_USERNAME="{{ .Data.POSTGRES_DMADMIN_USER }}"
     export DATAMIGRATE_DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    export KEYCLOAK_DATABASE_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
+    export KEYCLOAK_DATABASE_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
     {{- end -}}`}}
   vault.hashicorp.com/agent-inject-template-keycloak.env: |
     {{`{{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
     export KEYCLOAK_ADMIN="{{ .Data.KEYCLOAK_ADMIN_USER }}"
     export KEYCLOAK_ADMIN_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
-    export KEYCLOAK_DATABASE_USER="{{ .Data.KEYCLOAK_ADMIN_USER }}"
-    export KEYCLOAK_DATABASE_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
     {{- end -}}`}}
     {% endraw %}
       
@@ -69,17 +88,6 @@ initdbScripts:
       echo "Loading custom providers from /custom/providers..."
       cp -R /custom/providers/* /opt/bitnami/keycloak/providers
       echo "Successfully loaded custom providers"
-
-    init_vault.sh: |
-      #!/bin/bash
-      echo "Boom baam source karva ma aave che..."
-      for env_file in /vault/secrets/*.env; do
-        if [ -f "$env_file" ]; then
-          echo "Sourcing $env_file"
-          source "$env_file"
-        fi
-        env
-      done
     
 ingress:
   enabled: true
@@ -138,24 +146,7 @@ extraEnvVars:
       value: disable
     - name: DATAMIGRATE_DB_SCHEMA
       value: 'migrateadmin'
-
-    # - name: KEYCLOAK_DATABASE_HOST
-    #   value: "postgres-postgresql.postgres.svc.cluster.local"
+    - name: KEYCLOAK_DATABASE_SCHEMA
+      value: 'migrateadmin'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded
-
-    # - name: DATAMIGRATE_DB_USERNAME
-    #   value: dmadmin
-    # - name: DATAMIGRATE_DB_PASSWORD
-    #   value: dmadmin
-
-    # - name: "KEYCLOAK_ADMIN"
-    #   value: "admin"
-    # - name: "KEYCLOAK_ADMIN_PASSWORD"
-    #   value: "admin"
-
-    # - name: KEYCLOAK_DATABASE_USER
-    #   value: ""
-    # - name: KEYCLOAK_DATABASE_PASSWORD
-    #   value: ""
-

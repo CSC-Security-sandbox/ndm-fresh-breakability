@@ -54,6 +54,13 @@
   become_user: "{{ vm_username }}"
   template: src=./templates/postgres-values.j2 dest=$HOME/postgres/postgres-values.yaml
 
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n postgres postgres-sa
+  when: postgres_uninstall is defined
+
 - name: remove previous installation
   become: yes
   become_user: "{{ vm_username }}"
@@ -81,12 +88,6 @@
   args:
     chdir: $HOME
 
-- name: Cleanup service account
-  become: yes
-  become_user: "{{ vm_username }}"
-  shell: |
-    kubectl delete serviceaccount -n postgres postgres-sa
-  when: postgres_uninstall is defined
 
 - name: Create service account
   become: yes
