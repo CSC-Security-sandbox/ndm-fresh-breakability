@@ -36,7 +36,7 @@ export class PdfController {
         const pdf = await this.pdfService.generatePdf(jobRunId, reportType);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename=report.pdf');
-        // res.setHeader('Content-Length', pdf.length);  
+        res.setHeader('Content-Length', pdf.length);  
         res.send(pdf);
       } catch (error) {
         res.status(500).send(error);
