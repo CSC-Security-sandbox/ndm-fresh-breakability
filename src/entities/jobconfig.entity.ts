@@ -45,7 +45,7 @@ export class JobConfigEntity extends Base {
   @Column({ type: 'uuid', nullable: false, name: 'source_path_id' })
   sourcePathId: string;
 
-  @ApiProperty({ description: 'UUID of the target path configuration' })
+  @ApiProperty({ description: 'UUID of the Destination path configuration' })
   @Column({ type: 'uuid', nullable: true, name: 'target_path_id' })
   destinationPathId: string;
 
