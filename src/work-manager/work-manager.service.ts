@@ -15,8 +15,7 @@ export class WorkManagerService {
     static loadingConfigs = false;
     readonly workerId: string;
     private connection: NativeConnection = null;
-    private workers: Worker[] = [];
-    private activeWorkers: Set<string> = new Set<string>()
+    private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
 
     constructor(
@@ -59,31 +58,31 @@ export class WorkManagerService {
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {
-        const activeConfigs: Set<string> = new Set<string>()
+        let activeConfigs: Set<string> = new Set<string>()
         let configsToStart: string[] = []
         for(let i = 0; i < configs.length; i++) {
             const id = getWorkerIdentity(configs[i])
             if(!this.activeWorkers.has(id)) 
                 configsToStart.push(id)
+            activeConfigs.add(id)
         }
-        for(let i = 0; i < this.workers.length; i++) {
-            const id = this.workers[i].options.identity
+        for(let [id, worker] of this.activeWorkers) {
             if(!activeConfigs.has(id)) {
                 this.logger.info(`Stopping worker ${id}`)
-                await this.shutdownWorker(this.workers[i], false)
+                await this.shutdownWorker(worker, false)
                 this.activeWorkers.delete(id)
-                this.workers.splice(i--, 1)
+                activeConfigs.delete(id)
             }
         }
         for(let i = 0; i < configsToStart.length; i++) {
             this.logger.info(`Starting worker ${configsToStart[i]}`)
-            this.activeWorkers.add(configsToStart[i])
+            this.activeWorkers.set(configsToStart[i], null)
         }
     }
 
-    async startWorker(workerOptions: any){
+    async startWorker(id: string, workerOptions: any){
         const worker: Worker = await Worker.create(workerOptions);
-        this.workers.push(worker);
+        this.activeWorkers.set(id,worker);
         try {
             if (worker.getState() === WorkerState.INITIALIZED) 
                 worker.run();
@@ -93,7 +92,6 @@ export class WorkManagerService {
                 //sleep 
                 await new Promise((resolve) => setTimeout( resolve, this.workerStartupTimeout));
             }
-
         } catch (err) {
             this.logger.error(err);
         }
