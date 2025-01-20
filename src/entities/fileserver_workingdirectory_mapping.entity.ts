@@ -25,7 +25,7 @@ export class FileServerWorkingDirectoryMappingEntity extends Base {
     @Column({ type: 'uuid', nullable: true, name: 'config_id' })
     configId: string;
 
-    @OneToOne(() => ConfigEntity, config => config.fileServerWorkingDirectoryMapping, { onDelete: 'CASCADE' })
+    @OneToOne(() => ConfigEntity, config => config.workingDirectory, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'config_id' })
     config: ConfigEntity;
 }

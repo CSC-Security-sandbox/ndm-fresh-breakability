@@ -40,5 +40,5 @@ export class ConfigEntity extends Base {
     project: ProjectEntity;
 
     @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.config)
-    fileServerWorkingDirectoryMapping: FileServerWorkingDirectoryMappingEntity;
+    workingDirectory: FileServerWorkingDirectoryMappingEntity;
 }
