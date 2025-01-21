@@ -10,13 +10,13 @@ import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import appConfig from 'src/config/app.config';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
-import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ConfigModule.forRoot({ load: [appConfig] }),
-        TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity]),
+        TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity, FileServerWorkingDirectoryMappingEntity]),
         AuthKeycloakModule,
     ],
     providers:[ConfigurationService, RabbitMQService],

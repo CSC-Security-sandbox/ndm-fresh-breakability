@@ -1,10 +1,10 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, OneToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { JobConfigEntity } from "./jobconfig.entity";
 
-@Entity({name:'volume', schema:'migrateadmin'})
+@Entity({name:'volume'})
 export class VolumeEntity extends Base {
     @ApiProperty({ description: 'configId' })
     @PrimaryGeneratedColumn('uuid')
@@ -35,6 +35,6 @@ export class VolumeEntity extends Base {
     fileServer: FileServerEntity;
 
     @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: false})
-    jobConfig: JobConfigEntity[]
+    jobConfig: JobConfigEntity[];
 
 }

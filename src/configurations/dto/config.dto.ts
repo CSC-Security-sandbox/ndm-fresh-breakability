@@ -1,15 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
+import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
 import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 
 export class WorkingDirDTO {
-    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
+    @ApiPropertyOptional({ description: 'Path Name', example: '/temp' })
     @IsString()
     @IsOptional()
-    path: string;
+    pathName: string;
 
-    @ApiPropertyOptional({ description: 'Working Directory', example: '/temp' })
+    @ApiPropertyOptional({ description: 'Working Directory', example: '/working-directory' })
+    @IsString()
+    @IsOptional()
+    workingDirectory: string;
+
+    @ApiPropertyOptional({ description: 'Path Id', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
     @IsString()
     @IsOptional()
     pathId: string;
@@ -31,7 +36,7 @@ export class FileServersDTO {
     @IsEnum(Protocol)
     protocol: Protocol;
 
-    @ApiProperty({ description: 'Protocol version', enum: ProtocolVersion, example: ProtocolVersion.NFSv4 })
+    @ApiProperty({ description: 'Protocol version', enum: ProtocolVersion, example: ProtocolVersion.NFSv4_0 })
     @IsOptional()
     @IsEnum(ProtocolVersion)
     protocolVersion: ProtocolVersion;
@@ -72,9 +77,9 @@ export class ConfigDTO {
     @IsNotEmpty()
     configName: string;
 
-    @ApiPropertyOptional({ description: 'Working Directory', example: { path: '/temp', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
-    @IsOptional()
-    workingDirectory?: WorkingDirDTO;
+    @ApiProperty({ description: 'Working Directory', example: { pathName: '/temp', workingDirectory: '/working-directory', pathId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } })
+    @IsObject()
+    workingDirectory: WorkingDirDTO;
 
     @ApiProperty({ description: 'Configuration type', enum: ConfigurationType, example: ConfigurationType.file })
     @IsEnum(ConfigurationType)

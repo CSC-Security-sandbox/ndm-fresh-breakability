@@ -49,8 +49,9 @@ describe('ConfigurationController', () => {
         configName: "testConfig",
         configType: ConfigurationType.file,
         workingDirectory: {
-          path: '/temp',
+          pathName: '/temp',
           pathId: '123123',
+          workingDirectory: '/working-directory'
         },
         fileServers: [],
         projectId: "2345678",
@@ -60,8 +61,9 @@ describe('ConfigurationController', () => {
         configType: ConfigurationType.file,
         fileServers: [],
         workingDirectory: {
-          path: '/temp',
+          pathName: '/temp',
           pathId: '123123',
+          workingDirectory: '/working-directory'
         },
         projectId: "2345678",
         stage: "212"
@@ -115,6 +117,11 @@ describe('ConfigurationController', () => {
         configName: "testConfigUpdate",
         configType: ConfigurationType.file,
         fileServers: [],
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working-directory'
+        },
         projectId: "2345678",
         createdBy: "1234"
       };

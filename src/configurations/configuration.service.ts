@@ -10,7 +10,8 @@ import { validate as isUUID } from 'uuid';
 import { Credentials } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ConfigStatus, LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 
 
 
@@ -22,6 +23,8 @@ export class ConfigurationService {
         private readonly configEntity: Repository<ConfigEntity>,
         @InjectRepository(FileServerEntity)
         private readonly fileServerEntity: Repository<FileServerEntity>,
+        @InjectRepository(FileServerWorkingDirectoryMappingEntity)
+        private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
         private rabbitMQService: RabbitMQService,
@@ -43,6 +46,7 @@ export class ConfigurationService {
             createdAt: true,
             createdBy: true,
             scannedDate: true,
+            status: true,
             fileServers:{
                 id: true,
                 host: true,
@@ -52,6 +56,7 @@ export class ConfigurationService {
                 isRefreshed: true,
                 createdAt: true,
                 createdBy: true,
+                protocolVersion: true
             }
           },
           relations: {
@@ -80,15 +85,17 @@ export class ConfigurationService {
                 configName: true,
                 configType: true,
                 projectId: true,
-                workingDirectory: true,
                 scannedDate: true,
+                status: true,
                 fileServers:{
                     id: true,
                     host: true,
                     serverType: true,
                     protocol: true,
                     userName: true,
+                    password: true,
                     isRefreshed: true,
+                    protocolVersion: true,
                     volumes:{
                         id: true,
                         volumePath: true,
@@ -142,10 +149,11 @@ export class ConfigurationService {
                     workers: workers,
                     createdBy: userId,
                     protocol: fileServer.protocol,  
+                    protocolVersion:fileServer.protocolVersion,
                     userName: fileServer.userName,
                     password: fileServer?.password,
                     isRefreshed: false,
-                    volumes: []
+                    volumes: [],
                 });
             });
 
@@ -153,14 +161,24 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                workingDirectory: createConfig.workingDirectory?.path || '',
+                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
                 fileServers:  await Promise.all(fileServerPromises),
-                createdBy: userId
+                createdBy: userId,
             });
         
-            const update = await this.configEntity.save(config)
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials})
-            return update
+            const update = await this.configEntity.save(config);
+            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials});
+
+            const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
+                pathName: createConfig?.workingDirectory?.pathName,
+                pathId: createConfig?.workingDirectory?.pathId,
+                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+                configId: update.id
+            });
+        
+            await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
+
+            return update;
         }catch(error) {
             this.logger.error(`Error Occurred during creating Config ${error}`)
             throw new InternalServerErrorException('Error Occurred during creating Config')
@@ -190,7 +208,6 @@ export class ConfigurationService {
         config.configType = updateConfig.configType;
         config.createdBy = updateConfig.createdBy || userId
         config.updatedBy = userId
-        config.workingDirectory = updateConfig.workingDirectory?.path || ''
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
@@ -214,13 +231,31 @@ export class ConfigurationService {
                     workers: workers,
                     createdBy: fileServer.createdBy,
                     protocol: fileServer.protocol,  
+                    protocolVersion:update?.protocolVersion,
                     userName: update.userName || fileServer.userName,
                     volumes: fileServer.volumes,
                     password: update.password,
                     updatedBy: userId,
                     isRefreshed: false
                 });
-            })
+            });
+
+            const { workingDirectory } = updateConfig;
+
+            const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
+
+            if (!mapping) {
+                this.logger.error(`Mapping for configId ${id} not found`);
+                throw new NotFoundException(`Mapping for configId ${id} not found`);
+            }
+
+            Object.assign(mapping, {
+                pathName: workingDirectory?.pathName ?? mapping?.pathName,
+                workingDirectory: workingDirectory?.workingDirectory ?? mapping?.workingDirectory,
+                pathId: workingDirectory?.pathId ?? mapping?.pathId,
+            });
+
+            await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
             config.fileServers = await Promise.all(fileServerPromises);
             const update = await this.configEntity.save(config)

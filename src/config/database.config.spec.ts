@@ -8,6 +8,7 @@ import typeormConfig from 'src/config/database.config';
 import { VolumeEntity } from "src/entities/volume.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 
 
 describe('TypeORM Config', () => {
@@ -48,7 +49,8 @@ describe('TypeORM Config', () => {
         VolumeEntity,
         ProjectEntity,
         JobConfigEntity,
-        JobRunEntity
+        JobRunEntity,
+        FileServerWorkingDirectoryMappingEntity
       ],
       migrations: []
     };
