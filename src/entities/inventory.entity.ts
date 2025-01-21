@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp, UpdateDateColumn } from 'typeorm';
 
-@Entity({name:'inventory', schema:'migrateadmin'})
+@Entity({name:'inventory'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['pathId'])
