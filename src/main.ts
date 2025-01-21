@@ -1,12 +1,12 @@
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ConfigService } from '@nestjs/config';
-import { LoggerService } from './logger/logger.service';
+import Logger from './logger/logging';
 
 async function bootstrap() {
+  const logger = Logger.getLogger();
   const app = await NestFactory.createApplicationContext(AppModule);
   const configService = app.get(ConfigService);
-  const logger = app.get(LoggerService);
   const workerId = configService.get<string>('worker.workerId');
   const processId = process.pid;
   app.enableShutdownHooks();

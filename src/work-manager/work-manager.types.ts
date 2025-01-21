@@ -15,3 +15,8 @@ export enum WorkerState  {
     DRAINED = 'DRAINED', 
     FAILED = 'FAILED',
 }
+
+export enum WorkFlows{
+    VALIDATE_CONNECTION = 'ValidateConnectionWorkflow',
+    LIST_PATHS = 'listPathsWorkflow'
+}

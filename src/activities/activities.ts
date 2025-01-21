@@ -1,0 +1,1 @@
+export { validate } from './validate-connection/validate-connection';

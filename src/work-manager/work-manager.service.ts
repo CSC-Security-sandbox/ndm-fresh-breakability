@@ -2,27 +2,27 @@ import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NativeConnection, Worker } from '@temporalio/worker';
 import { retry, timer } from 'rxjs';
-import { LoggerService } from 'src/logger/logger.service';
-import { NativeConnection, Worker, State } from '@temporalio/worker';
-import { WorkerConfiguration, WorkerState } from './work-manager.types';
-import { getWorkerIdentity } from 'src/utils/woker-mapager.mappers';
+import { getWorkerIdentity } from 'src/utils/worker-mapager.mappers';
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
+import { WorkerConfiguration, WorkerState } from './work-manager.types';
+import Logger from 'src/logger/logging';
 
 @Injectable()
 export class WorkManagerService {
 
     readonly workerConfigUrl: string
-    static loadingConfigs = false;
+    private loadingConfigs = false;
     readonly workerId: string;
     private connection: NativeConnection = null;
     private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
+    private logger = Logger.getLogger();
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
-        @Inject(LoggerService) private readonly logger: LoggerService,
     ) {
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}?workerId=${this.configService.get('worker.workerId')}`;
         this.workerId = this.configService.get('workers.workerId');
@@ -40,8 +40,8 @@ export class WorkManagerService {
 
     @Cron(CronExpression.EVERY_SECOND)
     async handleCron() {
-        if(WorkManagerService.loadingConfigs) return;
-        WorkManagerService.loadingConfigs = true
+        if(this.loadingConfigs) return;
+        this.loadingConfigs = true
         // Get the worker configuration changes
         this.httpService.get(this.workerConfigUrl)
             .pipe(
@@ -66,7 +66,7 @@ export class WorkManagerService {
                   this.logger.error(`Failed to fetch configurations: ${error}`);
                 },
             });
-        WorkManagerService.loadingConfigs = false;
+        this.loadingConfigs = false;
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {

@@ -4,14 +4,13 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import appConfig from 'src/config/app.config';
-import { LoggerModule } from 'src/logger/logger.module';
+
 
 @Module({
   imports: [ 
     ConfigModule.forRoot({ load: [appConfig] }), 
     ScheduleModule.forRoot(), 
     HttpModule,
-    LoggerModule
   ],
   providers: [WorkManagerService]
 })
