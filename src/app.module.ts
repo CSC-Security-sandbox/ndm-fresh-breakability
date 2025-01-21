@@ -5,6 +5,7 @@ import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import { ConfigurationModule } from './configurations/configuration.module';
 import { LoggerFactory, LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkManagerModule } from './work-manager/work-manager.module';
 
 
 @Module({
@@ -18,6 +19,7 @@ import { LoggerFactory, LoggerModule, RequestLoggerMiddleware } from '@netapp-cl
       inject: [ConfigService],
     }),
     ConfigurationModule,
+    WorkManagerModule,
   ],
   controllers: [],
   providers: [],

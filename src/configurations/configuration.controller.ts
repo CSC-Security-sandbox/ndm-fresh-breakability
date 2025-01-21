@@ -4,7 +4,7 @@ import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
-import { ConfigResponseDto, FindAllConfigPageDto } from "./dto/findallconfig.dto";
+import { ConfigResponseDto, FindAllConfigPageDto} from "./dto/findallconfig.dto";
 
 @ApiTags("Configuration")
 @Controller('servers')

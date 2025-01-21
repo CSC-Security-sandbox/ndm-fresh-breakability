@@ -11,6 +11,7 @@ import { ConfigurationService } from './configuration.service';
 import appConfig from 'src/config/app.config';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
     imports: [
