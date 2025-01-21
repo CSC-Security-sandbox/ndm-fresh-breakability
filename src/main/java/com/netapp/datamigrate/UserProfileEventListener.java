@@ -83,7 +83,7 @@ public class UserProfileEventListener implements EventListenerProvider {
      * @param updatedEmail the new email to update
      */
     private void updateUserEmailInDatabase(String username, String updatedEmail, String updatedLastName, String updatedFirstName) {
-        StringBuilder queryBuilder = new StringBuilder("UPDATE migrateadmin.\"user\" SET email = ?");
+        StringBuilder queryBuilder = new StringBuilder("UPDATE \"user\" SET email = ?");
         List<Object> parameters = new ArrayList<>();
         parameters.add(updatedEmail);
      
