@@ -4,7 +4,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -27,7 +27,13 @@ export class JobConfigController {
   async createBulkMigrate(@Body() bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigEntity[]> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
   }
-  
+
+  @ApiOperation({ summary: 'Create a new cutover job' })
+  @ApiResponse({ status: 201, description: 'Cutover job has been successfully created.' })
+  @Post('/bulk-cutover')
+  async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigEntity[]> {
+    return await this.jobConfigService.createBulkCutover(bulkCutover);
+  }
 
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })

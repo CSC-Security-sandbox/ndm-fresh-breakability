@@ -431,6 +431,7 @@ export class JobRunService {
         "jobRun.id AS jobRunId",
         "jobConfig.jobType AS jobType",
         "jobConfig.id AS jobConfigId",
+        "jobConfig.futureScheduleAt AS nextSchedule",
         "sourceVolume.volumePath AS volumePath",
         "sourceFileServer.protocol AS sourceFileServerProtocol",
         "sourceConfig.configName AS sourceConfigName",
@@ -464,6 +465,7 @@ export class JobRunService {
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
           jobConfigId: jobRun?.jobconfigid,
+          nextSchedule: jobRun?.nextschedule,
           sourceServer: {
             serverName: jobRun.sourceconfigname,
             path: jobRun.volumepath,

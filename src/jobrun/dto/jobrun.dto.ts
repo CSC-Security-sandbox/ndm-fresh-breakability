@@ -88,6 +88,7 @@ export interface JobRunsDTO {
   jobType: string;
   sourceServer: ServerDetailsDTO;
   destinationServer?: ServerDetailsDTO;
+  nextSchedule?: Date;
   timeElapsed: number;
   scannedFilesCount: string;
   scannedDirectoriesCount: string;

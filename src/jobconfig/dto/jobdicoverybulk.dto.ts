@@ -116,3 +116,15 @@ export class JobConfigMigrateBulk {
   @Type(() => JobConfigOptions)
   options: JobConfigOptions
 }
+
+export class JobConfigCutoverBulk {
+  @ApiProperty({ 
+    description: 'Details of all the bulk migrate configs', 
+    isArray: true, 
+    type: MigrateConfig 
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MigrateConfig)
+  migrateConfigs: MigrateConfig[]
+}
