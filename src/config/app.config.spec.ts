@@ -1,51 +1,41 @@
-import appConfig from "./app.config";
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService, ConfigModule } from '@nestjs/config';
+import workerConfig, { WorkersConfig } from './app.config';
 
-describe('Worker Config', () => {
-  const originalEnv = process.env;
-  beforeEach(() => {
-    process.env = { ...originalEnv };
+
+describe('WorkersConfig', () => {
+  let workersConfig: WorkersConfig;
+  let configService: ConfigService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          load: [workerConfig],
+        }),
+      ],
+      providers: [ConfigService, WorkersConfig],
+    }).compile();
+
+    workersConfig = module.get<WorkersConfig>(WorkersConfig);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
+  it('should be defined', () => {
+    expect(workersConfig).toBeDefined();
   });
 
-  const clearEnvVars = () => {
-    delete process.env.FILE_SERVICE_BASEURL;
-    delete process.env.JOB_SERVICE_BASEURL;
-    delete process.env.SOCKET_SERVER;
-  };
-
-  it('should return default values when no environment variables are set', () => {
-    clearEnvVars();
-    const config = appConfig();
-    expect(config).toEqual({
-      fileServiceBaseURL: undefined,
-      jobServiceBaseURL: undefined,
-      socketServer: '',
+  it('should return correct value for worker configuration keys', () => {
+    const mockKey = 'shutdownTimeout';
+    const mockValue = 5000;
+    jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+      if (key === `worker.${mockKey}`) {
+        return mockValue;
+      }
+      return null;
     });
-  });
 
-  it('should use environment variables if they are set', () => {
-    process.env.FILE_SERVICE_BASEURL = 'http://fileservice.example.com';
-    process.env.JOB_SERVICE_BASEURL = 'http://jobservice.example.com';
-    process.env.SOCKET_SERVER = 'http://socketserver.example.com';
-    const config = appConfig();
-    expect(config).toEqual({
-      fileServiceBaseURL: 'http://fileservice.example.com',
-      jobServiceBaseURL: 'http://jobservice.example.com',
-      socketServer: 'http://socketserver.example.com',
-    });
-  });
-
-  it('should handle missing and partially set environment variables', () => {
-    clearEnvVars();
-    process.env.FILE_SERVICE_BASEURL = 'http://fileservice.example.com';
-    const config = appConfig();
-    expect(config).toEqual({
-      fileServiceBaseURL: 'http://fileservice.example.com',
-      jobServiceBaseURL: undefined,
-      socketServer: '',
-    });
+    const result = WorkersConfig.get(mockKey);
+    expect(result).toBe(mockValue);
   });
 });

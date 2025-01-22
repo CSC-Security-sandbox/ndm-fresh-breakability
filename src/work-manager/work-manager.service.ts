@@ -4,10 +4,11 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { retry, timer } from 'rxjs';
-import { getWorkerIdentity } from 'src/utils/worker-mapager.mappers';
+
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import Logger from 'src/logger/logging';
+import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 
 @Injectable()
 export class WorkManagerService {
@@ -18,7 +19,7 @@ export class WorkManagerService {
     private connection: NativeConnection = null;
     private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
-    private logger = Logger.getLogger();
+    readonly logger = Logger.getLogger();
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,

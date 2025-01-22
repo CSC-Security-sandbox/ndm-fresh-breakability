@@ -28,7 +28,7 @@ export default registerAs(
     ():Commands => ({
         nfs: {
             win: {
-                listPath: process.env.NFS_LIST_PATH_CMD,
+                listPath: process.env.NFS_WIN_LIST_PATH_CMD,
             },
             linux: {
                 listPath: process.env.NFS_LINUX_LIST_PATH_CMD,

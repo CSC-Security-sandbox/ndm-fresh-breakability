@@ -1,4 +1,3 @@
-
 import { CommandConfig } from 'src/config/command.config';
 import { ProtocolTypes } from '../protocols';
 import { Protocol } from './protocol';
@@ -6,7 +5,7 @@ import { Protocol } from './protocol';
 export class SMBProtocol extends Protocol {
 
   protected getCommandPattern( key : string): string {
-    const ans  =  CommandConfig.getSMBCommand(this.platform, key)
+    const ans  = CommandConfig.getSMBCommand(this.platform, key)
     this.logger.info(`Command pattern for ${key} is ${ans}`)
     return ans
   }
@@ -65,9 +64,7 @@ export class SMBProtocol extends Protocol {
   }
 
   async listPaths(traceId: string, payload: any): Promise<any> {
-    this.logger.info(
-      `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
-    );
+    this.logger.info( `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,);
 
     return this.executeCommand(
       traceId,
