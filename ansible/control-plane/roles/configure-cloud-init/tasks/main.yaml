@@ -1,21 +1,24 @@
-# File: setup_metallb_cloudinit/tasks/main.yml
-
+---
 - name: Ensure destination directories exist
   become: yes
   file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
     mode: '0755'
   loop:
-    - /app
+    - { path: "/opt/datamigrator" }
+    - { path: "/opt/datamigrator/bin" }
+    - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/logs" }
+    - { path: "/var/log/datamigrator" }
 
 - name: Copy cloud-init configuration
   become: yes
   copy:
     src: ./templates/cloud-init.j2
-    dest: /etc/cloud/cloud.cfg.d/99-microk8s-init.cfg
+    dest: /etc/cloud/cloud.cfg.d/00-datamigrator-hostname-init.cfg
     owner: root
     group: root
     mode: '0644'
@@ -24,7 +27,7 @@
   become: yes
   template:
     src: ./templates/boot-script.j2
-    dest: /app/microk8s-boot.sh
+    dest: /opt/datamigrator/bin/microk8s-boot.sh
     owner: root
     group: root
     mode: '0755'

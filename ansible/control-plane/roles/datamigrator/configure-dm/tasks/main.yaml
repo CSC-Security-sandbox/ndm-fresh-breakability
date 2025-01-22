@@ -1,0 +1,33 @@
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n datamigrator datamigrator-vault-sa
+  ignore_errors: yes
+  when: dm_uninstall is defined
+
+- name: delete acr pull secert when dm_uninstall is defined
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete secret docker-registry azure-dev-acr-creds --namespace datamigrator
+  ignore_errors: yes
+  when: dm_uninstall is defined
+
+- name: Create service account and namespace
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create namespace datamigrator
+    kubectl create serviceaccount -n datamigrator datamigrator-vault-sa
+
+- name: Create acr pull secert
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create secret docker-registry azure-dev-acr-creds \
+        --namespace datamigrator \
+        --docker-server={{ acr_registry }} \
+        --docker-username={{ azure_client_id }} \
+        --docker-password={{ azure_client_secret }}
+  ignore_errors: yes

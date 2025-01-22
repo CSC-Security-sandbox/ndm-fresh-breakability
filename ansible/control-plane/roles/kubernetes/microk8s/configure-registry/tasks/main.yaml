@@ -2,7 +2,7 @@
 # 1. Copy the tar file from your control node to the target server
 - name: Copy Docker image tar file to target
   copy:
-    src: "../../datamigrate/datamigrate_{{ datamigrate_release_version }}.tar"
+    src: "../../datamigrator/datamigrator_{{ datamigrator_release_version }}.tar"
     dest: /tmp/docker_images.tar
     mode: '0644'
 

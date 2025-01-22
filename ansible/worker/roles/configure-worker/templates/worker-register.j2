@@ -1,26 +1,64 @@
 #!/bin/bash
 
+# Log file location for script execution
+LOG_FILE="/var/log/datamigrator_worker_setup.log"
+
+# Function to log messages with timestamps
+log_message() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
 # Check if required environment variables are set
 if [[ -z "${CONTROL_PLANE_IP}" || -z "${PROJECT_API_KEY}" ]]; then
-  echo "Error: One or more required environment variables are missing."
+  log_message "Error: One or more required environment variables are missing."
   exit 1
 fi
 
-# Create and write to /opt/datamigrate/conf/worker.env
-echo "FILE_SERVICE_BASEURL=https://${CONTROL_PLANE_IP}/api/v1" > /opt/datamigrate/conf/worker.env
-echo "SOCKET_SERVER=wss://${CONTROL_PLANE_IP}/event" >> /opt/datamigrate/conf/worker.env
+# Create and write to /opt/datamigrator/conf/worker.env
+log_message "Creating /opt/datamigrator/conf/worker.env with CONTROL_PLANE_IP and SOCKET_SERVER."
+{
+  echo "FILE_SERVICE_BASEURL=https://${CONTROL_PLANE_IP}/api/v1"
+  echo "SOCKET_SERVER=wss://${CONTROL_PLANE_IP}/event"
+} > /opt/datamigrator/conf/worker.env
 
-# Create and write to /opt/datamigrate/conf/worker-config.json
-cat <<EOF > /opt/datamigrate/conf/worker-config.json
+# Check if the worker.env file was created successfully
+if [[ $? -ne 0 ]]; then
+  log_message "Error: Failed to create /opt/datamigrator/conf/worker.env."
+  exit 1
+fi
+
+# Create and write to /opt/datamigrator/conf/worker-config.json
+log_message "Creating /opt/datamigrator/conf/worker-config.json with PROJECT_API_KEY."
+cat <<EOF > /opt/datamigrator/conf/worker-config.json
 {
   "api_key": "${PROJECT_API_KEY}"
 }
 EOF
 
+# Check if the worker-config.json file was created successfully
+if [[ $? -ne 0 ]]; then
+  log_message "Error: Failed to create /opt/datamigrator/conf/worker-config.json."
+  exit 1
+fi
+
 # Start the worker service
+log_message "Starting the worker service."
 systemctl start worker.service
 
+# Check if the worker service started successfully
+if [[ $? -ne 0 ]]; then
+  log_message "Error: Failed to start worker service."
+  exit 1
+fi
+
 # Enable worker service to start on boot
+log_message "Enabling worker service to start on boot."
 systemctl enable worker.service
 
-echo "Worker service started successfully."
+# Check if the worker service was enabled successfully
+if [[ $? -ne 0 ]]; then
+  log_message "Error: Failed to enable worker service to start on boot."
+  exit 1
+fi
+
+log_message "Worker service started and enabled successfully."

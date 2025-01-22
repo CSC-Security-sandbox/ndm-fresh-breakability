@@ -1,0 +1,57 @@
+appName: "file-service"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  repository: file-service
+
+annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "datamigrator-role"
+    vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
+    vault.hashicorp.com/agent-inject-status: "update"
+    vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
+      {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
+      export RABBITMQ_URLS=amqp://{{ .Data.RABBITMQ_USERNAME }}:{{ .Data.RABBITMQ_PASSWORD }}@rabbitmq.rabbitmq.svc.cluster.local:5672
+      {{- end }}
+    
+serviceAccountName: datamigrator-vault-sa
+
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: APP_PORT
+    value: "3000"
+  - name: APP_HOST
+    value: "$(MY_HOST_IP)"
+
+  # - name: RABBITMQ_URLS # from secret
+  #   value: ""
+
+  - name: RABBITMQ_INVENTORY_QUEUE
+    value: "inventory"
+  - name: RABBITMQ_TASK_LIST_QUEUE
+    value: "task-list"
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(inventory|publish)/*"
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  ingressClassName: public
+  tls:
+    enabled: false
+  host: ""

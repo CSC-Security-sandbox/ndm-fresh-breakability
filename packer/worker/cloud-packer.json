@@ -1,5 +1,5 @@
 {
-  "project_name": "datamigrate",
+  "project_name": "datamigrator",
 
   "aws_ubuntu_release_version": "20241109",
   "aws_packer_instance_type": "t3a.2xlarge",

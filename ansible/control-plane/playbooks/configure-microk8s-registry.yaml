@@ -1,5 +1,5 @@
 ---
-- name: Configure microk8s image registry with datamigrate application images
+- name: Configure microk8s image registry with datamigrator application images
   hosts: default
   become: yes
   gather_facts: yes

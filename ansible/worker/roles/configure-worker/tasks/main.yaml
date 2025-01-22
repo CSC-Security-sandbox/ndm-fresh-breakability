@@ -1,4 +1,17 @@
 ---
+- name: Ensure destination directories exist
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: '0755'
+  loop:
+    - /opt/datamigrator
+    - /opt/datamigrator/bin
+    - /var/log/datamigrator
+
 - name: Copy binary file to remote server
   become: yes
   ansible.builtin.copy:
@@ -16,27 +29,27 @@
   become: yes
   ansible.builtin.template:
     src: ./templates/worker.service.j2
-    dest: /etc/systemd/system/worker.service
+    dest: /etc/systemd/system/datamigrator-worker.service
     owner: root
     group: root
     mode: '0644'
 
-- name: Copy setup_worker.sh to /opt/datamigrate/bin/
+- name: Copy worker-register.j2 to /opt/datamigrator/bin/
   become: yes
   copy:
-    src: setup_worker.sh
-    dest: /opt/datamigrate/bin/setup_worker.sh
+    src: ./templates/worker-register.j2
+    dest: /opt/datamigrator/bin/worker_register.sh
     mode: '0755'
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
 
 
-- name: Copy worker env to /opt/datamigrate/conf/
+- name: Copy worker env to /opt/datamigrator/conf/
   become: yes
   copy:
-    src: setup_worker.sh
-    dest: /opt/datamigrate/conf/worker.env
-    mode: '0755'
+    src: ./templates/worker.env.j2
+    dest: /opt/datamigrator/conf/worker.env
+    mode: '0644'
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
 
@@ -44,8 +57,8 @@
   become: yes
   ansible.builtin.command: systemctl daemon-reload
 
-- name: Enable the microk8s boot service
+- name: Enable the datamigrator worker service
   become: yes
   systemd:
-    name: worker.service
+    name: datamigrator-worker.service
     enabled: yes

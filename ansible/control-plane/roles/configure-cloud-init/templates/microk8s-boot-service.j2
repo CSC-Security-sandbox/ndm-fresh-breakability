@@ -4,11 +4,13 @@ After=network.target cloud-init.service
 
 [Service]
 Type=oneshot
-ExecStart=/app/microk8s-boot.sh
+ExecStart=/opt/datamigrator/bin/microk8s-boot.sh
+ExecStartPost=/usr/bin/wall "Datamigrator Application Setup Complete"
+ExecStartPost=/bin/echo "[$(date '+%Y-%m-%d %H:%M:%S')] Datamigrator Application Setup Complete" >> /var/log/datamigrator/microk8s-boot.log
 User=root
 Group=root
-StandardOutput=append:/var/log/microk8s-boot.log
-StandardError=append:/var/log/microk8s-boot.log
+StandardOutput=append:/var/log/datamigrator/microk8s-boot.log
+StandardError=append:/var/log/datamigrator/microk8s-boot.log
 
 [Install]
 WantedBy=multi-user.target

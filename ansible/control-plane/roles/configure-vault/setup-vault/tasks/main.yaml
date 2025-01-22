@@ -34,17 +34,17 @@
     - postgres
     - rabbitmq
   
-- name: Vault roles creation -- datamigrate
+- name: Vault roles creation -- datamigrator
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-vault-sa \
-    bound_service_account_namespaces=datamigrate \
+    bound_service_account_namespaces=datamigrator \
     policies=keycloak-policy,postgres-policy,rabbitmq-policy \
     ttl=24h
   with_items:
-    - datamigrate
+    - datamigrator
 
 - name: Vault roles creation -- keycloak
   become: yes
@@ -52,7 +52,7 @@
   shell: |
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-sa \
-    bound_service_account_namespaces=datamigrate,keycloak \
+    bound_service_account_namespaces=datamigrator,keycloak \
     policies=keycloak-policy,postgres-policy \
     ttl=24h
   with_items:
@@ -64,7 +64,7 @@
   shell: |
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-sa \
-    bound_service_account_namespaces=datamigrate,postgres \
+    bound_service_account_namespaces=datamigrator,postgres \
     policies=postgres-policy \
     ttl=24h
   with_items:
@@ -76,7 +76,7 @@
   shell: |
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-sa \
-    bound_service_account_namespaces=datamigrate,rabbitmq \
+    bound_service_account_namespaces=datamigrator,rabbitmq \
     policies=rabbitmq-policy \
     ttl=24h
   with_items:
@@ -88,7 +88,7 @@
 #   shell: |
 #     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
 #     bound_service_account_names={{ item }}-sa \
-#     bound_service_account_namespaces=datamigrate,keycloak,postgres \
+#     bound_service_account_namespaces=datamigrator,keycloak,postgres \
 #     policies={{ item }}-policy \
 #     ttl=24h
 #   with_items:
@@ -121,15 +121,15 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl exec -i vault-0 -n vault -- vault write sys/policies/password/datamigrate policy=@/tmp/password-policy.hcl
+    kubectl exec -i vault-0 -n vault -- vault write sys/policies/password/datamigrator policy=@/tmp/password-policy.hcl
     kubectl exec -i vault-0 -n vault -- vault write sys/policies/password/keycloak policy=@/tmp/keycloak-secret.hcl
 
 - name: Generate password for postgres
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
-    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
+    export POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/postgres-secrets/postgres-creds \
       POSTGRES_USER="postgres" \
       POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
@@ -141,7 +141,7 @@
   become_user: "{{ vm_username }}"
   shell: |
     export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/keycloak/generate | jq -r '.data.password')
-    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
+    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/keycloak-secrets/keycloak-creds \
       KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \
       KEYCLOAK_ADMIN_USER="kc-admin" \
@@ -151,5 +151,12 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export RABBITMQ_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrate/generate | jq -r '.data.password')
+    export RABBITMQ_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/rabbitmq-secrets/rabbitmq-creds RABBITMQ_USERNAME="rabbitmq" RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD}"
+
+- name: Delete vault directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/vault
+    state: absent

@@ -1,5 +1,5 @@
 ---
-- name: Configure datamigrate worker
+- name: Configure datamigrator worker
   hosts: default
   gather_facts: yes
   become: yes

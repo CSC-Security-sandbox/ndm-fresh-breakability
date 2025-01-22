@@ -90,8 +90,8 @@
   become_user: "{{ vm_username }}"
   shell: kubectl wait --namespace="keycloak" --for=condition=Ready pod --all
   register: kubectl_get_pods
-  retries: 6
-  delay: 20
+  retries: 10
+  delay: 25
   until: kubectl_get_pods.rc == 0
 
 - name: debug output

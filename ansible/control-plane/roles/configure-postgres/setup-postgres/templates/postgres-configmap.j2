@@ -6,10 +6,8 @@ metadata:
 data:
   
     createSchema.sql: |
-        GRANT ALL PRIVILEGES ON DATABASE datamigrate TO dmadmin;
-        
+        GRANT ALL PRIVILEGES ON DATABASE datamigrator TO dmadmin;
         CREATE SCHEMA IF NOT EXISTS migrateadmin;
-
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
         CREATE TABLE migrateadmin.account (
@@ -47,9 +45,46 @@ data:
             birth_time timestamp NULL,
             CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY (id)
         );
+        CREATE INDEX idx_file_server_path_id ON migrateadmin.inventory USING btree (volume_id);
         CREATE INDEX idx_id ON migrateadmin.inventory USING btree (id);
         CREATE INDEX idx_inventory_job_run_id ON migrateadmin.inventory USING btree (job_run_id);
         CREATE INDEX idx_path ON migrateadmin.inventory USING btree (path);
+
+
+        CREATE TABLE migrateadmin.job_options (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            exclude_older_than timestamp NULL,
+            exclude_file_patterns text NULL,
+            preserve_access_time bool DEFAULT false NOT NULL,
+            job_run_id uuid NULL,
+            source_working_dir text NULL,
+            target_working_dir text NULL,
+            CONSTRAINT "PK_7562d7f315d7854dc97552a0da0" PRIMARY KEY (id),
+            CONSTRAINT "REL_5b29fd4de00a0a910f667243c7" UNIQUE (job_run_id)
+        );
+
+        CREATE TABLE migrateadmin.jobconfig (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            job_type varchar NOT NULL,
+            status varchar NOT NULL,
+            exclude_older_than timestamp NULL,
+            exclude_file_patterns text NULL,
+            preserve_access_time bool DEFAULT false NOT NULL,
+            first_run_at timestamptz NULL,
+            future_schedule_at text NULL,
+            source_path_id uuid NOT NULL,
+            target_path_id uuid NULL,
+            scheduler varchar NULL,
+            CONSTRAINT "PK_ac392abad1e1801da9a4cf027d6" PRIMARY KEY (id)
+        );
 
         CREATE TABLE migrateadmin.jobidmapping (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -64,7 +99,6 @@ data:
             CONSTRAINT "PK_49659c592bf37c883fca075529c" PRIMARY KEY (id)
         );
 
-
         CREATE TABLE migrateadmin."permission" (
             created_at timestamp DEFAULT now() NOT NULL,
             created_by uuid NULL,
@@ -76,6 +110,14 @@ data:
             CONSTRAINT "PK_3b8b97af9d9d8807e41e6f48362" PRIMARY KEY (id)
         );
 
+        CREATE TABLE migrateadmin.reports (
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            report_data text NULL,
+            created_at time DEFAULT now() NULL,
+            report_type text NULL,
+            job_run_id uuid NULL,
+            CONSTRAINT reports_pkey PRIMARY KEY (id)
+        );
 
         CREATE TABLE migrateadmin."role" (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -87,7 +129,6 @@ data:
             role_status varchar(255) NOT NULL,
             CONSTRAINT "PK_b36bcfe02fc8de3c57a8b2391c2" PRIMARY KEY (id)
         );
-
 
         CREATE TABLE migrateadmin."user" (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -102,6 +143,21 @@ data:
             CONSTRAINT "PK_cace4a159ff9f2512dd42373760" PRIMARY KEY (id)
         );
 
+        CREATE TABLE migrateadmin.jobrun (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            status varchar NOT NULL,
+            start_time timestamp NOT NULL,
+            end_time timestamp NULL,
+            iteration_number int4 NOT NULL,
+            job_config_id uuid NOT NULL,
+            job_options_id uuid NULL,
+            CONSTRAINT "PK_39c91b190948f08d1d392f404e6" PRIMARY KEY (id),
+            CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES migrateadmin.jobconfig(id) ON DELETE CASCADE
+        );
 
         CREATE TABLE migrateadmin.project (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -130,6 +186,20 @@ data:
             CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin."permission"(id)
         );
 
+        CREATE TABLE migrateadmin.tasks (
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            job_run_id uuid NOT NULL,
+            status varchar NOT NULL,
+            task_type varchar NULL,
+            worker_id uuid NULL,
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NOT NULL,
+            CONSTRAINT "PK_8d12ff38fcc62aaba2cab748772" PRIMARY KEY (id),
+            CONSTRAINT "FK_e1d40541e2ee780839fb3f95c4a" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_job_run_id ON migrateadmin.tasks USING btree (job_run_id);
+        CREATE INDEX idx_job_run_status ON migrateadmin.tasks USING btree (job_run_id, status);
+        CREATE INDEX idx_task_type ON migrateadmin.tasks USING btree (task_type);
 
         CREATE TABLE migrateadmin.user_role (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -163,6 +233,17 @@ data:
             CONSTRAINT "FK_787ef3391e00fbbd3c127e0f3a2" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
         );
 
+        CREATE TABLE migrateadmin.worker_jobrun_mapping (
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            status bool DEFAULT false NOT NULL,
+            worker_id uuid NOT NULL,
+            job_run_id uuid NOT NULL,
+            is_path_mounted bool NULL,
+            CONSTRAINT "PK_98b8d5dc06ff2e1e408f3020be2" PRIMARY KEY (id),
+            CONSTRAINT "FK_06c32b99d7b638ac00e416bd3fa" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id) ON DELETE CASCADE,
+            CONSTRAINT "FK_0e30585297eabf24ea031fb784f" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE migrateadmin.config (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -174,6 +255,7 @@ data:
             project_id uuid NOT NULL,
             scanned_date timestamp NULL,
             working_directory text NULL,
+            status varchar DEFAULT 'DRAFT'::character varying NULL,
             CONSTRAINT "PK_d0ee79a681413d50b0a4f98cf7b" PRIMARY KEY (id),
             CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id)
         );
@@ -191,9 +273,11 @@ data:
             "password" text NULL,
             config_id uuid NULL,
             is_refreshed bool NULL,
+            protocol_version varchar NULL,
             CONSTRAINT "PK_533d54ec32cba35b21c5a2092fc" PRIMARY KEY (id),
             CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES migrateadmin.config(id) ON DELETE CASCADE
         );
+
 
 
         CREATE TABLE migrateadmin.file_server_worker (
@@ -205,6 +289,49 @@ data:
         );
         CREATE INDEX "IDX_000b409f7a5fe4210cf89b958d" ON migrateadmin.file_server_worker USING btree (file_server_id);
         CREATE INDEX "IDX_25cbd3119a71ce7db80d60e903" ON migrateadmin.file_server_worker USING btree (worker_id);
+
+
+
+        CREATE TABLE migrateadmin.fileserver_workingdirectory_mapping (
+            id uuid DEFAULT gen_random_uuid() NOT NULL,
+            path_name text NULL,
+            working_directory text NULL,
+            path_id uuid NULL,
+            config_id uuid NULL,
+            created_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+            updated_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+            created_by uuid NULL,
+            updated_by uuid NULL,
+            CONSTRAINT fileserver_workingdirectory_mapping_pkey PRIMARY KEY (id),
+            CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES migrateadmin.config(id) ON DELETE CASCADE
+        );
+
+
+
+        CREATE TABLE migrateadmin.operations (
+            created_at timestamp DEFAULT now() NOT NULL,
+            updated_at timestamp DEFAULT now() NULL,
+            created_by varchar NULL,
+            updated_by varchar NULL,
+            id uuid DEFAULT uuid_generate_v4() NOT NULL,
+            task_id uuid NULL,
+            job_run_id uuid NULL,
+            status varchar NOT NULL,
+            operation_type varchar NOT NULL,
+            request jsonb NOT NULL,
+            error_details text NULL,
+            f_path text NOT NULL,
+            retry_count int4 NULL,
+            source_path_id uuid NULL,
+            target_path_id uuid NULL,
+            CONSTRAINT "PK_7b62d84d6f9912b975987165856" PRIMARY KEY (id),
+            CONSTRAINT "FK_7d416e8bb958cabd9256e9a8e5e" FOREIGN KEY (task_id) REFERENCES migrateadmin.tasks(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_file_path_task ON migrateadmin.operations USING btree (f_path, task_id);
+        CREATE INDEX idx_operation_run_status ON migrateadmin.operations USING btree (job_run_id, status);
+        CREATE INDEX idx_operation_type ON migrateadmin.operations USING btree (operation_type);
+
+
 
         CREATE TABLE migrateadmin.request_track (
             created_at timestamp DEFAULT now() NOT NULL,
@@ -223,6 +350,8 @@ data:
             CONSTRAINT "FK_8363d1ef7f84cc88ec34d6dfec7" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id)
         );
 
+
+
         CREATE TABLE migrateadmin.volume (
             created_at timestamp DEFAULT now() NOT NULL,
             updated_at timestamp DEFAULT now() NULL,
@@ -238,87 +367,6 @@ data:
             CONSTRAINT "FK_556b3e916c55734c6f7424c9280" FOREIGN KEY (file_server_id) REFERENCES migrateadmin.file_server(id) ON DELETE CASCADE
         );
 
-        CREATE TABLE migrateadmin.jobconfig (
-            created_at timestamp DEFAULT now() NOT NULL,
-            updated_at timestamp DEFAULT now() NULL,
-            created_by varchar NULL,
-            updated_by varchar NULL,
-            id uuid DEFAULT uuid_generate_v4() NOT NULL,
-            job_type varchar NOT NULL,
-            status varchar NOT NULL,
-            exclude_older_than timestamp NULL,
-            exclude_file_patterns text NULL,
-            preserve_access_time bool DEFAULT false NOT NULL,
-            first_run_at timestamptz NULL,
-            future_schedule_at text NULL,
-            source_path_id uuid NOT NULL,
-            target_path_id uuid NULL,
-            CONSTRAINT "PK_ac392abad1e1801da9a4cf027d6" PRIMARY KEY (id),
-            CONSTRAINT "FK_6d8681dac974befcdd07f6cf59a" FOREIGN KEY (target_path_id) REFERENCES migrateadmin.volume(id) ON DELETE CASCADE,
-            CONSTRAINT "FK_cea32c3ed1e83116df4ef3c689a" FOREIGN KEY (source_path_id) REFERENCES migrateadmin.volume(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE migrateadmin.jobrun (
-            created_at timestamp DEFAULT now() NOT NULL,
-            updated_at timestamp DEFAULT now() NULL,
-            created_by varchar NULL,
-            updated_by varchar NULL,
-            id uuid DEFAULT uuid_generate_v4() NOT NULL,
-            status varchar NOT NULL,
-            start_time timestamp NOT NULL,
-            end_time timestamp NULL,
-            iteration_number int4 NOT NULL,
-            job_config_id uuid NOT NULL,
-            job_options_id uuid NULL,
-            CONSTRAINT "PK_39c91b190948f08d1d392f404e6" PRIMARY KEY (id),
-            CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES migrateadmin.jobconfig(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE migrateadmin.tasks (
-            id uuid DEFAULT uuid_generate_v4() NOT NULL,
-            job_run_id uuid NOT NULL,
-            status varchar NOT NULL,
-            task_type varchar NULL,
-            worker_id uuid NULL,
-            created_at timestamp DEFAULT now() NOT NULL,
-            updated_at timestamp DEFAULT now() NOT NULL,
-            CONSTRAINT "PK_8d12ff38fcc62aaba2cab748772" PRIMARY KEY (id),
-            CONSTRAINT "FK_e1d40541e2ee780839fb3f95c4a" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
-        );
-        CREATE INDEX idx_job_run_id ON migrateadmin.tasks USING btree (job_run_id);
-        CREATE INDEX idx_job_run_status ON migrateadmin.tasks USING btree (job_run_id, status);
-        CREATE INDEX idx_task_type ON migrateadmin.tasks USING btree (task_type);
-
-        CREATE TABLE migrateadmin.worker_jobrun_mapping (
-            id uuid DEFAULT uuid_generate_v4() NOT NULL,
-            status bool DEFAULT false NOT NULL,
-            worker_id uuid NOT NULL,
-            job_run_id uuid NOT NULL,
-            CONSTRAINT "PK_98b8d5dc06ff2e1e408f3020be2" PRIMARY KEY (id),
-            CONSTRAINT "FK_06c32b99d7b638ac00e416bd3fa" FOREIGN KEY (worker_id) REFERENCES migrateadmin.worker(id) ON DELETE CASCADE,
-            CONSTRAINT "FK_0e30585297eabf24ea031fb784f" FOREIGN KEY (job_run_id) REFERENCES migrateadmin.jobrun(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE migrateadmin.operations (
-            created_at timestamp DEFAULT now() NOT NULL,
-            updated_at timestamp DEFAULT now() NULL,
-            created_by varchar NULL,
-            updated_by varchar NULL,
-            id uuid DEFAULT uuid_generate_v4() NOT NULL,
-            task_id uuid NULL,
-            job_run_id uuid NULL,
-            status varchar NOT NULL,
-            operation_type varchar NOT NULL,
-            request jsonb NOT NULL,
-            error_details text NULL,
-            f_path text NOT NULL,
-            retry_count int4 NULL,
-            CONSTRAINT "PK_7b62d84d6f9912b975987165856" PRIMARY KEY (id),
-            CONSTRAINT "FK_7d416e8bb958cabd9256e9a8e5e" FOREIGN KEY (task_id) REFERENCES migrateadmin.tasks(id) ON DELETE CASCADE
-        );
-        CREATE INDEX idx_file_path_task ON migrateadmin.operations USING btree (f_path, task_id);
-        CREATE INDEX idx_operation_run_status ON migrateadmin.operations USING btree (job_run_id, status);
-        CREATE INDEX idx_operation_type ON migrateadmin.operations USING btree (operation_type);
 
     
     seedDb.sql: |
@@ -327,8 +375,9 @@ data:
         DECLARE
             user_id UUID;
             account_id UUID;
+            existing_user_id UUID;
+            role_id UUID;
             project_id UUID;
-
         BEGIN
             DELETE FROM "migrateadmin"."project" CASCADE;
             DELETE FROM "migrateadmin"."account" CASCADE;
@@ -340,10 +389,13 @@ data:
             CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             
             user_id = uuid_generate_v4();
+            account_id = '753975cb-2f97-4230-b632-6815515a7d0d';
+            project_id = uuid_generate_v4();
+
             INSERT INTO "migrateadmin"."user" (id, email, user_status, created_at, created_by, updated_at, updated_by) 
             VALUES (
                 user_id,
-                'system@datamigrate.local',
+                'admin@datamigrator.local',
                 'active',
                 now(),
                 user_id,
@@ -374,19 +426,19 @@ data:
 
             INSERT INTO "migrateadmin"."role" (id, role_name, role_status, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'AccountAdmin', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'ProjectAdmin', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'Viewer', 'active', now(), user_id, now(), user_id);
+                (uuid_generate_v4(), 'App Admin', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Project Admin', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'Project Viewer', 'active', now(), user_id, now(), user_id);
 
             INSERT INTO "migrateadmin"."role_permission" (id, role_id, permission_id, created_at, created_by, updated_at, updated_by)
             SELECT uuid_generate_v4(), r.id, p.id, now(), user_id, now(), user_id
             FROM "migrateadmin"."role" r, "migrateadmin"."permission" p
-            WHERE r.role_name = 'AccountAdmin';
+            WHERE r.role_name = 'App Admin';
 
             INSERT INTO "migrateadmin"."role_permission" (id, role_id, permission_id, created_at, created_by, updated_at, updated_by)
             SELECT uuid_generate_v4(), r.id, p.id, now(), user_id, now(), user_id
             FROM "migrateadmin"."role" r, "migrateadmin"."permission" p
-            WHERE r.role_name = 'ProjectAdmin'
+            WHERE r.role_name = 'Project Admin'
             AND p.permission_name IN (
                 'ManageProject', 'UpdateProject', 'AgentDeployment', 'ManageConfig', 
                 'ManageJob', 'RollbackJob', 'ViewLogs', 'ViewJob', 'Reports', 
@@ -404,25 +456,883 @@ data:
 
             INSERT INTO "migrateadmin"."account" (id, account_name, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'NetApp UAT', now(), user_id, now(), user_id);
+                (account_id, 'NetApp UAT', now(), user_id, now(), user_id);
 
             INSERT INTO "migrateadmin"."project" (id, project_name, account_id, start_date, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'NetApp UAT project', (SELECT id FROM migrateadmin.account WHERE account_name = 'NetApp UAT'), now(), now(), user_id, now(), user_id);
+                (project_id, 'NetApp UAT project', account_id, now(), now(), user_id, now(), user_id);
 
             INSERT INTO "migrateadmin"."user" (id, email, user_status, created_at, created_by, updated_at, updated_by)
             VALUES 
-                (uuid_generate_v4(), 'account-admin-1@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'account-admin-2@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'account-admin-3@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-admin-11@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-admin-12@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-admin-multi@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-10@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-11@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-12@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-13@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-2@datamigrate.local', 'active', now(), user_id, now(), user_id),
-                (uuid_generate_v4(), 'project-viewer-3@datamigrate.local', 'active', now(), user_id, now(), user_id);
+                (uuid_generate_v4(), 'account-admin-1@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'account-admin-2@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'account-admin-3@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-11@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-12@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-admin-multi@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-10@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-11@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-12@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-13@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-2@datamigrator.local', 'active', now(), user_id, now(), user_id),
+                (uuid_generate_v4(), 'project-viewer-3@datamigrator.local', 'active', now(), user_id, now(), user_id);
 
-        END $$;
+
+        -- Check if specific user exists
+            SELECT id INTO existing_user_id 
+            FROM "migrateadmin"."user" 
+            WHERE email = 'admin@datamigrator.local';
+
+            -- Assign role to the user
+            SELECT id INTO role_id FROM "migrateadmin"."role" WHERE role_name = 'App Admin';
+
+            IF role_id IS NOT NULL THEN
+                INSERT INTO "migrateadmin"."user_role" (role_id, account_id, project_id, user_id, created_at, created_by, updated_at, updated_by)
+                VALUES (
+                    role_id,
+                    account_id,
+                    NULL,
+                    existing_user_id,
+                    now(),
+                    user_id,
+                    now(),
+                    user_id
+                ) ON CONFLICT DO NOTHING;
+            END IF;
+        END $$; 
+
+    procedure.sql: |
+
+        -- DROP PROCEDURE migrateadmin.generate_discovery_report(uuid);
+
+        CREATE OR REPLACE PROCEDURE migrateadmin.generate_discovery_report(IN jobrunid uuid)
+        LANGUAGE plpgsql
+        AS $procedure$
+        declare
+            aggregated_json JSONB := '[]';
+
+        temp_json JSONB;
+
+        begin
+        -- Create a temporary table to store the categorized file data
+            drop table if exists temp_categorized_files;
+
+        create temp table temp_categorized_files as
+            select
+            case
+                when file_size = 0 then 'File Size: 0B'
+                when file_size between 1 and 8192 then 'File Size: <8KiB'
+                when file_size between 8193 and 65536 then 'File Size: 8-64KiB'
+                when file_size between 65537 and 1048576 then 'File Size: 64KiB-1MiB'
+                when file_size between 1048577 and 10485760 then 'File Size: 1-10MiB'
+                when file_size between 10485761 and 104857600 then 'File Size: 10-100MiB'
+                WHEN file_size BETWEEN 104857601 AND 1073741824 THEN 'File Size: 100 MiB - 1 GiB'
+                WHEN file_size > 1073741824 THEN 'File Size: 1+ GiB'
+            end as size_group,
+            file_size,
+            depth,
+            is_directory,
+            file_name,
+            --cast(left(modified_time,
+            --19) as TIMESTAMP) as modified_time,
+            --cast(left(creation_time,
+            --19) as TIMESTAMP) as creation_time,
+            --cast(left(access_time,
+            --19) as TIMESTAMP) as access_time,
+            CAST(modified_time AS TIMESTAMP) AS modified_time, 
+            CAST(birth_time AS TIMESTAMP) AS creation_time, 
+            CAST(access_time AS TIMESTAMP) AS access_time,
+            parent_path,
+            volume_id as path_id,
+            path,
+            file_type
+        from
+            migrateadmin.inventory
+        where
+            job_run_id = jobrunid;
+        -- Perform aggregation directly using subqueries
+            select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Number of Files',
+            'sub_category',
+            'File Count with ' || size_group,
+            'value',
+            file_count
+                    )
+                ) 
+            into
+            temp_json
+        from
+            (
+            select
+                size_group,
+                COUNT(*) as file_count
+            from
+                temp_categorized_files
+            group by
+                size_group
+            ) as file_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Modified',
+            'sub_category',
+            'File Count With Modification Time: ' || date_group,
+            'value',
+            file_count
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                modified_group as date_group,
+                COUNT(*) as file_count
+            from
+                (
+                select
+                    case
+                        WHEN modified_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN modified_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as modified_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                modified_group) as modified_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Modified',
+            'sub_category',
+            'Capacity With Modification Time: ' || date_group,
+            'value',
+            total_space
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                modified_group as date_group,
+                sum(file_size) as total_space
+            from
+                (
+                select
+                    case
+                        WHEN modified_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN modified_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN modified_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as modified_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                modified_group) as modified_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Created',
+            'sub_category',
+            'File Count with Creation Time '|| date_group,
+            'value',
+            file_count
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                created_group as date_group,
+                COUNT(*) as file_count
+            from
+                (
+                select
+                    case
+                        WHEN creation_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN creation_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as created_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                created_group) as created_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Created',
+            'sub_category',
+            'Capacity  with Creation Time '|| date_group,
+            'value',
+            total_space
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                created_group as date_group,
+                SUM(file_size) as total_space
+            from
+                (
+                select
+                    case
+                        WHEN creation_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN creation_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN creation_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as created_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                created_group) as created_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Access Time',
+            'sub_category',
+            'File Count with Access Time '|| date_group,
+            'value',
+            file_count
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                created_group as date_group,
+                COUNT(*) as file_count
+            from
+                (
+                select
+                    case
+                        WHEN access_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN access_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as created_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                created_group) as created_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Access Time',
+            'sub_category',
+            'Capacity with Access Time '|| date_group,
+            'value',
+            total_space
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                created_group as date_group,
+                SUM(file_size) as total_space
+            from
+                (
+                select
+                CASE 
+                        WHEN access_time < CURRENT_DATE - interval '10 year' THEN '10+ yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '9 year' AND CURRENT_DATE - interval '10 year' THEN '9-10 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '8 year' AND CURRENT_DATE - interval '9 year' THEN '8-9 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '7 year' AND CURRENT_DATE - interval '8 year' THEN '7-8 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '6 year' AND CURRENT_DATE - interval '7 year' THEN '6-7 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '5 year' AND CURRENT_DATE - interval '6 year' THEN '5-6 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '4 year' AND CURRENT_DATE - interval '5 year' THEN '4-5 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '3 year' AND CURRENT_DATE - interval '4 year' THEN '3-4 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '2 year' AND CURRENT_DATE - interval '3 year' THEN '2-3 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 year' AND CURRENT_DATE - interval '2 year' THEN '1-2 yr'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '6 months' AND CURRENT_DATE - interval '1 year' THEN '6-12 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '3 months' AND CURRENT_DATE - interval '6 months' THEN '3-6 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 month' AND CURRENT_DATE - interval '3 months' THEN '1-3 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE - interval '1 month' THEN '1 wk - 1 mo'
+                        WHEN access_time BETWEEN CURRENT_DATE - interval '1 week' AND CURRENT_DATE THEN '0-1 wk'
+                        WHEN access_time > CURRENT_DATE THEN 'future'
+                        ELSE 'invalid'
+                    end as created_group,
+                    file_size
+                from
+                    temp_categorized_files) as date_metrics
+            group by
+                created_group) as created_date_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Depth',
+            'sub_category',
+            depth_group,
+            'value',
+            depth_count
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                case
+                    when depth between 0 and 5 then '0-5'
+                    when depth between 6 and 10 then '6-10'
+                    when depth between 11 and 15 then '11-15'
+                    when depth between 16 and 20 then '16-20'
+                    when depth between 21 and 100 then '21-100'
+                    when depth > 100 then '>100'
+                end as depth_group,
+                COUNT(*) as depth_count
+            from
+                temp_categorized_files
+            group by
+                depth_group) as depth_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                    jsonb_build_object(
+                        'category',
+            'Space Used',
+            'sub_category',
+            'Capacity with ' || size_group,
+            'value',
+            total_space
+                    )
+                )
+        into
+            temp_json
+        from
+            (
+            select
+                size_group,
+                COUNT(*) as file_count,
+                SUM(file_size) as total_space
+            from
+                temp_categorized_files
+            group by
+                size_group
+                    ) as file_space_metrics;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                jsonb_build_object(
+                    'category',
+            'File System Stats',
+            'sub_category',
+            sub_category,
+            'value',
+            count_or_space
+                )
+            )
+        into
+            temp_json
+        from
+            (
+            select
+                'Total Count' as sub_category,
+                COUNT(*) as count_or_space
+            from
+                temp_categorized_files
+        union all
+            select
+                'Regular Files',
+                SUM(case when is_directory = false then 1 else 0 end)
+            from
+                temp_categorized_files
+        union all
+            select
+                'Symbolic Links',
+                SUM(case when file_type = 'symbolic_link' then 1 else 0 end)
+            from
+                temp_categorized_files
+        union all
+            select
+                'Special Files',
+                SUM(case when file_type = 'special_file' then 1 else 0 end)
+            from
+                temp_categorized_files
+        union all
+            select
+                'Total Space for Regular Files',
+                SUM(case when is_directory = false then file_size else 0 end)
+            from
+                temp_categorized_files
+        union all
+            select
+                'Total Space for Directories',
+                SUM(case when is_directory = true then file_size else 0 end)
+            from
+                temp_categorized_files
+        union all
+            select
+                'Total Space Used',
+                SUM(file_size)
+            from
+                temp_categorized_files
+        ) as stats;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        select
+            jsonb_agg(
+                jsonb_build_object(
+                    'category',
+            'Maximum Values',
+            'sub_category',
+            stat_type,
+            'value',
+            stat_value
+                )
+            )
+        into
+            temp_json
+        from
+            (
+            select
+                'max_file_size' as stat_type,
+                MAX(case when is_directory = false then file_size else null end)::numeric as stat_value
+            from
+                temp_categorized_files
+        union all
+            select
+                'max_name_length' as stat_type,
+                MAX(case when is_directory = false then LENGTH(file_name) else null end)::numeric as stat_value
+            from
+                temp_categorized_files
+        union all
+            select
+                'total_directories' as stat_type,
+                SUM(case when is_directory = true then 1 else 0 end)::numeric as stat_value
+            from
+                temp_categorized_files
+        ) as stats;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        SELECT
+            jsonb_agg(
+                jsonb_build_object(
+                    'category', 'Job Run Stats',
+                    'sub_category', stat_type,
+                    'value', stat_value
+                )
+            ) into temp_json
+        FROM (
+            SELECT 
+                'Total Time' AS stat_type,
+                CONCAT(COALESCE(EXTRACT(EPOCH FROM (jr.end_time - jr.start_time)), 0)::TEXT, 's') AS stat_value
+            FROM 
+                migrateadmin.jobrun jr
+            WHERE 
+                jr.id = jobrunid
+
+            UNION ALL
+
+            SELECT 
+                'Status' AS stat_type,
+                jr.status AS stat_value
+            FROM 
+                migrateadmin.jobrun jr
+            WHERE 
+                jr.id = jobrunid
+        ) AS job_run_stats;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        SELECT
+            jsonb_agg(
+                jsonb_build_object(
+                    'category', 'File Server Info',
+                    'sub_category', sub_category,
+                    'value', value
+                )
+            ) into temp_json
+        FROM (
+            SELECT 'Path' AS sub_category, v.volume_path AS value
+            FROM migrateadmin.config c
+            JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
+            JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+            WHERE v.id in (select path_id from temp_categorized_files limit 1 )
+            
+            UNION ALL
+            
+            SELECT 'Protocol' AS sub_category, fs2.protocol AS value
+            FROM migrateadmin.config c
+            JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
+            JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+            WHERE v.id in (select path_id from temp_categorized_files limit 1 )
+            
+            UNION ALL
+            
+            SELECT 'Config Name' AS sub_category, c.config_name AS value
+            FROM migrateadmin.config c
+            JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
+            JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+        WHERE v.id in (select path_id from temp_categorized_files limit 1 )
+        ) AS file_server_data;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        -- Longest File Names
+        select
+            jsonb_agg(result) into temp_json
+        from
+            (
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Longest File Names',
+                'value',
+                longest_file_names
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(file_name || ' (' || length(file_name) || ')',
+                    ';') as longest_file_names
+                from
+                    (
+                    select
+                        file_name,
+                        length(file_name)
+                    from
+                        migrateadmin.inventory i
+                    where
+                        i.is_directory is false
+                    order by
+                        length(file_name) desc
+                    limit 5
+        ) subquery
+
+        ) combined_results
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Longest Directory Names',
+                'value',
+                longest_file_names
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(file_name || ' (' || length(file_name) || ')',
+                    ';') as longest_file_names
+                from
+                    (
+                    select
+                        file_name,
+                        length(file_name)
+                    from
+                        migrateadmin.inventory i
+                    where
+                        i.is_directory is true
+                    order by
+                        length(file_name) desc
+                    limit 5
+        ) subquery) as combined_result
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Longest File Path',
+                'value',
+                longest_file_paths
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(path || ' (' || length(path) || ')',
+                    ';') as longest_file_paths
+                from
+                    (
+                    select
+                        path,
+                        length(path)
+                    from
+                        migrateadmin.inventory i
+                    where
+                        i.is_directory is false
+                    group by
+                        path
+                    order by
+                        length(path) desc
+                    limit 5
+        )subquery
+        ) as combined_result
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Longest Directory Path',
+                'value',
+                longest_directory_paths
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(path || ' (' || length(path) || ')',
+                    ';') as longest_directory_paths
+                from
+                    (
+                    select
+                        path,
+                        length(path)
+                    from
+                        migrateadmin.inventory i
+                    where
+                        i.is_directory is true
+                    order by
+                        length(path) desc
+                    limit 5
+        )subquery
+        ) as combined_result
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Biggest File Names',
+                'value',
+                biggest_file_name
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(file_name || ' (' || file_size || ')',
+                    ';') as biggest_file_name
+                from
+                    (
+                    select
+                        file_name,
+                        file_size
+                    from
+                        migrateadmin.inventory i
+                    where
+                        i.is_directory is false
+                    group by
+                        file_name,
+                        file_size
+                    order by
+                        file_size desc
+                    limit 5
+        ) subquery
+        ) as combined_result
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Biggest Directory With Count',
+                'value',
+                biggest_directory_count
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(directory || ' (' || file_count || ')',
+                    ';') as biggest_directory_count
+                from
+                    (
+                    select
+                        parent_path as directory,
+                        COUNT(*) as file_count
+                    from
+                        migrateadmin.inventory
+                    where
+                        parent_path is not null
+                        and is_directory is true
+                    group by
+                        parent_path
+                    order by
+                        file_count desc
+                    limit 5
+
+        ) subquery
+        ) as combined_result
+        union all
+            select
+                jsonb_build_object(
+                    'category',
+                'Biggest',
+                'sub_category',
+                'Biggest Directory With Capacity',
+                'value',
+                biggest_directory_with_capcity
+                ) as result
+            from
+                (
+                select
+                    STRING_AGG(directory || ' (' || total_size || ')',
+                    '; ') as biggest_directory_with_capcity
+                from
+                    (
+                    select
+                        parent_path as directory,
+                        SUM(file_size) as total_size
+                    from
+                        migrateadmin.inventory
+                    where
+                        parent_path is not null
+                        and is_directory is true
+                    group by
+                        parent_path
+                    order by
+                        total_size desc
+                    limit 5
+
+        ) subquery
+        ) as combined_result
+        
+        ) result;
+
+        aggregated_json := aggregated_json || temp_json;
+
+        -- Log the aggregated data using RAISE NOTICE
+            raise notice 'Aggregated Data: %',
+        aggregated_json;
+
+
+
+        insert
+            into
+            migrateadmin.reports(report_data,
+            report_type,
+            job_run_id)
+        values(aggregated_json,
+        'DISCOVERY',
+        jobrunid);
+
+        -- Add more aggregations if needed in similar fashion
+        end;
+
+        $procedure$
+        ;
+
+        -- Permissions
+
+        ALTER PROCEDURE migrateadmin.generate_discovery_report(uuid) OWNER TO dmadmin;
+        GRANT ALL ON PROCEDURE migrateadmin.generate_discovery_report(uuid) TO dmadmin;

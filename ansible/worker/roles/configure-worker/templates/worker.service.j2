@@ -3,14 +3,14 @@ Description=Worker Service
 After=network.target
 
 [Service]
-EnvironmentFile=/opt/datamigrate/conf/worker.env
-ExecStart=/opt/datamigrate/binary/{{ remote_binary_path | basename }} /opt/datamigrate/conf/worker-config.json
-WorkingDirectory=/opt/datamigrate
+EnvironmentFile=/opt/datamigrator/conf/worker.env
+ExecStart=/opt/datamigrator/binary/{{ remote_binary_path | basename }} /opt/datamigrator/conf/worker-config.json
+WorkingDirectory=/opt/datamigrator
 Restart=always
 User=root
 Group=root
-StandardOutput=append:/opt/datamigrate/logs/dm-worker.log
-StandardError=append:/opt/datamigrate/logs/dm-worker-error.log
+StandardOutput=append:/var/log/datamigrator/datamigrator-worker.log
+StandardError=append:/var/log/datamigrator/datamigrator-worker-error.log
 
 [Install]
 WantedBy=multi-user.target

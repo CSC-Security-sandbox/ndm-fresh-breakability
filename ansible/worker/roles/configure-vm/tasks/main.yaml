@@ -19,7 +19,8 @@
     group: "{{ vm_username }}"
     mode: '0755'
   loop:
-    - { path: "/opt/datamigrate" }
-    - { path: "/opt/datamigrate/bin" }
-    - { path: "/opt/datamigrate/conf" }
-    - { path: "/opt/datamigrate/logs" }
+    - { path: "/opt/datamigrator" }
+    - { path: "/opt/datamigrator/bin" }
+    - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/logs" }
+    - { path: "/var/log/datamigrator" }

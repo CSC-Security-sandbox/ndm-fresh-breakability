@@ -22,11 +22,11 @@
 - name: Configure keycloak
   import_playbook: configure-keycloak.yaml
 
-# - name: Configure microk8s image registry with datamigrate application images
+# - name: Configure microk8s image registry with datamigrator application images
 #   import_playbook: configure-microk8s-registry.yaml
 
-- name: Configure datamigrate helm chart and resources
-  import_playbook: configure-datamigrate.yaml
+- name: Configure datamigrator helm chart and resources
+  import_playbook: configure-datamigrator.yaml
 
 - name: Configure keycloak realm
   import_playbook: post-install.yaml

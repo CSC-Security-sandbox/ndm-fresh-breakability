@@ -16,8 +16,8 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl delete -f $HOME/admin-entry-configmap.yaml -n datamigrate
-    kubectl delete -f $HOME/admin-entry-job.yaml -n datamigrate
+    kubectl delete -f $HOME/admin-entry-configmap.yaml -n datamigrator
+    kubectl delete -f $HOME/admin-entry-job.yaml -n datamigrator
   when: reset_job is defined    
   args:
     chdir: $HOME
@@ -26,15 +26,15 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrate
+    kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator
     sleep 5
-    kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrate
+    kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrator
 
 - name: Wait for job to complete successfully
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrate
+    kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrator
   register: job_wait_result
   retries: 5
   delay: 10
@@ -44,8 +44,8 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    POD_NAME=$(kubectl get pods -n datamigrate -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
-    kubectl logs $POD_NAME -n datamigrate
+    POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
+    kubectl logs $POD_NAME -n datamigrator
   register: job_logs
   when: job_wait_result.rc == 0
 

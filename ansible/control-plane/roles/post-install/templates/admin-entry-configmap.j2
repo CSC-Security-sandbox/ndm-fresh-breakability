@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: admin-entry-config
-  namespace: datamigrate
+  namespace: datamigrator
 data:
   admin_entry.sh: |
     #!/bin/bash
@@ -13,8 +13,8 @@ data:
     KEYCLOAK_PASSWORD=$(grep 'KEYCLOAK_ADMIN_PASSWORD' /vault/secrets/keycloak.env | cut -d':' -f2 | xargs)
     CLIENT_SECRET=$(grep 'KEYCLOAK_CLIENT_SECRET' /vault/secrets/keycloak.env | cut -d':' -f2 | xargs)
     KEYCLOAK_BASEURL=http://keycloak.keycloak.svc.cluster.local:80/keycloak
-    REALM_NAME=datamigrate
-    ADMIN_EMAIL=admin@datamigrate.local
+    REALM_NAME=datamigrator
+    ADMIN_EMAIL=admin@datamigrator.local
     ADMIN_PASSWORD=welcome
     ADMIN_FIRSTNAME=Admin
     ADMIN_LASTNAME=Admin
@@ -90,7 +90,7 @@ data:
         attributes: {
             'oidc.ciba.grant.enabled': false,
             'backchannel.logout.session.required': true,
-            'login_theme': 'datamigrate',
+            'login_theme': 'datamigrator',
             'oauth2.device.authorization.grant.enabled': true,
             'display.on.consent.screen': false,
             'backchannel.logout.revoke.offline.tokens': false
@@ -154,7 +154,7 @@ data:
     JSON.stringify({
         name: '${MAPPER_NAME}',
         protocol: 'openid-connect',
-        protocolMapper: 'datamigrate-permissions-mapper',
+        protocolMapper: 'datamigrator-permissions-mapper',
         consentRequired: false,
         config: {
         'claim.name': 'user',

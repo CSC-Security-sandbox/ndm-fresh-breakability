@@ -82,12 +82,12 @@
   ansible.builtin.pause:
     seconds: 45
 
-- name: Get the unseal keys
+- name: Get the unseal keys and store them in /opt/datamigrator/vault
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl exec vault-{{ item }} -n vault -- vault operator init -key-shares=1 -key-threshold=1 -format=json > $HOME/vault/cluster-keys.json
-    VAULT_UNSEAL_KEY=$(cat $HOME/vault/cluster-keys.json | jq -r ".unseal_keys_b64[]")
+    kubectl exec vault-{{ item }} -n vault -- vault operator init -key-shares=1 -key-threshold=1 -format=json > /opt/datamigrator/vault/cluster-keys.json
+    VAULT_UNSEAL_KEY=$(cat /opt/datamigrator/vault/cluster-keys.json | jq -r ".unseal_keys_b64[]")
     kubectl exec vault-{{ item }} -n vault -- vault operator unseal $VAULT_UNSEAL_KEY
   with_items:
     - 0
@@ -100,7 +100,7 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    VAULT_UNSEAL_KEY=$(cat $HOME/vault/cluster-keys.json | jq -r ".unseal_keys_b64[]")
+    VAULT_UNSEAL_KEY=$(cat /opt/datamigrator/vault/cluster-keys.json | jq -r ".unseal_keys_b64[]")
     kubectl exec vault-{{ item }} -n vault -- vault operator unseal $VAULT_UNSEAL_KEY
   with_items:
     - 1
@@ -114,10 +114,9 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    VAULT_ROOT_PASSWORD=$(cat $HOME/vault/cluster-keys.json | jq -r ".root_token")
+    VAULT_ROOT_PASSWORD=$(cat /opt/datamigrator/vault/cluster-keys.json | jq -r ".root_token")
     kubectl exec vault-{{ item }} -n vault -- vault login $VAULT_ROOT_PASSWORD  
   with_items:
     - 0
     - 1
     - 2
-

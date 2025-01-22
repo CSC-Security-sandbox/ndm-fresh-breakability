@@ -1,23 +1,23 @@
 ---
 
 # Microservices release tags of docker images
-data_migrate_ui_tag: "local-ova"
-config_service_tag: "local-ova"
-db_writer_service_tag: "local-ova"
-jobs_service_tag: "local-ova"
-file_service_tag: "local-ova"
-reports_service_tag: "local-ova"
-admin_service_tag: "local-ova"
-keycloak_customizations_tag: "local-ova"
+# data_migrate_ui_tag: "local-ova"
+# config_service_tag: "local-ova"
+# db_writer_service_tag: "local-ova"
+# jobs_service_tag: "local-ova"
+# file_service_tag: "local-ova"
+# reports_service_tag: "local-ova"
+# admin_service_tag: "local-ova"
+# keycloak_customizations_tag: "local-ova"
 
-# data_migrate_ui_tag: "ova"
-# config_service_tag: "ova"
-# db_writer_service_tag: "ova"
-# jobs_service_tag: "ova"
-# file_service_tag: "ova"
-# reports_service_tag: "ova"
-# admin_service_tag: "ova"
-#keycloak_customizations_tag: "ova"
+data_migrate_ui_tag: "latest"
+config_service_tag: "latest"
+db_writer_service_tag: "latest"
+jobs_service_tag: "latest"
+file_service_tag: "latest"
+reports_service_tag: "latest"
+admin_service_tag: "latest"
+keycloak_customizations_tag: "microk8s-new"
 
 #acr_registry: "127.0.0.1:32000"
 acr_registry: "datamigratedev.azurecr.io"
@@ -27,7 +27,7 @@ azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
 vm_username: "datamigrator"
 
 # Version management
-microk8s_version: "1.31/stable"
+microk8s_version: "1.32/stable"
 microk8s_disable_snap_autoupdate: false
 
 # Cluster CIDR Values
