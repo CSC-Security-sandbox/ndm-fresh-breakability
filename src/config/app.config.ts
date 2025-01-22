@@ -12,6 +12,8 @@ export default registerAs(
     workerConfigUrl: process.env.WORKER_CONFIG_URL || 'http://localhost:3000/api/v1/workers/configs',
     platform: process.platform,
     baseMountDir: process.env.BASE_MOUNT_DIR || '/mnt',
+    workerName: process.env.WORKER_NAME || 'worker',
+    projectId: process.env.PROJECT_ID || '6cf21220-5627-4614-a947-778915dba29f',
   }),
 );
 

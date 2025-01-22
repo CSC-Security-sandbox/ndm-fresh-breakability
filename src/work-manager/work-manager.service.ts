@@ -10,6 +10,7 @@ import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import Logger from 'src/logger/logging';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 
+
 @Injectable()
 export class WorkManagerService {
 
@@ -25,7 +26,7 @@ export class WorkManagerService {
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
     ) {
-        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}?workerId=${this.configService.get('worker.workerId')}`;
+        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}/${this.configService.get('worker.workerId')}`;
         this.workerId = this.configService.get('workers.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout')
     }
@@ -44,7 +45,12 @@ export class WorkManagerService {
         if(this.loadingConfigs) return;
         this.loadingConfigs = true
         // Get the worker configuration changes
-        this.httpService.get(this.workerConfigUrl)
+        this.httpService.get(this.workerConfigUrl,{
+            headers: {
+                ['worker-name']: this.configService.get('worker.workerName'),
+                ['project-id']: this.configService.get('worker.projectId')
+            },
+        })
             .pipe(
                 retry({
                     count: 3,
