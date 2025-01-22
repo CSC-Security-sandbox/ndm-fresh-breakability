@@ -517,7 +517,7 @@ describe("JobRunService", () => {
     const filter = { projectId: "project123" };
     const mockJobRuns = [
       {
-        jobtype: "COPY",
+        jobtype: "DISCOVER",
         volumepath: "/source/path",
         sourcefileserverprotocol: "HTTP",
         sourceconfigname: "SourceServer",
@@ -557,7 +557,7 @@ describe("JobRunService", () => {
         status: "SUCCESS",
         startTime: mockJobRuns[0].starttime,
         endTime: mockJobRuns[0].endtime,
-        jobType: "COPY",
+        jobType: "DISCOVER",
         sourceServer: {
           serverName: "SourceServer",
           path: "/source/path",
@@ -571,6 +571,72 @@ describe("JobRunService", () => {
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
         totalScannedSize: "2.00 KB",
+        totalMigratedSize: "0",
+        errors: [],
+      },
+    ]);
+  });
+
+
+  it("should return job runs with calculated stats scanned data as 0 for migration", async () => {
+    const filter = { projectId: "project123" };
+    const mockJobRuns = [
+      {
+        jobtype: "MIGRATE",
+        volumepath: "/source/path",
+        sourcefileserverprotocol: "HTTP",
+        sourceconfigname: "SourceServer",
+        targetvolumepath: "/target/path",
+        targetfileserverprotocol: "FTP",
+        targetconfigname: "TargetServer",
+        status: "SUCCESS",
+        starttime: new Date(Date.now() - 10000),
+        endtime: new Date(),
+      },
+    ];
+
+    const mockInventoryStats = {
+      filecount: "10",
+      directorycount: "2",
+      totalsize: "2048",
+    };
+
+    jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
+    } as any);
+
+    jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(mockInventoryStats),
+    } as any);
+
+    const result = await service.getJobAllRuns(filter);
+
+    expect(result).toMatchObject([
+      {
+        status: "SUCCESS",
+        startTime: mockJobRuns[0].starttime,
+        endTime: mockJobRuns[0].endtime,
+        jobType: "MIGRATE",
+        sourceServer: {
+          serverName: "SourceServer",
+          path: "/source/path",
+          protocol: "HTTP",
+        },
+        destinationServer: {
+          serverName: "TargetServer",
+          path: "/target/path",
+          protocol: "FTP",
+        },
+        scannedFilesCount: "10",
+        scannedDirectoriesCount: "2",
+        totalScannedSize: "",
+        totalMigratedSize: "",
         errors: [],
       },
     ]);
@@ -743,6 +809,120 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
+        totalMigratedSize: '0',
+        errors: [],
+        tasks: [],
+      });
+    });
+    it('should return job run details when it exists with stats', async () => {
+      // Arrange
+      const jobId = '1';
+      const jobRunId = '123';
+      const jobConfigId = '456';
+      const jobType = JobType.Migrate;
+      const sourceServerName = 'SourceServer';
+      const sourcePath = '/source/path';
+      const sourceProtocol = 'HTTP';
+      const targetServerName = 'TargetServer';
+      const targetPath = '/target/path';
+      const targetProtocol = 'FTP';
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + 1000);
+      const fileCount = '0';
+      const directoryCount = '0';
+      const totalSize = '0';
+
+      jest.spyOn(service['jobRunRepo'], 'findOne').mockResolvedValueOnce({
+        id: jobRunId,
+        status: JobRunStatus.Completed,
+        startTime,
+        endTime,
+        jobConfigId,
+        tasks: [],
+      } as JobRunEntity);
+
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValueOnce({
+        id: jobConfigId,
+        jobType,
+        sourcePath: {
+          fileServer: {
+            config: {
+              configName: sourceServerName,
+            },
+            protocol: sourceProtocol,
+          },
+          volumePath: sourcePath,
+        },
+        targetPath: {
+          fileServer: {
+            config: {
+              configName: targetServerName,
+            },
+            protocol: targetProtocol,
+          },
+          volumePath: targetPath,
+        },
+        preserveAccessTime: false,
+        firstRunAt: new Date().toDateString(),
+        futureScheduleAt: '0 0 0 * * *',
+        excludeOlderThan: new Date(),
+        excludeFilePatterns: 'test',
+        status: JobStatus.Active,
+        createdBy: 'test',
+        sourcePathId: '1',
+        targetPathId: '2',
+        jobRuns: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        updatedBy: 'test',
+      } as unknown as JobConfigEntity);
+
+      jest.spyOn(service['inventoryRepo'], 'createQueryBuilder').mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValueOnce({
+          fileCount,
+          directoryCount,
+          totalSize,
+        }),
+      } as any);
+      const result = await service.getJobRun(jobId);
+    
+      expect(service["jobConfigRepo"].findOne).toHaveBeenCalledWith({
+        where: { id: jobConfigId },
+        relations: [
+          'jobRuns',
+          'sourcePath',
+          'sourcePath.fileServer',
+          'sourcePath.fileServer.config',
+          'targetPath',
+          'targetPath.fileServer',
+          'targetPath.fileServer.config',
+        ],
+      });
+      expect(service["inventoryRepo"].createQueryBuilder).toHaveBeenCalledWith('inventory');
+      expect(result).toEqual({
+        jobRunId,
+        jobConfigId,
+        status: JobRunStatus.Completed,
+        startTime,
+        endTime,
+        jobType,
+        sourceServer: {
+          serverName: sourceServerName,
+          path: sourcePath,
+          protocol: sourceProtocol,
+        },
+        destinationServer: {
+          serverName: targetServerName,
+          path: targetPath,
+          protocol: targetProtocol,
+        },
+        timeElapsed: endTime.getTime() - startTime.getTime(),
+        scannedFilesCount: fileCount,
+        scannedDirectoriesCount: directoryCount,
+        totalScannedSize: "0",
+        totalMigratedSize: '',
         errors: [],
         tasks: [],
       });
