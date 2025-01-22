@@ -87,6 +87,11 @@ export class ConfigurationService {
                 projectId: true,
                 scannedDate: true,
                 status: true,
+                workingDirectory: {
+                    pathName: true,
+                    workingDirectory: true,
+                    pathId: true
+                },
                 fileServers:{
                     id: true,
                     host: true,
@@ -121,7 +126,8 @@ export class ConfigurationService {
                         }    
                     }
                         
-                }
+                },
+                workingDirectory: true 
             }
         });
      
