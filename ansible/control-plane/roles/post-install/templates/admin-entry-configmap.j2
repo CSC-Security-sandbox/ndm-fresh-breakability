@@ -90,7 +90,7 @@ data:
         attributes: {
             'oidc.ciba.grant.enabled': false,
             'backchannel.logout.session.required': true,
-            'login_theme': 'datamigrator',
+            'login_theme': 'datamigrate',
             'oauth2.device.authorization.grant.enabled': true,
             'display.on.consent.screen': false,
             'backchannel.logout.revoke.offline.tokens': false
@@ -154,7 +154,7 @@ data:
     JSON.stringify({
         name: '${MAPPER_NAME}',
         protocol: 'openid-connect',
-        protocolMapper: 'datamigrator-permissions-mapper',
+        protocolMapper: 'datamigrate-permissions-mapper',
         consentRequired: false,
         config: {
         'claim.name': 'user',
