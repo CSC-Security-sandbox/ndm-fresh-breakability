@@ -11,7 +11,7 @@ import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 
 @Injectable()
 export class WorkManagerService {
-    private logger : LoggerService
+    readonly logger : LoggerService
     constructor(
         @InjectRepository(WorkerEntity)
         private readonly workerEntity: Repository<WorkerEntity>,

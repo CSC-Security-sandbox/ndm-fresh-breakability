@@ -22,7 +22,7 @@ export class WorkManagerController {
     }
 
     
-    @ApiOperation({ summary: 'Create a new request' }) // Description for Swagger
+    @ApiOperation({ summary: 'Create a new request' }) 
     @ApiResponse({ status: 201, description: 'Request created successfully' })
     @ApiResponse({ status: 400, description: 'Bad Request' })
     @Post('/validate-connection')

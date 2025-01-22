@@ -41,7 +41,7 @@ describe('TypeORM Config', () => {
       database: 'testdb',
       synchronize: false,
       dropSchema: false,
-      logging: true,
+      logging: false,
       entities: [
         WorkerEntity,
         ConfigEntity,

@@ -1,18 +1,132 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Repository } from 'typeorm';
 import { WorkManagerService } from './work-manager.service';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
+import { CreateRequestDto } from './dto/validate-connection.dto';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
+  let workerEntityMock: Repository<WorkerEntity>;
+  let loggerFactoryMock;
+  let workflowServiceMock: WorkflowService;
 
   beforeEach(async () => {
+    workerEntityMock = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+    } as unknown as Repository<WorkerEntity>;
+
+    loggerFactoryMock = {
+      create: jest.fn().mockReturnValue({
+        log: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+      }),
+    } ;
+
+    workflowServiceMock = {
+      startWorkflow: jest.fn(),
+    } as unknown as WorkflowService;
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [WorkManagerService],
+      providers: [
+        WorkManagerService,
+        { provide: 'WorkerEntityRepository', useValue: workerEntityMock },
+        { provide: LoggerFactory, useValue: loggerFactoryMock },
+        { provide: WorkflowService, useValue: workflowServiceMock },
+      ],
     }).compile();
 
     service = module.get<WorkManagerService>(WorkManagerService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  describe('getConfiguration', () => {
+    it('should return existing worker configuration', async () => {
+      const workerId = '123';
+      const mockWorker = { workerId, metaConfig: [{ configName: 'TestConfig' }] };
+
+      jest.spyOn(workerEntityMock, 'findOne').mockResolvedValue(mockWorker as WorkerEntity);
+
+      const result = await service.getConfiguration(workerId, '', '', '');
+      expect(result).toEqual(mockWorker.metaConfig);
+      expect(workerEntityMock.findOne).toHaveBeenCalledWith({ where: { workerId } });
+    });
+
+    it('should create a new worker if not found and return its configuration', async () => {
+      const workerId = '123';
+      const ip = '127.0.0.1';
+      const projectId = 'projectId';
+      const workerName = 'workerName';
+      const mockNewWorker = {
+        workerId,
+        ipAddress: ip,
+        metaConfig: service.createWorkerConfiguration(workerId),
+        status: WorkerStatus.Online,
+        workerName,
+        createdBy: workerId,
+        projectId,
+      };
+
+      jest.spyOn(workerEntityMock, 'findOne').mockResolvedValue(null);
+      jest.spyOn(workerEntityMock, 'create').mockReturnValue(mockNewWorker as WorkerEntity);
+      jest.spyOn(workerEntityMock, 'save').mockResolvedValue(mockNewWorker as WorkerEntity);
+
+      const result = await service.getConfiguration(workerId, ip, projectId, workerName);
+      expect(result).toEqual(mockNewWorker.metaConfig);
+      expect(workerEntityMock.create).toHaveBeenCalledWith(mockNewWorker);
+      expect(workerEntityMock.save).toHaveBeenCalledWith(mockNewWorker);
+    });
+  });
+
+  describe('createWorkerConfiguration', () => {
+    it('should return a default worker configuration', () => {
+      const workerId = '123';
+      const expectedConfig = [
+        {
+          configName: WorkFlowType.PARENT_WORKFLOW,
+          dynamicTaskQueue: false,
+          taskQueueId: null,
+          workerId,
+        },
+        {
+          configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
+          dynamicTaskQueue: true,
+          taskQueueId: workerId,
+          workerId,
+        },
+      ];
+
+      const result = service.createWorkerConfiguration(workerId);
+      expect(result).toEqual(expectedConfig);
+    });
+  });
+
+  describe('validateConnection', () => {
+    it('should start the workflow with the correct payload', async () => {
+      const payload: CreateRequestDto = {
+        options: { startDelay: '10', workflowExecutionTimeout: '12',workflowRunTimeout :'12' , workflowTaskTimeout: '12' },
+        fileServer: { hostname: 'test', protocols: [] },
+        workerIds: ['123']
+      };
+      const traceId = 'trace123';
+
+      const expectedWorkflowPayload = {
+        workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [{ traceId, payload: { traceId, ...payload }, options: payload.options }],
+        ...payload.options,
+      };
+
+      await service.validateConnection(payload, traceId);
+
+      expect(workflowServiceMock.startWorkflow).toHaveBeenCalledWith(
+        WorkFlows.VALIDATE_CONNECTION,
+        expectedWorkflowPayload,
+      );
+    });
   });
 });
