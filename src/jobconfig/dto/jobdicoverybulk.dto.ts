@@ -51,14 +51,11 @@ export class MigrateConfig {
   @IsUUID()
   sourcePathId: string;
 
-  @ApiProperty({ description: 'UUID of the destination file servers' })
-  destinationPathId: string;
-}
-
-export class JobConfigOptions {
-  @ApiProperty({ description: 'Preserve access time flag', example: false})
-  @IsBoolean()
-  preserveAccessTime: boolean;
+  @ApiProperty({ description: 'UUIDs of the destination file servers' })
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true }) 
+  destinationPathId: string[];
 }
 
 export class JobConfigMigrateBulk {
@@ -109,12 +106,9 @@ export class JobConfigMigrateBulk {
   @IsOptional()
   gidMapping: Buffer;
 
-  @ApiProperty({ 
-    description: 'Options for bulk migrate', 
-    type: JobConfigOptions 
-  })
-  @Type(() => JobConfigOptions)
-  options: JobConfigOptions
+  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsBoolean()
+  preserveAccessTime: boolean;
 }
 
 export class JobConfigCutoverBulk {
