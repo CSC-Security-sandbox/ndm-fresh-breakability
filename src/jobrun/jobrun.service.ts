@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobStatus } from "src/constants/enums";
+import { JobRunStatus, JobStatus, JobType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -368,7 +368,8 @@ export class JobRunService {
       scannedDirectoriesCount: BigInt(
         inventoryCounts?.directorycount || "0"
       )?.toString(),
-      totalScannedSize:  this.covertBytes(Number(inventoryCounts?.totalsize || "0")),
+      totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
+      totalMigratedSize: jobConfigDetails.jobType === JobType.Migrate ? '' : '0',
       errors: [],
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -431,6 +432,7 @@ export class JobRunService {
         "jobRun.id AS jobRunId",
         "jobConfig.jobType AS jobType",
         "jobConfig.id AS jobConfigId",
+        "jobConfig.futureScheduleAt AS nextSchedule",
         "sourceVolume.volumePath AS volumePath",
         "sourceFileServer.protocol AS sourceFileServerProtocol",
         "sourceConfig.configName AS sourceConfigName",
@@ -464,6 +466,7 @@ export class JobRunService {
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
           jobConfigId: jobRun?.jobconfigid,
+          nextSchedule: jobRun?.nextschedule,
           sourceServer: {
             serverName: jobRun.sourceconfigname,
             path: jobRun.volumepath,
@@ -485,9 +488,10 @@ export class JobRunService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts?.directorycount || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(
+          totalScannedSize: jobRun.jobtype === JobType.DISCOVER ? this.covertBytes(Number(
             inventoryCounts?.totalsize || "0"
-          )),
+          )) : '',
+          totalMigratedSize: jobRun.jobtype === JobType.Migrate ? '' : '0',
           errors: [],
         };
         return response;

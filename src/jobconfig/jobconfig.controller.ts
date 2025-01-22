@@ -1,10 +1,11 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -13,14 +14,27 @@ export class JobConfigController {
     private readonly jobConfigService: JobConfigService,
   ) {}
 
-  @ApiOperation({ summary: 'Create a new job' })
-  @ApiResponse({ status: 201, description: 'The job has been successfully created.' })
+  @ApiOperation({ summary: 'Create a new discovery job' })
+  @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
     return jobConfig;
   }
-  
+
+  @ApiOperation({ summary: 'Create a new migrate job' })
+  @ApiResponse({ status: 201, description: 'Migrate job has been successfully created.' })
+  @Post('/bulk-migrate')
+  async createBulkMigrate(@Body() bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
+    return await this.jobConfigService.createBulkMigrate(bulkMigrate);
+  }
+
+  @ApiOperation({ summary: 'Create a new cutover job' })
+  @ApiResponse({ status: 201, description: 'Cutover job has been successfully created.' })
+  @Post('/bulk-cutover')
+  async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
+    return await this.jobConfigService.createBulkCutover(bulkCutover);
+  }
 
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
