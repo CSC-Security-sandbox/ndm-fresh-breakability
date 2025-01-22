@@ -29,7 +29,7 @@ public class DataMigratePermissionMapper extends AbstractOIDCProtocolMapper
     /**
      * Unique identifier for this protocol mapper.
      */
-    public static final String PROVIDER_ID = "netapp-mapper";
+    public static final String PROVIDER_ID = "datamigrate-permissions-mapper";
  
     /**
      * Configuration properties for the mapper.
@@ -71,7 +71,7 @@ public class DataMigratePermissionMapper extends AbstractOIDCProtocolMapper
      */
     @Override
     public String getDisplayType() {
-        return "DataMigrate Permission Mapper";
+        return "DataMigrate Permissions Mapper";
     }
  
     /**

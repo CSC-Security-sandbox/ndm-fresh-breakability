@@ -36,15 +36,15 @@ public class UserPermissionFetcher {
                 array_agg(DISTINCT p.permission_name) AS permissions,
                 COALESCE(array_agg(DISTINCT ur.project_id) FILTER (WHERE ur.project_id IS NOT NULL), '{}') AS projects
             FROM
-                migrateadmin.user_role ur
+                user_role ur
             JOIN
-                migrateadmin.role r ON ur.role_id = r.id
+                role r ON ur.role_id = r.id
             JOIN
-                migrateadmin.role_permission rp ON rp.role_id = r.id
+                role_permission rp ON rp.role_id = r.id
             JOIN
-                migrateadmin.permission p ON rp.permission_id = p.id
+                permission p ON rp.permission_id = p.id
             JOIN
-                migrateadmin."user" u ON ur.user_id = u.id
+                "user" u ON ur.user_id = u.id
             WHERE
                 LOWER(u.email) = LOWER(?)
             GROUP BY
