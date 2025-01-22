@@ -1,4 +1,4 @@
-import { JobRunStatus, JobType } from "src/constants/enums";
+import { JobRunStatus, JobType, TaskStatus } from "src/constants/enums";
 import { JobRunConfig } from "src/jobrun/jobrun.types";
 
 export interface MountedStatus{
@@ -60,7 +60,7 @@ export interface ScanCompletedPayload{
   id: string,
   jobRunId: string,
   taskType: string,
-  status: string,
+  status: TaskStatus,
   workerId: string,
   sPath: string,
   tPath?: string | null,
