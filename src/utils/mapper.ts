@@ -34,18 +34,10 @@ export const jobTypeToOperationType = (type: JobType) => {
 }
 
 export const nextDate = (jobType: string, runDate: Date, cron: string) => {
-    const isDateString = (str: string): boolean => {
-        const parsedDate = new Date(str);
-        return !isNaN(parsedDate.getTime());
-    };
     switch(jobType) {
         case JobType.DISCOVER:
             return runDate && runDate > new Date() ? runDate : null;
         default:
-            if (isDateString(cron)) {
-                const parsedDate = new Date(cron);
-                return parsedDate > new Date() ? parsedDate : null;
-            }
             return cron ? parser.parseExpression(cron).next().toDate(): null
     }
 }
