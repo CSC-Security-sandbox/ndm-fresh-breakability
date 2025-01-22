@@ -6,7 +6,6 @@ import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
-import { JobStatus } from 'src/constants/enums';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -15,6 +14,8 @@ describe('JobConfigController', () => {
   const mockJobConfigService = {
     createJobConfig: jest.fn(),
     createBulkDiscovery: jest.fn(),
+    createBulkMigrate: jest.fn(),
+    createBulkCutover: jest.fn(),
     getAllJobConfig: jest.fn(),
     getJobConfigById: jest.fn(),
     updateJobConfig: jest.fn(),
@@ -54,6 +55,38 @@ describe('JobConfigController', () => {
       const result = await controller.createBulkDiscovery(bulkDiscovery);
       expect(result).toEqual(jobConfigEntities);
       expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkDiscovery);
+    });
+  });
+
+  describe('createBulkMigrate', () => {
+    it('should create bulk migrate jobs', async () => {
+      const bulkMigrate: any = { sourcePathIds: ['123'] } as  any ;
+      const jobConfigEntities: JobConfigEntity[] = [
+        { id: '1', },
+        { id: '2', },
+      ] as JobConfigEntity[];
+
+      mockJobConfigService.createBulkMigrate.mockResolvedValue(jobConfigEntities);
+
+      const result = await controller.createBulkMigrate(bulkMigrate);
+      expect(result).toEqual(jobConfigEntities);
+      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkMigrate);
+    });
+  });
+
+  describe('createBulkCutover', () => {
+    it('should create bulk cutover jobs', async () => {
+      const bulkCutover: any = { sourcePathIds: ['123'] } as  any ;
+      const jobConfigEntities: JobConfigEntity[] = [
+        { id: '1', },
+        { id: '2', },
+      ] as JobConfigEntity[];
+
+      mockJobConfigService.createBulkCutover.mockResolvedValue(jobConfigEntities);
+
+      const result = await controller.createBulkCutover(bulkCutover);
+      expect(result).toEqual(jobConfigEntities);
+      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkCutover);
     });
   });
 

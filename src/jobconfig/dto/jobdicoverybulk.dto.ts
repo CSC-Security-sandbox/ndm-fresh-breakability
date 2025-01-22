@@ -45,6 +45,22 @@ export class JobConfigDiscoverBulk {
   createdBy?: string;
 }
 
+export class MigrateJobConfigOptions {
+  @ApiProperty({ description: 'Exclude files older than this date', required: false })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  excludeOlderThan?: Date;
+
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false , })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsBoolean()
+  preserveAccessTime: boolean;
+}
 
 export class MigrateConfig {
   @ApiProperty({ description: 'UUID of the source path configurations' })
@@ -59,19 +75,7 @@ export class MigrateConfig {
 }
 
 export class JobConfigMigrateBulk {
-  @ApiProperty({ description: 'Exclude files older than this date', required: false })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  excludeOlderThan?: Date;
-
-  @ApiProperty({ description: 'Patterns of files to exclude', required: false , })
-  @IsOptional()
-  @IsString()
-  excludeFilePatterns?: string;
-
-  @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
-  @IsOptional()
+  @ApiProperty({ description: 'Timestamp for 1st migrate run', example: new Date().toISOString() })
   @Type(() => Date)
   @IsDate()
   firstRunAt: Date;
@@ -106,9 +110,11 @@ export class JobConfigMigrateBulk {
   @IsOptional()
   gidMapping: Buffer;
 
-  @ApiProperty({ description: 'Preserve access time flag', example: false})
-  @IsBoolean()
-  preserveAccessTime: boolean;
+  @ApiProperty({
+    type: MigrateJobConfigOptions,
+    description: 'Migrate job options'
+  })
+  options: MigrateJobConfigOptions
 }
 
 export class JobConfigCutoverBulk {

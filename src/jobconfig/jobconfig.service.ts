@@ -8,7 +8,7 @@ import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { InActivateJobConfigPayload } from './jobconfig.types';
+import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
@@ -66,7 +66,7 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
-  async createBulkMigrate(bulkMigrate: JobConfigMigrateBulk): Promise<Partial<JobConfigEntity[]>> {
+  async createBulkMigrate(bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
     return [
       {
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
@@ -78,29 +78,24 @@ export class JobConfigService {
         firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
         futureScheduleAt: '0 12 * * *',
         sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-        targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
+        targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
         scheduler: '0 12 * * *',
       }
-    ] as any;
+    ];
   }
 
 
-  async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<Partial<JobConfigEntity[]>> {
+  async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     return [
       {
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.Migrate,
+        jobType: JobType.CutOver,
         status: JobStatus.Active,
-        excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
-        excludeFilePatterns: '*.log, *.tmp',
-        preserveAccessTime: false,
         firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
-        futureScheduleAt: '0 12 * * *',
         sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-        targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
-        scheduler: '0 12 * * *',
+        targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
       }
-    ] as any;
+    ];
   }
 
   // ------------  update ---------------- //
