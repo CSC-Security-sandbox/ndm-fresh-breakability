@@ -6,12 +6,14 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import appConfig from 'src/config/app.config';
+import { WorkflowModule } from 'src/workflow/workflow.module';
 
 @Module({
   imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [appConfig] }),
     TypeOrmModule.forFeature([WorkerEntity]),
+    WorkflowModule
   ],
   controllers: [WorkManagerController],
   providers: [WorkManagerService]

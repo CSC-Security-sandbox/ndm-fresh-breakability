@@ -16,11 +16,6 @@ export class WorkerEntity extends Base  {
   @Column({ type: 'uuid', nullable: false , name: 'project_id'})
   projectId: string;
 
-
-  @ApiProperty({ description: 'clientId' })
-  @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
-  clientId: string;
-
   @ApiProperty({ description: 'workerName' })
   @Column({ type: 'varchar', length: 255, nullable: false, name:'worker_name' })
   workerName: string;
