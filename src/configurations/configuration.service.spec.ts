@@ -63,6 +63,14 @@ describe('ConfigurationService', () => {
   let rabbitMqService: RabbitMQService;
   let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
 
+  let loggerFactoryMock = {
+    create: jest.fn().mockReturnValue({
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -91,12 +99,7 @@ describe('ConfigurationService', () => {
           provide: RabbitMQService,
           useValue: mockRabbitMQService,
         },
-        {
-          provide: LoggerFactory,
-          useValue: {
-            create: jest.fn()
-          }
-        }
+        { provide: LoggerFactory, useValue: loggerFactoryMock },
       ],
     }).compile();
 

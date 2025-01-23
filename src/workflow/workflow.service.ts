@@ -23,12 +23,12 @@ export class WorkflowService {
         return this.client;
 
         try {
-        this.connection = await Connection.connect(this.configService.get<any>('temporal'));
-        this.client = new Client({ connection: this.connection });
-        return this.client;
+            this.connection = await Connection.connect(this.configService.get<any>('temporal'));
+            this.client = new Client({ connection: this.connection });
+            return this.client;
         } catch (error) {
-        this.logger.error(`Failed to connect to Temporal: ${error}`);
-        throw error;
+            this.logger.error(`Failed to connect to Temporal: ${error}`);
+            throw error;
         }
     }
 

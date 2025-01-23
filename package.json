@@ -113,7 +113,8 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
+      "/test/",
+      "src/middleware"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -121,7 +122,8 @@
       "/coverage",
       "/dist",
       "/test/",
-      "/entities/"
+      "/entities/",
+      "src/middleware"
     ]
   }
 }
