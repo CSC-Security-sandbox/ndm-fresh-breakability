@@ -66,6 +66,7 @@ microk8s_plugins:
   kata: false                             # A secure container runtime with lightweight virtual machines
   openebs: false                          # openebs storage
   openfaas: false                         # serverless
+  observability: false                    # Observability stack
 
 helm3_repositories:
   - name: stable

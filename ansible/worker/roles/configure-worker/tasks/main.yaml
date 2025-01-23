@@ -2,15 +2,18 @@
 - name: Ensure destination directories exist
   become: yes
   file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
     mode: '0755'
   loop:
-    - /opt/datamigrator
-    - /opt/datamigrator/bin
-    - /var/log/datamigrator
+    - { path: "/opt/datamigrator" }
+    - { path: "/opt/datamigrator/bin" }
+    - { path: "/opt/datamigrator/binary" }
+    - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/logs" }
+    - { path: "/var/log/datamigrator" }
 
 - name: Copy binary file to remote server
   become: yes
@@ -57,8 +60,9 @@
   become: yes
   ansible.builtin.command: systemctl daemon-reload
 
-- name: Enable the datamigrator worker service
+- name: Disable the datamigrator worker service from starting on boot
   become: yes
-  systemd:
+  ansible.builtin.systemd_service:
     name: datamigrator-worker.service
-    enabled: yes
+    enabled: false
+    state: stopped

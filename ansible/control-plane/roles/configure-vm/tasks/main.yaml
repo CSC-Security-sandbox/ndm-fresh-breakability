@@ -39,19 +39,12 @@
       - acl
       - jq
     state: present
-    update_cache: yes
-    cache_valid_time: 3600
   # retries: 3
   # delay: 10
   # register: install_packages_result
   # until: install_packages_result is succeeded
 
-- name: 2.3. Upgrade all packages to the latest version
-  apt:
-    upgrade: dist
-    update_cache: yes
-
-- name: 2.4. Sets the /data directory owner as {{ vm_username }}
+- name: 2.3. Sets the /data directory owner as {{ vm_username }}
   file:
     path: /data
     state: directory
@@ -59,7 +52,7 @@
     group: '{{ vm_username }}'   
     mode: 0755
 
-- name: 2.5. Sets the /logs directory owner as {{ vm_username }}
+- name: 2.4. Sets the /logs directory owner as {{ vm_username }}
   file:
     path: /logs
     state: directory
@@ -67,7 +60,7 @@
     group: '{{ vm_username }}'   
     mode: 0755
   
-- name: 2.6. Sets default ACL for {{ vm_username }} on /data
+- name: 2.5. Sets default ACL for {{ vm_username }} on /data
   ansible.posix.acl:
     path: /data
     entity: '{{ vm_username }}'
@@ -76,7 +69,7 @@
     default: true
     state: present
 
-- name: 2.7. Sets default ACL for {{ vm_username }} on /logs
+- name: 2.6. Sets default ACL for {{ vm_username }} on /logs
   ansible.posix.acl:
     path: /logs
     entity: '{{ vm_username }}'
@@ -85,6 +78,5 @@
     default: true
     state: present
   
-- name: 2.8. Set the hostname to datamigrator
-  ansible.builtin.hostname:
-    name: datamigrator
+- name: 2.7. Set the hostname
+  command: hostnamectl set-hostname datamigrator
