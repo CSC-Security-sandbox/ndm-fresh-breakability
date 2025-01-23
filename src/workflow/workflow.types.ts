@@ -4,3 +4,9 @@ export interface StartWorkFlowPayload {
     args: any[];
     [key: string]: any;
   }
+
+export enum WorkflowExecutionStatus {
+    COMPLETED = 'COMPLETED',
+    RUNNING =  'RUNNING',
+    TIMED_OUT = 'TIMED_OUT'
+}

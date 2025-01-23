@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
-import { StartWorkFlowPayload } from './workflow.types';
+import { StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -44,9 +44,18 @@ export class WorkflowService {
                     2,
                 )}`,
             );
-            return handle;
+            return handle
         } catch (error) {
             this.logger.error(`Failed to start workflow: ${error}`);
         }
+    }
+
+    async getWorkFlowRes(id: string) {
+        const client = await this.getClient();
+        const handle = client.workflow.getHandle(id);
+        const details =  await handle.describe() 
+        if(details.status.name ===  WorkflowExecutionStatus.COMPLETED) 
+            return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result()} 
+        return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: []}
     }
 }

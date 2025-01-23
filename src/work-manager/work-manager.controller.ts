@@ -30,4 +30,12 @@ export class WorkManagerController {
         return await this.workManagerService.validateConnection(request, req?.trackId)
     }
 
+    @ApiOperation({ summary: 'Create a new requestasd' }) 
+    @ApiResponse({ status: 201, description: 'Request created successfully' })
+    @ApiResponse({ status: 400, description: 'Bad Request' })
+    @Get('kunal/get-res/:workflow')
+    async getChildWorkFlowRes(@Param('workflow') id: string) {
+        return await this.workManagerService.getChildWorkFlowRes(id)
+    }
+
 }

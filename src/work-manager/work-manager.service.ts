@@ -62,4 +62,8 @@ export class WorkManagerService {
         }
         return this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
     }
+
+    async getChildWorkFlowRes(id: string) {
+        return this.workFlowService.getWorkFlowRes(id)
+    }
 }
