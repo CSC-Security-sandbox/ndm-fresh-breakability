@@ -29,7 +29,7 @@ export class JobConfigEntity extends Base {
   jobType: JobType;
 
   @ApiProperty({ description: 'Status of the job' })
-  @Column({ type: 'varchar', name: 'status' })
+  @Column({ type: 'enum', name: 'status', enum: JobStatus, })
   status: JobStatus;
 
   @ApiProperty({ description: 'Exclude files older than this date' })

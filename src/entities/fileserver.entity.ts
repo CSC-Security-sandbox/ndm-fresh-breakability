@@ -49,7 +49,7 @@ export class FileServerEntity extends Base {
     isRefreshed: boolean;
 
     @ApiProperty({ description: 'protocol version' })
-    @Column({ type: 'varchar', nullable: true,  name: 'protocol_version'})
+    @Column({ type: 'varchar', nullable: false, name: 'protocol_version'})
     protocolVersion: ProtocolVersion;
 
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
