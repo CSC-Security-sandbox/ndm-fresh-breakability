@@ -21,7 +21,6 @@ export class WorkManagerController {
 
     }
 
-    
     @ApiOperation({ summary: 'Create a new request' }) 
     @ApiResponse({ status: 201, description: 'Request created successfully' })
     @ApiResponse({ status: 400, description: 'Bad Request' })
@@ -30,11 +29,11 @@ export class WorkManagerController {
         return await this.workManagerService.validateConnection(request, req?.trackId)
     }
 
-    @ApiOperation({ summary: 'Create a new requestasd' }) 
+    @ApiOperation({ summary: 'Get Workflow Result' }) 
     @ApiResponse({ status: 201, description: 'Request created successfully' })
     @ApiResponse({ status: 400, description: 'Bad Request' })
-    @Get('kunal/get-res/:workflow')
-    async getChildWorkFlowRes(@Param('workflow') id: string) {
+    @Get('details/:workflow-id')
+    async getChildWorkFlowRes(@Param('workflow-id') id: string) {
         return await this.workManagerService.getChildWorkFlowRes(id)
     }
 

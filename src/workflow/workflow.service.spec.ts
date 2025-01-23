@@ -37,6 +37,7 @@ describe('WorkflowService', () => {
     mockClient = {
       workflow: {
         start: jest.fn(),
+        getHandle: jest.fn()
       },
     } as unknown as jest.Mocked<Client>;
 
@@ -86,6 +87,80 @@ describe('WorkflowService', () => {
       expect(loggerService.error).toHaveBeenCalledWith(`Failed to connect to Temporal: ${error}`);
     });
   });
+
+  describe('getWorkFlowRes', () => {
+    it('should return completed workflow details if the workflow status is COMPLETED', async () => {
+      const workflowId = 'test-workflow-id';
+      const mockResult = { key: 'value' };
+      const mockHandle = {
+        describe: jest.fn().mockResolvedValue({
+          status: { name: 'COMPLETED' },
+          workflowId,
+          raw: {},
+        }),
+        result: jest.fn().mockResolvedValue(mockResult),
+      };
+  
+      mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
+  
+      const result = await service.getWorkFlowRes(workflowId);
+  
+      expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
+      expect(mockHandle.describe).toHaveBeenCalled();
+      expect(mockHandle.result).toHaveBeenCalled();
+      expect(result).toEqual({
+        status: 'COMPLETED',
+        id: workflowId,
+        pending: [],
+        completed: mockResult,
+      });
+    });
+  
+    it('should return pending workflow details if the workflow status is not COMPLETED', async () => {
+      const workflowId = 'test-workflow-id';
+      const mockPending = [{ childWorkflowId: 'child1' }];
+      const mockHandle = {
+        describe: jest.fn().mockResolvedValue({
+          status: { name: 'RUNNING' },
+          workflowId,
+          raw: { pendingChildren: mockPending },
+        }),
+        result: jest.fn()
+      };
+  
+      mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
+  
+      const result = await service.getWorkFlowRes(workflowId);
+  
+      expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
+      expect(mockHandle.describe).toHaveBeenCalled();
+      expect(mockHandle.result).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        status: 'RUNNING',
+        id: workflowId,
+        pending: mockPending,
+        completed: [],
+      });
+    });
+  
+    it('should handle errors gracefully and log them', async () => {
+      const workflowId = 'test-workflow-id';
+      const error = new Error('Failed to get workflow details');
+  
+      const mockHandle = {
+        describe: jest.fn().mockRejectedValue(error),
+        result: jest.fn(),
+      };
+  
+      mockClient.workflow.getHandle =  jest.fn().mockReturnValue(mockHandle);
+  
+      await expect(service.getWorkFlowRes(workflowId)).rejects.toThrow(error);
+  
+      expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
+      expect(mockHandle.describe).toHaveBeenCalled();
+    });
+  });
+  
 
 
 });

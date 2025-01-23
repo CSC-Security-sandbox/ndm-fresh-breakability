@@ -29,7 +29,7 @@ describe('WorkManagerService', () => {
     } ;
 
     workflowServiceMock = {
-      startWorkflow: jest.fn(),
+      startWorkflow: jest.fn().mockResolvedValue({workflowId: '123'}),
     } as unknown as WorkflowService;
 
     const module: TestingModule = await Test.createTestingModule({

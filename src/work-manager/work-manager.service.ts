@@ -60,7 +60,8 @@ export class WorkManagerService {
             args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
             ...payload.options
         }
-        return this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
+        const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
+        return {workflowId : workflow.workflowId}
     }
 
     async getChildWorkFlowRes(id: string) {
