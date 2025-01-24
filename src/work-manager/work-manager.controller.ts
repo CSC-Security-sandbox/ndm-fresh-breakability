@@ -32,8 +32,8 @@ export class WorkManagerController {
     @ApiOperation({ summary: 'Get Workflow Result' }) 
     @ApiResponse({ status: 201, description: 'Request created successfully' })
     @ApiResponse({ status: 400, description: 'Bad Request' })
-    @Get('details/:workflow-id')
-    async getChildWorkFlowRes(@Param('workflow-id') id: string) {
+    @Get('/workflow/details/:id')
+    async getChildWorkFlowRes(@Param('id') id: string) {
         return await this.workManagerService.getChildWorkFlowRes(id)
     }
 
