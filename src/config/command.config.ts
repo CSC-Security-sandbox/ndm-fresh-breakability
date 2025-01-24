@@ -67,11 +67,11 @@ export class CommandConfig {
     CommandConfig.configService = configService;
   }
 
-  static getSMBCommand(platform: 'win' | 'linux' | 'darwin', key: string): any {
+  static getSMBCommand(platform: NodeJS.Platform, key: string): any {
     return CommandConfig.configService.get(`cmd.smb.${platform}.${key}`);
   }
 
-  static getNFSCommand(platform: 'win' | 'linux' | 'darwin', key: string): any {
+  static getNFSCommand(platform: NodeJS.Platform, key: string): any {
     return CommandConfig.configService.get(`cmd.nfs.${platform}.${key}`);
   }
 }

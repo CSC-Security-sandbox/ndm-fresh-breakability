@@ -1,6 +1,8 @@
-import { NFSProtocol } from "./protocols/nfs.protocol";
-import { Protocol } from "./protocols/protocol";
-import { SMBProtocol } from "./protocols/smb.protocol";
+import { NFSProtocol } from "./nfs/nfs.protocol";
+import { Protocol } from "./protocol/protocol";
+import { SMBProtocol } from "./smb/smb.protocol";
+
+
 
 
 export enum ProtocolTypes {

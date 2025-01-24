@@ -25,8 +25,6 @@ class WorkFlowOptions {
         this.taskQueue = !config.dynamicTaskQueue ? taskQueue : `${config.taskQueueId}-${taskQueue}`
         this.activities = activities;
         this.workflowsPath = require.resolve('../../workflows/workflows')
-
-        console.log(this.taskQueue)
     }
 }
 

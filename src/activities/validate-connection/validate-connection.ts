@@ -1,8 +1,8 @@
 
 import { WorkersConfig } from 'src/config/app.config';
 import Logger from 'src/logger/logging';
-import { Protocols, ProtocolTypes } from 'src/protocol/protocols';
-import { Protocol } from 'src/protocol/protocols/protocol';
+import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { Protocol } from 'src/protocols/protocol/protocol';
 
 export async function validate(
   traceId: string,
@@ -26,6 +26,7 @@ export async function validate(
 
   try {
     const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+    await protocol.validateConnection(traceId, payload);
     response.paths = await protocol.listPaths(traceId, payload);
     response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
     logger.info(`[${traceId}] Paths: ${response.paths}`);
