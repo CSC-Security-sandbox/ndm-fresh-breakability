@@ -1,0 +1,113 @@
+
+import { SmbErrors } from './smb.protocol.type';
+import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
+
+describe('handleConnectionError', () => {
+    it('should return the correct error message for ACCESS_DENIED', () => {
+        const errorCode = SmbErrors.ACCESS_DENIED;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Unable to connect to the server - ${SmbErrors.ACCESS_DENIED}`);
+    });
+
+    it('should return the correct error message for CONNECTION_REFUSED', () => {
+        const errorCode = SmbErrors.CONNECTION_REFUSED;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Not a valid SMB server - ${SmbErrors.CONNECTION_REFUSED}`);
+    });
+
+    it('should return the correct error message for LOGON_FAILURE', () => {
+        const errorCode = SmbErrors.LOGON_FAILURE;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Wrong credentials - ${SmbErrors.LOGON_FAILURE}`);
+    });
+
+    it('should return the correct error message for TIMEOUT', () => {
+        const errorCode = SmbErrors.TIMEOUT;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Unable to connect to the server - ${SmbErrors.TIMEOUT}`);
+    });
+
+    it('should return the default error message for an unknown error code', () => {
+        const errorCode = 'UNKNOWN_ERROR';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Unable to connect to the server - UNKNOWN_ERROR`);
+    });
+});
+
+
+
+describe('parseProtocolVersions', () => {
+    it('should return an empty array when output is empty', () => {
+        const result = parseProtocolVersions('');
+        expect(result).toEqual([]);
+    });
+
+    it('should return an empty array when output is undefined or null', () => {
+        const resultNull = parseProtocolVersions(null);
+        const resultUndefined = parseProtocolVersions(undefined);
+        expect(resultNull).toEqual([]);
+        expect(resultUndefined).toEqual([]);
+    });
+
+    it('should handle missing smb-protocols section gracefully', () => {
+        const output = 'No protocols section here';
+        const result = parseProtocolVersions(output);
+        expect(result).toEqual([]);
+    });
+});
+
+describe('parseLinMacShares', () => {
+    it('should return an empty array when input is empty', () => {
+        const result = parseLinMacShares('');
+        expect(result).toEqual([]);
+    });
+
+    it('should correctly parse and return shares starting with "/"', () => {
+        const input = 'Sharename\n---------\nIPC$\nprint$\nSMB1\nShare1\nShare2';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/Share1', '/Share2']);
+    });
+
+    it('should exclude irrelevant share names like IPC$, print$, SMB1', () => {
+        const input = 'Sharename\n---------\nIPC$\nprint$\nSMB1\nvalidShare1\nvalidShare2';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/validShare1', '/validShare2']);
+    });
+
+    it('should handle shares with special characters or spaces correctly', () => {
+        const input = 'Sharename\n---------\nMy Share 1\nMy-Share_2\nShare3';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/My', '/My-Share_2', '/Share3']);
+    });
+});
+
+describe('parseWindowsShares', () => {
+    it('should return an empty array when input is empty', () => {
+        const result = parseWindowsShares('');
+        expect(result).toEqual([]);
+    });
+
+    it('should correctly parse share names between "---" and "The command completed successfully"', () => {
+        const input = '---\nShare1\nShare2\nShare3\nThe command completed successfully';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['Share1', 'Share2', 'Share3']);
+    });
+
+    it('should exclude lines before and after the shares', () => {
+        const input = 'Some random text\n---\nShare1\nShare2\nThe command completed successfully\nSome other text';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['Share1', 'Share2']);
+    });
+
+    it('should handle multiline share names correctly', () => {
+        const input = '---\nShareName1\nShareName2\nThe command completed successfully';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['ShareName1', 'ShareName2']);
+    });
+
+    it('should return an empty array if no shares are found', () => {
+        const input = 'Some irrelevant text without any shares';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual([]);
+    });
+});
