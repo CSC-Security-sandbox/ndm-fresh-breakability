@@ -17,5 +17,5 @@ export enum WorkerState  {
 
 export enum WorkFlows{
     VALIDATE_CONNECTION = 'ValidateConnectionWorkflow',
-    LIST_PATHS = 'listPathsWorkflow'
+    LIST_PATHS = 'ListPathsWorkflow'
 }
