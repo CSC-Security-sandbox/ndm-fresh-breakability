@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client, Connection, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
+import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -53,7 +53,7 @@ export class WorkflowService {
     async getWorkFlowRes(id: string) {
         const client = await this.getClient();
         const handle = client.workflow.getHandle(id);
-        const details =  await handle.describe() 
+        const details: WorkflowExecutionDescription = await handle.describe() 
         if(details.status.name ===  WorkflowExecutionStatus.COMPLETED) 
             return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result()} 
         return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: []}

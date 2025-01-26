@@ -1,20 +1,23 @@
 import { Protocol } from "src/constants/enums";
+import { WorkflowExecutionStatus } from "src/workflow/workflow.types";
 
-export interface Credentials {
-    protocol: Protocol;
-    details: {
-        username: string;
-        hostname: string;
-        password?: string
-    }
-    workers: string[]
-}
-
-export interface FetchMountMsg{
-    configId: string;
-    credentials: Credentials[]
-}
-
+export interface ListPathWorkflowStatus {
+    status:WorkflowExecutionStatus;
+    id: string;
+    pending: any[]; 
+    completed: ListPathTask[];
+  }
+  
+  interface ListPathTask {
+    traceId: string;
+    status: "success";
+    protocolType: Protocol;
+    hostname: string;
+    workerId: string;
+    paths: string[];
+    message: string;
+  }
+  
 export type UserDetails = {
     trackId?: string;
     user: {
@@ -28,3 +31,18 @@ type Role = {
     projects: string[];
     permissions: string[];
 };
+
+export interface PathsMap {
+    NFS: {workers :  number, paths: string[]},
+    SMB: {workers :  number, paths: string[]}
+}
+
+export interface Credentials {
+    protocol: Protocol;
+    details: {
+        username: string;
+        hostname: string;
+        password?: string
+    }
+    workers: string[]
+}

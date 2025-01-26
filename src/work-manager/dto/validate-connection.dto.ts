@@ -32,7 +32,7 @@ class FileServer {
   protocols: Protocol[];
 }
 
-class Options {
+export class Options {
   @ApiProperty({ description: 'Timeout for workflow execution', default: '60s', required: false })
   @IsOptional()
   @IsString()
@@ -51,7 +51,7 @@ class Options {
   @ApiProperty({ description: 'Delay before starting the workflow', default: '10s', required: false })
   @IsOptional()
   @IsString()
-  startDelay: string = '10s';
+  startDelay: string = '1s';
 }
 
 export class CreateRequestDto {

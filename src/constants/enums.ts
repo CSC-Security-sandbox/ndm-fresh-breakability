@@ -46,5 +46,5 @@ export enum WorkFlowType {
 
 export enum WorkFlows{
     VALIDATE_CONNECTION = 'ValidateConnectionsWorkflow',
-    LIST_PATHS = 'listPathsWorkflow'
+    LIST_PATHS = 'ListPathsWorkflow'
 }
