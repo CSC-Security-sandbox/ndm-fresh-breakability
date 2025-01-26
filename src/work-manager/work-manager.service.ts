@@ -6,8 +6,9 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { retry, timer } from 'rxjs';
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
-import Logger from 'src/logger/logging';
+
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
+import { Logger } from 'src/logger/logger.service';
 
 
 @Injectable()
@@ -19,11 +20,11 @@ export class WorkManagerService {
     private connection: NativeConnection = null;
     private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
-    readonly logger = Logger.getLogger();
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
+        @Inject(Logger) private readonly logger: Logger,
     ) {
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}/${this.configService.get('worker.workerId')}`;
         this.workerId = this.configService.get('workers.workerId');
@@ -54,9 +55,7 @@ export class WorkManagerService {
                 retry({
                     count: 3,
                     delay: (error, retryCount) => {
-                        this.logger.warn(
-                        `Retrying to fetch configurations. Attempt: ${retryCount}`,
-                        );
+                        this.logger.warn(`Retrying to fetch configurations. Attempt: ${retryCount}`);
                         return timer(2000);
                     },
                 }),
@@ -97,7 +96,7 @@ export class WorkManagerService {
             configsToStart.delete(id)
             const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
-            this.activeWorkers.set(id,null); // remove after startWorker
+            this.activeWorkers.set(id,null); 
         }
     }
 

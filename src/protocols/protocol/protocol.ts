@@ -1,12 +1,12 @@
 import { exec } from "child_process";
 import { WorkersConfig } from "src/config/app.config";
-import Logger from "src/logger/logging";
+
+import { Logger } from "src/logger/logger.service";
 import { ProtocolPayload } from "./protocol.type";
-import { rejects } from "assert";
 
 
 export abstract class Protocol {
-    protected logger = Logger.getLogger();
+    protected logger = new  Logger();
     protected workerId = WorkersConfig.get('workerId');
     protected baseMountDir = WorkersConfig.get('baseMountDir');
     protected platform: NodeJS.Platform = WorkersConfig.get('platform');

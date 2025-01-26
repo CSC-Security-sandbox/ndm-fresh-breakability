@@ -27,7 +27,7 @@ export class NFSProtocol extends Protocol {
         client.end();
         return 'Connection established';
     } catch (error) {
-        this.logger.error('Error during connection:', error.message);
+        this.logger.error(`Error during connection: ${error.message}`);
         throw new Error(handleConnectionError(error, options.hostname, 2049));
     } finally {
         client.destroy();

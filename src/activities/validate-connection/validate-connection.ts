@@ -1,15 +1,15 @@
 
 import { WorkersConfig } from 'src/config/app.config';
-import Logger from 'src/logger/logging';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from 'src/protocols/protocol/protocol';
+import { Logger } from 'src/logger/logger.service';
 
 export async function validate(
   traceId: string,
   protocolType: string,
   payload: any,
 ): Promise<any> {
-  const logger = Logger.getLogger();
+  const logger = new Logger();
   const workerId = WorkersConfig.get('workerId');
   logger.info(`[${traceId}] Validating connection for ${payload.hostname} of type ${protocolType} from ${workerId}`,);
 

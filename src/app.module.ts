@@ -5,11 +5,13 @@ import appConfig, { WorkersConfig } from './config/app.config';
 import commandConfig, { CommandConfig } from './config/command.config';
 import temporalConfig from './config/temporal.config';
 import { WorkManagerModule } from './work-manager/work-manager.module';
+import { LoggerModule } from './logger/logger.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ load: [appConfig, commandConfig, temporalConfig] }),
-    WorkManagerModule
+    WorkManagerModule,
+    LoggerModule
   ],
   providers: [WorkersConfig, CommandConfig],
 })
