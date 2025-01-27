@@ -26,7 +26,7 @@ export class RedisUtils {
 
     logger.info(`Connecting to Redis at ${redisClientOptions.url}`);
     this.client = createClient(redisClientOptions);
-    this.client.connect();
+    this.client = await this.client.connect();
     this.client.on('error', (error) => {
       logger.error(`Redis connection error: ${error}`);
     });
