@@ -41,11 +41,13 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     taskStats: { numMessages: 0, lastId: '0-0' } };
     console.log('>> Deserialized:', info);
     jobContext.jobConfig = JSON.parse(info.jobConfig);
+    jobContext.jobRunStatus = info.jobRunStatus;
+    jobContext.jobRunId = info.jobRunId;
     jobContext.filesInfo = new RedisFileCollection(jobRunId, info.filesInfo.numMessages, info.filesInfo.lastId, this.redisClient);
     jobContext.dirsInfo = new RedisDirectoryCollection(jobRunId, info.dirsInfo.numMessages, info.dirsInfo.lastId, this.redisClient);
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
-    jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, 0, '0-0', this.redisClient);
+    jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
     return jobContext;
   }
 }
