@@ -23,7 +23,7 @@ export enum SocketEvents{
 }
 
 
-export enum RequestTaskType {
+export enum TaskType {
     VALIDATE_CONNECTION = 'VALIDATE_CONNECTION',
     LIST_PATHS='LIST_PATHS',
 }

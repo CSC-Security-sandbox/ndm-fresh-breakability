@@ -16,7 +16,7 @@ export class InventoryEntity extends Base {
     id: string;
 
     @ApiProperty({ description: 'Path from where inventory has been discovered' })
-    @Column({ name: 'path',type:'text', nullable: false })
+    @Column({ name: 'path',type:'text' })
     path: string;
 
     @ApiProperty({ description: 'Is Directory' })
@@ -68,7 +68,7 @@ export class InventoryEntity extends Base {
     accessTime: Timestamp;
 
     @ApiProperty({ description: 'File Permission' })
-    @Column({ name: 'file_permission', type: 'text' })    
+    @Column({ name: 'file_permission' })    
     filePermission: string;
 
     @ApiProperty({ description: 'File Server Exports/Shared Path ID' })
