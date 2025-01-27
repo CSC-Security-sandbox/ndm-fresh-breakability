@@ -21,7 +21,7 @@ export class TaskEntity  {
   jobRunId: string;
 
   @ApiProperty({ description: 'Task status' })
-  @Column({ type: 'varchar', name:'status' })
+  @Column({ type: 'enum', enum: TaskStatus, name:'status' })
   status: TaskStatus;
 
   @ApiProperty({ description: 'Task type' })

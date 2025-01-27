@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
-import { Operations, ResponseStatus, TaskType } from 'src/constants/status';
+import { Operations, ResponseStatus, RequestTaskType } from 'src/constants/status';
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { WorkerEntity } from './worker.entity';
@@ -13,7 +13,7 @@ export class RequestTrackEntity extends Base {
 
   @ApiProperty({ description: 'Type of the request' })
   @Column({ type: 'text', name:'task_type',  nullable: false})
-  taskType: TaskType;
+  taskType: RequestTaskType;
 
   @ApiProperty({ description: 'Data' })
   @Column({ type: 'text', nullable: true,  name:'response' })
@@ -24,7 +24,7 @@ export class RequestTrackEntity extends Base {
   status: ResponseStatus;
 
   @ApiProperty({ description: 'Operation of the request',  name:'operation'  })
-  @Column({ type: 'varchar', nullable: false })
+  @Column({ type: 'enum', enum: Operations, nullable: false })
   operation: Operations;
 
   @ApiProperty({ description: 'Worker ID' })
