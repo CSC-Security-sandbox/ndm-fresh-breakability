@@ -16,6 +16,7 @@ describe('ConfigurationController', () => {
     getAllConfig: jest.fn(),
     getConfigById: jest.fn(),
     updateConfiguration: jest.fn(),
+    refreshConfig: jest.fn(),
     remove: jest.fn(),
   };
 
@@ -140,6 +141,7 @@ describe('ConfigurationController', () => {
         }
        }
 
+      jest.spyOn(service, 'refreshConfig').mockReturnValue({} as any)
       mockConfigurationService.updateConfiguration.mockResolvedValue(updatedConfig);
 
       const result = await controller.update(configId, updateConfigDTO, user);

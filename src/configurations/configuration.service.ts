@@ -178,7 +178,7 @@ export class ConfigurationService {
             });
         
             const update = await this.configEntity.save(config);
-            this.refreshConfig(update.id, traceId)
+         
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
                 pathId: createConfig?.workingDirectory?.pathId,
@@ -186,9 +186,8 @@ export class ConfigurationService {
                 configId: update.id,
                 createdBy: userId
             });
-        
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-
+            this.refreshConfig(update.id, traceId)
             return update;
         }catch(error) {
             this.logger.error(`Error Occurred during creating Config ${error}`)
