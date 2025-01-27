@@ -208,33 +208,34 @@ async function startTasksConsumer(jobRunId: string, groupName: string) {
         }
     }  
 }
+//for local testing
 
-(async () => {
-    const args = process.argv.slice(2);
-    if (args.length === 0) {
-        throw new Error('Missing job run id');
-    }
-    const type = args[0];
-    const jobRunId = args[1];
+// (async () => {
+//     const args = process.argv.slice(2);
+//     if (args.length === 0) {
+//         throw new Error('Missing job run id');
+//     }
+//     const type = args[0];
+//     const jobRunId = args[1];
 
-    if (type === 'files-producer') {
-        await startFilesProducer(jobRunId);
-    } else if (type === 'tasks-producer') {
-        await startTasksProducer(jobRunId);
-    } else if (type === 'group-files-consumer') {
-        const groupName = args[2];
-        await startGroupFilesConsumer(jobRunId, groupName);
-    } else if (type === 'files-consumer') {
-        const groupName = args[2];
-        await startFilesConsumer(jobRunId, groupName);
-    } else if (type === 'group-tasks-consumer') {
-        const groupName = args[2];
-        await startGroupTasksConsumer(jobRunId, groupName);
-    } else if (type === 'tasks-consumer') {
-        const groupName = args[2];
-        await startTasksConsumer(jobRunId, groupName);
-    } else {
-        throw new Error(`Unknown job type: ${type}`);
-    }
+//     if (type === 'files-producer') {
+//         await startFilesProducer(jobRunId);
+//     } else if (type === 'tasks-producer') {
+//         await startTasksProducer(jobRunId);
+//     } else if (type === 'group-files-consumer') {
+//         const groupName = args[2];
+//         await startGroupFilesConsumer(jobRunId, groupName);
+//     } else if (type === 'files-consumer') {
+//         const groupName = args[2];
+//         await startFilesConsumer(jobRunId, groupName);
+//     } else if (type === 'group-tasks-consumer') {
+//         const groupName = args[2];
+//         await startGroupTasksConsumer(jobRunId, groupName);
+//     } else if (type === 'tasks-consumer') {
+//         const groupName = args[2];
+//         await startTasksConsumer(jobRunId, groupName);
+//     } else {
+//         throw new Error(`Unknown job type: ${type}`);
+//     }
 
-})();
+// })();
