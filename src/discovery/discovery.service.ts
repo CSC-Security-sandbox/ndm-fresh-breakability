@@ -69,6 +69,26 @@ export class DiscoveryService {
     }
   }
 
+  async createMigrationReportFile(jobRunId: string, reportType: string): Promise<any> {
+    this.logger.log(
+      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+    );
+    try {
+      const jobRunUUID = `${jobRunId}::UUID`;
+      const reportLocation = `/migration_coc_reports::TEXT`
+      await this.inventoryRepo.query(
+        "CALL migrateadmin.generate_migration_coc_report($1, $2);",
+        [jobRunUUID, reportLocation]
+      );
+      return { message: "Report generated successfully" };
+    } catch (error) {
+      this.logger.log(error);
+      throw new InternalServerErrorException(
+        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+      );
+    }
+  }
+
   formatAndWriteToFile(data: any[], filePath: string): void {
     const resultRow: { [key: string]: string | number } = {};
 

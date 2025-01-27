@@ -139,6 +139,7 @@ export class DiscoveryController {
       throw new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY');
     }
 
+    if(reportType === 'MIGRATION_COC') return this.discoveryService.createMigrationReportFile(jobRunId, reportType);
     return this.discoveryService.createReportFile(jobRunId, reportType);
   }
 
