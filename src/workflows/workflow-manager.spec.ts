@@ -1,12 +1,18 @@
 import { WorkflowManager } from './workflow-manager';
 import { WorkFlows } from 'src/work-manager/work-manager.types';
 import { ValidateConnectionsWorkflow } from './validate-connection/validate-connection.workflow';
+import { ListPathsWorkflow } from './workflows';
 
 describe('WorkflowManager', () => {
   describe('createWorkflowInstance', () => {
     it('should return the ValidateConnectionsWorkflow class when the name is VALIDATE_CONNECTION', () => {
       const workflowInstance = WorkflowManager.createWorkflowInstance(WorkFlows.VALIDATE_CONNECTION);
       expect(workflowInstance).toBe(ValidateConnectionsWorkflow);
+    });
+
+    it('should return the ListPathsWorkflow class when the name is LIST_PATHS', () => {
+      const workflowInstance = WorkflowManager.createWorkflowInstance(WorkFlows.LIST_PATHS);
+      expect(workflowInstance).toBe(ListPathsWorkflow);
     });
 
     it('should throw an error when the workflow name is not found', () => {

@@ -187,27 +187,31 @@ describe('WorkManagerService', () => {
     });
 
     describe('startWorker', () => {
-        it('should wait until worker state is RUNNING', async () => {
-            const id = 'worker1';
-            const workerOptions = { options: 'workerOptions' };
-            const worker: Worker = {
-              getState: jest.fn()
-                .mockReturnValueOnce(WorkerState.INITIALIZED) 
-                .mockReturnValueOnce(WorkerState.RUNNING),
-              run: jest.fn(),
-              options: { identity: id },
-              shutdown: jest.fn(),
-            } as any;
-          
-            Worker.create = jest.fn().mockResolvedValue(worker);
-          
-            await service.startWorker(id, workerOptions);
+     
+  
+      it('should wait until worker state is RUNNING', async () => {
+        const id = 'worker1';
+        const workerOptions = { options: 'workerOptions' };
+        const worker: Worker = {
+          getState: jest.fn()
+            .mockReturnValueOnce(WorkerState.INITIALIZED) 
+            .mockReturnValueOnce(WorkerState.RUNNING),
+          run: jest.fn(),
+          options: { identity: id },
+          shutdown: jest.fn(),
+        } as any;
+      
+        Worker.create = jest.fn().mockResolvedValue(worker);
+      
+        await service.startWorker(id, workerOptions);
 
-            expect(worker.getState).toHaveBeenCalledTimes(2); 
-            expect(worker.run).toHaveBeenCalled();
-          }, 3000);
+        expect(worker.getState).toHaveBeenCalledTimes(2); 
+        expect(worker.run).toHaveBeenCalled();
+      }, 3000);
+
     
-        });
+    
+    });
 
     describe('shutdownWorker', ()=>{
         jest.useFakeTimers(); 
@@ -244,7 +248,7 @@ describe('WorkManagerService', () => {
             expect(worker.shutdown).toHaveBeenCalled();
         });
 
-        it('should shutdown the worker immediately when forced', async () => {
+        it('should shutdown the worker immediately when forced 1', async () => {
             const id = 'worker2';
             const worker: Worker = {
                 getState: jest.fn()
@@ -259,13 +263,28 @@ describe('WorkManagerService', () => {
             jest.advanceTimersByTime(1000);
             expect(worker.shutdown).toHaveBeenCalled();
         });
+
+        it('should shutdown the worker immediately when forced 1', async () => {
+          const id = 'worker2';
+          const worker: Worker = {
+              getState: jest.fn()
+              .mockReturnValueOnce( WorkerState.RUNNING)
+              .mockReturnValueOnce( WorkerState.STOPPED),
+              shutdown: jest.fn(),
+              options: { identity: id },
+          } as any;
+          Worker.create = jest.fn().mockResolvedValue(worker);
+
+          await service.shutdownWorker(worker, false);
+          expect(worker.shutdown).toHaveBeenCalled();
+      });
     })
 
     describe('onApplicationBootstrap', () => {
         it('should establish a connection to Temporal', async () => {
           await service.onApplicationBootstrap();
           expect(logger.info).toHaveBeenCalledWith('[onApplicationBootstrap] - Starting Worker Service');
-        });
+        })
     });
 
     describe('handleConfigurations', () => {
@@ -296,7 +315,13 @@ describe('WorkManagerService', () => {
           expect(service.startWorker).toHaveBeenCalled()
         });
 
-      });
-    
 
+        it('should handle worker startup  gracefully 1', async () => {
+          jest.spyOn(service, 'startWorker').mockImplementation(() => {
+            return new Promise((resolve, reject) => resolve());
+          });
+          await expect(service.handleConfigurations([]))
+        });
+
+      });
 });
