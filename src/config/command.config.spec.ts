@@ -1,4 +1,5 @@
-import cmdConfig from './command.config';
+import { ConfigService } from '@nestjs/config';
+import cmdConfig, { CommandConfig } from './command.config';
 
 describe('Command Config', () => {
   const originalEnv = process.env;
@@ -137,4 +138,48 @@ describe('Command Config', () => {
       },
     });
   });
+});
+it('should return undefined for non-existent SMB command', () => {
+    const configService = new ConfigService();
+    const commandConfig = new CommandConfig(configService);
+    jest.spyOn(configService, 'get').mockReturnValue(undefined);
+
+    const result = CommandConfig.getSMBCommand('win32', 'nonExistentCommand');
+    expect(result).toBeUndefined();
+});
+
+it('should return undefined for non-existent NFS command', () => {
+    const configService = new ConfigService();
+    const commandConfig = new CommandConfig(configService);
+    jest.spyOn(configService, 'get').mockReturnValue(undefined);
+
+    const result = CommandConfig.getNFSCommand('linux', 'nonExistentCommand');
+    expect(result).toBeUndefined();
+});
+
+it('should return correct SMB command for win32 platform', () => {
+    const configService = new ConfigService();
+    const commandConfig = new CommandConfig(configService);
+    jest.spyOn(configService, 'get').mockReturnValue('net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}');
+
+    const result = CommandConfig.getSMBCommand('win32', 'validateCred');
+    expect(result).toBe('net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}');
+});
+
+it('should return correct NFS command for linux platform', () => {
+    const configService = new ConfigService();
+    const commandConfig = new CommandConfig(configService);
+    jest.spyOn(configService, 'get').mockReturnValue('showmount -e ${HOST}');
+
+    const result = CommandConfig.getNFSCommand('linux', 'listPath');
+    expect(result).toBe('showmount -e ${HOST}');
+});
+
+it('should return undefined for unset optional commands', () => {
+    const configService = new ConfigService();
+    const commandConfig = new CommandConfig(configService);
+    jest.spyOn(configService, 'get').mockReturnValue(undefined);
+
+    const result = CommandConfig.getNFSCommand('darwin', 'unmountPath');
+    expect(result).toBeUndefined();
 });
