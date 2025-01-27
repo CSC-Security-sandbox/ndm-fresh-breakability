@@ -44,6 +44,7 @@ export class RedisJobContext extends JobContext {
       this.dirsInfo,
       this.errorsInfo,
       this.tasksInfo,
+      this.taskStats
     ]) {
         this.logger.info(`Initializing collection: ${collection.streamKey}`);
         await collection.init();  
