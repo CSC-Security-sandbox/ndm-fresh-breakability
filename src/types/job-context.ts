@@ -120,7 +120,7 @@ export abstract class JobContext {
   serialize(): string {
     const info = {
       jobRunId: this.jobRunId,
-      jobConfig: JSON.stringify(this.jobConfig),
+      jobConfig: this.jobConfig,
       filesInfo: this.filesInfo
         ? {
             numMessages: this.filesInfo.numMessages,
