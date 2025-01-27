@@ -101,7 +101,7 @@ export class RedisTaskStatsCollection
   ) {
     super(
       jobRunId,
-      JobUtils.getRedisKey(jobRunId, 'tasks'),
+      JobUtils.getRedisKey(jobRunId, 'tasks-stats'),
       numMessages,
       lastId,
       redisClient,
