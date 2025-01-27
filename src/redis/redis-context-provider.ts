@@ -40,7 +40,7 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     tasksInfo: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' } };
     console.log('>> Deserialized:', info);
-    jobContext.jobConfig = JSON.parse(info.jobConfig);
+    jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
     jobContext.jobRunId = info.jobRunId;
     jobContext.filesInfo = new RedisFileCollection(jobRunId, info.filesInfo.numMessages, info.filesInfo.lastId, this.redisClient);
