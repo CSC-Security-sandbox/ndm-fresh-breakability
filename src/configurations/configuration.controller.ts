@@ -22,11 +22,9 @@ export class ConfigurationController{
     @ApiBody({ description: 'Configuration data', type: ConfigDTO })
     async createConfiguration(
         @Body() createConfigurationDto: ConfigDTO,
-        @Req() req: any
-        // @Request() userDetails: UserDetails
+        @Request() userDetails: UserDetails
     ) {
-        // const createdConfiguration = await this.configurationService.createConfiguration(createConfigurationDto,  userDetails.user.id);
-        return  await this.configurationService.createConfiguration(createConfigurationDto, req?.trackId,req?.trackId)
+        return  await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id,userDetails?.trackId)
     }
 
 
@@ -36,7 +34,7 @@ export class ConfigurationController{
         description: 'Invalid pagination parameters.'
     })
     @ApiBearerAuth()
-    // @Auth(Permission.ViewConfig)
+    @Auth(Permission.ViewConfig)
     @Get('/')
     async getAllConfiguration(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findAllConfigPageDto: FindAllConfigPageDto) {
         return await this.configurationService.getAllConfig(findAllConfigPageDto);
@@ -46,7 +44,7 @@ export class ConfigurationController{
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBearerAuth()
-    // @Auth(Permission.ViewConfig)
+    @Auth(Permission.ViewConfig)
     @Get(':id')
     async getConfiguration(@Param('id') id: string) {
         return await this.configurationService.getConfigById(id)
@@ -58,16 +56,14 @@ export class ConfigurationController{
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBody({ description: 'Configuration data to update', type: ConfigDTO })
     @ApiBearerAuth()
-    // @Auth(Permission.ManageConfig)
+    @Auth(Permission.ManageConfig)
     @Put(':id')
     async update(
         @Param('id') id: string,
         @Body() updateConfig: ConfigDTO,
-        // @Request() userDetails: UserDetails
-        @Req() req: any
+        @Request() userDetails: UserDetails
     ) {
-        // return await this.configurationService.updateConfiguration(id,updateConfig, userDetails.user.id);
-        return await this.configurationService.updateConfiguration(id,updateConfig, id,req?.trackId)
+        return await this.configurationService.updateConfiguration(id,updateConfig, userDetails.user.id, userDetails?.trackId)
     }
 
     @ApiOperation({ summary: 'Delete Configuration by ID' })
@@ -84,8 +80,8 @@ export class ConfigurationController{
     @ApiOperation({ summary: 'Get Workflow Result' }) 
     @ApiResponse({ status: 200, description: 'Request created successfully' })
     @Get('/refresh/:id')
-    async refreshConfig(@Param('id') id: string, @Req() req: any) {
-        return await this.configurationService.refreshConfig(id,  req?.trackId)
+    async refreshConfig(@Param('id') id: string,  @Request() userDetails: UserDetails) {
+        return await this.configurationService.refreshConfig(id, userDetails?.trackId)
     }
 
 }
