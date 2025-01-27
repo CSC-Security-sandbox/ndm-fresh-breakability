@@ -1,10 +1,10 @@
 {
   "main": "dist/index.js",
   "name": "@NetApp-Cloud-DataMigrate/jobs-lib", 
-   "publishConfig": {    "registry": "https://npm.pkg.github.com/@NetApp-Cloud-DataMigrate"  }, 
-   "author": "NetApp-Cloud-DataMigrater",
-   "types": "dist/index.d.ts",
-   "version": "1.0.0",
+  "publishConfig": {    "registry": "https://npm.pkg.github.com/@NetApp-Cloud-DataMigrate"  }, 
+  "author": "NetApp-Cloud-DataMigrater",
+  "types": "dist/index.d.ts",
+  "version": "1.0.0",
   "scripts": {
     "build": "tsc",
     "run": "tsc && node dist/index.js",
