@@ -1,0 +1,39 @@
+{
+  "main": "dist/index.js",
+  "name": "@NetApp-Cloud-DataMigrate/jobs-lib", 
+   "publishConfig": {    "registry": "https://npm.pkg.github.com/@NetApp-Cloud-DataMigrate"  }, 
+   "author": "NetApp-Cloud-DataMigrater",
+   "types": "dist/index.d.ts",
+   "version": "0.0.1",
+  "scripts": {
+    "build": "tsc",
+    "run": "tsc && node dist/index.js",
+    "files-producer": "nodemon --exec ts-node src/index.ts files-producer ac9e52f9-b8eb-4218-a73c-9457749d9f60",
+    "tasks-producer": "nodemon --exec ts-node src/index.ts tasks-producer ac9e52f9-b8eb-4218-a73c-9457749d9f60",
+    "group-files-consumer-1": "nodemon --exec ts-node src/index.ts group-files-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 files-group-1",
+    "group-files-consumer-2": "nodemon --exec ts-node src/index.ts group-files-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 files-group-2",
+    "files-consumer-1": "nodemon --exec ts-node src/index.ts files-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 files-read-1",
+    "files-consumer-2": "nodemon --exec ts-node src/index.ts files-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 files-read-2",
+    "group-tasks-consumer-1": "nodemon --exec ts-node src/index.ts group-tasks-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 tasks-group-1",
+    "group-tasks-consumer-2": "nodemon --exec ts-node src/index.ts group-tasks-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 tasks-group-2",
+    "tasks-consumer-1": "nodemon --exec ts-node src/index.ts tasks-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 tasks-read-1",
+    "tasks-consumer-2": "nodemon --exec ts-node src/index.ts tasks-consumer ac9e52f9-b8eb-4218-a73c-9457749d9f60 tasks-read-2",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
+  },
+  "dependencies": {
+    "msgpack-lite": "^0.1.26",
+    "redis": "^4.7.0",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/msgpack-lite": "^0.1.11",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.0"
+  }
+}

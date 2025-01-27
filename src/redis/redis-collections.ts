@@ -1,0 +1,110 @@
+import { DMError, FileInfo, Task, TaskStats } from '../types/metadata-types';
+import {
+  DirectoryCollection,
+  ErrorCollection,
+  FileCollection,
+  TaskCollection,
+  TaskStatsCollection,
+} from '../types/stream-collection';
+import { JobUtils } from '../utils/job-utils';
+import { RedisStreamCollection } from './redits-stream-collection';
+
+export class RedisFileCollection
+  extends RedisStreamCollection<FileInfo>
+  implements FileCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'files'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisErrorCollection
+  extends RedisStreamCollection<DMError>
+  implements ErrorCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'errors'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisTaskCollection
+  extends RedisStreamCollection<Task>
+  implements TaskCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisDirectoryCollection
+  extends RedisStreamCollection<FileInfo>
+  implements DirectoryCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'dirs'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisTaskStatsCollection
+  extends RedisStreamCollection<TaskStats>
+  implements TaskStatsCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
