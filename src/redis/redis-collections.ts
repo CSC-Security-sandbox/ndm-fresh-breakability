@@ -7,7 +7,7 @@ import {
   TaskStatsCollection,
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
-import { RedisStreamCollection } from './redits-stream-collection';
+import { RedisStreamCollection } from './redis-stream-collection';
 
 export class RedisFileCollection
   extends RedisStreamCollection<FileInfo>
