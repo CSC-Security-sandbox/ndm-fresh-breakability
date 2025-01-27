@@ -11,7 +11,7 @@ export async function listPath(
 ): Promise<any> {
   const logger = new Logger();
   const workerId = WorkersConfig.get('workerId');
-  logger.info(`[${traceId}] Validating connection for ${payload.hostname} of type ${protocolType} from ${workerId}`,);
+  logger.info(`[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${workerId}`,);
 
   const response = {
     traceId: traceId,
@@ -35,7 +35,7 @@ export async function listPath(
       hostname: payload.hostname,
       workerId: workerId,
       paths: [],
-      message: `Failed to validate connection for ${payload.hostname} of type ${protocolType}: ${error}`,
+      message: `Failed to List Path for ${payload.hostname} of type ${protocolType}: ${error}`,
     };
   }
 }

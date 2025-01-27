@@ -1,6 +1,6 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
-import { ValidateWorkerConnectionWorkflow } from "./validate-worker-connection.workflow";
 import { WorkFlows } from "src/work-manager/work-manager.types";
+import { ValidateWorkerConnectionWorkflow } from "./validate-worker-connection.workflow";
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);

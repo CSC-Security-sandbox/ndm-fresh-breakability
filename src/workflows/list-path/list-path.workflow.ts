@@ -34,7 +34,7 @@ export const ListPathsWorkflow = async ({traceId, payload, options}) => {
   
     const result = responseArray.flat();
     log(
-      traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
+      traceId, `ListPathsWorkflow response: ${JSON.stringify(result)}`,
     );
     return result;
 }
