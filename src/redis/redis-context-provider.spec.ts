@@ -23,6 +23,7 @@ describe('RedisJobContextProvider', () => {
     logger = {
       info: jest.fn(),
       warn: jest.fn(),
+      debug: jest.fn(),
     } as unknown as jest.Mocked<Logger>;
     (Logger.getLogger as jest.Mock).mockReturnValue(logger);
     jobContextProvider = new RedisJobContextProvider(redisClient);

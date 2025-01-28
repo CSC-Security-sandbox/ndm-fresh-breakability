@@ -44,7 +44,7 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
                                                     tasksInfo: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' } };
-    console.log('>> Deserialized:', info);
+    this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
     jobContext.jobRunId = info.jobRunId;
