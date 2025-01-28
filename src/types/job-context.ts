@@ -151,10 +151,11 @@ export abstract class JobContext {
           }
         : { numMessages: 0, lastId: '0-0' },
       taskStats: this.taskStats
-      ? {
-          numMessages: this.taskStats.numMessages,
-          lastId: this.taskStats.lastId,
-        } : { numMessages: 0, lastId: '0-0' }, 
+        ? {
+            numMessages: this.taskStats.numMessages,
+            lastId: this.taskStats.lastId,
+          }
+        : { numMessages: 0, lastId: '0-0' },
     };
     return JSON.stringify(info);
   }
