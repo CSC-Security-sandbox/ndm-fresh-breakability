@@ -35,27 +35,4 @@ describe('getWorkerIdentity', () => {
     const result = getWorkerIdentity(config);
     expect(result).toBe('worker123/configA-');
   });
-
-//   it('should handle undefined taskQueueId gracefully when dynamicTaskQueue is true', () => {
-//     const config: WorkerConfiguration = {
-//       workerId: 'worker123',
-//       configName: 'configA',
-//       dynamicTaskQueue: true,
-//       taskQueueId: undefined,
-//     };
-//     const result = getWorkerIdentity(config);
-//     expect(result).toBe('worker123/configA-');
-//   });
-
-//   it('should throw an error if workerId or configName is missing', () => {
-//     const config = {
-//       workerId: '',
-//       configName: 'configA',
-//       dynamicTaskQueue: false,
-//     } as WorkerConfiguration;
-
-//     expect(() => getWorkerIdentity(config)).toThrowError(
-//       'Invalid workerId or configName'
-//     );
-//   });
 });

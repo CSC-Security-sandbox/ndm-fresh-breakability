@@ -2,6 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService, registerAs } from '@nestjs/config';
 
 
+export enum CommandPattern{
+    VALIDATE_CRED='validateCred',
+    LIST_PATHS='listPath',
+    CHECK_MOUNT_PATH='checkMountPath',
+    UNMOUNT_PATH='unmountPath',
+    VERSION_DETAIL='versionDetails',
+}
+
 // @types 
 export interface Commands{
     nfs : ProtocolCommands,

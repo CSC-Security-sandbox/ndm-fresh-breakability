@@ -1,4 +1,4 @@
-import { CommandConfig } from 'src/config/command.config';
+import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
@@ -8,9 +8,7 @@ import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseW
 export class SMBProtocol extends Protocol {
 
   protected getCommandPattern( key : string): string {
-    const ans  = CommandConfig.getSMBCommand(this.platform, key)
-    this.logger.info(`Command pattern for ${key} is ${ans}`)
-    return ans
+    return CommandConfig.getSMBCommand(this.platform, key)
   }
 
   // --------------------------- Validate Connection -------------------------- //
@@ -25,7 +23,7 @@ export class SMBProtocol extends Protocol {
       traceId,
       ProtocolTypes.SMB,
       payload,
-      this.getCommandPattern('versionDetails'),
+      this.getCommandPattern(CommandPattern.VERSION_DETAIL),
       'SMB Get Protocols',
     ).then((response) => {
       this.logger.info(`[${traceId}] ${response.message}`);
@@ -41,7 +39,7 @@ export class SMBProtocol extends Protocol {
         traceId,
         ProtocolTypes.SMB,
         payload,
-        this.getCommandPattern('listPath'),
+        this.getCommandPattern(CommandPattern.LIST_PATHS),
         'SMB Show Shares',
       )
       this.logger.info(`[${traceId}] ${response.message} ${response.status}`);
@@ -64,7 +62,7 @@ export class SMBProtocol extends Protocol {
         traceId,
         ProtocolTypes.SMB,
         payload,
-        this.getCommandPattern('validateCred'),
+        this.getCommandPattern(CommandPattern.VALIDATE_CRED),
         'Connect SMB via Cred',
       )
       if(result?.toLowerCase().includes("successfully.")){
@@ -72,7 +70,7 @@ export class SMBProtocol extends Protocol {
           traceId,
           ProtocolTypes.SMB,
           payload,
-          this.getCommandPattern('listPath'),
+          this.getCommandPattern(CommandPattern.LIST_PATHS),
           'SMB Show Shares',
         ).then((response) => {
           this.logger.info(`[${traceId}] ${response.message}`);
@@ -85,6 +83,7 @@ export class SMBProtocol extends Protocol {
         throw new Error(lines.length > 1 ? lines.slice(1).join('\n') : '')
     }
   }
+
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<any> {
     switch(this.platform){

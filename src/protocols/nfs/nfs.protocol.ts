@@ -1,6 +1,6 @@
 
 
-import { CommandConfig } from 'src/config/command.config';
+import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
@@ -43,7 +43,7 @@ export class NFSProtocol extends Protocol {
       traceId,
       ProtocolTypes.NFS,
       payload,
-      this.getCommandPattern('versionDetails'),
+      this.getCommandPattern(CommandPattern.VERSION_DETAIL),
       'NFS Get Protocols',
     ).then((response) => {
       this.logger.info(`[${traceId}] ${response.message}`);
@@ -61,7 +61,7 @@ export class NFSProtocol extends Protocol {
       traceId,
       ProtocolTypes.NFS,
       payload,
-      this.getCommandPattern('listPath'),
+      this.getCommandPattern(CommandPattern.LIST_PATHS),
       'NFS Show Mount',
     ).then((response) => {
       this.logger.info(`[${traceId}] ${response.message}`);
