@@ -41,6 +41,11 @@ export abstract class JobContext {
     return this.stats.get(statName)!;
   }
 
+  setStat(statName, value: number): number {
+    this.stats.set(statName, value);
+    return value;
+  }
+
   getStat(statName: string): number {
     return this.stats.get(statName) || 0;
   }
