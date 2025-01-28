@@ -41,6 +41,11 @@ export abstract class JobContext {
     return this.stats.get(statName)!;
   }
 
+  setStat(statName, value: number): number {
+    this.stats.set(statName, value);
+    return value;
+  }
+
   getStat(statName: string): number {
     return this.stats.get(statName) || 0;
   }
@@ -145,6 +150,11 @@ export abstract class JobContext {
             lastId: this.tasksInfo.lastId,
           }
         : { numMessages: 0, lastId: '0-0' },
+      taskStats: this.taskStats
+      ? {
+          numMessages: this.taskStats.numMessages,
+          lastId: this.taskStats.lastId,
+        } : { numMessages: 0, lastId: '0-0' }, 
     };
     return JSON.stringify(info);
   }
