@@ -100,12 +100,29 @@ unseal_vault() {
 
 restart_statefulsets() {
     local services=("postgres-postgresql:postgres" "rabbitmq:rabbitmq" "keycloak:keycloak")
-    
+
     for service in "${services[@]}"; do
         IFS=':' read -r statefulset namespace <<< "$service"
-        log "Restarting $statefulset in namespace $namespace..."
-        retry $MAX_RETRIES "kubectl rollout restart statefulset $statefulset -n $namespace" || handle_failure "Failed to restart $statefulset"
-        retry $MAX_RETRIES "kubectl wait --namespace=\"$namespace\" --for=condition=Ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "$statefulset pods not ready"
+        
+        log "Restarting StatefulSet $statefulset in namespace $namespace..."
+
+        if ! retry $MAX_RETRIES "kubectl rollout restart statefulset $statefulset -n $namespace"; then
+            handle_failure "Failed to restart StatefulSet $statefulset in namespace $namespace"
+            continue
+        fi
+
+        log "Waiting for StatefulSet $statefulset rollout to complete in namespace $namespace..."
+        if ! retry $MAX_RETRIES "kubectl rollout status statefulset/$statefulset -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+            handle_failure "Rollout of StatefulSet $statefulset in namespace $namespace failed"
+            continue
+        fi
+
+        log "Waiting for all pods in StatefulSet $statefulset to become Ready in namespace $namespace..."
+        if ! retry $MAX_RETRIES "kubectl wait --namespace=\"$namespace\" --for=condition=Ready pod -l statefulset.kubernetes.io/pod-name=$statefulset --timeout=${WAIT_TIMEOUT}s"; then
+            handle_failure "Pods for StatefulSet $statefulset in namespace $namespace are not Ready"
+        else
+            log "StatefulSet $statefulset in namespace $namespace restarted successfully and all pods are Ready."
+        fi
     done
 }
 

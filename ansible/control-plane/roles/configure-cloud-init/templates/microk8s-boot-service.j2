@@ -1,6 +1,7 @@
 [Unit]
 Description=MicroK8s Boot Service (First Boot Only)
-After=network.target cloud-init.service
+After=network.target cloud-init.service snapd.service
+Requires=snapd.service
 
 [Service]
 Type=oneshot
