@@ -35,8 +35,19 @@ export class Logger implements LoggerService {
           filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
           datePattern: 'YYYY-MM-DD',
           maxFiles: '14d',
+          zippedArchive: true,
+          maxSize: '10m'
         }),
       ],
+      exceptionHandlers: [
+        new winston.transports.DailyRotateFile({
+          filename: `${Logger.logDir}/${Logger.workerId}-%DATE%_exception.log`,
+          datePattern: 'YYYY-MM-DD',
+          maxFiles: '14d',
+          zippedArchive: true,
+          maxSize: '10m'
+        })
+      ]
     });
 
     if (!Logger.isRuntimeInstalled) {
