@@ -111,3 +111,84 @@ describe('parseWindowsShares', () => {
         expect(result).toEqual([]);
     });
 });
+describe('parseProtocolVersions', () => {
+    it('should return an array of protocol versions', () => {
+        const output = '| smb-protocols:\n|     SMB2_02\n|     SMB2_10\n|_    SMB3_00';
+        const result = parseProtocolVersions(output);
+        expect(result).toEqual(['SMB2_02', 'SMB2_10', 'SMB3_00']);
+    });
+
+    it('should handle output with no protocols section', () => {
+        const output = 'Some random text';
+        const result = parseProtocolVersions(output);
+        expect(result).toEqual([]);
+    });
+
+    it('should handle output with empty protocols section', () => {
+        const output = '| smb-protocols:\n';
+        const result = parseProtocolVersions(output);
+        expect(result).toEqual([]);
+    });
+
+    it('should handle output with malformed protocols section', () => {
+        const output = '| smb-protocols:\n|     SMB2_02\n|_';
+        const result = parseProtocolVersions(output);
+        expect(result).toEqual(['SMB2_02']);
+    });
+});
+
+describe('parseLinMacShares', () => {
+    it('should return an empty array when input is empty', () => {
+        const result = parseLinMacShares('');
+        expect(result).toEqual([]);
+    });
+
+    it('should correctly parse and return shares starting with "/"', () => {
+        const input = 'Sharename\n---------\nIPC$\nprint$\nSMB1\nShare1\nShare2';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/Share1', '/Share2']);
+    });
+
+    it('should exclude irrelevant share names like IPC$, print$, SMB1', () => {
+        const input = 'Sharename\n---------\nIPC$\nprint$\nSMB1\nvalidShare1\nvalidShare2';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/validShare1', '/validShare2']);
+    });
+
+    it('should handle shares with special characters or spaces correctly', () => {
+        const input = 'Sharename\n---------\nMy Share 1\nMy-Share_2\nShare3';
+        const result = parseLinMacShares(input);
+        expect(result).toEqual(['/My', '/My-Share_2', '/Share3']);
+    });
+});
+
+describe('parseWindowsShares', () => {
+    it('should return an empty array when input is empty', () => {
+        const result = parseWindowsShares('');
+        expect(result).toEqual([]);
+    });
+
+    it('should correctly parse share names between "---" and "The command completed successfully"', () => {
+        const input = '---\nShare1\nShare2\nShare3\nThe command completed successfully';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['Share1', 'Share2', 'Share3']);
+    });
+
+    it('should exclude lines before and after the shares', () => {
+        const input = 'Some random text\n---\nShare1\nShare2\nThe command completed successfully\nSome other text';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['Share1', 'Share2']);
+    });
+
+    it('should handle multiline share names correctly', () => {
+        const input = '---\nShareName1\nShareName2\nThe command completed successfully';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual(['ShareName1', 'ShareName2']);
+    });
+
+    it('should return an empty array if no shares are found', () => {
+        const input = 'Some irrelevant text without any shares';
+        const result = parseWindowsShares(input);
+        expect(result).toEqual([]);
+    });
+});
