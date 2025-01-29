@@ -1,4 +1,4 @@
-import { Injectable, } from '@nestjs/common';
+import { Injectable,OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
@@ -6,7 +6,7 @@ import { StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types'
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
-export class WorkflowService {
+export class WorkflowService implements OnModuleDestroy{
     private logger : LoggerService
     private client: Client | null = null;
     private connection: Connection | null = null;
@@ -17,6 +17,7 @@ export class WorkflowService {
         ) {
          this.logger = this.loggerFactory.create(WorkflowService.name)
     }
+   
 
     private async getClient(): Promise<Client> {
         if (this.client) 
@@ -58,4 +59,16 @@ export class WorkflowService {
             return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result()} 
         return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: []}
     }
+
+    onModuleDestroy() {
+        try{
+            if(this.client) {
+                this.client.connection.close();
+                this.logger.log(`Closing client connection with temporal`)
+            }
+        }catch(error) {
+            this.logger.error(`Error while closing temporal connection : ${error}`)
+        }
+    }
+
 }
