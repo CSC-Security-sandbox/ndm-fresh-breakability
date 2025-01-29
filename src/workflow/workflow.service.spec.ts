@@ -162,5 +162,25 @@ describe('WorkflowService', () => {
   });
   
 
+  it('should close client connection if client exists', () => {
+    function setPrivateClient(value: any) {
+      Object.defineProperty(service, 'client', {
+          value,
+          writable: true,
+      });
+    }
+    const mockClient = {
+      connection: {
+          close: jest.fn(),
+      },
+    };
+
+    setPrivateClient(mockClient);
+
+    service.onModuleDestroy();
+
+    expect(mockClient.connection.close).toHaveBeenCalled();
+
+    });
 
 });
