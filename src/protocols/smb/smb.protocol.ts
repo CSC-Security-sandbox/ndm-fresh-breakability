@@ -13,7 +13,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- Validate Connection -------------------------- //
   async validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
-    return
+    await this.listPaths(traceId, payload)
   }
 
   // --------------------------- Get Protocol Versions -------------------------- //

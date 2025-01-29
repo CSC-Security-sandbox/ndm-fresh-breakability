@@ -14,27 +14,28 @@ async function log(traceId: string, message: string) {
  */
 export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) => {
   log( traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,);
-    const responseArray = await Promise.all(
-      payload.workerIds.map((workerId) =>
-        executeChild(ValidateWorkerConnectionWorkflow, {
-          args: [
-            {
-              traceId: traceId,
-              fileServer: payload.fileServer,
-            }
-          ],
-          workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}-${workerId}`,
-          taskQueue: `${workerId}-TaskQueue`,
-          ...options,
-          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
-        }),
-      ),
-    );
+  const responseArray = await Promise.all(
+    payload.workerIds.map((workerId) =>
+      executeChild(ValidateWorkerConnectionWorkflow, {
+        args: [
+          {
+            traceId: traceId,
+            fileServer: payload.fileServer,
+            feature: payload.feature
+          }
+        ],
+        workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}-${workerId}`,
+        taskQueue: `${workerId}-TaskQueue`,
+        ...options,
+        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        parentClosePolicy: ParentClosePolicy.TERMINATE,
+      }),
+    ),
+  );
   
-    const result = responseArray.flat();
-    log(
-      traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
-    );
-    return result;
+  const result = responseArray.flat();
+  log(
+    traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
+  );
+  return result;
 }
