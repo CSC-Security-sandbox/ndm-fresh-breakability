@@ -6,6 +6,7 @@ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-l
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
+import { ConfigService } from '@nestjs/config';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -36,6 +37,7 @@ describe('WorkManagerService', () => {
       providers: [
         WorkManagerService,
         { provide: 'WorkerEntityRepository', useValue: workerEntityMock },
+        { provide: ConfigService, useValue: {get : jest.fn().mockImplementation(()=> {feature: true})} },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         { provide: WorkflowService, useValue: workflowServiceMock },
       ],
@@ -119,6 +121,7 @@ describe('WorkManagerService', () => {
         taskQueue: 'ParentWorkflow-TaskQueue',
         args: [{ traceId, payload: { traceId, ...payload }, options: payload.options }],
         ...payload.options,
+
       };
 
       await service.validateConnection(payload, traceId);

@@ -18,7 +18,6 @@ export class WorkManagerController {
     @Get('config/:id')
     async getConfiguration(@Param('id') id: string, @ClientIp() ip: string, @Req() req: any): Promise<WorkerConfiguration[]> {
         return await this.workManagerService.getConfiguration(id, ip, req.headers['project-id'], req.headers['worker-name'])
-
     }
 
     @ApiOperation({ summary: 'Create a new request' }) 

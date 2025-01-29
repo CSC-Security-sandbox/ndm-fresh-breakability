@@ -8,6 +8,8 @@ import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { ConfigService } from '@nestjs/config';
+
 
 @Injectable()
 export class WorkManagerService {
@@ -16,7 +18,8 @@ export class WorkManagerService {
         @InjectRepository(WorkerEntity)
         private readonly workerEntity: Repository<WorkerEntity>,
         private loggerFactory: LoggerFactory,
-        private readonly workFlowService: WorkflowService
+        private readonly workFlowService: WorkflowService,
+        private readonly configService: ConfigService
     ) {
         this.logger = this.loggerFactory.create(WorkManagerService.name)
     }
@@ -57,9 +60,19 @@ export class WorkManagerService {
         const startWorkFlowPayload: StartWorkFlowPayload = {
             workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
             taskQueue: 'ParentWorkflow-TaskQueue',
-            args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
+            args: [{ traceId: traceId, payload: {
+                    traceId,
+                    feature: this.configService.get('app.feature'), 
+                    ...payload
+                }, 
+                options: payload.options
+             }],
             ...payload.options
         }
+
+        this.logger.log('-----------------------------------------')
+        this.logger.log( JSON.stringify(this.configService.get('app.feature')) )
+        this.logger.log('-----------------------------------------')
         const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
         return {workflowId : workflow.workflowId}
     }
