@@ -1,8 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE SCHEMA IF NOT EXISTS migrateadmin;
-
-CREATE TABLE IF NOT EXISTS migrateadmin.account (
+CREATE TABLE IF NOT EXISTS account (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -12,7 +10,7 @@ CREATE TABLE IF NOT EXISTS migrateadmin.account (
 	CONSTRAINT "PK_54115ee388cdb6d86bb4bf5b2ea" PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS migrateadmin."permission" (
+CREATE TABLE IF NOT EXISTS "permission" (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -23,7 +21,7 @@ CREATE TABLE IF NOT EXISTS migrateadmin."permission" (
 	CONSTRAINT "PK_3b8b97af9d9d8807e41e6f48362" PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS migrateadmin.project (
+CREATE TABLE IF NOT EXISTS project (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -36,9 +34,9 @@ CREATE TABLE IF NOT EXISTS migrateadmin.project (
 	CONSTRAINT "PK_4d68b1358bb5b766d3e78f32f57" PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.project ADD CONSTRAINT "FK_76eea9da615605bb68d1ffc995c" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id);
+ALTER TABLE project ADD CONSTRAINT "FK_76eea9da615605bb68d1ffc995c" FOREIGN KEY (account_id) REFERENCES account(id);
 
-CREATE TABLE IF NOT EXISTS migrateadmin.role_permission (
+CREATE TABLE IF NOT EXISTS role_permission (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -49,10 +47,10 @@ CREATE TABLE IF NOT EXISTS migrateadmin.role_permission (
 	CONSTRAINT "PK_96c8f1fd25538d3692024115b47" PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.role_permission ADD CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES migrateadmin."role"(id);
-ALTER TABLE migrateadmin.role_permission ADD CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES migrateadmin."permission"(id);
+ALTER TABLE role_permission ADD CONSTRAINT "FK_3d0a7155eafd75ddba5a7013368" FOREIGN KEY (role_id) REFERENCES "role"(id);
+ALTER TABLE role_permission ADD CONSTRAINT "FK_e3a3ba47b7ca00fd23be4ebd6cf" FOREIGN KEY (permission_id) REFERENCES "permission"(id);
 
-CREATE TABLE IF NOT EXISTS migrateadmin."role" (
+CREATE TABLE IF NOT EXISTS "role" (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -63,7 +61,7 @@ CREATE TABLE IF NOT EXISTS migrateadmin."role" (
 	CONSTRAINT "PK_b36bcfe02fc8de3c57a8b2391c2" PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS migrateadmin.user_role (
+CREATE TABLE IF NOT EXISTS user_role (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
@@ -76,12 +74,12 @@ CREATE TABLE IF NOT EXISTS migrateadmin.user_role (
 	CONSTRAINT "PK_fb2e442d14add3cefbdf33c4561" PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.user_role ADD CONSTRAINT "FK_32a6fc2fcb019d8e3a8ace0f55f" FOREIGN KEY (role_id) REFERENCES migrateadmin."role"(id);
-ALTER TABLE migrateadmin.user_role ADD CONSTRAINT "FK_7b6db8740e8e0e2916ac5c7d089" FOREIGN KEY (account_id) REFERENCES migrateadmin.account(id);
-ALTER TABLE migrateadmin.user_role ADD CONSTRAINT "FK_8541d9c873a5883eca10c3822e4" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id);
-ALTER TABLE migrateadmin.user_role ADD CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES migrateadmin."user"(id);
+ALTER TABLE user_role ADD CONSTRAINT "FK_32a6fc2fcb019d8e3a8ace0f55f" FOREIGN KEY (role_id) REFERENCES "role"(id);
+ALTER TABLE user_role ADD CONSTRAINT "FK_7b6db8740e8e0e2916ac5c7d089" FOREIGN KEY (account_id) REFERENCES account(id);
+ALTER TABLE user_role ADD CONSTRAINT "FK_8541d9c873a5883eca10c3822e4" FOREIGN KEY (project_id) REFERENCES project(id);
+ALTER TABLE user_role ADD CONSTRAINT "FK_d0e5815877f7395a198a4cb0a46" FOREIGN KEY (user_id) REFERENCES "user"(id);
 
-CREATE TABLE IF NOT EXISTS migrateadmin."user" (
+CREATE TABLE IF NOT EXISTS "user" (
 	created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
