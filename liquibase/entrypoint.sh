@@ -26,4 +26,6 @@ liquibase --url="$LIQUIBASE_COMMAND_URL" \
           --password="$LIQUIBASE_COMMAND_PASSWORD" \
           --driver="$LIQUIBASE_COMMAND_DRIVER" \
           --changeLogFile="$LIQUIBASE_COMMAND_CHANGELOG_FILE" \
+          --liquibase-schema-name="$LIQUIBASE_LIQUIBASE_SCHEMA_NAME" \
+          --default-schema-name="$LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME" \
           "$1"
