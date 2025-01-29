@@ -1,8 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE SCHEMA IF NOT EXISTS migrateadmin;
-
-CREATE TABLE IF NOT EXISTS migrateadmin.config (
+CREATE TABLE IF NOT EXISTS config (
 	created_at timestamp DEFAULT now() NOT NULL,
 	updated_at timestamp DEFAULT now() NULL,
 	created_by varchar NULL,
@@ -17,9 +15,9 @@ CREATE TABLE IF NOT EXISTS migrateadmin.config (
 	CONSTRAINT "PK_d0ee79a681413d50b0a4f98cf7b" PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.config ADD CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES migrateadmin.project(id);
+ALTER TABLE config ADD CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES project(id);
 
-CREATE TABLE IF NOT EXISTS migrateadmin.fileserver_workingdirectory_mapping (
+CREATE TABLE IF NOT EXISTS fileserver_workingdirectory_mapping (
 	id uuid DEFAULT gen_random_uuid() NOT NULL,
 	path_name text NULL,
 	working_directory text NULL,
@@ -32,9 +30,9 @@ CREATE TABLE IF NOT EXISTS migrateadmin.fileserver_workingdirectory_mapping (
 	CONSTRAINT fileserver_workingdirectory_mapping_pkey PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.fileserver_workingdirectory_mapping ADD CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES migrateadmin.config(id) ON DELETE CASCADE;
+ALTER TABLE fileserver_workingdirectory_mapping ADD CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE;
 
-CREATE TABLE IF NOT EXISTS migrateadmin.file_server (
+CREATE TABLE IF NOT EXISTS file_server (
 	created_at timestamp DEFAULT now() NOT NULL,
 	updated_at timestamp DEFAULT now() NULL,
 	created_by varchar NULL,
@@ -51,4 +49,4 @@ CREATE TABLE IF NOT EXISTS migrateadmin.file_server (
 	CONSTRAINT "PK_533d54ec32cba35b21c5a2092fc" PRIMARY KEY (id)
 );
 
-ALTER TABLE migrateadmin.file_server ADD CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES migrateadmin.config(id) ON DELETE CASCADE;
+ALTER TABLE file_server ADD CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE;
