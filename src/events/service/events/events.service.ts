@@ -170,23 +170,26 @@ export class EventsService {
         return await this.fileConfigService.updateRefetchingConfig(config)
     }
 
-    async fetchPathNotify(map: Map<string, Omit<Credentials, 'workers'>[]>, transactionId: string, configId: string) {
-        map.forEach(async (credentials, worker) => {
-            const payload = this.baseListPathReqByDetails(credentials, transactionId, worker)
+    async fetchPathNotify(map: Map<string, Omit<Credentials, 'workers'>[]>, transactionId: string, configId: string) {    
+        for (const [worker, credentials] of map.entries()) {
+            const payload = this.baseListPathReqByDetails(credentials, transactionId, worker);
+    
             const promise = credentials.map(async cred => {
                 const requestTrack = this.requestTrackEntity.create({
-                    transactionId, status: ResponseStatus.PENDING,
+                    transactionId, 
+                    status: ResponseStatus.PENDING,
                     taskType: TaskType.LIST_PATHS,
-                    workerId: worker, createdBy: transactionId,
-                    operation: cred.protocol == Protocol.NFS ? Operations.LIST_NFS_PATHS : Operations.LIST_SMB_PATHS,
+                    workerId: worker, 
+                    createdBy: transactionId,
+                    operation: cred.protocol === Protocol.NFS ? Operations.LIST_NFS_PATHS : Operations.LIST_SMB_PATHS,
                     configId: configId
-                })
-                await this.requestTrackEntity.save(requestTrack)
-            })
-            await Promise.all(promise)
-            this.logger.error(payload)
-            await this.notifyEventToWorker(worker, SocketEvents.LIST_PATH, payload)
-
-        })
+                });
+                await this.requestTrackEntity.save(requestTrack);
+            });
+    
+            await Promise.all(promise);
+    
+            await this.notifyEventToWorker(worker, SocketEvents.LIST_PATH, payload);
+        }
     }
 }
