@@ -538,4 +538,11 @@ it('should handle database errors in find method', async () => {
       expect(res[0].status).toEqual(JobStatus.Active);
     })
   })
+
+  describe('precheck', () => {
+    it('should return succes for precheck', async () => {
+      const result = await service.precheck({} as any);
+      expect(result.status).toEqual('success');
+    })
+  })
 });

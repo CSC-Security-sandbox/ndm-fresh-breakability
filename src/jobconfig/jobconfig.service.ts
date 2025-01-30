@@ -5,10 +5,10 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
+import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
@@ -96,6 +96,10 @@ export class JobConfigService {
         targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
       }
     ];
+  }
+
+  async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
+    return { status: 'success' }
   }
 
   // ------------  update ---------------- //
