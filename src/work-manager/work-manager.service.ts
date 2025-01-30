@@ -69,10 +69,6 @@ export class WorkManagerService {
              }],
             ...payload.options
         }
-
-        this.logger.log('-----------------------------------------')
-        this.logger.log( JSON.stringify(this.configService.get('app.feature')) )
-        this.logger.log('-----------------------------------------')
         const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
         return {workflowId : workflow.workflowId}
     }
