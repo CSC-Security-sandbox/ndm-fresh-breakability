@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from './logger.service';
 import * as fs from 'fs';
 import * as winston from 'winston';
-import { Runtime } from '@temporalio/worker';
+import { Logger } from './logger.service';
 
 jest.mock('@temporalio/worker', () => ({
   Worker: jest.fn(),
@@ -41,29 +40,6 @@ jest.mock('winston', () => {
   };
 });
 
-// jest.mock('winston', () => {
-//   const mLogger = {
-//     info: jest.fn(),
-//     error: jest.fn(),
-//     warn: jest.fn(),
-//     debug: jest.fn(),
-//     verbose: jest.fn(),
-//     log: jest.fn(),
-//   };
-//   return {
-//     createLogger: jest.fn(() => mLogger),
-//     transports: {
-//       Console: jest.fn(),
-//       DailyRotateFile: jest.fn(),
-//     },
-//     format: {
-//       combine: jest.fn(),
-//       timestamp: jest.fn(),
-//       colorize: jest.fn(),
-//       printf: jest.fn(),
-//     },
-//   };
-// });
 
 describe('Logger', () => {
   let service: Logger;
@@ -101,8 +77,6 @@ describe('Logger', () => {
 
     expect(fs.existsSync).toHaveBeenCalledWith(Logger.logDir);
     expect(fs.mkdirSync).toHaveBeenCalledWith(Logger.logDir);
-
-    // expect(fs.mkdirSync).not.toHaveBeenCalled();
 
   });
 

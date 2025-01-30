@@ -15,9 +15,7 @@ export async function ValidateWorkerConnectionWorkflow(
   args: any,
 ): Promise<any> {
   const fileServer = args.fileServer;
-  log( args.traceId, `\n------------------------------------------------\n`,);
   log( args.traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(args)}`);
-  log( args.traceId, `\n------------------------------------------------\n`,);
   const results = await Promise.all(
     fileServer.protocols.map(async (protocol) => {
       return await validateActivity(args.traceId, protocol.type, {
