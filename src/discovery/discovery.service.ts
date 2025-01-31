@@ -77,7 +77,7 @@ export class DiscoveryService {
       const jobRunUUID = `${jobRunId}::UUID`;
       const reportLocation = `/migration_coc_reports::TEXT`
       await this.inventoryRepo.query(
-        "CALL migrateadmin.generate_migration_coc_report($1, $2);",
+        "CALL migrateadmin.generate_coc_report($1, $2);",
         [jobRunUUID, reportLocation]
       );
       return { message: "Report generated successfully" };
