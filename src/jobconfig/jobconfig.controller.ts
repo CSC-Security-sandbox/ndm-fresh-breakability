@@ -39,8 +39,8 @@ export class JobConfigController {
   @ApiOperation({ summary: 'precheck for migration job' })
   @ApiResponse({ status: 200, description: 'Precheck is passed' })
   @Post('/precheck')
-  async precheck(@Body() bulkCutover: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
-    return await this.jobConfigService.precheck(bulkCutover);
+  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
+    return await this.jobConfigService.precheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
