@@ -497,7 +497,7 @@ it('should handle database errors in find method', async () => {
       const mokcResult = [
         {
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.Migrate,
+          jobType: JobType.MIGRATE,
           status: JobStatus.Active,
           excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
           excludeFilePatterns: '*.log, *.tmp',
@@ -513,7 +513,7 @@ it('should handle database errors in find method', async () => {
       const res = await service.createBulkMigrate({} as any);
       expect(res).toEqual(mokcResult);
       expect(res.length).toEqual(1);
-      expect(res[0].jobType).toEqual(JobType.Migrate);
+      expect(res[0].jobType).toEqual(JobType.MIGRATE);
       expect(res[0].status).toEqual(JobStatus.Active);
     })
   })

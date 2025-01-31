@@ -1,11 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In } from 'typeorm';
+import { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
+import { join } from 'path';
 import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobStatus, JobType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
@@ -13,6 +16,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
 import { nextDate } from 'src/utils/mapper';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 
 @Injectable()
 export class JobConfigService {
@@ -66,11 +70,11 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
-  async createBulkMigrate(bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
+  async createBulkMigrate(bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
     return [
       {
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.Migrate,
+        jobType: JobType.MIGRATE,
         status: JobStatus.Active,
         excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
         excludeFilePatterns: '*.log, *.tmp',
@@ -250,6 +254,41 @@ export class JobConfigService {
       });
     });
     return payload
+  }
+
+  // Define file mappings
+  private templates = {
+    sid: 'sid_template.csv',
+    gid: 'gid_template.csv',
+    uid: 'uid_template.csv',
+  };
+
+  getTemplateFilename(params: { sid?: string; gid?: string; uid?: string }) {
+    const key = Object.keys(params).find(k => params[k]); // Find the active key
+    console.log(`this.templates[key] - ${this.templates[key]}`);
+    
+    return this.templates[key]; // Get corresponding filename
+  }
+
+  sendCsvFile(filename: string, res: Response) {
+    // const filePath = join(__dirname, '..', 'csv-files', filename); // Path to CSV files
+    const filePath = join(process.cwd(), 'src', 'csv-files', filename);
+    console.log(`filePath ${filePath}`);
+    
+    // Check if file exists
+    if (!existsSync(filePath)) {
+      throw new NotFoundException(`CSV file ${filename} not found`);
+    }
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'text/csv');
+
+    // Stream the file to the response
+    const fileStream = createReadStream(filePath);
+    console.log(`fileStream - ${fileStream}`);
+    
+    fileStream.pipe(res);
   }
 
   covertBytes(bytes: number): string {

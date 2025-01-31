@@ -1,11 +1,13 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+import { Response } from 'express';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -25,7 +27,7 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Create a new migrate job' })
   @ApiResponse({ status: 201, description: 'Migrate job has been successfully created.' })
   @Post('/bulk-migrate')
-  async createBulkMigrate(@Body() bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
+  async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
   }
 
@@ -45,6 +47,36 @@ export class JobConfigController {
       throw new BadRequestException(`Required parameters['ProjectId'] is missing in the request`);
     }
     return await this.jobConfigService.getAllJobConfig(projectId);
+  }
+
+  @Get('download-template')
+  async downloadTemplate(
+    @Res() res: Response,
+    @Query('sid') sid?: string, 
+    @Query('gid') gid?: string, 
+    @Query('uid') uid?: string
+  ) {
+    // Validate input: Only one parameter should be provided
+    const params = { sid, gid, uid };
+    console.log(`params - ${params}`);
+    
+    const activeParams = Object.keys(params).filter(key => params[key]);
+
+    console.log(`activeParams - ${activeParams}`);
+    
+
+    if (activeParams.length !== 1) {
+      throw new BadRequestException('Either sid, gid, or uid is required');
+    }
+
+    // Get CSV file name
+    const filename = this.jobConfigService.getTemplateFilename(params);
+
+    console.log(`filename - ${filename}`);
+    
+
+    // Serve the CSV file
+    this.jobConfigService.sendCsvFile(filename, res);
   }
 
   @ApiOperation({ summary: 'Get jobfindallConfigPageDto: FindallConfigPageDto by ID' })
