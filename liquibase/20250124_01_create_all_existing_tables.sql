@@ -1,8 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE SCHEMA IF NOT EXISTS migrateadmin;
-
-CREATE TABLE IF NOT EXISTS migrateadmin.reports (
+CREATE TABLE IF NOT EXISTS reports (
 	id uuid DEFAULT uuid_generate_v4() NOT NULL,
 	report_data text NULL,
 	created_at time DEFAULT now() NULL,
