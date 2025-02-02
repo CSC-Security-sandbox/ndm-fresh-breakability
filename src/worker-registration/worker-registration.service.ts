@@ -52,11 +52,9 @@ export class WorkerRegistrationService {
                     } 
                 }
             );
-            this.logger.error(response)
             if (response.status === 201) {
                 return { workerId: clientConfig.clientId, secret: clientConfig.secret };
             }
-            this.logger.error('response')
             throw new InternalServerErrorException('Failed to register worker');
         } catch (error) {
             this.logger.error('Error during worker registration', error);
