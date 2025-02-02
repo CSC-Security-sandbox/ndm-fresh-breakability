@@ -2,12 +2,16 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { config } from 'dotenv';
+import keycloakConfig from './keycloak.config';
 
 config(); // Load .env file
 
 @Module({
   imports: [
-    ConfigModule.forRoot(), // Automatically loads .env
+    ConfigModule.forRoot({
+      isGlobal: true, // Makes config available throughout the app
+      load: [keycloakConfig], // Load keycloak config
+    }), // Automatically loads .env
     TypeOrmModule.forRoot({
       type: 'postgres', // Adjust according to your DB type
       host: process.env.DATABASE_HOST,
@@ -16,9 +20,6 @@ config(); // Load .env file
       password: process.env.DATABASE_PASSWORD,
       database: process.env.DATABASE_NAME,
       schema: process.env.DATABASE_SCHEMA,
-      // ssl: {
-      //   rejectUnauthorized: false,
-      // },
       autoLoadEntities: process.env.AUTOLOAD_ENTITIES === 'true',
       synchronize: process.env.SYNCHRONIZE === 'true',
     }),
