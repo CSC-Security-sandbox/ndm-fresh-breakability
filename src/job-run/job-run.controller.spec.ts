@@ -2,9 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
+import { NotFoundException } from '@nestjs/common';
 
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
+  jobRunReportByJobRunId: jest.fn(),
 };
 
 describe('JobRunController', () => {
@@ -48,5 +50,19 @@ describe('JobRunController', () => {
       expect(e.response.statusCode).toBe(404); // Check if it throws the NotFoundException
       expect(e.response.message).toBe('Job run not found.');
     }
+  });
+
+  it("should return parsed job report data when found", async () => {
+    const jobRunId = "1";
+    const mockReportData = `[{"category": "Number of Files", "sub_category": "<8KiB", "value": 119897}]`;
+
+    mockJobRunService.jobRunReportByJobRunId.mockResolvedValue(mockReportData);
+
+    const result = await controller.getJobReportById(jobRunId);
+
+    expect(result).toEqual(JSON.parse(mockReportData));
+    expect(mockJobRunService.jobRunReportByJobRunId).toHaveBeenCalledWith(
+      jobRunId
+    );
   });
 });
