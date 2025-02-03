@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Param, Post, Put, Query, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Patch, Post, Put, Query, ValidationPipe } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
@@ -7,6 +7,7 @@ import { JobRunActionsReq } from './dto/jobrunactions.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunService } from './jobrun.service';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
+import { JobRunStatus } from 'src/constants/enums';
 
 @ApiTags('jobs run')
 @Controller('job-run')
@@ -14,6 +15,7 @@ export class JobRunController {
   private readonly logger = new Logger(JobRunController.name);
   constructor(private readonly jobRunService: JobRunService) {}
 
+  // remove the schedule cron job
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron(){
     await this.jobRunService.scheduleAJob()
@@ -51,6 +53,13 @@ export class JobRunController {
   @Post('/ad-hoc')
   async adhocRun(@Body() adhocRun: AdHocRunDTO) {
     return this.jobRunService.addHocRun(adhocRun.jobConfigId)
+  }
+
+  @ApiOperation({ summary: 'Update Job Run Status' })
+  @ApiResponse({ status: 200, description: 'The job run status updated successfully .' })
+  @Patch('/:jobRunId/:status')
+  async updateJobRunStatus(@Param('jobRunId') jobRunId: string, @Param('status') status: JobRunStatus) {
+    return await this.jobRunService.updateJobRunStatus(jobRunId, status);
   }
 
 }

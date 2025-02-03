@@ -59,7 +59,7 @@ export class EventsGateway implements OnGatewayInit{
     if(worker) {
       try{ // update existing worker
         this.logger.log(`Record Found for Worker: ${workerId} Project: ${projectId}`)
-        await this.workerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
+       // await this.workerEntity.update({workerId: workerId}, {workerName: workerName, clientId: client.id, status: WorkerStatus.Online})
         this.logger.log(`Record Updated for Worker: ${workerId} Project: ${projectId}`)
         this.clients.set(workerId, client.id);
       }catch(e){
@@ -76,8 +76,9 @@ export class EventsGateway implements OnGatewayInit{
       return
     }
     try{ // Add new worker
-      const registerWorker =  this.workerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
-      await this.workerEntity.save(registerWorker)
+     // const registerWorker =  this.workerEntity.create({workerId, projectId, workerName, ipAddress, status: WorkerStatus.Online, clientId: client.id, createdBy:  uuidv4()})
+     const registerWorker=null;
+     await this.workerEntity.save(registerWorker)
       this.clients.set(workerId, client.id);
     }
     catch(e) {

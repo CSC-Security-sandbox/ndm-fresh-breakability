@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
+import { JobRunStatus, JobType, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
@@ -10,7 +10,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
-import { buildScanPayload } from "./workmanager.mapper";
+import { buildScanPayload,buildMigrationPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { ConfigService } from "@nestjs/config";
 
@@ -32,26 +32,34 @@ export class WorkManager{
     // --------------------------- Create init Operation --------------------------------//
     @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
     async createInitDiscovery(payload: TaskEventPayload){
+        await this.createTaskForJobRun(payload)
+    }
+
+    async createTaskForJobRun(payload:TaskEventPayload) {
         try{
             const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-            const path =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
-            this.logger.error(path)
-            const request =  buildScanPayload(path)
+           // const sourcePath =  `${mountBasePath}/${payload.jobRunId}`
+            const sourcePath =  `${mountBasePath}`
+            const targetPath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.targetCredential?.pathId}`
+            //const targetPath =  `${mountBasePath}/${payload.jobRunId}`
+           // this.logger.error(sourcePath)
+            const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(sourcePath) : buildMigrationPayload(sourcePath,targetPath)  
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
-                fPath: path,
+                fPath: sourcePath,
                 sPathId: payload.details.connection.sourceCredential?.pathId,
                 tPathId: payload.details.connection.targetCredential?.pathId,
                 retryCount: 0,
                 operationType: jobTypeToOperationType(payload.details.jobType),
                 request: request
             })
-            await this.operationsRepo.save(operation)
+           return await this.operationsRepo.save(operation)
        
         }catch(e){
             this.logger.error(e)
         }
+
     }
 
     // ------------------------------- Update Worker Mount Status -----------------------------------//

@@ -9,13 +9,20 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { WorkManager } from 'src/events/workmanager/workmanager.service';
+import { TaskEntity } from 'src/entities/task.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+
 
 @Module({
     imports: [
+        LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity,TaskEntity,OperationsEntity]),
     ],
-    providers: [JobRunService, JobConfigService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkManager],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobStatus, JobType } from "src/constants/enums";
+import { JobRunStatus, JobStatus, JobType, OperationStatus, Protocol, TaskStatus, WorkFlowType, WorkFlows } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -19,9 +19,26 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunConfig, UnMountNotificationPayload, UpdateJobRunMappingPayload } from "./jobrun.types";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { ConfigService } from "@nestjs/config";
+import { StartWorkFlowPayload } from "src/workflow/workflow.types";
+import { WorkflowService } from "src/workflow/workflow.service";
+import {
+  Command,
+  FileServerDetails,
+  JobConfig,
+  JobContextFactory,
+  NFS,
+  RedisUtils,
+  SMB,
+  Task,
+} from '@netapp-cloud-datamigrate/jobs-lib';
+import { WorkManager } from "src/events/workmanager/workmanager.service";
+import { TaskEntity } from "src/entities/task.entity";
+import { operationsTypeToTaskType } from "src/utils/mapper";
+import { OperationsEntity } from "src/entities/operation.entity";
 
 @Injectable()
 export class JobRunService {
+ 
   private readonly logger = new Logger(JobRunService.name);
   private readonly mountBasePath: string 
 
@@ -37,7 +54,15 @@ export class JobRunService {
     @InjectRepository(JobOptionsEntity)
     private optionRepo: Repository<JobOptionsEntity>,
     private readonly eventEmitter: EventEmitter2,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    @Inject()
+    private workFlowService: WorkflowService,
+    @Inject()
+    private workerManagerService: WorkManager,
+    @InjectRepository(TaskEntity)
+    private taskRepo: Repository<TaskEntity>,
+    @InjectRepository(OperationsEntity)
+    private operationRepo: Repository<OperationsEntity>
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
@@ -98,6 +123,7 @@ export class JobRunService {
         firstRunAt: LessThan(currentTime)
       },
     })
+    console.log('ppppppaa--->'+JSON.stringify(jobs))
     jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
     return jobs;
   }
@@ -197,21 +223,127 @@ export class JobRunService {
       iterationNumber: 1,
       jobConfigId: jobConfigId,
       workerMap: workerMap,
-      options: options
+      options: options,
     });
-    const update = await this.jobRunRepo.save(jobRunRecord);
+    const jobRun = await this.jobRunRepo.save(jobRunRecord);
+    await this.intiateWorkflow(jobRun.id, details.jobType,details)
+    
     // make JobConfig Active
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-    await this.sendMountMessage(details, update.id)
+  
+  //  await this.sendMountMessage(details, jobRun.id)
 
     this.eventEmitter.emit(EmitterEvents.CREATE_TASK, {
-      jobRunId: update.id,
-      status: update.status,
+      jobRunId: jobRun.id,
+      status: jobRun.status,
       details: details
     });
 
-    return update
+    return jobRun
   }
+
+
+  async intiateWorkflow(jobRunId: string, jobType: JobType,jobRunConfig: JobRunConfig) {
+    const jobWorkflowMap = {
+      [JobType.Migrate]: () => this.startMigrateWorkFlow(),
+      [JobType.DISCOVER]: () => this.starDiscoveryWorkFlow(jobRunId,jobRunConfig,jobType),
+    };    
+    const jobRunWorkflow = await jobWorkflowMap[jobType]?.();
+    await this.jobRunRepo.update({id: jobRunId}, {workFlowId: jobRunWorkflow.workflowId});
+    this.logger.log(`Starting ${jobType} workflow for jobRunId: ${jobRunId} , with workflowId: ${jobRunWorkflow.workflowId}`);
+  }
+
+  async starDiscoveryWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
+   //TODDO : fetch it from config??
+    const options = {
+      workflowExecutionTimeout: '60s',
+      workflowTaskTimeout: '30s',
+      workflowRunTimeout: '30s',
+      startDelay: '1s'
+    }
+    await this.buildJobContext(jobRunId,jobRunConfig,jobType);
+    const startWorkFlowPayload: StartWorkFlowPayload = {
+      workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
+      taskQueue: 'ParentWorkflow-TaskQueue',
+      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
+      options:options
+    }
+  const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+  return {workflowId : workflow.workflowId}
+  }
+
+  async buildJobContext(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType) {
+    let sourcefileServerDetails: FileServerDetails;
+    let targetfileServerDetails: FileServerDetails;
+
+    const sourceCredential = jobRunConfig.connection.sourceCredential;
+    const targetCredential = jobRunConfig.connection.targetCredential;
+
+    const createFileServerDetails = (credential: any) => {
+      return credential.protocol === Protocol.NFS
+        ? new FileServerDetails(credential.host, [new NFS(credential.username)])
+        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)]);
+    };
+    sourcefileServerDetails= createFileServerDetails(sourceCredential);
+
+    if (jobType === JobType.Migrate) 
+      targetfileServerDetails= createFileServerDetails(targetCredential);
+
+      const jobConfig = new JobConfig(
+        jobRunId,
+        jobType,
+        sourcefileServerDetails,
+        jobRunConfig.connection.sourceCredential.path,
+        jobType === JobType.Migrate ? targetfileServerDetails : undefined,
+        jobType === JobType.Migrate ? jobRunConfig.connection.targetCredential.path : undefined,
+        jobRunConfig.workers
+      )
+      const redisClient = await RedisUtils.getClient();
+      if(!redisClient.isOpen)await redisClient.connect();
+      const jobContext = JobContextFactory.getProvider('redis', redisClient)
+      .buildContext(jobRunId, jobConfig, JobRunStatus.Ready);
+       (await jobContext).appendToTaskList(await this.creatIntialTask(jobRunId,jobRunConfig));
+      redisClient.set(jobRunId, (await jobContext).serialize());
+  }
+
+  async creatIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
+    const payload ={
+      jobRunId: jobRunId,
+      status: JobRunStatus.Ready,
+      details: jobRunConfig,
+    }
+    const operation = await this.workerManagerService.createTaskForJobRun(payload);
+    const taskEntity : TaskEntity =  this.taskRepo.create({
+      jobRunId: jobRunId,
+      taskType: operationsTypeToTaskType(operation.operationType),
+      status: TaskStatus.Pending
+  });
+   await this.operationRepo.update({id: operation.id}, {taskId: taskEntity.id, status: OperationStatus.READY});
+   const task =  this.buildTaskPaylod(taskEntity,jobRunConfig,operation);
+   return task;
+  }
+
+  buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
+      const commands = new Command(operations.fPath, {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
+      const task = new Task(
+        taskEntity.id,
+        taskEntity.jobRunId,
+        taskEntity.taskType,
+        taskEntity.status,
+        'Worker-1', // needs to be looked into 
+        jobRunConfig.connection.sourceCredential.path,
+        jobRunConfig.jobType===JobType.Migrate || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
+        jobRunConfig.excludeFilePatterns,
+        [commands]
+      )
+      return task;
+  }
+
+  async startMigrateWorkFlow(): Promise<{workflowId: string}> {
+      //TODO: Implement the migration workflow
+    return {workflowId: 'migrate-workflow-id'}
+  }
+  
   //  ------------------- sendMountMessage ------------------ //
   async sendMountMessage(details: JobRunConfig, jobRunId: string) {
       details.workers.forEach(worker => 
@@ -521,6 +653,10 @@ export class JobRunService {
     } else {
         return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
+  }
+
+  updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
+    return this.jobRunRepo.update({ id: jobRunId }, { status: status, endTime: new Date() });
   }
 
 }

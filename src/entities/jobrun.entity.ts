@@ -7,6 +7,7 @@ import { JobRunStatus } from 'src/constants/enums';
 import { InventoryEntity } from './inventory.entity';
 import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
+import { WorkerConfiguration } from 'src/constants/types';
 
 
 @Entity({ name: 'jobrun', schema: 'migrateadmin' })
@@ -50,4 +51,10 @@ export class JobRunEntity extends Base {
 
   @OneToOne(()=>JobOptionsEntity, jobOption=> jobOption.jobRun, {cascade: true,  eager: false})
   options: JobOptionsEntity
+
+  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  metaConfig: WorkerConfiguration[];
+
+  @Column({ type: 'text', nullable: true, name: 'workflow_id' })
+  workFlowId: string;
 }
