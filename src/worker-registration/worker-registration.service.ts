@@ -55,7 +55,7 @@ export class WorkerRegistrationService {
             if (response.status === 201) {
                 return { workerId: clientConfig.clientId, secret: clientConfig.secret };
             }
-            throw new InternalServerErrorException('Failed to register worker');
+            throw new InternalServerErrorException(`Failed to register worker with status code ${response.status}`);
         } catch (error) {
             this.logger.error('Error during worker registration', error);
             if (axios.isAxiosError(error) && error.response) 
