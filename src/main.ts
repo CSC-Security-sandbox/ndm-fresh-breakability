@@ -17,25 +17,26 @@ async function bootstrap() {
   Logger.log(`RabbitMQ URLs: ${configService.get<string>('app.rabbitmq.urls')}`);
   Logger.log(`Queue name: ${configService.get<string>('app.rabbitmq.inventoryQueue')}`);
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: configService.get('app.rabbitmq.urls'),
-      queue: configService.get('app.rabbitmq.inventoryQueue'),
-      noAck: false,
-      queueOptions: {
-        durable: true,
-        arguments: {
-          'x-queue-type': 'quorum',
-        },
-      },
-    },
-  });
+  // app.connectMicroservice<MicroserviceOptions>({
+  //   transport: Transport.RMQ,
+  //   options: {
+  //     urls: configService.get('app.rabbitmq.urls'),
+  //     queue: configService.get('app.rabbitmq.inventoryQueue'),
+  //     noAck: false,
+  //     queueOptions: {
+  //       durable: true,
+  //       arguments: {
+  //         'x-queue-type': 'quorum',
+  //       },
+  //     },
+  //   },
+  // });
 
-  await app.startAllMicroservices();
+  // await app.startAllMicroservices();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.setGlobalPrefix('api/v1/');
+  app.useGlobalPipes(new ValidationPipe());
   app.useGlobalPipes(new ValidationPipe());
 
   const serverEndpoint = `http://${host}:${port}`;

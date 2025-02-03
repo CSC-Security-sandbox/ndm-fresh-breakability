@@ -40,23 +40,40 @@ export class InventoryService {
         });
     }
     
-    async createInventory(data: CreateInventory[]) {
+    async createInventory(data: CreateInventory[],jobRunId: string) {
         try {
-            const inventoryRecords = this.inventoryRepo.create(data);
+            const mappedData = this.mapSourceToTarget(data[0],jobRunId);
+            const inventoryRecords = this.inventoryRepo.create(mappedData);
              await this.inventoryRepo.insert(inventoryRecords);
         } catch (err) {
             this.logger.error(`Failed to save inventory records: ${err.message}`, err.stack);
             throw new Error('Error while saving inventory records to the database');
         }
     }
+     mapSourceToTarget(file: any,jobRunId:string): any {
+        return {
+          path: file.path,
+          isDirectory: file.isDirectory,
+          sourceChecksum: "", 
+          targetChecksum: "", 
+          parentPath: file.parentPath,
+          depth: file.depth,
+          fileName: file.fileName,
+          uid: file.uid.toString(),
+          gid: file.gid.toString(),
+          fileSize: BigInt(file.size),
+          extension: file.extension,
+          fileType: file.fileType as any,
+          modifiedTime: file.mtime.toISOString(),
+          accessTime: file.atime.toISOString(),
+          permission: file.permission,
+          jobRunId: jobRunId, 
+          birthTime: file.ctime.toISOString(),
+        };
+      }
 
     async operate(payload: InventoryPayload) {
         switch(payload.type) {
-            case InventoryPayloadType.DATA_INSERT:
-                this.totalObjects += (payload?.data.length || 0)
-                this.logger.debug(`Inserting Message of length:  ${payload?.data.length} | total count:${++this.counter} | totalObjects : ${this.totalObjects} | Completed Count : ${this.completedCount} `)
-                await this.createInventory(payload.data);
-                break
             case InventoryPayloadType.DISCOVERY_COMPLETED:
                 this.completedCount++;
                 this.notifyDiscoveryCompleted(payload.data)

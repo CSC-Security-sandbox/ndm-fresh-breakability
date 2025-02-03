@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryModule } from './inventory/inventory.module';
+import { RedisConsumerModule } from './redis-consumer/redis-consumer.module';
 import appConfig from './config/app.config';
 
 @Module({
@@ -18,6 +19,7 @@ import appConfig from './config/app.config';
       inject: [ConfigService],
     }),
     InventoryModule,
+    RedisConsumerModule,
   ],
   controllers: [],
   providers: [],
