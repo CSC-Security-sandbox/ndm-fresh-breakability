@@ -50,6 +50,39 @@ describe('JobRunService', () => {
     jest.clearAllMocks();
   });
 
+  describe("jobRunReportByJobRunId", () => {
+    const jobRunId = "12345";
+
+    it("should return report data when found", async () => {
+      const mockReport = { reportData: '{"test": "data"}' };
+      mockReportsRepo.findOne.mockResolvedValue(mockReport);
+
+      const result = await service.jobRunReportByJobRunId(jobRunId);
+
+      expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
+        where: { jobRunId },
+        order: { createdAt: "DESC" },
+        select: ["reportData"],
+      });
+
+      expect(result).toEqual(mockReport.reportData);
+    });
+
+    it("should return null when no report exists", async () => {
+      mockReportsRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.jobRunReportByJobRunId(jobRunId);
+
+      expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
+        where: { jobRunId },
+        order: { createdAt: "DESC" },
+        select: ["reportData"],
+      });
+
+      expect(result).toBeUndefined(); 
+    });
+  });
+
   describe('getJobStatsId', () => {
     const jobId = '12345';
 

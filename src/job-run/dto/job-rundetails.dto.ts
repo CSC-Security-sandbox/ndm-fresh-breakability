@@ -75,6 +75,19 @@ export class JobRunStats {
 }
 
 
+export class JobReportResponseDto {
+  @ApiProperty()
+  value: string | number;
+
+  @ApiProperty()
+  @IsString()
+  category: string;
+
+  @ApiProperty()
+  @IsString()
+  sub_category: Date;
+}
+
 
 export class JobRunDetailsResponseDto {
   @ApiProperty()
