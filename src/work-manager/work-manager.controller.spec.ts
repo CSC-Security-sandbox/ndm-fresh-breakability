@@ -3,6 +3,7 @@ import { WorkManagerController } from './work-manager.controller';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration } from 'src/constants/types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('WorkManagerController', () => {
   let controller: WorkManagerController;
@@ -16,7 +17,9 @@ describe('WorkManagerController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WorkManagerController],
-      providers: [{ provide: WorkManagerService, useValue: serviceMock }],
+      providers: [
+        { provide: WorkManagerService, useValue: serviceMock},
+         { provide: JwtService, useValue: {} }],
     }).compile();
 
     controller = module.get<WorkManagerController>(WorkManagerController);
@@ -24,7 +27,7 @@ describe('WorkManagerController', () => {
 
   describe('getConfiguration', () => {
     it('should return worker configuration when found', async () => {
-      const workerId = '123';
+      const workerId = '123123';
       const ip = '127.0.0.1';
       const projectId = 'projectId';
       const workerName = 'workerName';
@@ -40,13 +43,12 @@ describe('WorkManagerController', () => {
       jest.spyOn(serviceMock, 'getConfiguration').mockResolvedValue(mockConfig);
 
       const reqMock = {
-        headers: {
-          'project-id': projectId,
-          'worker-name': workerName,
-        },
+        'project_id': projectId,
+        'worker_name': workerName,
+        'worker_id': '123123'
       };
 
-      const result = await controller.getConfiguration(workerId, ip, reqMock);
+      const result = await controller.getConfiguration(ip, reqMock);
 
       expect(result).toEqual(mockConfig);
       expect(serviceMock.getConfiguration).toHaveBeenCalledWith(workerId, ip, projectId, workerName);
