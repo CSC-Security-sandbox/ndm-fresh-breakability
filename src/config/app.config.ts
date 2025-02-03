@@ -1,19 +1,49 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigObject, ConfigService, registerAs } from '@nestjs/config';
 
-
 export default registerAs(
   'worker',
-  ():ConfigObject => ({
+  (): ConfigObject => ({
     shutdownTimeout: process.env.SHUTDOWN_TIMEOUT || 5000,
     workerShutdownTimeout: process.env.WORKER_SHUTDOWN_TIMEOUT || 5000,
     workerId: process.env.WORKER_ID || '6cf21220-5627-4614-a947-778915dba29f',
     buildId: process.env.BUILD_ID || '1.0.0',
-    workerConfigUrl: process.env.WORKER_CONFIG_URL || 'http://localhost:3000/api/v1/workers/configs',
+    workerConfigUrl:
+      process.env.WORKER_CONFIG_URL ||
+      'http://localhost:3000/api/v1/workers/configs',
+    workerJobServiceUrl:
+      process.env.WORKER_JOB_SERVICE_URL ||
+      'http://localhost:3008/api/v1/job-run',
     platform: process.platform,
-    baseMountDir: process.env.BASE_MOUNT_DIR || '/mnt',
+    baseMountDir: process.env.BASE_MOUNT_DIR || '/Users/avadoot.narvekar/code_base/netapp/netapp_code_base/mount1',
     workerName: process.env.WORKER_NAME || 'worker',
-    projectId: process.env.PROJECT_ID || '6cf21220-5627-4614-a947-778915dba29f',
+    projectId: process.env.PROJECT_ID || '8092ce59-5dfd-4d2f-939a-af51d3580233',
+    smbValidateCommand:
+      process.env.SMB_VALIDATE_CONNECTION_COMMAND ||
+      'smbutil view //${username}:${password}@${hostname}',
+    nfsValidateCommand:
+      process.env.NFS_VALIDATE_CONNECTION_COMMAND || 'showmount -e ${hostname}',
+    nfsShowmountCommand:
+      process.env.NFS_SHOWMOUNT_COMMAND || 'showmount -e ${hostname}',
+    smbShowsharesCommand:
+      process.env.SMB_SHOWSHARES_COMMAND ||
+      'smbutil view //${username}:${password}@${hostname}',
+    nfsGetProtocolsCommand:
+      process.env.NFS_GET_PROTOCOLS_COMMAND ||
+      'rpcinfo -p ${hostname} |grep nfs',
+    smbGetProtocolsCommand:
+      process.env.SMB_GET_PROTOCOLS_COMMAND ||
+      'nmap -p 445 --script smb-protocols ${hostname}',
+    nfsMountCommand:
+      process.env.NFS_MOUNT_COMMAND ||
+      'mount -t nfs -o resvport ${hostname}:${path} ${baseMountDir}/${jobRunId}',
+    smbMountCommand:
+      process.env.SMB_MOUNT_COMMAND ||
+      'mount -t cifs //${hostname}/${path} ${baseMountDir}/${jobRunId} -o username=${username},password=${password}',
+    nfsUnmountCommand:
+      process.env.NFS_UNMOUNT_COMMAND || 'umount ${baseMountDir}/${jobRunId}',
+    smbUnmountCommand:
+      process.env.SMB_UNMOUNT_COMMAND || 'umount ${baseMountDir}/${jobRunId}',
   }),
 );
 

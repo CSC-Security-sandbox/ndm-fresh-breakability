@@ -5,7 +5,9 @@ import { Protocol } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
 import { ProtocolTypes } from 'src/protocols/protocols';
-import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
+import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
+import * as fs from 'fs';
+import { WorkersConfig } from 'src/config/app.config';
 
 export class NFSProtocol extends Protocol {
 
@@ -68,5 +70,73 @@ export class NFSProtocol extends Protocol {
       return parseExports(response.message);
     });
   }
-  
+
+   
+  async unmountPath(traceId: string, payload: any): Promise<any> {
+    this.logger.info(
+      `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
+    );
+
+    const response = this.executeCommand(
+      traceId,
+      ProtocolTypes.NFS,
+      payload,
+      WorkersConfig.get('nfsUnmountCommand'),
+      'NFS Unmount',
+    );
+
+    if (response['status'] === 'success') {
+      const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+      if (fs.existsSync(mountDir)) {
+        fs.rmdirSync(mountDir, { recursive: false });
+        this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+      } else {
+        this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+      }
+      
+      return response;
+    }
+  }
+
+  async mountPath(traceId: string, payload: any): Promise<any> {
+   console.log(
+      `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
+    );
+
+    const mountDir = `${WorkersConfig.get('baseMountDir')}/${payload.jobRunId}`;
+    if (fs.existsSync(mountDir)) {
+      this.logger.info(`[${traceId}] Directory already exists: ${mountDir}`);
+      return {
+        traceId,
+        status: 'error',
+        protocolType: ProtocolTypes.NFS,
+        hostname: payload.hostname,
+        workerId: this.workerId,
+        message: `[${traceId}] Directory already exists: ${mountDir}`,
+      }
+    } else {
+      try{
+      fs.mkdirSync(mountDir,{ recursive: true });
+      this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+      } catch (error) {
+        this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
+        return {
+          traceId,
+          status: 'error',
+          protocolType: ProtocolTypes.NFS,
+          hostname: payload.hostname,
+          workerId: this.workerId,
+          message: `[${traceId}] Error creating directory: ${error.message}`,
+        }
+      }
+    }
+    
+    return this.executeCommand(
+      traceId,
+      ProtocolTypes.NFS,
+      payload,
+      WorkersConfig.get('nfsMountCommand'),
+      'NFS Mount',
+    );
+  }
 }

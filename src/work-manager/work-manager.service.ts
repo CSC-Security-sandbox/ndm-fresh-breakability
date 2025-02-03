@@ -6,7 +6,7 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { retry, timer } from 'rxjs';
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
-
+import * as crypto from 'crypto';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 
@@ -26,8 +26,9 @@ export class WorkManagerService {
         @Inject(HttpService) private readonly httpService: HttpService,
         @Inject(Logger) private readonly logger: Logger,
     ) {
-        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}/${this.configService.get('worker.workerId')}`;
-        this.workerId = this.configService.get('workers.workerId');
+        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}config/${this.configService.get('worker.workerId')}`;
+        console.log('sssssssss->'+this.workerConfigUrl)
+        this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout')
     }
     async onApplicationBootstrap() {
@@ -40,12 +41,14 @@ export class WorkManagerService {
         }
     }
 
-    @Cron(CronExpression.EVERY_SECOND)
+    @Cron(CronExpression.EVERY_30_SECONDS)
     async handleCron() {
+        console.log('Called when the current second is 42');
+        console.log(`${this.workerConfigUrl} ${this.configService.get('worker.workerName')} ${this.configService.get('worker.projectId')}`);
         if(this.loadingConfigs) return;
         this.loadingConfigs = true
         // Get the worker configuration changes
-        this.httpService.get(this.workerConfigUrl,{
+        this.httpService.get(`${this.workerConfigUrl}`,{
             headers: {
                 ['worker-name']: this.configService.get('worker.workerName'),
                 ['project-id']: this.configService.get('worker.projectId')
@@ -101,18 +104,19 @@ export class WorkManagerService {
     }
 
     async startWorker(id: string, workerOptions: any){
-        const worker: Worker = await Worker.create(workerOptions);
-        this.activeWorkers.set(id,worker);
         try {
+        const worker: Worker = await Worker.create(workerOptions);
+            this.activeWorkers.set(id,worker);
+            console.log('worker.getState()---->', worker.getState())
             if (worker.getState() === WorkerState.INITIALIZED) 
                 worker.run();
-
             while (worker.getState() !== WorkerState.RUNNING) {
                 this.logger.debug( `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()}`);
                 //sleep 
                 await new Promise((resolve) => setTimeout( resolve, this.workerStartupTimeout));
             }
         } catch (err) {
+            console.log('err---->', err)
             this.logger.error(err);
         }
     }

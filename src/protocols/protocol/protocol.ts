@@ -14,6 +14,8 @@ export abstract class Protocol {
     abstract listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]>;
     abstract getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<string[]>;
     abstract validateConnection(traceId: string, payload: ProtocolPayload): Promise<any>;
+    abstract mountPath(traceId: string, payload: ProtocolPayload): Promise<any>;  
+    abstract unmountPath(traceId: string, payload: ProtocolPayload): Promise<any>;
 
     protected async executeCommand(
         traceId: string,
@@ -22,7 +24,7 @@ export abstract class Protocol {
         commandPattern: string,
         commandDescription: string,
       ): Promise<any> {
-      
+      console.log('traceId----->', traceId, 'protocolType----->', protocolType, 'payload----->', payload, 'commandPattern----->', commandPattern, 'commandDescription----->', commandDescription);  
         const response = {
           traceId: traceId,
           status: 'success',
@@ -33,12 +35,14 @@ export abstract class Protocol {
         };
       
         const command = commandPattern
-          ?.replace('${HOST}', payload?.hostname)
+          ?.replace('${hostname}', payload?.hostname)
           ?.replace('${USERNAME}', payload?.username)
           ?.replace('${PASSWORD}', payload?.password)
-          ?.replace('${PATH}', payload?.path)
-          ?.replace('${JOB_RUN_ID}', payload?.jobRunId)
-          ?.replace('${BASE_DIR}', this.baseMountDir);
+          ?.replace('${path}', payload?.path)
+          ?.replace('${jobRunId}', payload?.jobRunId)
+          ?.replace('${baseMountDir}', this.baseMountDir);
+
+          console.log('command-->', command);
       
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
