@@ -8,6 +8,7 @@ import { DataSourceOptions } from "typeorm";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -21,6 +22,6 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         dropSchema: false,
         logging: false,
         schema: process.env.SCHEMA,
-        entities: [WorkerEntity, ConfigEntity, FileServerEntity, VolumeEntity, ProjectEntity,JobConfigEntity,JobRunEntity, FileServerWorkingDirectoryMappingEntity],
+        entities: [WorkerEntity, ConfigEntity, FileServerEntity, VolumeEntity, ProjectEntity,JobConfigEntity,JobRunEntity, FileServerWorkingDirectoryMappingEntity,WorkerJobRunMap],
         migrations: []
     }))
