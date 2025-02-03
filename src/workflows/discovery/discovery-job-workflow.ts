@@ -2,6 +2,8 @@ import { proxyActivities } from '@temporalio/workflow';
 import type * as discovery from '../../activities/discovery/discovery';
 import type * as fetchTasks from '../../activities/discovery/fetch-tasks';
 import * as publishTask from '../../activities/discovery/publish-task';
+import axios from 'axios';
+import { WorkersConfig } from 'src/config/app.config';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -33,6 +35,7 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
     args.traceId,
     `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args.options)}`,
   );
+  const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
   let discoveryResponse: any = {};
   try {
     while (true) {
@@ -58,10 +61,11 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         }
       }
     }
-    console.log(`` + JSON.stringify(discoveryResponse));
+    await axios.patch(`${workerJobServiceUrl}/${traceId}/Completed`);
     return { message: 'Discovery completed' };
   } catch (error) {
     log(traceId, `Error  occured during discovery : ${error}`);
+    await axios.patch(`${workerJobServiceUrl}/${traceId}/Failed`);
     return { message: 'Discovery failed'};
    
   }

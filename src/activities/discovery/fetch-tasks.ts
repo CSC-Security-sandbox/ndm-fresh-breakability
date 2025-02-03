@@ -35,8 +35,12 @@ export async function fetchTasks(traceId: string): Promise<any> {
     return streamMessages;
 
   } catch (error) {
-    logger.error(`[${traceId}] Error during task fetching: ${error.message}`, error.stack);
-    throw error;
+    logger.error(`[${traceId}] Failed to fetch the task: ${error}`);
+    return {
+      traceId: traceId,
+      status: 'error',
+      message: `Failed to fetch the task for Job run id ${traceId} : ${error}`,
+    };
 
   } finally {
     if (redisClient && redisClient.isOpen) {

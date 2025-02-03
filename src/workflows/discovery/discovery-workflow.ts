@@ -89,9 +89,13 @@ const discoveryResponse =  await Promise.all(
     return response;
   }).catch((error) => { 
     log(traceId, `DiscoveryWorkflow error: ${error}`);
-    return error;
+    return {
+      traceId: traceId,
+      status: 'error',
+      message: `Failed to do discovery for  ${traceId} : ${error}`,
+    };
   });
-  let discoveryResult = discoveryResponse.flat();
+  let discoveryResult = (discoveryResponse as any[]).flat();
   result.push(discoveryResult);
 
   //cleanup all the workers

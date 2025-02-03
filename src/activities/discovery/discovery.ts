@@ -27,8 +27,8 @@ export async function discovery(
     );
     return inventoryStats;
   } catch (error) {
-    console.error(`[${traceId}] Error in handling Redis task: ${error}`);
-    throw error;
+    
+    
   }
 }
 
@@ -96,13 +96,21 @@ async function processTask(
           );
         } catch (error) {
           log(traceId, `Error in processing commands: ${error}`);
-          throw error;
+          if (!jobContext.errorsInfo) {
+            jobContext.errorsInfo.init();
+          }
+          const dmError = new DMError(cmd.fPath, error);
+          await jobContext.appendToErrorList(dmError);
         }
       }),
     );
   } catch (error) {
-    log(traceId, `Error in processing task: ${error}`);
-    throw error;
+    return {
+      traceId: traceId,
+      status: 'error',
+      workerId: workerId,
+      message: `Failed to process the task ${taskId}  of Job run id ${traceId} : ${error}`,
+    };
   }
 
   return taskStats;
@@ -125,7 +133,6 @@ export async function processFolderRead({
     accumulatedResult: [],
     unScannedPaths: [],
   };
-  const errors: any[] = [];
   const ids = { jobRunId, workerId, transactionId: '' };
   for (const file of files) {
     try{
@@ -165,6 +172,13 @@ export async function processFolderRead({
     }
     const dmError = new DMError(file, error);
     await jobContext.appendToErrorList(dmError);
+    return {
+      traceId: jobRunId,
+      status: 'error',
+      hostname: payload.hostname,
+      workerId: workerId,
+      message: `Failed to Discover for job run id ${jobRunId}: ${error}`,
+    };
   }
   }
   const fileStatsArray: FileInfo[] = payload.accumulatedResult.map(

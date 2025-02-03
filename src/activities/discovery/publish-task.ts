@@ -61,9 +61,12 @@ export async function publishTask(traceId: string): Promise<any> {
 
     return { status: 'success', message: 'Task published successfully' };
   } catch (error) {
-   
-    logger.error(`[${traceId}] Error in publishing task: ${error.message}`, error.stack);
-    return { status: 'failure', message: 'Task publishing failed' };
+    logger.error(`[${traceId}] Error in publishing task: ${error.message}`, error.stack); 
+    return {
+      traceId: traceId,
+      status: 'error',
+      message: `Failed to publish task for Job run id ${traceId} : ${error}`,
+    };
   } finally {
     // Clean up Redis client
     if (redisClient && redisClient.isOpen) {
