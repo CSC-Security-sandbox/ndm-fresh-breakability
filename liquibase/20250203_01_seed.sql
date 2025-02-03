@@ -99,11 +99,6 @@ BEGIN
     -- Insert projects
     INSERT INTO "project" (id, project_name, account_id, start_date, created_at, created_by, updated_at, updated_by)
     VALUES 
-        (uuid_generate_v4(), 'Demo Project 10', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'Demo Project 11', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'Demo Project 12', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'Demo Project 13', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'Demo Project 2', (SELECT id FROM account WHERE account_name = 'Demo Account 1’), now(), now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'Demo Project 3', (SELECT id FROM account WHERE account_name = 'Demo Account 1’), now(), now(), user_id, now(), user_id);
-
+        (uuid_generate_v4(), 'Demo Project 1', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+    
 END $$;
