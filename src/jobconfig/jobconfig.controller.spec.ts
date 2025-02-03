@@ -5,7 +5,8 @@ import { BadRequestException } from '@nestjs/common';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigPrecheckRes } from './jobconfig.types';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -16,6 +17,7 @@ describe('JobConfigController', () => {
     createBulkDiscovery: jest.fn(),
     createBulkMigrate: jest.fn(),
     createBulkCutover: jest.fn(),
+    precheck: jest.fn(),
     getAllJobConfig: jest.fn(),
     getJobConfigById: jest.fn(),
     updateJobConfig: jest.fn(),
@@ -89,6 +91,17 @@ describe('JobConfigController', () => {
       expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkCutover);
     });
   });
+
+  describe('precheck', () => {
+    it('should return precheck result', async () => {
+      const precheckDto: JobConfigPrecheck = { migrateConfigs: [{ sourcePathId: '', destinationPathId: [''] }], preserveAccessTime: true }
+      const response: JobConfigPrecheckRes = { status: 'success' };
+      mockJobConfigService.precheck.mockResolvedValue(response);
+      const res = await controller.precheck(precheckDto);
+      expect(res).toEqual(response);
+      expect(service.precheck).toHaveBeenCalledWith(precheckDto);
+    });
+  })
 
   describe('getAllJobConfig', () => {
     it('should throw BadRequestException if projectId is missing', async () => {
