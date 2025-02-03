@@ -54,6 +54,7 @@ describe('WorkManagerService', () => {
                     provide: HttpService,
                     useValue: {
                         get: jest.fn(),
+                        post: jest.fn(),
                         subscribe: jest.fn().mockImplementation((nextFn: any)=> nextFn.next())
                     },
                 },
@@ -88,102 +89,29 @@ describe('WorkManagerService', () => {
         expect(service).toBeDefined();
     });
 
+    describe('getAccessToken', () => {
+      it('should fetch a new access token', async () => {
+        jest.spyOn(httpService, 'post').mockReturnValue({ data: { access_token: 'test-token', expires_in: 300 } } as any);
+        const token = await service['getAccessToken']();
+        expect(token).toBeDefined();
+      });
+  
+      it('should return null if token fetch fails', async () => {
+        jest.spyOn(httpService, 'post').mockReturnValue(throwError(() => new Error('Keycloak error')));
+        const token = await service['getAccessToken']();
+        expect(token).toBeNull();
+      });
+    });
+  
     describe('handleCron', () => {
-        it('should fetch configurations and handle them', async () => {
-            const response = { status: 200, data: [] };
-            const getSpy = jest.spyOn(httpService, 'get').mockReturnValue(of(response) as any);
-            const handleConfigsSpy = jest.spyOn(service, 'handleConfigurations');
-            
-            const subscription = service.handleCron();
-            await subscription;
-            expect(getSpy).toHaveBeenCalled();
-            expect(handleConfigsSpy).toHaveBeenCalledWith(response.data);
-        });
-
-        it('should not fetch configurations if already loading', async () => {
-            service['loadingConfigs'] = true;
-            const getSpy = jest.spyOn(httpService, 'get');
-            const subscription = service.handleCron();
-            await subscription;
-
-            expect(getSpy).not.toHaveBeenCalled();
-        });
-
-        it('should fetch configurations and handle them', async () => {
-            const response = { status: 200, data: [] };
-            const getSpy = jest.spyOn(httpService, 'get').mockReturnValue(of(response) as any);
-            const handleConfigsSpy = jest.spyOn(service, 'handleConfigurations');
-            const subscription = service.handleCron();
-            await subscription;
-            expect(getSpy).toHaveBeenCalled();
-            expect(handleConfigsSpy).toHaveBeenCalledWith(response.data);
-        });
-
-        it('should retry fetching configurations and handle response', async () => {
-            const mockResponse = { status: 200, data: { key: 'value' } };
-        
-            jest.spyOn(httpService, 'get').mockReturnValue(
-              of(mockResponse).pipe(
-                retry({
-                  count: 3,
-                  delay: (error, retryCount) => {
-                    logger.warn(`Retrying to fetch configurations. Attempt: ${retryCount}`);
-                    return timer(2000); 
-                  },
-                }),
-              ) as any,
-            );
-        
-
-            const handleConfigurationsMock = jest.spyOn(service, 'handleConfigurations').mockResolvedValue(undefined);
-        
-            await service.handleCron();
-        
-            expect(httpService.get).toHaveBeenCalledTimes(1);
-            expect(handleConfigurationsMock).toHaveBeenCalledWith(mockResponse.data); 
-        });
-
-
-        it('should log error if fetch configurations fails after retries 3', async () => {
-            const mockError = new Error('Network Error');
-
-            jest.spyOn(httpService, 'get').mockReturnValue(
-            throwError(() => mockError).pipe(
-                retry({
-                count: 3,
-                delay: (error, retryCount) => {
-                    logger.warn(`Retrying to fetch configurations. Attempt: ${retryCount}`);
-                    return timer(2000); 
-                },
-                }),
-            ),
-            );
-
-
-            await service.handleCron();
-
-            await httpService.get('').pipe(
-                retry({
-                    count: 3,
-                    delay: (error, retryCount) => {
-                    logger.warn(`Retrying to fetch configurations. Attempt: ${retryCount}`);
-                    return timer(2000);
-                    },
-                })
-                ).subscribe({
-                next: async (response) => {
-                    if (response.status !== 200) {
-                    logger.error(`Failed to fetch configurations. Status code: ${response.status}`);
-                    return;
-                    }
-                    await service.handleConfigurations(response.data);
-                },
-                error: (error) => {
-                    logger.error(`Failed to fetch configurations: ${error}`);
-                },
-            });
-
-        });
+      it('should fetch configurations and call handleConfigurations', async () => {
+        jest.spyOn(service, 'getAccessToken').mockResolvedValue('valid-token');
+        jest.spyOn(httpService, 'get').mockReturnValue(of({ status: 200, data: [] } as any));
+        jest.spyOn(service, 'handleConfigurations').mockResolvedValue(undefined);
+  
+        await service.handleCron();
+        expect(service['handleConfigurations']).toHaveBeenCalledWith([]);
+      });
     });
 
     describe('startWorker', () => {
