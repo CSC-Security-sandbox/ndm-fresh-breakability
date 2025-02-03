@@ -34,6 +34,9 @@ export class JobListingDTO{
 
     @ApiProperty({ description: 'Next Schedule Date' ,nullable: true})
     nextScheduleDate:Date;
+    
+    @ApiProperty({ description: 'Job createation date' })
+    createdAt: Date;
 }
 export interface SourceServer{
     serverName: string;
