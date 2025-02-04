@@ -98,8 +98,37 @@ export class JobConfigService {
     ];
   }
 
-  async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
-    return { status: 'success' }
+  async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes[]> {
+    return [
+      {
+        status: "success",
+        workerId: "worker-12345",
+        workerName: "worker",
+        sourceFileServerConnection: {
+          status: "success",
+          message: "File server connection established."
+        },
+        targetFileServerConnection: {
+          status: "success",
+          message: "File server connection established."
+        },
+        mountStatus: {
+          status: "mounted"
+        },
+        permissions: {
+          source: {
+            path: "/mnt/source",
+            writeAccess: true,
+            message: "Worker has write access to the source path."
+          },
+          target: {
+            path: "/mnt/target",
+            writeAccess: true,
+            message: "Worker has write access to the target path."
+          }
+        }
+      }
+    ]
   }
 
   // ------------  update ---------------- //

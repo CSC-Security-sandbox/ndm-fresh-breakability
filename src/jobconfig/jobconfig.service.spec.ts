@@ -542,7 +542,7 @@ it('should handle database errors in find method', async () => {
   describe('precheck', () => {
     it('should return succes for precheck', async () => {
       const result = await service.precheck({} as any);
-      expect(result.status).toEqual('success');
+      expect(result[0].status).toEqual('success');
     })
   })
 });

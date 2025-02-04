@@ -30,5 +30,30 @@ export interface JobConfigBulkCutoverRes {
 }
 
 export interface JobConfigPrecheckRes {
-    status: 'success'
+    status: string,
+    workerId: string,
+    workerName: string,
+    sourceFileServerConnection: {
+        status: string,
+        message: string
+    },
+    targetFileServerConnection: {
+        status: string,
+        message: string
+    },
+    mountStatus: {
+        status: string
+    },
+    permissions: {
+        source: {
+            path: string,
+            writeAccess: boolean,
+            message: string
+        },
+        target: {
+            path: string,
+            writeAccess: boolean,
+            message: string
+        }
+    }
 }
