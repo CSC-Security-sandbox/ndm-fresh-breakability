@@ -25,6 +25,8 @@ export class DiscoveryService {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
   }
 
+  private readonly reportLocation = process.env.COC_REPORT_PATH || '/coc/reports'
+
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
@@ -75,10 +77,9 @@ export class DiscoveryService {
     );
     try {
       const jobRunUUID = `${jobRunId}::UUID`;
-      const reportLocation = `/migration_coc_reports::TEXT`
       await this.inventoryRepo.query(
         "CALL migrateadmin.generate_coc_report($1, $2);",
-        [jobRunUUID, reportLocation]
+        [jobRunUUID, `${this.reportLocation}::TEXT`]
       );
       return { message: "Report generated successfully" };
     } catch (error) {
