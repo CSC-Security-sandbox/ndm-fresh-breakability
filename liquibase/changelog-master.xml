@@ -8,7 +8,7 @@
    </changeSet>
 
    <changeSet id="9002" author="aniketd">
-      <sqlFile path="liquibase/20250131_01_procedure.sql"/>
+      <sqlFile path="liquibase/20250131_01_procedure.sql" splitStatements="false"/>
    </changeSet>
 
 </databaseChangeLog>
