@@ -25,6 +25,8 @@ export class DiscoveryService {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
   }
 
+  private readonly reportLocation = process.env.COC_REPORT_PATH || '/coc/reports'
+
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
@@ -61,6 +63,25 @@ export class DiscoveryService {
       return {
         message: "Report generated successfully",
       };
+    } catch (error) {
+      this.logger.log(error);
+      throw new InternalServerErrorException(
+        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+      );
+    }
+  }
+
+  async createMigrationReportFile(jobRunId: string, reportType: string): Promise<any> {
+    this.logger.log(
+      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+    );
+    try {
+      const jobRunUUID = `${jobRunId}::UUID`;
+      await this.inventoryRepo.query(
+        "CALL migrateadmin.generate_coc_report($1, $2);",
+        [jobRunUUID, `${this.reportLocation}::TEXT`]
+      );
+      return { message: "Report generated successfully" };
     } catch (error) {
       this.logger.log(error);
       throw new InternalServerErrorException(

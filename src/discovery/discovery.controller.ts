@@ -8,7 +8,7 @@ import {
   RmqContext,
 } from "@nestjs/microservices";
 import { DiscoveryCompletedPayload } from 'src/discovery/discovery.interface';
-import { Pattern } from 'src/discovery/pattern.enum';
+import { Pattern, ReportType } from 'src/discovery/pattern.enum';
 
 @ApiTags('Get discovery inventory')
 @Controller('inventory')
@@ -75,7 +75,7 @@ export class DiscoveryController {
         },
         'report-type': {
           type: 'string',
-          enum: ['COC', 'DISCOVERY'],
+          enum: Object.values(ReportType),
           description: 'Type of the report to download',
         },
       },
@@ -89,13 +89,13 @@ export class DiscoveryController {
   @Header('Content-Disposition', 'attachment; filename=reports.zip') 
   async downloadReports(
     @Body('jobRunId') jobRunIds: string[],
-    @Body('report-type') reportType: string,
+    @Body('report-type') reportType: ReportType,
   ): Promise<StreamableFile> {
     if (!jobRunIds || jobRunIds.length === 0) {
       throw new BadRequestException('jobRunId array must not be empty');
     }
 
-    if (!['COC', 'DISCOVERY'].includes(reportType)) {
+    if (!Object.values(ReportType).includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
     }
 
@@ -115,7 +115,7 @@ export class DiscoveryController {
         jobRunId: { type: 'string', description: 'The ID of the job run' },
         'report-type': { 
           type: 'string', 
-          enum: ['COC', 'DISCOVERY'], 
+          enum: Object.values(ReportType), 
           description: 'The type of the report to generate' 
         },
       },
@@ -128,17 +128,18 @@ export class DiscoveryController {
   @Header('Content-Disposition', 'attachment; filename=generated-report.txt')
   async generateReport(
     @Body('jobRunId') jobRunId: string,
-    @Body('report-type') reportType: string,
+    @Body('report-type') reportType: ReportType
   ): Promise<Buffer> {
     this.logger.log("reached here in controller");
 
     if (!jobRunId) {
       throw new BadRequestException('jobRunId is required');
     }
-    if (!reportType || !['COC', 'DISCOVERY'].includes(reportType)) {
+    if (!reportType || !Object.values(ReportType).includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY');
     }
 
+    if(reportType === ReportType.COC) return this.discoveryService.createMigrationReportFile(jobRunId, reportType);
     return this.discoveryService.createReportFile(jobRunId, reportType);
   }
 
