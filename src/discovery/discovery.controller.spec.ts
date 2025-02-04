@@ -5,6 +5,7 @@ import { BadRequestException } from '@nestjs/common';
 import { StreamableFile } from '@nestjs/common';
 import { RmqContext } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
+import { ReportType } from './pattern.enum';
 
 describe('DiscoveryController', () => {
   let controller: DiscoveryController;
@@ -87,7 +88,7 @@ describe('DiscoveryController', () => {
   describe('downloadReports', () => {
     it('should download reports successfully', async () => {
       const jobRunIds = ['job1', 'job2'];
-      const reportType = 'DISCOVERY';
+      const reportType = ReportType.DISCOVERY;
       const mockBuffer = Buffer.from('test');
       mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
 
@@ -98,19 +99,19 @@ describe('DiscoveryController', () => {
     });
 
     it('should throw BadRequestException when jobRunIds is empty', async () => {
-      await expect(controller.downloadReports([], 'discovery')).rejects.toThrow(
+      await expect(controller.downloadReports([], ReportType.DISCOVERY)).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );
     });
 
     it('should throw BadRequestException when reportType is invalid', async () => {
-      await expect(controller.downloadReports(['job1'], 'INVALID')).rejects.toThrow(
+      await expect(controller.downloadReports(['job1'], 'INVALID' as any)).rejects.toThrow(
         new BadRequestException('Invalid report type. Allowed values are COC or discovery')
       );
     });
 
     it('should throw BadRequestException when jobRunIds is null', async () => {
-      await expect(controller.downloadReports(null, 'discovery')).rejects.toThrow(
+      await expect(controller.downloadReports(null, ReportType.DISCOVERY)).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );
     });
@@ -119,7 +120,7 @@ describe('DiscoveryController', () => {
   describe('generateReport', () => {
     it('should generate report successfully', async () => {
       const jobRunId = 'job1';
-      const reportType = 'DISCOVERY';
+      const reportType = ReportType.DISCOVERY;
       const expectedResult = { message: 'Report generated successfully' };
       mockDiscoveryService.createReportFile.mockResolvedValue(expectedResult);
 
@@ -130,19 +131,19 @@ describe('DiscoveryController', () => {
     });
 
     it('should throw BadRequestException when jobRunId is missing', async () => {
-      await expect(controller.generateReport('', 'discovery')).rejects.toThrow(
+      await expect(controller.generateReport('', ReportType.DISCOVERY)).rejects.toThrow(
         new BadRequestException('jobRunId is required')
       );
     });
 
     it('should throw BadRequestException when reportType is invalid', async () => {
-      await expect(controller.generateReport('job1', 'INVALID')).rejects.toThrow(
+      await expect(controller.generateReport('job1', 'INVALID' as any)).rejects.toThrow(
         new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY')
       );
     });
 
     it('should throw BadRequestException when reportType is missing', async () => {
-      await expect(controller.generateReport('job1', '')).rejects.toThrow(
+      await expect(controller.generateReport('job1', '' as any)).rejects.toThrow(
         new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY')
       );
     });
@@ -150,7 +151,7 @@ describe('DiscoveryController', () => {
     it('should log when generating report', async () => {
       const logSpy = jest.spyOn(logger, 'log');
       const jobRunId = 'job1';
-      const reportType = 'DISCOVERY';
+      const reportType = ReportType.DISCOVERY;
       mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
 
       await controller.generateReport(jobRunId, reportType);
