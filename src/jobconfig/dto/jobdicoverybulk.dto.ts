@@ -118,27 +118,27 @@ export class JobConfigMigrateBulk {
 }
 
 export class JobConfigCutoverBulk {
-  @ApiProperty({ 
-    description: 'Details of all the bulk migrate configs', 
-    isArray: true, 
-    type: MigrateConfig 
-  })
+  @ApiProperty({ description: 'UUID of the source path configurations' })
+  @IsUUID()
+  sourcePathId: string;
+
+  @ApiProperty({ description: 'UUIDs of the destination file servers' })
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => MigrateConfig)
-  migrateConfigs: MigrateConfig[]
+  @ArrayUnique()
+  @IsUUID('all', { each: true }) 
+  destinationPathId: string[];
 }
 
 export class JobConfigPrecheck {
-  @ApiProperty({ 
-    description: 'Details of all the bulk migrate configs', 
-    isArray: true, 
-    type: MigrateConfig 
-  })
+  @ApiProperty({ description: 'UUID of the source path configurations' })
+  @IsUUID()
+  sourcePathId: string;
+
+  @ApiProperty({ description: 'UUIDs of the destination file servers' })
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => MigrateConfig)
-  migrateConfigs: MigrateConfig[]
+  @ArrayUnique()
+  @IsUUID('all', { each: true }) 
+  destinationPathId: string[];
 
   @ApiProperty({ description: 'Preserve access time flag', example: false})
   @IsBoolean()
