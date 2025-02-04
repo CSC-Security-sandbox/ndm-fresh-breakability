@@ -16,6 +16,24 @@ CREATE TABLE IF NOT EXISTS config (
 	CONSTRAINT "FK_8c83350735693ce1b8eabf935a3" FOREIGN KEY (project_id) REFERENCES project(id)
 );
 
+CREATE TABLE IF NOT EXISTS file_server (
+	created_at timestamp DEFAULT now() NOT NULL,
+	updated_at timestamp DEFAULT now() NULL,
+	created_by varchar NULL,
+	updated_by varchar NULL,
+	id uuid DEFAULT uuid_generate_v4() NOT NULL,
+	hostname text NULL,
+	username text NULL,
+	protocol varchar NULL,
+	server_type varchar NOT NULL,
+	"password" text NULL,
+	config_id uuid NULL,
+	is_refreshed bool NULL,
+	protocol_version varchar NULL,
+	CONSTRAINT "PK_533d54ec32cba35b21c5a2092fc" PRIMARY KEY (id),
+	CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS file_server_worker (
 	file_server_id uuid NOT NULL,
 	worker_id uuid NOT NULL,
@@ -40,20 +58,3 @@ CREATE TABLE IF NOT EXISTS fileserver_workingdirectory_mapping (
 	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS file_server (
-	created_at timestamp DEFAULT now() NOT NULL,
-	updated_at timestamp DEFAULT now() NULL,
-	created_by varchar NULL,
-	updated_by varchar NULL,
-	id uuid DEFAULT uuid_generate_v4() NOT NULL,
-	hostname text NULL,
-	username text NULL,
-	protocol varchar NULL,
-	server_type varchar NOT NULL,
-	"password" text NULL,
-	config_id uuid NULL,
-	is_refreshed bool NULL,
-	protocol_version varchar NULL,
-	CONSTRAINT "PK_533d54ec32cba35b21c5a2092fc" PRIMARY KEY (id),
-	CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE
-);
