@@ -4,6 +4,7 @@ import { WorkerStatus } from 'src/constants/enums';
 import { ProjectEntity } from './project.entity';
 import { Base } from './base.entity';
 import { FileServerEntity } from './fileserver.entity';
+import { WorkerConfiguration } from 'src/constants/types';
 
 @Entity({name:'worker'})
 export class WorkerEntity extends Base  {
@@ -14,11 +15,6 @@ export class WorkerEntity extends Base  {
   @ApiProperty({ description: 'projectId' })
   @Column({ type: 'uuid', nullable: false , name: 'project_id'})
   projectId: string;
-
-
-  @ApiProperty({ description: 'clientId' })
-  @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
-  clientId: string;
 
   @ApiProperty({ description: 'workerName' })
   @Column({ type: 'varchar', length: 255, nullable: false, name:'worker_name' })
@@ -36,7 +32,10 @@ export class WorkerEntity extends Base  {
   @Column({ type: 'varchar', name:'status' })
   status: WorkerStatus;
 
-  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  metaConfig: WorkerConfiguration[];
+
+  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
   fileServers: FileServerEntity[];
 
 }

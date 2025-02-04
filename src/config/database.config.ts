@@ -19,7 +19,7 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         database: process.env.DB_NAME,
         synchronize: false,
         dropSchema: false,
-        logging: true,
+        logging: false,
         schema: process.env.SCHEMA,
         entities: [WorkerEntity, ConfigEntity, FileServerEntity, VolumeEntity, ProjectEntity,JobConfigEntity,JobRunEntity, FileServerWorkingDirectoryMappingEntity],
         migrations: []

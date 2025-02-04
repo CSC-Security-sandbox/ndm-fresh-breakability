@@ -1,37 +1,45 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ConfigStatus, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
-import { WorkerEntity } from 'src/entities/worker.entity';
-import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
-import { FindManyOptions, In, Repository } from 'typeorm';
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { Credentials } from './configuration.types';
-import { ConfigDTO } from './dto/config.dto';
-import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { ConfigStatus, RabbitMq } from 'src/constants/enums';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { CreateRequestDto, Options } from 'src/work-manager/dto/validate-connection.dto';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
+import { FindManyOptions, In, Repository } from 'typeorm';
+import { validate as isUUID } from 'uuid';
+import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
+import { ConfigDTO } from './dto/config.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 
 
 
 @Injectable()
 export class ConfigurationService {
-    private logger: Logger = new Logger(ConfigurationService.name)
+    private logger : LoggerService
     constructor(
         @InjectRepository(ConfigEntity)
         private readonly configEntity: Repository<ConfigEntity>,
         @InjectRepository(FileServerEntity)
         private readonly fileServerEntity: Repository<FileServerEntity>,
+        @InjectRepository(VolumeEntity)
+        private readonly volumes: Repository<VolumeEntity>,
         @InjectRepository(FileServerWorkingDirectoryMappingEntity)
         private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
-        private rabbitMQService: RabbitMQService
-        
-    ) {}
+        private loggerFactory: LoggerFactory,
+        private readonly workFlowService: WorkflowService
+    ) {
+        this.logger = this.loggerFactory.create(ConfigurationService.name)
+    }
 
-    async getAllConfig(findallConfigPageDto: FindallConfigPageDto) {
-        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findallConfigPageDto;
+    async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
+        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findAllConfigPageDto;
         
         const findOptions: FindManyOptions<ConfigEntity> = {
           where: filter, order: { [sort]: order }, 
@@ -127,13 +135,12 @@ export class ConfigurationService {
                 workingDirectory: true 
             }
         });
-
-        
+     
         if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
         return config
     }
 
-    async createConfiguration(createConfig: ConfigDTO, userId: string) {
+    async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
         const credentials:Credentials[] = []
         try {
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
@@ -171,25 +178,24 @@ export class ConfigurationService {
             });
         
             const update = await this.configEntity.save(config);
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials});
-
+         
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
                 pathId: createConfig?.workingDirectory?.pathId,
                 workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-                configId: update.id
+                configId: update.id,
+                createdBy: userId
             });
-        
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-
+            this.refreshConfig(update.id, traceId)
             return update;
         }catch(error) {
-            this.logger.error(`Error Occurred during creating Config ${error}`)
+            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during creating Config')
         }
     }
 
-    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string) {
+    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string, traceId: string) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
@@ -249,7 +255,7 @@ export class ConfigurationService {
             const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
 
             if (!mapping) {
-                this.logger.error(`Mapping for configId ${id} not found`);
+                this.logger.error(`Mapping for configId ${id} not found for request ${traceId}`);
                 throw new NotFoundException(`Mapping for configId ${id} not found`);
             }
 
@@ -263,10 +269,10 @@ export class ConfigurationService {
 
             config.fileServers = await Promise.all(fileServerPromises);
             const update = await this.configEntity.save(config)
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: config.id})
+            this.refreshConfig(update.id, traceId)
             return update
         }catch(error) {
-            this.logger.error(`Error Occurred during updating Config ${error}`)
+            this.logger.error(`Error Occurred during updating Config ${error} for traceId ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during updating Config')
         }
     }
@@ -279,5 +285,105 @@ export class ConfigurationService {
                 where: { id }
             });
         return await this.configEntity.remove(config)
+    }
+
+    async refreshConfig(id: string, traceId: string) {
+        const config = await this.configEntity.findOne({where : {id}, relations: {fileServers : {workers: true}, }})
+        if(!config)
+            throw new NotFoundException(`Config Not found with config id ${id}`)
+
+        const payload :CreateRequestDto = {
+            fileServer: {
+                hostname: '',
+                protocols: []
+            },
+            options: new Options(),
+            workerIds: []
+        }
+        config.fileServers?.forEach((fileServer)=>{
+            payload.fileServer.hostname = fileServer.host
+            payload.fileServer.protocols.push({
+                type: fileServer.protocol,
+                username: fileServer.userName,
+                password: fileServer.password
+            })
+            fileServer?.workers?.forEach(worker=>{
+                if(!payload.workerIds.includes(worker.workerId))
+                    payload.workerIds.push(worker.workerId)
+            })
+        })
+        if(payload.workerIds.length === 0) return
+        await this.fileServerEntity.update({id: In(config.fileServers.map(it=>it.id))}, {isRefreshed: false})
+        const startWorkFlowPayload: StartWorkFlowPayload = {
+            workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
+            taskQueue: 'ParentWorkflow-TaskQueue',
+            args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
+            ...payload.options
+        }
+        const workflow = await this.workFlowService.startWorkflow(WorkFlows.LIST_PATHS, startWorkFlowPayload)
+        this.updateResult( workflow.workflowId, id)
+        return {workflowId : workflow.workflowId}
+    }
+
+    async updateResult(id: string, configId: string) {
+        setTimeout(async ()=>{
+            const details: ListPathWorkflowStatus = await this.workFlowService.getWorkFlowRes(id) as ListPathWorkflowStatus
+            if(details.status === WorkflowExecutionStatus.COMPLETED)
+                await this.updatePaths(configId, details)
+        },2000)
+    }
+
+    async updatePaths(id: string, details:ListPathWorkflowStatus) {
+        const pathsMap: PathsMap = {
+            NFS: {workers: 0, paths: []},
+            SMB: {workers: 0, paths: []},
+        }
+        details.completed.forEach(workflow => {
+            pathsMap[workflow.protocolType].workers++
+            workflow.paths.forEach(path =>{
+                if(!pathsMap[workflow.protocolType].paths.includes(path)) 
+                pathsMap[workflow.protocolType].paths.push(path)
+            });
+        })
+        const config =  await this.configEntity.findOne({
+            select: {
+                fileServers:{
+                    id: true,
+                    protocol: true,
+                    volumes:{
+                        id: true,
+                        volumePath: true,
+                    }
+                }
+            },
+            where: { id },
+            relations: {
+                fileServers: {
+                    volumes: true       
+                }
+            }
+        });
+        for(let fileServer of config.fileServers) {
+            await this.volumes.update({
+                fileServerId: fileServer.id,
+                volumePath: In(pathsMap[fileServer.protocol].paths)
+            },{ reachableCount: pathsMap[fileServer.protocol].workers})
+
+            const existingPaths = new Set(fileServer.volumes.map(vol => vol.volumePath));
+            const founds: VolumeEntity[] = []
+            pathsMap[fileServer.protocol].paths.forEach((path)=>{
+                if(!existingPaths.has(path))
+                    founds.push(this.volumes.create({
+                        fileServerId: fileServer.id,
+                        reachableCount:  pathsMap[fileServer.protocol].workers,
+                        volumePath: path,
+                        createdBy: config.updatedBy ?? config.createdBy
+                    }))
+            })
+            await this.volumes.save(founds)
+            await this.fileServerEntity.update({id: fileServer.id},{isRefreshed: true})
+        }
+
+        await this.configEntity.update({id}, {scannedDate : new Date()})
     }
 }

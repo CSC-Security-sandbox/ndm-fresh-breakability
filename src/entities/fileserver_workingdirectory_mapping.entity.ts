@@ -1,7 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
-import { FileServerEntity } from "./fileserver.entity";
 import { ConfigEntity } from "./config.entity";
 @Entity({ name: 'fileserver_workingdirectory_mapping' })
 export class FileServerWorkingDirectoryMappingEntity extends Base {
