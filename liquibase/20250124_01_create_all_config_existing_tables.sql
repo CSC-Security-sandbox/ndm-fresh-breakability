@@ -34,6 +34,21 @@ CREATE TABLE IF NOT EXISTS file_server (
 	CONSTRAINT "FK_e041c087a720332bc6ef0b83eb3" FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS worker (
+	created_at timestamp DEFAULT now() NOT NULL,
+	updated_at timestamp DEFAULT now() NULL,
+	created_by varchar NULL,
+	updated_by varchar NULL,
+	id uuid NOT NULL,
+	project_id uuid NOT NULL,
+	client_id varchar(255) NOT NULL,
+	worker_name varchar(255) NOT NULL,
+	ip_address varchar(255) NOT NULL,
+	status varchar NOT NULL,
+	CONSTRAINT "PK_dc8175fa0e34ce7a39e4ec73b94" PRIMARY KEY (id),
+	CONSTRAINT "FK_787ef3391e00fbbd3c127e0f3a2" FOREIGN KEY (project_id) REFERENCES project(id)
+);
+
 CREATE TABLE IF NOT EXISTS file_server_worker (
 	file_server_id uuid NOT NULL,
 	worker_id uuid NOT NULL,
@@ -57,4 +72,3 @@ CREATE TABLE IF NOT EXISTS fileserver_workingdirectory_mapping (
 	CONSTRAINT fileserver_workingdirectory_mapping_pkey PRIMARY KEY (id),
 	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE
 );
-
