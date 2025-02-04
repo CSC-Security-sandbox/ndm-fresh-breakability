@@ -16,6 +16,7 @@ BEGIN
     
     -- Generate a system user for tracking
     user_id = uuid_generate_v4();
+    account_id = '753975cb-2f97-4230-b632-6815515a7d0d';
     INSERT INTO "user" (id, email, user_status, created_at, created_by, updated_at, updated_by) 
     VALUES (
         user_id,
