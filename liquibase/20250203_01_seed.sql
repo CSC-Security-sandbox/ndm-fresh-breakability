@@ -2,11 +2,9 @@ DO $$
 DECLARE
     user_id UUID;
     account_id UUID;
-    project_id UUID;
 
 BEGIN
     -- Clean up existing records in the migrateadmin schema
-    DELETE FROM "project" CASCADE;
     DELETE FROM "account" CASCADE;
     DELETE FROM "role_permission" CASCADE;
     DELETE FROM "role" CASCADE;
@@ -94,11 +92,6 @@ BEGIN
     -- Insert accounts
     INSERT INTO "account" (id, account_name, created_at, created_by, updated_at, updated_by)
     VALUES 
-        (uuid_generate_v4(), 'Demo Account 1', now(), user_id, now(), user_id)
-
-    -- Insert projects
-    INSERT INTO "project" (id, project_name, account_id, start_date, created_at, created_by, updated_at, updated_by)
-    VALUES 
-        (uuid_generate_v4(), 'Demo Project 1', (SELECT id FROM account WHERE account_name = 'Demo Account 1'), now(), now(), user_id, now(), user_id),
+        (uuid_generate_v4(), 'NetApp Data Migrate', now(), user_id, now(), user_id)
     
 END $$;
