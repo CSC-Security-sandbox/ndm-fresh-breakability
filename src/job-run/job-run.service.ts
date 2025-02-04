@@ -24,6 +24,17 @@ export class JobRunService {
         private reportsRepo: Repository<ReportsEntity>,
     ){}
 
+    async jobRunReportByJobRunId(id:string) {
+      const report = await this.reportsRepo.findOne(
+        {
+          where:{jobRunId:id},
+          order:{createdAt:'DESC'},
+          select:["reportData"]
+        }
+      )
+      if(report) return report.reportData
+    }
+
     async getJobStatsId(id: string) {
 
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
