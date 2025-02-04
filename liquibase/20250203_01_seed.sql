@@ -2,7 +2,6 @@ DO $$
 DECLARE
     user_id UUID;
     account_id UUID;
-
 BEGIN
     -- Clean up existing records in the migrateadmin schema
     DELETE FROM "account" CASCADE;
@@ -56,11 +55,6 @@ BEGIN
         (uuid_generate_v4(), 'App Admin', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'Project Admin', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'Project Viewer', 'active', now(), user_id, now(), user_id);
-
-    -- creating role for a particular user
-    INSERT INTO user_role
-    (created_at, created_by, updated_at, updated_by, id, user_id, role_id, project_id, account_id)
-    VALUES(now(), user_id, now(), user_id, uuid_generate_v4(), user_id, (SELECT id FROM "role" WHERE role_name = 'App Admin'), null, account_id);
     
     -- Assign permissions to roles
     -- App Admin gets all permissions
@@ -93,6 +87,11 @@ BEGIN
     -- Insert accounts
     INSERT INTO "account" (id, account_name, created_at, created_by, updated_at, updated_by)
     VALUES 
-        (uuid_generate_v4(), 'NetApp Data Migrate', now(), user_id, now(), user_id)
+        (account_id, 'NetApp Data Migrate', now(), user_id, now(), user_id);
+
+    -- creating role for a particular user
+    INSERT INTO user_role
+    (created_at, created_by, updated_at, updated_by, id, user_id, role_id, project_id, account_id)
+    VALUES(now(), user_id, now(), user_id, uuid_generate_v4(), user_id, (SELECT id FROM "role" WHERE role_name = 'App Admin'), null, account_id);
     
 END $$;
