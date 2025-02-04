@@ -94,7 +94,7 @@ describe('JobConfigController', () => {
 
   describe('precheck', () => {
     it('should return precheck result', async () => {
-      const precheckDto: JobConfigPrecheck = { migrateConfigs: [{ sourcePathId: '', destinationPathId: [''] }], preserveAccessTime: true }
+      const precheckDto: JobConfigPrecheck = { sourcePathId: '', destinationPathId: [''] , preserveAccessTime: true }
       const response: JobConfigPrecheckRes = { status: 'success' };
       mockJobConfigService.precheck.mockResolvedValue(response);
       const res = await controller.precheck(precheckDto);
