@@ -1,6 +1,6 @@
--- DROP PROCEDURE migrateadmin.generate_discovery_report(uuid);
+-- DROP PROCEDURE generate_discovery_report(uuid);
 
-CREATE OR REPLACE PROCEDURE migrateadmin.generate_discovery_report(IN jobrunid uuid)
+CREATE OR REPLACE PROCEDURE generate_discovery_report(IN jobrunid uuid)
  LANGUAGE plpgsql
 AS $procedure$
 declare
@@ -42,7 +42,7 @@ create temp table temp_categorized_files as
 	path,
 	file_type
 from
-	migrateadmin.inventory
+	inventory
 where
 	job_run_id = jobrunid;
 -- Perform aggregation directly using subqueries
@@ -530,7 +530,7 @@ FROM (
         'Total Time' AS stat_type,
         CONCAT(COALESCE(EXTRACT(EPOCH FROM (jr.end_time - jr.start_time)), 0)::TEXT, 's') AS stat_value
     FROM 
-        migrateadmin.jobrun jr
+        jobrun jr
     WHERE 
         jr.id = jobrunid
 
@@ -540,7 +540,7 @@ FROM (
         'Status' AS stat_type,
         jr.status AS stat_value
     FROM 
-        migrateadmin.jobrun jr
+        jobrun jr
     WHERE 
         jr.id = jobrunid
 ) AS job_run_stats;
@@ -557,25 +557,25 @@ SELECT
     ) into temp_json
 FROM (
     SELECT 'Path' AS sub_category, v.volume_path AS value
-    FROM migrateadmin.config c
-    JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
-    JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+    FROM config c
+    JOIN file_server fs2 ON fs2.config_id = c.id
+    JOIN volume v ON v.file_server_id = fs2.id
     WHERE v.id in (select path_id from temp_categorized_files limit 1 )
     
     UNION ALL
     
     SELECT 'Protocol' AS sub_category, fs2.protocol AS value
-    FROM migrateadmin.config c
-    JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
-    JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+    FROM config c
+    JOIN file_server fs2 ON fs2.config_id = c.id
+    JOIN volume v ON v.file_server_id = fs2.id
     WHERE v.id in (select path_id from temp_categorized_files limit 1 )
     
     UNION ALL
     
     SELECT 'Config Name' AS sub_category, c.config_name AS value
-    FROM migrateadmin.config c
-    JOIN migrateadmin.file_server fs2 ON fs2.config_id = c.id
-    JOIN migrateadmin.volume v ON v.file_server_id = fs2.id
+    FROM config c
+    JOIN file_server fs2 ON fs2.config_id = c.id
+    JOIN volume v ON v.file_server_id = fs2.id
    WHERE v.id in (select path_id from temp_categorized_files limit 1 )
 ) AS file_server_data;
 
@@ -606,7 +606,7 @@ from
 				file_name,
 				length(file_name)
 			from
-				migrateadmin.inventory i
+				inventory i
 			where
 				i.is_directory is false
 			order by
@@ -636,7 +636,7 @@ union all
 				file_name,
 				length(file_name)
 			from
-				migrateadmin.inventory i
+				inventory i
 			where
 				i.is_directory is true
 			order by
@@ -664,7 +664,7 @@ union all
 				path,
 				length(path)
 			from
-				migrateadmin.inventory i
+				inventory i
 			where
 				i.is_directory is false
 			group by
@@ -695,7 +695,7 @@ union all
 				path,
 				length(path)
 			from
-				migrateadmin.inventory i
+				inventory i
 			where
 				i.is_directory is true
 			order by
@@ -724,7 +724,7 @@ union all
 				file_name,
 				file_size
 			from
-				migrateadmin.inventory i
+				inventory i
 			where
 				i.is_directory is false
 			group by
@@ -756,7 +756,7 @@ union all
 				parent_path as directory,
 				COUNT(*) as file_count
 			from
-				migrateadmin.inventory
+				inventory
 			where
 				parent_path is not null
 				and is_directory is true
@@ -789,7 +789,7 @@ union all
 				parent_path as directory,
 				SUM(file_size) as total_size
 			from
-				migrateadmin.inventory
+				inventory
 			where
 				parent_path is not null
 				and is_directory is true
@@ -814,7 +814,7 @@ aggregated_json;
 
 insert
 	into
-	migrateadmin.reports(report_data,
+	reports(report_data,
 	report_type,
 	job_run_id)
 values(aggregated_json,
