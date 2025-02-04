@@ -6,7 +6,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
-import { JobStatus, JobType } from 'src/constants/enums';
+import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -182,6 +182,23 @@ export class JobConfigService {
     };
 
     return payload;
+  }
+
+  async getCutoverDetailsByFileServerId(fileServerId: string) {
+    return [{
+      sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
+      protocol: Protocol.NFS,
+      destinationFileServer: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationFileServerName: 'fileServer1' },
+      destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
+      jobConfig: [{
+        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+        jobType: JobType.CutOver,
+        jobRunDetails: {
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          status: JobRunStatus.Completed
+        }
+      }]
+    }]
   }
 
   // ------------ Job Config All ---------------- //
