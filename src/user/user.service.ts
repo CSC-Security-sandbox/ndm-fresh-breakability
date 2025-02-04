@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, IsNull, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -42,11 +42,10 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
-
   async findAll(
     page: number = 1,
     limit: number = 10,
-    sortField: string = "id",
+    sortField: string = 'id',
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
   ): Promise<User[]> {
@@ -70,15 +69,34 @@ export class UserService {
           where: { id: user.updated_by },
           select: ['id', 'email', 'user_status'],
         });
-   
+
+        const userRoleId = await this.userRoleRepository.findOne({
+          where: { userId: user.id, projectId: IsNull() },
+          select: ['roleId'],
+        });
+
+        if (!userRoleId) {
+          return {
+            ...user,
+            created_by: createdByUser,
+            updated_by: updatedByUser,
+          };
+        }
+
+        const roleName = await this.roleRepository.findOne({
+          where: { id: userRoleId.roleId },
+          select: ['role_name'],
+        });
+
         return {
           ...user,
+          ...roleName,
           created_by: createdByUser,
           updated_by: updatedByUser,
         } as any;
       }),
     );
-   
+
     return transformedUsers;
   }
 
