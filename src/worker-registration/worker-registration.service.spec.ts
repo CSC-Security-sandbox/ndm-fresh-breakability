@@ -6,6 +6,7 @@ import { InternalServerErrorException, BadRequestException } from '@nestjs/commo
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
 
+
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
@@ -36,10 +37,11 @@ describe('WorkerRegistrationService', () => {
 
     service = module.get<WorkerRegistrationService>(WorkerRegistrationService);
     configService = module.get<ConfigService>(ConfigService);
+    jest.clearAllMocks();
   });
 
   describe('getAdminAccessToken', () => {
-    it('should return the access token', async () => {
+    it('should return the access token on success', async () => {
       const mockTokenResponse = { data: { access_token: 'mock-access-token' } };
       mockedAxios.post.mockResolvedValue(mockTokenResponse);
 
@@ -61,49 +63,61 @@ describe('WorkerRegistrationService', () => {
   });
 
   describe('registerWorker', () => {
-    it('should register the worker successfully', async () => {
-      const mockRegisterResponse = { status: 201 };
-      const mockDetails: RegisterWorkerDto = { projectId: 'project1', workerName: 'worker1' };
-      const mockClientConfig = { clientId: 'client-id', secret: 'client-secret' };
+    const validDetails: RegisterWorkerDto = { projectId: 'project1', workerName: 'worker1' };
+
+    it('should register the worker successfully when response status is 201', async () => {
       const mockAccessToken = 'mock-access-token';
+      const mockRegisterResponse = { status: 201 };
 
-      // Mock axios.post calls
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { access_token: mockAccessToken } }) // Mock getAdminAccessToken
-        .mockResolvedValueOnce(mockRegisterResponse); // Mock register worker API call
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
 
-      const result = await service.registerWorker(mockDetails);
-
-      expect(result).toBeDefined();
-
+      const result = await service.registerWorker(validDetails);
+      expect(result).toHaveProperty('workerId');
+      expect(result).toHaveProperty('secret');
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     });
 
-    it('should throw BadRequestException when worker details are invalid', async () => {
-      const mockDetails: RegisterWorkerDto = { projectId: '', workerName: '' };
-
-      await expect(service.registerWorker(mockDetails)).rejects.toThrow(InternalServerErrorException);
+    it('should throw InternalServerErrorException when details are invalid', async () => {
+      const invalidDetails: RegisterWorkerDto = { projectId: '', workerName: '' };
+      await expect(service.registerWorker(invalidDetails)).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('should throw InternalServerErrorException when worker registration fails', async () => {
-      const mockDetails: RegisterWorkerDto = { projectId: 'project1', workerName: 'worker1' };
+    it('should throw InternalServerErrorException when registration response status is not 201', async () => {
+      const mockAccessToken = 'mock-access-token';
+      const mockRegisterResponse = { status: 400 }; 
 
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { access_token: 'mock-access-token' } }) // Mock getAdminAccessToken
-        .mockRejectedValueOnce(new Error('Registration failed')); // Mock registration failure
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
 
-      await expect(service.registerWorker(mockDetails)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.registerWorker(validDetails)).rejects.toThrow(
+        new InternalServerErrorException(`Unexpected error occurred while registering worker`)
+      );
     });
 
-    it('should throw InternalServerErrorException when worker registration fails 2', async () => {
-      const mockDetails: RegisterWorkerDto = { projectId: 'project1', workerName: 'worker1' };
+    it('should throw InternalServerErrorException with axios error response data when registration fails with an Axios error', async () => {
+      const mockAccessToken = 'mock-access-token';
+      const axiosError = new Error('Axios error') as any;
+      axiosError.response = { data: 'Detailed axios error message' };
+      jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockRejectedValueOnce(axiosError);
 
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { access_token: 'mock-access-token' } }) // Mock getAdminAccessToken
-        .mockRejectedValueOnce({status: 200}); 
-
-      await expect(service.registerWorker(mockDetails)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.registerWorker(validDetails)).rejects.toThrow(
+        new InternalServerErrorException(axiosError.response.data)
+      );
     });
 
+    it('should throw InternalServerErrorException with a generic message when registration fails with a non-Axios error', async () => {
+      const mockAccessToken = 'mock-access-token';
+      const nonAxiosError = new Error('Non-Axios error');
+      jest.spyOn(axios, 'isAxiosError').mockReturnValue(false);
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockRejectedValueOnce(nonAxiosError);
 
+      await expect(service.registerWorker(validDetails)).rejects.toThrow(
+        new InternalServerErrorException('Unexpected error occurred while registering worker')
+      );
+    });
   });
 });
