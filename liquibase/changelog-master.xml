@@ -4,7 +4,11 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
 
    <changeSet id="1001" author="aniketd">
-      <sqlFile path="liquibase/20250124_01_create_all_existing_tables.sql"/>
+      <sqlFile path="liquibase/20250124_01_create_all_admin_existing_tables.sql"/>
+   </changeSet>
+
+   <changeSet id="1002" author="aniketd">
+      <sqlFile path="liquibase/20250203_01_seed.sql"/>
    </changeSet>
 
 </databaseChangeLog>
