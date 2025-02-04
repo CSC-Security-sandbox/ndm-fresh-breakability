@@ -8,6 +8,7 @@ export async function validate(
   traceId: string,
   protocolType: string,
   payload: any,
+  feature: any
 ): Promise<any> {
   const logger = new Logger();
   const workerId = WorkersConfig.get('workerId');
@@ -27,8 +28,10 @@ export async function validate(
   try {
     const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
     await protocol.validateConnection(traceId, payload);
-    response.paths = await protocol.listPaths(traceId, payload);
-    response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
+    if(feature.enablePreListPath)
+      response.paths = await protocol.listPaths(traceId, payload);
+    if(feature.enableVersionFetch)
+      response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
     logger.info(`[${traceId}] Paths: ${response.paths}`);
     return response;
   } catch (error) {
