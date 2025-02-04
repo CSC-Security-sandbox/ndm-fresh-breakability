@@ -5,6 +5,7 @@ import { handleConnectionError, parseExports, parseProtocolVersions } from './nf
 import { ConfigService } from '@nestjs/config';
 import { WorkersConfig } from 'src/config/app.config';
 import { CommandConfig } from 'src/config/command.config';
+import { Runtime, RuntimeOptions } from '@temporalio/worker';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
@@ -14,6 +15,9 @@ describe('NFSProtocol', () => {
   let mockLogger: any;
 
   beforeEach(() => {
+    jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
+      return null;
+    });
     const configService = new ConfigService();
     jest.spyOn(configService, 'get').mockReturnValue('test-worker');
     WorkersConfig.configService = configService;

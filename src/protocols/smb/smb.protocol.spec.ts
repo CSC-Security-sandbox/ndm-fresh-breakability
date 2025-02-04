@@ -4,6 +4,7 @@ import { handleConnectionError, parseWindowsShares, parseLinMacShares, parseProt
 import { ConfigService } from '@nestjs/config';
 import { WorkersConfig } from 'src/config/app.config';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
+import { Runtime, RuntimeOptions } from '@temporalio/worker';
 
 jest.mock('./smb.utils');
 
@@ -12,6 +13,10 @@ describe('SMBProtocol', () => {
   let mockLogger: any;
 
   beforeEach(() => {
+    jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
+      return null;
+    });
+
     const configService = new ConfigService();
     jest.spyOn(configService, 'get').mockImplementation((key: string) => {
       if (key === 'workerId') {
