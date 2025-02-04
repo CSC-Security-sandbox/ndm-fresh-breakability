@@ -212,7 +212,7 @@ export class JobConfigService {
         'targetFileServer.protocol AS targetProtocol',
         'sourceConfig.configName AS sourceServerName',
         'targetConfig.configName AS targetServerName',
-        'jobconfig.createdAt AS createdAt',
+        'jobconfig.createdAt AS "createdAt"',
       ]).addSelect('COUNT(jobRun.id)', 'totalRuns')
       .where('sourceConfig.projectId = :projectId', { projectId })
       .orWhere('targetConfig.projectId = :projectId', { projectId })
@@ -250,7 +250,8 @@ export class JobConfigService {
         } : {},
         errors: 0,
         totalRuns: job.totalRuns,
-        configName: job.configname
+        configName: job.configname,
+        createdAt: job.createdAt
       });
     });
     return payload
