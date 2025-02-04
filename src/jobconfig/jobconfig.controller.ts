@@ -4,8 +4,8 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
-import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -34,6 +34,13 @@ export class JobConfigController {
   @Post('/bulk-cutover')
   async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     return await this.jobConfigService.createBulkCutover(bulkCutover);
+  }
+
+  @ApiOperation({ summary: 'precheck for migration job' })
+  @ApiResponse({ status: 200, description: 'Precheck is passed' })
+  @Post('/precheck')
+  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
+    return await this.jobConfigService.precheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
