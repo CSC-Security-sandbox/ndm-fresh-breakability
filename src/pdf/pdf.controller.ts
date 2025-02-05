@@ -1,4 +1,4 @@
-import { Controller, Get, Res, HttpException, HttpStatus, Body } from '@nestjs/common';
+import { Controller, Get, Res, HttpException, HttpStatus, Body, Post } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -10,7 +10,7 @@ export class PdfController {
   constructor(private readonly pdfService: PdfService) {}
   
     @ApiOperation({ summary: 'Generate PDF report' })
-    @Get('generate')
+    @Post('generate')
     @ApiBody({
       schema: {
         type: 'object',
