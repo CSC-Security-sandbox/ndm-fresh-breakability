@@ -33,13 +33,18 @@ export class RedisJobContextProvider implements JobContextProvider {
     const jobContext = new RedisJobContext(jobRunId, this.redisClient);
     const value = await this.redisClient.get(jobRunId);
 
+    if (!value) {
+      this.logger.warn(`Job context not found for job run id: ${jobRunId}`);
+      return null;
+    }
+
     this.logger.info(`Retrieved job context for job run id: ${jobRunId}`);
     let info = value ? jobContext.deserialize(value) : { filesInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     dirsInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
                                                     tasksInfo: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' } };
-    console.log('>> Deserialized:', info);
+    this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
     jobContext.jobRunId = info.jobRunId;

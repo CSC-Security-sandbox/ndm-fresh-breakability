@@ -1,5 +1,4 @@
-import { Serializable } from './serializable';
-import { encode, decode } from 'msgpack-lite';
+import { Serializable } from "./serializable";
 
 export class FileInfo implements Serializable {
   fileName: string;
@@ -53,12 +52,12 @@ export class FileInfo implements Serializable {
   }
 
   serialize(): string {
-    return encode(this).toString();
+    return JSON.stringify(this);
   }
 
-  static deserialize(data: string): FileInfo {
-    return decode(Buffer.from(data));
-  }
+  static deserialize(serialized: string): FileInfo {
+    return JSON.parse(serialized);
+  }        
 }
 
 export enum TaskStatsType {
@@ -67,7 +66,7 @@ export enum TaskStatsType {
   numErrors = 'Number of Errors',
 }
 
-export class TaskStats {
+export class TaskStats implements Serializable {
   numFiles: number = 0;
   numDirs: number = 0;
   numErrors: number = 0;
@@ -92,11 +91,11 @@ export class TaskStats {
   }
 
   serialize(): string {
-    return encode(this).toString();
+    return JSON.stringify(this);
   }
 
-  static deserialize(data: string): TaskStats {
-    return decode(Buffer.from(data));
+  static deserialize(serialized: string): TaskStats {
+    return JSON.parse(serialized);
   }
 }
 
@@ -105,7 +104,7 @@ export class CommandOperation {
   status: string;
 }
 
-export class Command {
+export class Command implements Serializable {
   fPath: string;
   ops: Record<number, CommandOperation>;
   commandId: string;
@@ -121,23 +120,23 @@ export class Command {
   }
 
   serialize(): string {
-    return encode(this).toString();
+    return JSON.stringify(this);
   }
 
-  static deserialize(data: string): Command {
-    return decode(Buffer.from(data));
+  static deserialize(serialized: string): Command {
+    return JSON.parse(serialized);
   }
 }
 
-export class Task {
+export class Task implements Serializable {
   id: string;
   jobRunId: string;
   taskType: string;
   status: string;
   workerId: string;
   sPath: string;
-  tPath: string;
-  excludeFilePatterns: string;
+  tPath?: string;
+  excludeFilePatterns?: string;
   commands: Command[];
 
   constructor(
@@ -147,9 +146,9 @@ export class Task {
     status: string,
     workerId: string,
     sPath: string,
-    tPath: string,
-    excludeFilePatterns: string,
     commands: Command[],
+    tPath?: string,
+    excludeFilePatterns?: string,
   ) {
     this.id = id;
     this.jobRunId = jobRunId;
@@ -163,15 +162,15 @@ export class Task {
   }
 
   serialize(): string {
-    return encode(this).toString();
+    return JSON.stringify(this);
   }
 
-  static deserialize(data: string): Task {
-    return decode(Buffer.from(data));
+  static deserialize(serialized: string): Task {
+    return JSON.parse(serialized);
   }
 }
 
-export class DMError {
+export class DMError implements Serializable {
   file: string;
   error: Error;
 
@@ -181,10 +180,10 @@ export class DMError {
   }
 
   serialize(): string {
-    return encode(this).toString();
+    return JSON.stringify(this);
   }
 
-  static deserialize(data: string): DMError {
-    return decode(Buffer.from(data));
+  static deserialize(serialized: string): DMError {
+    return JSON.parse(serialized);
   }
 }
