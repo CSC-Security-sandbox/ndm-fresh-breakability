@@ -23,7 +23,7 @@ export class UserService {
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
 
-    @InjectRepository(RolePermission) 
+    @InjectRepository(RolePermission)
     private rolePermissionRepository: Repository<RolePermission>,
 
     @InjectRepository(Project)
@@ -33,7 +33,10 @@ export class UserService {
     private accountRepository: Repository<Account>,
   ) {}
 
-  create(createUserDto: CreateUserDto, userPermissions:UserPermissionResponse): Promise<User> {
+  create(
+    createUserDto: CreateUserDto,
+    userPermissions: UserPermissionResponse,
+  ): Promise<User> {
     const user = this.userRepository.create({
       ...createUserDto,
       user_status: 'active',
@@ -55,42 +58,40 @@ export class UserService {
       order: { [sortField]: sortOrder },
       where: filter,
     };
-   
+
     const users = await this.userRepository.find(options);
-   
+
     const transformedUsers = await Promise.all(
       users.map(async (user) => {
         const createdByUser = await this.userRepository.findOne({
           where: { id: user.created_by },
           select: ['id', 'email', 'user_status'],
         });
-   
+
         const updatedByUser = await this.userRepository.findOne({
           where: { id: user.updated_by },
           select: ['id', 'email', 'user_status'],
         });
 
-        const userRoleId = await this.userRoleRepository.findOne({
+        const userRole = await this.userRoleRepository.findOne({
           where: { userId: user.id, projectId: IsNull() },
           select: ['roleId'],
         });
 
-        if (!userRoleId) {
-          return {
-            ...user,
-            created_by: createdByUser,
-            updated_by: updatedByUser,
-          };
-        }
+        let isAppAdmin = false;
 
-        const roleName = await this.roleRepository.findOne({
-          where: { id: userRoleId.roleId },
-          select: ['role_name'],
-        });
+        if (userRole) {
+          const role = await this.roleRepository.findOne({
+            where: { id: userRole.roleId },
+            select: ['role_name'],
+          });
+
+          isAppAdmin = role?.role_name === 'App Admin';
+        }
 
         return {
           ...user,
-          ...roleName,
+          isAppAdmin,
           created_by: createdByUser,
           updated_by: updatedByUser,
         } as any;
@@ -104,7 +105,11 @@ export class UserService {
     return await this.userRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto, userPermissions:UserPermissionResponse): Promise<void> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+    userPermissions: UserPermissionResponse,
+  ): Promise<void> {
     await this.userRepository.update(id, {
       ...updateUserDto,
       updated_by: userPermissions.user.id,
@@ -145,13 +150,17 @@ export class UserService {
         (userRole) => userRole.project?.id === projectId,
       );
       if (userRolesInProject.length === 0) {
-        throw new NotFoundException(`User has no role in project with ID ${projectId}`);
+        throw new NotFoundException(
+          `User has no role in project with ID ${projectId}`,
+        );
       }
       return {
         projectId,
         projectName: userRolesInProject[0]?.project.project_name,
         role: userRolesInProject[0]?.role.role_name,
-        permissionsOfProject: await this.getPermissionsByRoles(userRolesInProject[0]?.role.id),
+        permissionsOfProject: await this.getPermissionsByRoles(
+          userRolesInProject[0]?.role.id,
+        ),
       };
     } else {
       return await Promise.all(
@@ -160,7 +169,7 @@ export class UserService {
           projectName: ur.project?.project_name || null,
           role: ur.role.role_name,
           permissionsOfProject: await this.getPermissionsByRoles(ur.role.id),
-        }))
+        })),
       );
     }
   }
@@ -172,6 +181,5 @@ export class UserService {
     });
     return rolePermissions.map((rp) => rp.permission.permission_name);
   }
-
 }
 
