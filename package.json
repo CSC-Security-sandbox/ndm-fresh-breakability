@@ -101,7 +101,8 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
+      "/test/",
+      "/src/logger/logger.service.ts"
     ]
   }
 }
