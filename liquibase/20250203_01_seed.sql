@@ -19,7 +19,7 @@ BEGIN
     INSERT INTO "user" (id, email, user_status, created_at, created_by, updated_at, updated_by) 
     VALUES (
         user_id,
-        'admin@datamigrate.local',
+        'admin@datamigrator.local',
         'active',
         now(),
         user_id,
