@@ -4,7 +4,7 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 
 
-@Entity({ name: 'jobidmapping', schema: 'migrateadmin' })
+@Entity({ name: 'jobidmapping' })
 export class JobIdMappingEntity extends Base {
   @ApiProperty({ description: 'UUID of the job mapping' })
   @PrimaryGeneratedColumn('uuid')
