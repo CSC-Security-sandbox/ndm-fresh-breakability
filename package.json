@@ -102,10 +102,7 @@
       "/coverage",
       "/dist",
       "/test/",
-      "/entities/",
-      ".*\\.protocol\\.ts$",
-      "src/protocols/protocol/protocol.ts",
-      "src/logger/logger.service.ts"
+      "/src/logger/logger.service.ts"
     ]
   }
 }

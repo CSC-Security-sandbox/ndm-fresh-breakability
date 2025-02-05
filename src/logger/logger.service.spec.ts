@@ -117,4 +117,8 @@ describe('Logger', () => {
     expect(loggerInstance.info).toHaveBeenCalledWith(message);
   });
 
+  it('should set isRuntimeInstalled to true after Runtime.install is called', () => {
+    expect(Logger['isRuntimeInstalled']).toBe(true);
+  });
+
 });
