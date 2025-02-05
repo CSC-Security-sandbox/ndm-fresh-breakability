@@ -88,11 +88,13 @@ export interface JobRunsDTO {
   jobType: string;
   sourceServer: ServerDetailsDTO;
   destinationServer?: ServerDetailsDTO;
+  nextSchedule?: Date;
   timeElapsed: number;
   scannedFilesCount: string;
   scannedDirectoriesCount: string;
   totalScannedSize: string;
   errors: string[];
+  totalMigratedSize: string
 }
 
 export interface ServerDetailsDTO {
@@ -116,6 +118,7 @@ export interface JobRunDetailsDTO {
   totalScannedSize: string;
   errors: string[];
   tasks: TaskDTO[];
+  totalMigratedSize: string
 }
 export interface TaskDTO {
   taskId: string;

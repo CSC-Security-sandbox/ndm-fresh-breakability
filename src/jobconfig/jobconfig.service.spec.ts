@@ -492,5 +492,57 @@ it('should handle database errors in find method', async () => {
     });
 });
 
+  describe('createBulkMigrate', () => {
+    it('should return success for bulk migrate', async () => {
+      const mokcResult = [
+        {
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          jobType: JobType.Migrate,
+          status: JobStatus.Active,
+          excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
+          excludeFilePatterns: '*.log, *.tmp',
+          preserveAccessTime: false,
+          firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
+          futureScheduleAt: '0 12 * * *',
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
+          scheduler: '0 12 * * *',
+        }
+      ] as any;
 
+      const res = await service.createBulkMigrate({} as any);
+      expect(res).toEqual(mokcResult);
+      expect(res.length).toEqual(1);
+      expect(res[0].jobType).toEqual(JobType.Migrate);
+      expect(res[0].status).toEqual(JobStatus.Active);
+    })
+  })
+
+  describe('createBulkCutover', () => {
+    it('should return success for bulk cutover', async () => {
+      const mokcResult = [
+        {
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          jobType: JobType.CutOver,
+          status: JobStatus.Active,
+          firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
+        }
+      ] as any;
+
+      const res = await service.createBulkCutover({} as any);
+      expect(res).toEqual(mokcResult);
+      expect(res.length).toEqual(1);
+      expect(res[0].jobType).toEqual(JobType.CutOver);
+      expect(res[0].status).toEqual(JobStatus.Active);
+    })
+  })
+
+  describe('precheck', () => {
+    it('should return succes for precheck', async () => {
+      const result = await service.precheck({} as any);
+      expect(result.status).toEqual('success');
+    })
+  })
 });

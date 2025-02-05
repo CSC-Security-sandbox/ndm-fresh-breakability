@@ -2,7 +2,6 @@ import { JobType, OperationType, Protocol, TaskType } from "src/constants/enums"
 import { Operations } from "src/constants/status";
 import * as parser from 'cron-parser'
 
-
 export const OperationToProtocol = (operation : Operations):Protocol => {
     switch (operation) {
         case Operations.LIST_NFS_PATHS:

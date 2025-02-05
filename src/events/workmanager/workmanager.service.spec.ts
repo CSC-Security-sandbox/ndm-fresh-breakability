@@ -314,6 +314,7 @@ describe('WorkManager', () => {
       const mockTask = {
         id: 'task1',
         jobRunId: 'jobRun1',
+        status: TaskStatus.Completed,
         commands: [
           { 
             fPath: '/path1', 
@@ -358,6 +359,7 @@ describe('WorkManager', () => {
       const mockTask = {
         id: 'task1',
         jobRunId: 'jobRun1',
+        status: TaskStatus.Completed,
         commands: [
           { fPath: '/path1', ops: [{ status: OperationStatus.COMPLETED }] },
           { fPath: '/path2', ops: [{ status: OperationStatus.ERROR, error: 'Some error' }] },
