@@ -157,7 +157,7 @@ describe('RedisStreamCollection', () => {
       ]);
 
       const messages = [];
-      for await (const msg of collection.groupRead('readerName')) {
+      for await (const msg of collection.groupRead('readerName',1)) {
         messages.push(msg);
         break;
       }
@@ -177,7 +177,7 @@ describe('RedisStreamCollection', () => {
       ]);
 
       const messages = [];
-      for await (const msg of collection.groupRead('readerName')) {
+      for await (const msg of collection.groupRead('readerName',10)) {
         messages.push(msg);
         break;
       }

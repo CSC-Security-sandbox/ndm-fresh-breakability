@@ -260,7 +260,7 @@ describe('JobContext Class', () => {
       );      
       jest.spyOn(jobContext.filesInfo, 'groupRead').mockReturnValue((async function* () { yield fileInfo; })());
       const files = [];
-      for await (const file of jobContext.groupReadFiles('reader1')) {
+      for await (const file of jobContext.groupReadFiles('reader1',10)) {
         files.push(file);
       }
       expect(files).toEqual([fileInfo]);
@@ -314,7 +314,7 @@ describe('JobContext Class', () => {
       );
       jest.spyOn(jobContext.dirsInfo, 'groupRead').mockReturnValue((async function* () { yield dirInfo; })());
       const dirs = [];
-      for await (const dir of jobContext.groupReadDirs('reader1')) {
+      for await (const dir of jobContext.groupReadDirs('reader1',10)) {
         dirs.push(dir);
       }
       expect(dirs).toEqual([dirInfo]);
@@ -356,7 +356,7 @@ describe('JobContext Class', () => {
       )        
       jest.spyOn(jobContext.tasksInfo, 'groupRead').mockReturnValue((async function* () { yield task; })());
       const tasks = [];
-      for await (const t of jobContext.groupReadTasks('reader1')) {
+      for await (const t of jobContext.groupReadTasks('reader1',10)) {
         tasks.push(t);
       }
       expect(tasks).toEqual([task]);
@@ -378,7 +378,7 @@ describe('JobContext Class', () => {
       const taskStats = new TaskStats("taskStat1");
       jest.spyOn(jobContext.taskStats, 'groupRead').mockReturnValue((async function* () { yield taskStats; })());
       const stats = [];
-      for await (const stat of jobContext.groupReadTaskStats('reader1')) {
+      for await (const stat of jobContext.groupReadTaskStats('reader1',10)) {
         stats.push(stat);
       }
       expect(stats).toEqual([taskStats]);
@@ -400,7 +400,7 @@ describe('JobContext Class', () => {
       const errorInfo: DMError = new DMError('file', new Error('error'));
       jest.spyOn(jobContext.errorsInfo, 'groupRead').mockReturnValue((async function* () { yield errorInfo; })());
       const errors = [];
-      for await (const error of jobContext.groupReadErrors('reader1')) {
+      for await (const error of jobContext.groupReadErrors('reader1',10)) {
         errors.push(error);
       }
       expect(errors).toEqual([errorInfo]);
