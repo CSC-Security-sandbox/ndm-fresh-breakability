@@ -81,40 +81,40 @@ export abstract class JobContext {
     yield* this.filesInfo.read(readerName);
   }
 
-  async *groupReadFiles(readerName: string): AsyncGenerator<FileInfo> {
-    yield* this.filesInfo.groupRead(readerName);
+  async *groupReadFiles(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
+    yield* this.filesInfo.groupRead(readerName,batchSize);
   }
 
   async *readDirs(readerName: string): AsyncGenerator<FileInfo> {
     yield* this.dirsInfo.read(readerName);
   }
 
-  async *groupReadDirs(readerName: string): AsyncGenerator<FileInfo> {
-    yield* this.dirsInfo.groupRead(readerName);
+  async *groupReadDirs(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
+    yield* this.dirsInfo.groupRead(readerName,batchSize);
   }
 
   async *readTasks(readerName: string): AsyncGenerator<Task> {
     yield* this.tasksInfo.read(readerName);
   }
 
-  async *groupReadTasks(readerName: string): AsyncGenerator<Task> {
-    yield* this.tasksInfo.groupRead(readerName);
+  async *groupReadTasks(readerName: string,batchSize:number): AsyncGenerator<Task> {
+    yield* this.tasksInfo.groupRead(readerName,batchSize);
   }
 
   async *readTaskStats(readerName: string): AsyncGenerator<TaskStats> {
     yield* this.taskStats.read(readerName);
   }
 
-  async *groupReadTaskStats(readerName: string): AsyncGenerator<TaskStats> {
-    yield* this.taskStats.groupRead(readerName);
+  async *groupReadTaskStats(readerName: string,batchSize:number): AsyncGenerator<TaskStats> {
+    yield* this.taskStats.groupRead(readerName,batchSize);
   }
 
   async *readErrors(readerName: string): AsyncGenerator<DMError> {
     yield* this.errorsInfo.read(readerName);
   }
 
-  async *groupReadErrors(readerName: string): AsyncGenerator<DMError> {
-    yield* this.errorsInfo.groupRead(readerName);
+  async *groupReadErrors(readerName: string,batchSize:number): AsyncGenerator<DMError> {
+    yield* this.errorsInfo.groupRead(readerName,batchSize);
   }
 
   serialize(): string {

@@ -138,7 +138,7 @@ async function startGroupFilesConsumer(jobRunId: string, groupName: string) {
     if (jobContext) {  
         while(true) {
             try {
-            for await (const file of jobContext.groupReadFiles(groupName)) {
+            for await (const file of jobContext.groupReadFiles(groupName,10)) {
                 logger.info(`File: ${JSON.stringify(file)}`);
             }
             } catch (err) {
@@ -178,7 +178,7 @@ async function startGroupTasksConsumer(jobRunId: string, groupName: string) {
     if (jobContext) {  
         while(true) {
             try {
-            for await (const task of jobContext.groupReadTasks(groupName)) {
+            for await (const task of jobContext.groupReadTasks(groupName,10)) {
                 logger.info(`Task: ${JSON.stringify(task)}`);
             }
             } catch (err) {

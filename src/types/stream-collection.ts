@@ -17,7 +17,7 @@ export interface StreamCollection<T extends Serializable> {
   close(): Promise<void>;
   append(record: T): Promise<string>;
   read(readerName: string): AsyncGenerator<T>;
-  groupRead(readerName: string): AsyncGenerator<T>;
+  groupRead(readerName: string,batchSize:number): AsyncGenerator<T>;
 }
 
 export interface FileCollection extends StreamCollection<FileInfo> {}

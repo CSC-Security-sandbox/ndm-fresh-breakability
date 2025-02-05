@@ -106,12 +106,14 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  async *groupRead(readerName: string): AsyncGenerator<T> {
+  async *groupRead(readerName: string, batchSize: number): AsyncGenerator<T> {
     this.logger.info(
-      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}`,
+      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}, Batch Size: ${batchSize}`,
     );
-
+  
     let lastReadId = '0';
+    let messagesProcessed = 0;
+  
     while (true) {
       const results = await this.redisClient.xReadGroup(
         this.jobRunId,
@@ -119,6 +121,7 @@ export class RedisStreamCollection<T extends Serializable>
         [{ key: this.streamKey, id: '>' }],
         { COUNT: 1, BLOCK: 5000 },
       );
+  
       if (results) {
         for (const result of results) {
           for (const message of result.messages) {
@@ -126,34 +129,38 @@ export class RedisStreamCollection<T extends Serializable>
             this.lastId = lastReadId;
             this.logger.info(`>> Reading message: ${lastReadId}`);
             yield decode(Buffer.from(message.message.obj, 'base64'));
+            messagesProcessed++;
           }
+        }
+      }
+  
+      if (messagesProcessed >= batchSize) {
+        this.logger.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
+        await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
+        break;
+      }
+  
+      this.logger.info('>> No results');
+      const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
+      this.logger.info(`Group info: ${JSON.stringify(groupInfo)}`);
+  
+      const consumerGroupInfo = groupInfo.find(
+        (group) => group.name === this.jobRunId,
+      );
+  
+      if (consumerGroupInfo) {
+        this.logger.info(
+          `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
+        );
+        this.logger.info(`Last collection id : ${this.lastId}`);
+  
+        if (consumerGroupInfo.lastDeliveredId === this.lastId) {
+          this.logger.info(`>> Acking messages: ${lastReadId}`);
+          await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
+          break;
         }
       } else {
-        this.logger.info('>> No results');
-        const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
-        this.logger.info(`Group info: ${JSON.stringify(groupInfo)}`);
-
-        const consumerGroupInfo = groupInfo.find(
-          (group) => group.name === this.jobRunId,
-        );
-        if (consumerGroupInfo) {
-          this.logger.info(
-            `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
-          );
-          this.logger.info(`Last collection id : ${this.lastId}`);
-
-          if (consumerGroupInfo.lastDeliveredId == this.lastId) {
-            this.logger.info(`>> Acking messages: ${lastReadId}`);
-            await this.redisClient.xAck(
-              this.streamKey,
-              this.jobRunId,
-              lastReadId,
-            );
-            break;
-          }
-        } else {
-          this.logger.info(`Consumer group ${this.jobRunId} not found.`);
-        }
+        this.logger.info(`Consumer group ${this.jobRunId} not found.`);
       }
     }
   }
