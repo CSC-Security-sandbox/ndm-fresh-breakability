@@ -140,28 +140,28 @@ export class RedisStreamCollection<T extends Serializable>
         break;
       }
   
-      this.logger.info('>> No results');
-      const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
-      this.logger.info(`Group info: ${JSON.stringify(groupInfo)}`);
+      // this.logger.info('>> No results');
+      // const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
+      // this.logger.info(`Group info: ${JSON.stringify(groupInfo)}`);
   
-      const consumerGroupInfo = groupInfo.find(
-        (group) => group.name === this.jobRunId,
-      );
+      // const consumerGroupInfo = groupInfo.find(
+      //   (group) => group.name === this.jobRunId,
+      // );
   
-      if (consumerGroupInfo) {
-        this.logger.info(
-          `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
-        );
-        this.logger.info(`Last collection id : ${this.lastId}`);
+      // if (consumerGroupInfo) {
+      //   this.logger.info(
+      //     `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
+      //   );
+      //   this.logger.info(`Last collection id : ${this.lastId}`);
   
-        if (consumerGroupInfo.lastDeliveredId === this.lastId) {
-          this.logger.info(`>> Acking messages: ${lastReadId}`);
-          await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
-          break;
-        }
-      } else {
-        this.logger.info(`Consumer group ${this.jobRunId} not found.`);
-      }
+      //   if (consumerGroupInfo.lastDeliveredId === this.lastId) {
+      //     this.logger.info(`>> Acking messages: ${lastReadId}`);
+      //     await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
+      //     break;
+      //   }
+      // } else {
+      //   this.logger.info(`Consumer group ${this.jobRunId} not found.`);
+      // }
     }
   }
 }
