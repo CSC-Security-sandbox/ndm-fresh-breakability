@@ -196,7 +196,7 @@ export class JobConfigService {
       destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
       jobConfig: [{
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.CutOver,
+        jobType: JobType.Migrate,
         jobRunDetails: {
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
           status: JobRunStatus.Completed
