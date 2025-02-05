@@ -204,5 +204,132 @@ describe('SMBProtocol', () => {
       expect(mockLogger.error).toHaveBeenCalledWith('Error during SMB connection: NT_STATUS_ACCESS_DENIED');
     });
   });
+
+  describe('listPaths', () => {
+    const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+
+    it('should list paths for darwin platform', async () => {
+      jest.spyOn(smbProtocol, 'listPathLinMac').mockResolvedValue(['share1', 'share2']);
+      (smbProtocol as any).platform = 'darwin';
+
+      const result = await smbProtocol.listPaths('traceId', payload);
+
+      expect(result).toEqual(['share1', 'share2']);
+      expect(smbProtocol.listPathLinMac).toHaveBeenCalledWith('traceId', payload);
+    });
+
+    it('should list paths for linux platform', async () => {
+      jest.spyOn(smbProtocol, 'listPathLinMac').mockResolvedValue(['share1', 'share2']);
+      (smbProtocol as any).platform = 'linux';
+
+      const result = await smbProtocol.listPaths('traceId', payload);
+
+      expect(result).toEqual(['share1', 'share2']);
+      expect(smbProtocol.listPathLinMac).toHaveBeenCalledWith('traceId', payload);
+    });
+
+    it('should list paths for win32 platform', async () => {
+      jest.spyOn(smbProtocol, 'listPathWindows').mockResolvedValue(['share1', 'share2']);
+      (smbProtocol as any).platform = 'win32';
+
+      const result = await smbProtocol.listPaths('traceId', payload);
+
+      expect(result).toEqual(['share1', 'share2']);
+      expect(smbProtocol.listPathWindows).toHaveBeenCalledWith('traceId', payload);
+    });
+
+    it('should throw error for unsupported platform', async () => {
+      (smbProtocol as any).platform = 'unsupported';
+
+      await expect(smbProtocol.listPaths('traceId', payload)).rejects.toThrow('Unsupported platform unsupported');
+    });
+  });
+
+  describe('listPathLinMac', () => {
+    it('should list shares successfully for linux and mac', async () => {
+      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
+        if (key == CommandPattern.LIST_PATHS) {
+          return CommandPattern.LIST_PATHS;
+        }
+      });
+
+      jest.spyOn(smbProtocol, 'executeCommand').mockResolvedValue({ message: 'share1\nshare2', status: 'success' });
+      (parseLinMacShares as any).mockReturnValue(['share1', 'share2']);
+
+      const result = await smbProtocol.listPathLinMac('traceId', payload);
+
+      expect(result).toEqual(['share1', 'share2']);
+      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type SMB from defaultWorkerId');
+      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] share1\nshare2 success');
+    });
+
+    it('should handle error during listing shares', async () => {
+      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
+        if (key == CommandPattern.LIST_PATHS) {
+          return CommandPattern.LIST_PATHS;
+        }
+      });
+
+      jest.spyOn(smbProtocol, 'executeCommand').mockRejectedValue(new Error('NT_STATUS_ACCESS_DENIED'));
+      (handleConnectionError as any).mockReturnValue('Handled connection error');
+
+      await expect(smbProtocol.listPathLinMac('traceId', payload)).rejects.toThrow('Handled connection error');
+      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type SMB from defaultWorkerId');
+      expect(mockLogger.error).toHaveBeenCalledWith('Error during SMB connection: NT_STATUS_ACCESS_DENIED');
+    });
+    describe('listPathWindows', () => {
+      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+
+      it('should list shares successfully for windows', async () => {
+        jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
+          if (key == CommandPattern.VALIDATE_CRED) {
+            return CommandPattern.VALIDATE_CRED;
+          } else if (key == CommandPattern.LIST_PATHS) {
+            return CommandPattern.LIST_PATHS;
+          }
+        });
+
+        jest.spyOn(smbProtocol, 'executeCommand').mockImplementation((traceId: string, p: any, pl: any, command: string, cd: string) => {
+          if (command.includes(CommandPattern.VALIDATE_CRED)) {
+            return Promise.resolve("Connected successfully.");
+          } else if (command.includes(CommandPattern.LIST_PATHS)) {
+            return Promise.resolve({ message: 'share1\nshare2' });
+          }
+        });
+
+        (parseWindowsShares as any).mockReturnValue(['share1', 'share2']);
+
+        const result = await smbProtocol.listPathWindows('traceId', payload);
+
+        expect(result).toEqual(['share1', 'share2']);
+        expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type SMB from defaultWorkerId');
+        expect(mockLogger.info).toHaveBeenCalledWith('[traceId] share1\nshare2');
+      });
+
+      it('should handle error during listing shares', async () => {
+        jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
+          if (key == CommandPattern.VALIDATE_CRED) {
+            return CommandPattern.VALIDATE_CRED;
+          } else if (key == CommandPattern.LIST_PATHS) {
+            return CommandPattern.LIST_PATHS;
+          }
+        });
+
+        jest.spyOn(smbProtocol, 'executeCommand').mockImplementation((traceId: string, p: any, pl: any, command: string, cd: string) => {
+          if (command.includes(CommandPattern.VALIDATE_CRED)) {
+            return Promise.resolve("Connected successfully.");
+          } else if (command.includes(CommandPattern.LIST_PATHS)) {
+            return Promise.reject(new Error('NT_STATUS_ACCESS_DENIED\nAdditional error info'));
+          }
+        });
+
+        await expect(smbProtocol.listPathWindows('traceId', payload)).rejects.toThrow('Additional error info');
+        expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type SMB from defaultWorkerId');
+      });
+    });
+
+  });
   });
 });
