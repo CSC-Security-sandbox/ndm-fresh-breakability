@@ -164,7 +164,7 @@ describe('RedisStreamCollection', () => {
 
       expect(messages).toEqual([record]);
       expect(logger.info).toHaveBeenCalledWith(
-        'Reading stream: streamKey, jobRunId, readerName',
+        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName'),
       );
     });
   });
@@ -184,7 +184,7 @@ describe('RedisStreamCollection', () => {
 
       //expect(message).toEqual({});
       expect(logger.info).toHaveBeenCalledWith(
-        'Reading stream: streamKey, jobRunId, readerName',
+        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName, Batch Size: 10'),
       );
       expect(logger.info).toHaveBeenCalledWith('>> No results');
 
