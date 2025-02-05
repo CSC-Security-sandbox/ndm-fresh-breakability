@@ -132,13 +132,18 @@ export class RedisStreamCollection<T extends Serializable>
             messagesProcessed++;
           }
         }
-      }
-  
-      if (messagesProcessed >= batchSize) {
-        this.logger.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
+        if (messagesProcessed >= batchSize) {
+          this.logger.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
+          await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
+          break;
+        }
+      }else{
+        this.logger.info(`>> No results, thus exiting`);
         await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
         break;
       }
+  
+     
   
       // this.logger.info('>> No results');
       // const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
