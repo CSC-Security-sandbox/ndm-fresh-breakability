@@ -13,6 +13,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
 import { nextDate } from 'src/utils/mapper';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
 
 @Injectable()
 export class JobConfigService {
@@ -22,6 +23,8 @@ export class JobConfigService {
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(FileServerEntity)
+    private readonly fileServerEntity: Repository<FileServerEntity>,
   ) { }
 
   // ------------ Events ---------------- //
@@ -189,6 +192,89 @@ export class JobConfigService {
   }
 
   async getCutoverDetailsByFileServerId(fileServerId: string) {
+
+
+
+    // const config =  await this.configEntity.findOne({
+    //   select: {
+    //       id: true,
+    //       configName: true,
+    //       configType: true,
+    //       projectId: true,
+    //       scannedDate: true,
+    //       status: true,
+    //       workingDirectory: {
+    //           pathName: true,
+    //           workingDirectory: true,
+    //           pathId: true
+    //       },
+    //       fileServers:{
+    //           id: true,
+    //           host: true,
+    //           serverType: true,
+    //           protocol: true,
+    //           userName: true,
+    //           password: true,
+    //           isRefreshed: true,
+    //           protocolVersion: true,
+    //           volumes:{
+    //               id: true,
+    //               volumePath: true,
+    //               jobConfig: {
+    //                   id: true,
+    //                   jobType: true,
+    //                   jobRunDetails: {
+    //                       id: true,
+    //                       status: true
+    //                   }
+    //               }
+    //           }
+    //       }
+    //   },
+    //   where: { id },
+    //   relations: {
+    //       project: true,
+    //       fileServers: {
+    //           workers: true,
+    //           volumes: {
+    //               jobConfig: {
+    //                     jobRunDetails: true  
+    //               }    
+    //           }
+                  
+    //       },
+    //       workingDirectory: true 
+    //   }
+    // });
+
+
+    // return await this.fileServerEntity.findOne({
+    //   where: { id: fileServerId }
+    // });
+
+
+
+    // {
+    //   // sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
+    //   destinationFileServerId: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+    //   destinationFileServerName: 'fileServer1',
+    //   protocol: Protocol.NFS,
+    //   volumes: [
+    //     {
+    //     destinationPathId: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+    //     destinationPathName: '/destination/test',
+    //     jobConfig: [{
+    //       id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+    //       jobType: JobType.Migrate,
+    //       jobRunDetails: {
+    //         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+    //         status: JobRunStatus.Completed
+    //       }
+    //     }]
+    //   }
+    // ]
+    // }
+
     return [{
       sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
       protocol: Protocol.NFS,
