@@ -75,19 +75,10 @@ export class UserService {
 
         const userRole = await this.userRoleRepository.findOne({
           where: { userId: user.id, projectId: IsNull() },
-          select: ['roleId'],
+          select: ['roleId', 'projectId'],
         });
 
-        let isAppAdmin = false;
-
-        if (userRole) {
-          const role = await this.roleRepository.findOne({
-            where: { id: userRole.roleId },
-            select: ['role_name'],
-          });
-
-          isAppAdmin = role?.role_name === 'App Admin';
-        }
+        const isAppAdmin = !!userRole;
 
         return {
           ...user,
