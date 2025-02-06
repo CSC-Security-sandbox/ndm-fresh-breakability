@@ -11,3 +11,7 @@ export const getChecksum = (filePath: string): Promise<string> => {
         stream.on("error", reject);
     });
 };
+
+
+export const removePrefix = (str: string, prefix: string): string => 
+    str.startsWith(prefix) ? str.slice(prefix.length, 1000) : str;

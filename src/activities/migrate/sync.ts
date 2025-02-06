@@ -1,11 +1,12 @@
 
 import * as fs from "fs";
-import { getChecksum } from "./base";
+import { getChecksum, removePrefix } from "./base";
 import * as path from "path";
 
-function* getDirectoryContents(dir: string): Generator<string> {
+function* getDirectoryContents(path: string): Generator<string> {
+    if(!fs.existsSync(path)) return
     try {
-        const items = fs.readdirSync(dir, { withFileTypes: true });
+        const items = fs.readdirSync(path, { withFileTypes: true });
         for (const item of items) {
             yield item.name;
         }
@@ -14,18 +15,22 @@ function* getDirectoryContents(dir: string): Generator<string> {
     }
 }
 
-const syncContent = async (sourcePath: string, targetPath: string) => {
-    const diff : string[] = [];
+const syncContent = async (sourcePath: string, targetPath: string, sourcePrefix: string) => {
+    const files: string[] = [];
+    const directory: string[] = [];
     try{
         const sourceContent = new Set<string>(await getDirectoryContents(sourcePath))
         const targeContent = new Set<string>(await getDirectoryContents(targetPath))
-
         for(const item of sourceContent) {
             const sourceContentPath = path.join(sourcePath, item);
-            if(!fs.existsSync(sourceContentPath)) continue
+            if(!fs.existsSync(sourceContentPath)) 
+                continue
             const sourceContent = fs.statSync(sourceContentPath)
-            if(!targeContent.has(item) || sourceContent.isDirectory())
-                diff.push(sourceContentPath)
+            const relativeSourcePath =  removePrefix(sourceContentPath, sourcePrefix)
+            if(sourceContent.isDirectory())
+                directory.push(relativeSourcePath)
+            else if(!targeContent.has(item)) 
+                files.push(relativeSourcePath)
             else {
                 const targetFilePath = path.join(targetPath, item);
                 const targetFile = fs.statSync(targetFilePath)
@@ -36,7 +41,7 @@ const syncContent = async (sourcePath: string, targetPath: string) => {
                         getChecksum(targetFilePath)
                     ]);
                     if (checksum1 !== checksum2) {
-                        diff.push(sourceContentPath);
+                        files.push(relativeSourcePath);
                     }
                 } catch (error) {
                     console.error("Error computing checksum:", error);
@@ -46,12 +51,14 @@ const syncContent = async (sourcePath: string, targetPath: string) => {
     }catch(error) {
         console.error(error);
     }
-    return diff;
+    return {files, directory};
 }
 
 // const dir1 = "/Users/calfus-kunalavghade/Desktop/node-fs/test1";
-// const dir2 = "/Users/calfus-kunalavghade/Desktop/node-fs/test2";
+// const dir2 = "/Users/calfus-kunalavghade/Desktop/node-fs/test3";
 
-// syncContent(dir1, dir2)
-//     .then(diff => console.log("Differences:", diff))
+// const prefix = "/Users/calfus-kunalavghade/Desktop/node-fs";
+
+// syncContent(dir1, dir2, prefix)
+//     .then(diff => console.log("Differences:", diff.files , diff.directory))
 //     .catch(err => console.error("Error:", err));
