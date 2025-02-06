@@ -90,6 +90,7 @@ export class RedisStreamCollection<T extends Serializable>
         [{ key: this.streamKey, id: this.lastId }],
         { COUNT: 1, BLOCK: 5000 },
       );
+      this.logger.info(`Results in read>>>>: ${JSON.stringify(results)}`);
       if (results) {
         for (const result of results) {
           for (const message of result.messages) {
