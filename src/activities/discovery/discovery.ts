@@ -54,7 +54,9 @@ async function processTask(
   let taskStats = undefined;
   try {
     let redisClient = await RedisUtils.getClient();
+    console.log(`Redis Client: ${redisClient}`);
     if (!redisClient.isOpen) redisClient = await redisClient.connect();
+    console.log(`Redis Client connect: ${redisClient}`);
     const contextProvider = JobContextFactory.getProvider('redis', redisClient);
     let jobContext = await contextProvider.getJobContext(traceId);
     await Promise.all(
@@ -74,25 +76,25 @@ async function processTask(
             chunkPath: fPath,
             jobRunId: ids.jobRunId,
             pathId: sourcePath,
-            batchSize: options.batchSize || 10,
+            batchSize: options?.batchSize || 10,
             workerId: ids.workerId,
             commandId: cmd.commandId || 'test',
-            excludePattern: excludeFilePatterns.split(','),
+            excludePattern: excludeFilePatterns?.split(','),
             taskId: ids.taskId,
             jobContext,
             client: redisClient,
           });
           taskStats.numFiles =
             taskStats.numFiles +
-            inventory.payload.accumulatedResult.filter(
+            inventory.payload?.accumulatedResult?.filter(
               (entry: any) => !entry.isDirectory,
             ).length;
           taskStats.numDirs =
-            taskStats.numDirs + inventory.payload.unScannedPaths?.length;
+            taskStats.numDirs + inventory?.payload?.unScannedPaths?.length;
           taskStats.numErrors = 0;
           log(
             traceId,
-            `Processed ${inventory.payload.accumulatedResult.length} files`,
+            `Processed ${inventory?.payload?.accumulatedResult?.length} files`,
           );
         } catch (error) {
           log(traceId, `Error in processing commands: ${error}`);
@@ -100,7 +102,8 @@ async function processTask(
             jobContext.errorsInfo.init();
           }
           const dmError = new DMError(cmd.fPath, error);
-          await jobContext.appendToErrorList(dmError);
+          const id = await jobContext.appendToErrorList(dmError);
+          jobContext.errorsInfo.lastId = id;
         }
       }),
     );
@@ -139,8 +142,8 @@ export async function processFolderRead({
     const fullPath = path.join(chunkPath, file);
     const lStat = await fs.promises.lstat(fullPath);
     const isDirectory = lStat.isDirectory();
-    const shouldExcludeFile = shouldExclude(fullPath, excludePattern);
-    if (shouldExcludeFile) continue;
+    // const shouldExcludeFile = shouldExclude(fullPath, excludePattern);
+    // if (shouldExcludeFile) continue;
     const entry: FileEntry = {
       taskId,
       pathId,
@@ -171,7 +174,9 @@ export async function processFolderRead({
       jobContext.errorsInfo.init();
     }
     const dmError = new DMError(file, error);
-    await jobContext.appendToErrorList(dmError);
+    const id = await jobContext.appendToErrorList(dmError);
+    jobContext.errorsInfo.lastId = id;
+    client.set(jobRunId, jobContext.serialize());
     return {
       traceId: jobRunId,
       status: 'error',
@@ -207,17 +212,21 @@ export async function processFolderRead({
       if (!jobContext.dirsInfo) {
         jobContext.dirsInfo.init();
       }
-      await jobContext.appendToDirList(fileStats);
+     const id=  await jobContext.appendToDirList(fileStats);
+      jobContext.dirsInfo.lastId = id;
+      jobContext.dirsInfo.numMessages++;
       log(jobRunId, `***************Appending to dir list***************`);
     } else {
       if (!jobContext.filesInfo) {
         jobContext.filesInfo.init();
       }
-      await jobContext.appendToFileList(fileStats);
+      const id = await jobContext.appendToFileList(fileStats);
+       jobContext.filesInfo.lastId = id;
+       jobContext.filesInfo.numMessages++;
       log(jobRunId, `***************Appending to file list***************`);
     }
   });
-  await client.set(jobRunId, jobContext.serialize());
+  client.set(jobRunId, jobContext.serialize());
   return { payload };
 }
 

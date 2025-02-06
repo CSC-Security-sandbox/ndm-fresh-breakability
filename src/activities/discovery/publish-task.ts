@@ -27,9 +27,14 @@ export async function publishTask(traceId: string): Promise<any> {
     logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
 
     // Process files and append tasks
-    for await (const file of jobContext.groupReadDirs('consumer-1')) {
-      logger.debug(`[${traceId}] Processing file: ${JSON.stringify(file)}`);
-
+    const directoryBatchSize = 500;
+    let counter=0;
+    for await (const directory of jobContext.groupReadDirs('consumer-1',directoryBatchSize)) {
+      counter++;
+      if (counter > directoryBatchSize){
+        console.log("breaking the loop of pubish task"); 
+        break;
+      }
       const ops = {
         0: {
           cmd: 'SCAN',
@@ -37,8 +42,7 @@ export async function publishTask(traceId: string): Promise<any> {
         },
       };
 
-      const commands = [new Command(file.path, ops, `cmd-${uuid4()}`)];
-
+      const commands = [new Command(directory.path, ops, `cmd-${uuid4()}`)];
       const task = new Task(
         uuid4(),
         traceId,
@@ -46,16 +50,13 @@ export async function publishTask(traceId: string): Promise<any> {
         'PENDING',
         'worker-1',
         '/mnt/nfs/test.txt',
-        null,
-        '*.tmp, *.log',
         commands,
       );
 
-      await jobContext.appendToTaskList(task);
-      logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+     const id =  await jobContext.appendToTaskList(task);
+     jobContext.tasksInfo.lastId = id;
+     logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
     }
-
-   
     await redisClient.set(traceId, jobContext.serialize());
     logger.log(`[${traceId}] JobContext updated in Redis.`);
 
@@ -68,7 +69,6 @@ export async function publishTask(traceId: string): Promise<any> {
       message: `Failed to publish task for Job run id ${traceId} : ${error}`,
     };
   } finally {
-    // Clean up Redis client
     if (redisClient && redisClient.isOpen) {
       await redisClient.quit();
       logger.log(`[${traceId}] Redis client connection closed.`);

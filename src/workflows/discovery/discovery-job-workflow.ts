@@ -2,22 +2,27 @@ import { proxyActivities } from '@temporalio/workflow';
 import type * as discovery from '../../activities/discovery/discovery';
 import type * as fetchTasks from '../../activities/discovery/fetch-tasks';
 import * as publishTask from '../../activities/discovery/publish-task';
-import axios from 'axios';
-import { WorkersConfig } from 'src/config/app.config';
+import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
 const { discovery: scanActivity } = proxyActivities<typeof discovery>({
-  startToCloseTimeout: '30s',
+  startToCloseTimeout: '300s',
 });
 const { fetchTasks: fetchTaskActivity } = proxyActivities<typeof fetchTasks>({
-  startToCloseTimeout: '30s',
+  startToCloseTimeout: '300s',
 });
 
 const { publishTask: publishTaskActivity } = proxyActivities<
   typeof publishTask
+>({
+  startToCloseTimeout: '300s',
+});
+
+const { discoveryStatusUpdate: updateDiscoveryStatus } = proxyActivities<
+  typeof discoveryStatusUpdate
 >({
   startToCloseTimeout: '30s',
 });
@@ -35,38 +40,51 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
     args.traceId,
     `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args.options)}`,
   );
-  const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
+
   let discoveryResponse: any = {};
   try {
     while (true) {
-      const tasks: any = await fetchTaskActivity(traceId);
-      if (tasks && tasks.length === 0) {
+      const tasks = await fetchTaskActivity(traceId);
+      console.log(`Tasks fetched :}`);
+      if (!tasks || tasks.length === 0) {
         log(traceId, `No more tasks in the stream. Exiting workflow.`);
-        break;
-      } else {
-        log(traceId, `Tasks fetched from the stream: ${JSON.stringify(tasks)}`);
-        for (const task of tasks) {
-          discoveryResponse = await scanActivity(
-            args.traceId,
-            args.options,
-            task,
-          );
-          log(
-            traceId,
-            `Discovery findings: ${JSON.stringify(discoveryResponse)}`,
-          );
-          if (discoveryResponse && discoveryResponse.numDirs > 0) {
-            await publishTaskActivity(traceId);
-          }
+        await updateDiscoveryStatus(traceId, 'COMPLETED')
+          .then(() => {
+            log(traceId, `Discovery status updated to Completed`);
+          })
+          .catch((err) => {
+            log(traceId, `Failed to update discovery status: ${err}`);
+          });
+        return { message: 'Discovery Completed' };
+      }
+
+      for (const task of tasks) {
+        const discoveryResponse = await scanActivity(
+          args.traceId,
+          args?.options,
+          task,
+        );
+
+        log(
+          traceId,
+          `Discovery findings: ${JSON.stringify(discoveryResponse)}`,
+        );
+
+        if (discoveryResponse && discoveryResponse.numDirs > 0) {
+          await publishTaskActivity(traceId);
         }
       }
     }
-    await axios.patch(`${workerJobServiceUrl}/${traceId}/Completed`);
-    return { message: 'Discovery completed' };
   } catch (error) {
     log(traceId, `Error  occured during discovery : ${error}`);
-    await axios.patch(`${workerJobServiceUrl}/${traceId}/Failed`);
-    return { message: 'Discovery failed'};
-   
+    await updateDiscoveryStatus(traceId, 'FAILED')
+      .then(() => {
+        log(traceId, `Discovery status updated to Completed`);
+      })
+      .catch((err) => {
+        log(traceId, `Failed to update discovery status: ${err}`);
+      });
+    log(traceId, `Discovery status updated to Completed`);
+    return { message: 'Discovery failed' };
   }
 }
