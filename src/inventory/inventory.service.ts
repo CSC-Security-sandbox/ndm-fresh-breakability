@@ -5,7 +5,10 @@ import { InventoryEntity } from '../entities/inventory.entity';
 import { CreateInventory, DiscoveryCompletedPayload, InventoryPayload, InventoryPayloadType } from './inventory.type';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy, ClientProxyFactory, Transport } from '@nestjs/microservices';
-import { Pattern } from 'src/enum/queues.enum';
+import { OperationStatus, OperationType, Pattern } from 'src/enum/queues.enum';
+import { TaskEntity } from 'src/entities/task.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class InventoryService {
@@ -21,7 +24,12 @@ export class InventoryService {
     constructor(
         @InjectRepository(InventoryEntity)
         private readonly inventoryRepo: Repository<InventoryEntity>,
-        private readonly configService: ConfigService
+        private readonly configService: ConfigService,
+        @InjectRepository(TaskEntity)
+        private readonly taskRepo: Repository<TaskEntity>,
+        @InjectRepository(OperationsEntity)
+        private readonly operationRepo: Repository<OperationsEntity>,
+
     ) { 
 
         const urls: any = this.configService.get<string[]>('app.rabbitmq.urls') || '';
@@ -87,4 +95,33 @@ export class InventoryService {
     async notifyDiscoveryCompleted(data: DiscoveryCompletedPayload) {
         await this.reportsClient.send(Pattern.DISCOVERY_COMPLETED, data).toPromise()
     }  
+  async saveTasks(data: any) {
+    try {
+    const {id,jobRunId,taskType,status,sPath,tPath,excludeFilePatterns,commands} = data;
+     let  workerId =  randomUUID();
+    const task = this.taskRepo.create({
+      id: id,
+      jobRunId: jobRunId,
+      status:status,
+      taskType:taskType,
+      workerId: workerId
+    });
+   const taskEntity=  await this.taskRepo.insert(task);
+   console.log ('taskEntity',taskEntity);
+    const operation = this.operationRepo.create({
+      taskId: id,
+     jobRunId: jobRunId,
+     sPathId: workerId,
+     tPathId:  tPath ?? null,
+     status : OperationStatus.COMPLETED,
+     operationType: OperationType.SCAN,
+     request:commands,
+     fPath: commands[0]?.fPath
+    });
+    await this.operationRepo.insert(operation);
+  }catch(err){  
+    this.logger.error(`Failed to save task records: ${err.message}`, err.stack);
+    throw new Error('Error while saving task records to the database');
+  }
+}
 }
