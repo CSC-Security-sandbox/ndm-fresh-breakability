@@ -40,7 +40,7 @@ export class DiscoveryService {
       }
 
       await this.inventoryRepo.query(
-        "CALL migrateadmin.generate_discovery_report($1)",
+        "CALL generate_discovery_report($1)",
         [jobRunId]
       );
 
@@ -78,7 +78,7 @@ export class DiscoveryService {
     try {
       const jobRunUUID = `${jobRunId}::UUID`;
       await this.inventoryRepo.query(
-        "CALL migrateadmin.generate_coc_report($1, $2);",
+        "CALL generate_coc_report($1, $2);",
         [jobRunUUID, `${this.reportLocation}::TEXT`]
       );
       return { message: "Report generated successfully" };
