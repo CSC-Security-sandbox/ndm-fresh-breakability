@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, IsNull, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -23,7 +23,7 @@ export class UserService {
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
 
-    @InjectRepository(RolePermission) 
+    @InjectRepository(RolePermission)
     private rolePermissionRepository: Repository<RolePermission>,
 
     @InjectRepository(Project)
@@ -33,7 +33,10 @@ export class UserService {
     private accountRepository: Repository<Account>,
   ) {}
 
-  create(createUserDto: CreateUserDto, userPermissions:UserPermissionResponse): Promise<User> {
+  create(
+    createUserDto: CreateUserDto,
+    userPermissions: UserPermissionResponse,
+  ): Promise<User> {
     const user = this.userRepository.create({
       ...createUserDto,
       user_status: 'active',
@@ -42,11 +45,10 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
-
   async findAll(
     page: number = 1,
     limit: number = 10,
-    sortField: string = "id",
+    sortField: string = 'id',
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
   ): Promise<User[]> {
@@ -56,29 +58,37 @@ export class UserService {
       order: { [sortField]: sortOrder },
       where: filter,
     };
-   
+
     const users = await this.userRepository.find(options);
-   
+
     const transformedUsers = await Promise.all(
       users.map(async (user) => {
         const createdByUser = await this.userRepository.findOne({
           where: { id: user.created_by },
           select: ['id', 'email', 'user_status'],
         });
-   
+
         const updatedByUser = await this.userRepository.findOne({
           where: { id: user.updated_by },
           select: ['id', 'email', 'user_status'],
         });
-   
+
+        const userRole = await this.userRoleRepository.findOne({
+          where: { userId: user.id, projectId: IsNull() },
+          select: ['roleId', 'projectId'],
+        });
+
+        const isAppAdmin = !!userRole;
+
         return {
           ...user,
+          isAppAdmin,
           created_by: createdByUser,
           updated_by: updatedByUser,
         } as any;
       }),
     );
-   
+
     return transformedUsers;
   }
 
@@ -86,7 +96,11 @@ export class UserService {
     return await this.userRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto, userPermissions:UserPermissionResponse): Promise<void> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+    userPermissions: UserPermissionResponse,
+  ): Promise<void> {
     await this.userRepository.update(id, {
       ...updateUserDto,
       updated_by: userPermissions.user.id,
@@ -127,13 +141,17 @@ export class UserService {
         (userRole) => userRole.project?.id === projectId,
       );
       if (userRolesInProject.length === 0) {
-        throw new NotFoundException(`User has no role in project with ID ${projectId}`);
+        throw new NotFoundException(
+          `User has no role in project with ID ${projectId}`,
+        );
       }
       return {
         projectId,
         projectName: userRolesInProject[0]?.project.project_name,
         role: userRolesInProject[0]?.role.role_name,
-        permissionsOfProject: await this.getPermissionsByRoles(userRolesInProject[0]?.role.id),
+        permissionsOfProject: await this.getPermissionsByRoles(
+          userRolesInProject[0]?.role.id,
+        ),
       };
     } else {
       return await Promise.all(
@@ -142,7 +160,7 @@ export class UserService {
           projectName: ur.project?.project_name || null,
           role: ur.role.role_name,
           permissionsOfProject: await this.getPermissionsByRoles(ur.role.id),
-        }))
+        })),
       );
     }
   }
@@ -154,6 +172,5 @@ export class UserService {
     });
     return rolePermissions.map((rp) => rp.permission.permission_name);
   }
-
 }
 

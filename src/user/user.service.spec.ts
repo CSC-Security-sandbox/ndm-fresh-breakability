@@ -21,7 +21,7 @@ describe('UserService', () => {
   let accountRepository: Repository<Account>;
   let projectRepository: Repository<Project>;
   let userRoleRepository: Repository<UserRole>;
-  let rolePermissionRepository: Repository<RolePermission>;;
+  let rolePermissionRepository: Repository<RolePermission>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -73,14 +73,14 @@ describe('UserService', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca',
+    },
+  } as UserPermissionResponse;
 
   it('should create a user', async () => {
     
@@ -131,6 +131,7 @@ describe('UserService', () => {
         first_name: '',
         last_name: '',
         name: '',
+        isAppAdmin: false,
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -146,6 +147,7 @@ describe('UserService', () => {
         first_name: '',
         last_name: '',
         name: '',
+        isAppAdmin: true,
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -156,19 +158,21 @@ describe('UserService', () => {
       },
     ];
    
-    // Mock the userRepository to return the list of users
     jest.spyOn(userRepository, 'find').mockResolvedValue(users);
    
-    // Mock the findOne method to return the first user (just for reference in your service)
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(users[0]);
-   
-    // Call the service's findAll method
+
+    jest
+      .spyOn(userRoleRepository, 'findOne')
+      .mockResolvedValue({ roleId: '1' } as UserRole);
+
+    jest
+      .spyOn(roleRepository, 'findOne')
+      .mockResolvedValue({ role_name: 'App Admin' } as Role);
+
     const result = await service.findAll();
-   
-    // Ensure the userRepository's find method was called
     expect(userRepository.find).toHaveBeenCalled();
    
-    // Check if the result contains the expected users with their properties
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -357,12 +361,12 @@ describe('UserService', () => {
 
     expect(userRepository.remove).toHaveBeenCalledWith(user);
   });
-   
+
   it('should throw NotFoundException if user is not found', async () => {
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
-   
+
     await expect(service.delete('1')).rejects.toThrow(
-      new NotFoundException('User with ID 1 not found')
+      new NotFoundException('User with ID 1 not found'),
     );
   });
 
