@@ -1,0 +1,1 @@
+ALTER TABLE INVENTORY ADD COLUMN extension text

@@ -7,4 +7,8 @@
       <sqlFile path="liquibase/20250124_01_create_all_db_writer_existing_tables.sql"/>
    </changeSet>
 
+   <changeSet id="7002" author="aniketd">
+      <sqlFile path="liquibase/20250206_01_alter_inventory_table.sql"/>
+   </changeSet>
+
 </databaseChangeLog>
