@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In } from 'typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
@@ -67,68 +67,102 @@ export class JobConfigService {
   }
 
   async createBulkMigrate(bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
-    return [
-      {
-        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.Migrate,
-        status: JobStatus.Active,
-        excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
-        excludeFilePatterns: '*.log, *.tmp',
-        preserveAccessTime: false,
-        firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
-        futureScheduleAt: '0 12 * * *',
-        sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-        targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
-        scheduler: '0 12 * * *',
-      }
-    ];
+    try {
+      return [
+        {
+          status: 'created',
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          jobType: JobType.Migrate,
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'
+        },
+        {
+          status: 'failed',
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
+          jobType: JobType.Migrate,
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd'
+        }
+      ];
+    } catch (error) {
+      throw new HttpException({
+          status: 'failed',
+          message: error.message || 'An error occurred while creating bulk migrate job',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
 
   async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
-    return [
-      {
-        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.CutOver,
-        status: JobStatus.Active,
-        firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
-        sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-        targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
-      }
-    ];
+    try {
+      return [
+        {
+          status: 'created',
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          jobType: JobType.CutOver,
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
+        },
+        {
+          status: 'failed',
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
+          jobType: JobType.CutOver,
+          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
+          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd',
+        }
+      ];
+    } catch (error) {
+      throw new HttpException({
+          status: 'failed',
+          message: error.message || 'An error occurred while creating bulk cutover job',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes[]> {
-    return [
-      {
-        status: "success",
-        workerId: "worker-12345",
-        workerName: "worker",
-        sourceFileServerConnection: {
+    try {
+      return [
+        {
           status: "success",
-          message: "File server connection established."
-        },
-        targetFileServerConnection: {
-          status: "success",
-          message: "File server connection established."
-        },
-        mountStatus: {
-          status: "mounted"
-        },
-        permissions: {
-          source: {
-            path: "/mnt/source",
-            writeAccess: true,
-            message: "Worker has write access to the source path."
+          workerId: "worker-12345",
+          workerName: "worker",
+          sourceFileServerConnection: {
+            status: "success",
+            message: "File server connection established."
           },
-          target: {
-            path: "/mnt/target",
-            writeAccess: true,
-            message: "Worker has write access to the target path."
+          targetFileServerConnection: {
+            status: "success",
+            message: "File server connection established."
+          },
+          mountStatus: {
+            status: "mounted"
+          },
+          permissions: {
+            source: {
+              path: "/mnt/source",
+              writeAccess: true,
+              message: "Worker has write access to the source path."
+            },
+            target: {
+              path: "/mnt/target",
+              writeAccess: true,
+              message: "Worker has write access to the target path."
+            }
           }
         }
-      }
-    ]
+      ]
+    } catch (error) {
+      throw new HttpException({
+          status: 'failed',
+          message: error.message || 'An error occurred precheck',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   // ------------  update ---------------- //

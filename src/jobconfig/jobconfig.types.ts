@@ -7,26 +7,19 @@ export interface InActivateJobConfigPayload {
 }
 
 export interface JobConfigBulkMigrateRes {
+    status: 'created' | 'failed';
     id: string;
     jobType: JobType;
-    status: JobStatus;
-    excludeOlderThan?: Date;
-    excludeFilePatterns?: string;
-    preserveAccessTime: boolean;
-    firstRunAt: Date;
-    futureScheduleAt: string;
     sourcePathId: string;
-    targetPathId: string[];
-    scheduler: string;
+    targetPathId: string;
 }
 
 export interface JobConfigBulkCutoverRes {
+    status: 'created' | 'failed';
     id: string;
     jobType: JobType;
-    status: JobStatus;
-    firstRunAt: Date;
     sourcePathId: string;
-    targetPathId: string[];
+    targetPathId: string;
 }
 
 export interface JobConfigPrecheckRes {

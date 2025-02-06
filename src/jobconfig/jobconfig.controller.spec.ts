@@ -94,7 +94,7 @@ describe('JobConfigController', () => {
 
   describe('precheck', () => {
     it('should return precheck result', async () => {
-      const precheckDto: JobConfigPrecheck = { sourcePathId: '', destinationPathId: [''] , preserveAccessTime: true }
+      const precheckDto: any = { sourcePathId: '', destinationPathId: [''] , preserveAccessTime: true }
       const response: JobConfigPrecheckRes[] =[
         {
           status: "success",
