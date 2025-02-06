@@ -20,7 +20,7 @@ export class PdfService {
       this.logger.log( `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
 
       await this.inventoryRepo.query(
-        "CALL migrateadmin.generate_discovery_report($1)",
+        "CALL generate_discovery_report($1)",
         [jobRunId]
       );
 
