@@ -5,7 +5,7 @@ import { JobRunEntity } from './jobrun.entity';
 
 
 
-@Entity({ name: 'job_options', schema: 'migrateadmin' })
+@Entity({ name: 'job_options' })
 export class JobOptionsEntity extends Base {
   @ApiProperty({ description: 'UUID of the job' })
   @PrimaryGeneratedColumn('uuid')
