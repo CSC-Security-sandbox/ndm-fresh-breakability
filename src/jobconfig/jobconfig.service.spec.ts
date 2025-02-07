@@ -373,6 +373,12 @@ it('should handle database errors in find method', async () => {
         path: '/target/path',
         protocol: 'FTP',
       },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
+      },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
       jobRuns: [
@@ -434,6 +440,12 @@ it('should handle database errors in find method', async () => {
         protocol: null,
       },
       destinationServer: {
+      },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
       },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
