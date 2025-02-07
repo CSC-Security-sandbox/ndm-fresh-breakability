@@ -182,6 +182,12 @@ export class JobConfigService {
       status: jobConfig.status,    
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
+      aggregateData: {
+        timeElapsed: 0,
+        scannedFilesCount: 0,
+        scannedDirectoriesCount: 0,
+        totalScannedSize: "0 B"
+      },
       errors: [],
     };
 
