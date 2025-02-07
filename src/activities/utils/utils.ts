@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
+import { JobContext, JobContextFactory, RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
+import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -39,3 +41,14 @@ export const shouldExclude = ( fullPath: string, excludePatterns: string[] ): bo
     return regexPatterns.some((regex) => regex.test(normalizedPath));
 }
   
+
+export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promise<GetJobConnectionOutput> => {
+    const redisClient = await RedisUtils.getClient();
+    if (!redisClient.isOpen) {
+        await redisClient.connect();
+        console.log(`job run ${jobRunId}, Connected to Redis client.`);
+    }
+    const contextProvider = JobContextFactory.getProvider('redis', redisClient);
+    const jobContext = await contextProvider.getJobContext(jobRunId);
+    return {jobContext, connectionClient: redisClient}
+}

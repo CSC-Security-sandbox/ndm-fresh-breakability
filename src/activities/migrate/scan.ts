@@ -23,12 +23,10 @@ const syncContent = async (syncInput: SyncContentInput) => {
         const targeContent = new Set<string>(await getDirectoryContents(syncInput.targetPath))
 
         for(const item of sourceContent) {
-            
             const sourceContentPath = path.join(syncInput.sourcePath, item);
             if(!fs.existsSync(sourceContentPath)) continue;
-
             const sourceContent = fs.statSync(sourceContentPath)
-            const relativeSourcePath =  removePrefix(sourceContentPath, syncInput.sourcePrefix)
+            const relativeSourcePath = removePrefix(sourceContentPath, syncInput.sourcePrefix)
 
             if(sourceContent.isSymbolicLink() || shouldExclude(sourceContentPath, syncInput.excludePatterns)) 
                 continue;
@@ -41,19 +39,21 @@ const syncContent = async (syncInput: SyncContentInput) => {
 
             else {
                 const targetFilePath = path.join(syncInput.targetPath, item);
-                const targetFile = fs.statSync(targetFilePath)
-                if(fs.existsSync(targetFilePath) && targetFile.isFile()) 
-                    try {
-                        const [checksum1, checksum2] = await Promise.all([
-                            getChecksum(sourceContentPath),
-                            getChecksum(targetFilePath)
-                        ]);
-                        if (checksum1 !== checksum2) {
-                            syncContentOutput.files.push(relativeSourcePath);
+                if(fs.existsSync(targetFilePath)) {
+                    const targetFile = fs.statSync(targetFilePath)
+                    if(targetFile.isFile()) 
+                        try {
+                            const [checksum1, checksum2] = await Promise.all([
+                                getChecksum(sourceContentPath),
+                                getChecksum(targetFilePath)
+                            ]);
+                            if (checksum1 !== checksum2) {
+                                syncContentOutput.files.push(relativeSourcePath);
+                            }
+                        } catch (error) {
+                            console.error("Error computing checksum:", error);
                         }
-                    } catch (error) {
-                        console.error("Error computing checksum:", error);
-                    }
+                }
             }
         }
     }catch(error) {
@@ -61,6 +61,8 @@ const syncContent = async (syncInput: SyncContentInput) => {
     }
     return syncContentOutput;
 }
+
+
 
 // const dir1 = "/Users/calfus-kunalavghade/Desktop/node-fs/test1";
 // const dir2 = "/Users/calfus-kunalavghade/Desktop/node-fs/test3";
@@ -70,3 +72,7 @@ const syncContent = async (syncInput: SyncContentInput) => {
 // syncContent({sourcePath: dir1, targetPath: dir2, sourcePrefix:prefix,excludePatterns:[]})
 //     .then(diff => console.log("Differences:", diff.files , diff.directory))
 //     .catch(err => console.error("Error:", err));
+
+// 1. modified or size change -> copyFile 
+// 3. update meta -> if change
+// 2. if t and !s -> delete 
