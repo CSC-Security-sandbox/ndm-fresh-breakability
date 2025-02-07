@@ -1,6 +1,6 @@
 
 import * as fs from "fs";
-import { getChecksum, removePrefix, shouldExclude } from "./base";
+import { getChecksum, removePrefix, shouldExclude } from "../utils/utils";
 import * as path from "path";
 import { SyncContentInput, SyncContentOutput } from "./migrate.type";
 
