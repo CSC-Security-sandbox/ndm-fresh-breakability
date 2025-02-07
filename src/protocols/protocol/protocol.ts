@@ -15,7 +15,7 @@ export abstract class Protocol {
     abstract getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<string[]>;
     abstract validateConnection(traceId: string, payload: ProtocolPayload): Promise<any>;
 
-    protected async executeCommand(
+    public async executeCommand(
         traceId: string,
         protocolType: string,
         payload: ProtocolPayload,

@@ -45,7 +45,6 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.2",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.0.18",
     "@temporalio/client": "^1.11.6",
     "@temporalio/worker": "^1.11.6",
     "@temporalio/workflow": "^1.11.6",
@@ -120,9 +119,6 @@
       "/coverage",
       "/dist",
       "/test/",
-      "/entities/",
-      ".*\\.protocol\\.ts$",
-      "src/protocols/protocol/protocol.ts",
       "src/logger/logger.service.ts"
     ]
   }
