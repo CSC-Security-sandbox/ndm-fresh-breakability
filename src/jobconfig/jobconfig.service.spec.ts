@@ -1,15 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JobStatus, JobType } from 'src/constants/enums';
+import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { In, Repository } from 'typeorm';
 
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
-import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 const mockJobEntity = {
   id: 'uuid1',
@@ -25,8 +26,7 @@ const mockJobEntity = {
   preserveAccessTime: false,
   futureScheduleAt: null,
   firstRunAt: null,
-  status: JobStatus.Active,
-
+  status: JobStatus.Active
 };
 
 const mockJobDto = {
@@ -160,6 +160,16 @@ it('should handle database errors in find method', async () => {
   await expect(service.createBulkDiscovery(bulkDiscovery)).rejects.toThrowError('Database error');
 });
 
+  describe('inActivateJobConfig', () => {
+    it('should inactivate job config on event', async () => {
+      const payload: any = { jobConfigId: 1 };
+      await service.inActivateJobConfig(payload);
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: payload.jobConfigId },
+        { status: JobStatus.InActive }
+      );
+    });
+  })
 
   describe('updateJobConfig', () => {
     it('should update a job', async () => {
@@ -498,14 +508,14 @@ it('should handle database errors in find method', async () => {
         {
           status: 'created',
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.Migrate,
+          jobType: JobType.MIGRATE,
           sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
           targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'
         },
         {
           status: 'failed',
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
-          jobType: JobType.Migrate,
+          jobType: JobType.MIGRATE,
           sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
           targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd'
         }
@@ -514,7 +524,45 @@ it('should handle database errors in find method', async () => {
       const res = await service.createBulkMigrate({} as any);
       expect(res).toEqual(mokcResult);
       expect(res.length).toEqual(2);
-      expect(res[0].jobType).toEqual(JobType.Migrate);
+      expect(res[0].jobType).toEqual(JobType.MIGRATE);
+    })
+    it('should throw an HttpException when an error occurs', async () => {
+      const mockedError = new HttpException({
+        status: 'failed',
+        message: 'db error',
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    )
+      jest.spyOn(service, 'createBulkMigrate').mockImplementation(async ( )=> {
+        throw mockedError
+      });
+      await expect(service.createBulkMigrate({} as any)).rejects.toThrow(mockedError);
+      try {
+        await service.createBulkMigrate({} as any);
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpException);
+      }
+    });
+  })
+
+  describe('getCutoverDetailsByFileServerId', () => {
+    it('should resturn data for cutover details by fileserver id', async () => {
+      const mokcedRes = [{
+          protocol: Protocol.NFS,
+          sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
+          destinationFileServer: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationFileServerName: 'fileServer1' },
+          destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
+          jobConfig: [{
+            id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+            jobType: JobType.MIGRATE,
+            jobRunDetails: {
+              id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+              status: JobRunStatus.Completed
+            }
+          }]
+        }]
+      const result = await service.getCutoverDetailsByFileServerId('');
+      expect(result).toEqual(mokcedRes);
     })
   })
 
@@ -542,6 +590,15 @@ it('should handle database errors in find method', async () => {
       expect(res.length).toEqual(2);
       expect(res[0].jobType).toEqual(JobType.CutOver);
     })
+    it('should throw an HttpException when an error occurs', async () => {
+      jest.spyOn(service, 'createBulkCutover').mockRejectedValue(new HttpException('DB error', HttpStatus.BAD_GATEWAY));
+      await expect(service.createBulkCutover({} as any)).rejects.toThrow(HttpException);
+    });
+    it('should catch the error', () => {
+      service.createBulkCutover({} as any).catch((error) => {
+        expect(error).toBeDefined();
+      });
+    });
   })
 
   describe('precheck', () => {
