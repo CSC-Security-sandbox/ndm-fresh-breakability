@@ -369,7 +369,7 @@ export class JobRunService {
         inventoryCounts?.directorycount || "0"
       )?.toString(),
       totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
-      totalMigratedSize: jobConfigDetails.jobType === JobType.Migrate ? '' : '0',
+      totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? '' : '0',
       errors: [],
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -491,7 +491,7 @@ export class JobRunService {
           totalScannedSize: jobRun.jobtype === JobType.DISCOVER ? this.covertBytes(Number(
             inventoryCounts?.totalsize || "0"
           )) : '',
-          totalMigratedSize: jobRun.jobtype === JobType.Migrate ? '' : '0',
+          totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? '' : '0',
           errors: [],
         };
         return response;

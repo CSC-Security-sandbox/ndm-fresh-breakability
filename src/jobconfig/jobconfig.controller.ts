@@ -62,6 +62,14 @@ export class JobConfigController {
     return await this.jobConfigService.getJobConfigById(id);
   }
 
+  @ApiOperation({ summary: 'Get Cutover details' })
+  @ApiResponse({ status: 200, description: 'Cutover details Found' })
+  @ApiResponse({ status: 404, description: 'Cutover details Not Found' })
+  @Get('cutover/:fileServerId')
+  async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
+      return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
+  }
+
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })

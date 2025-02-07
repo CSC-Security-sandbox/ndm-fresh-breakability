@@ -6,7 +6,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
-import { JobStatus, JobType } from 'src/constants/enums';
+import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -21,7 +21,7 @@ export class JobConfigService {
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(InventoryEntity)
-    private inventoryRepo: Repository<InventoryEntity>,
+    private inventoryRepo: Repository<InventoryEntity>
   ) { }
 
   // ------------ Events ---------------- //
@@ -70,7 +70,7 @@ export class JobConfigService {
     return [
       {
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.Migrate,
+        jobType: JobType.MIGRATE,
         status: JobStatus.Active,
         excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
         excludeFilePatterns: '*.log, *.tmp',
@@ -192,6 +192,23 @@ export class JobConfigService {
     };
 
     return payload;
+  }
+
+  async getCutoverDetailsByFileServerId(fileServerId: string) {
+    return [{
+      protocol: Protocol.NFS,
+      sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
+      destinationFileServer: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationFileServerName: 'fileServer1' },
+      destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
+      jobConfig: [{
+        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+        jobType: JobType.MIGRATE,
+        jobRunDetails: {
+          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
+          status: JobRunStatus.Completed
+        }
+      }]
+    }]
   }
 
   // ------------ Job Config All ---------------- //

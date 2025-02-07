@@ -33,7 +33,7 @@ export enum JobStatus {
   
 export enum JobType {
     DISCOVER = 'DISCOVER',
-    Migrate = 'MIGRATE',
+    MIGRATE = 'MIGRATE',
     CutOver = 'CUT_OVER',
 }
 
