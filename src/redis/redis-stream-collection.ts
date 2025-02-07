@@ -82,8 +82,9 @@ export class RedisStreamCollection<T extends Serializable>
     this.logger.info(
       `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName} ${this.lastId}`,
     );
-
-    let lastReadId = '0';
+    const readerLastReadId = await this.redisClient.get(`${this.jobRunId}-${readerName}`);
+    this.logger.info(`Reader last read id: ${readerLastReadId}`);
+    let lastReadId = readerLastReadId || '0';
     //let numMessagesRead = 0;
     while (true) {
       const results = await this.redisClient.xRead(
@@ -102,6 +103,7 @@ export class RedisStreamCollection<T extends Serializable>
           }
         }
       } else {
+        this.redisClient.set(`${this.jobRunId}-${readerName}`, this.lastId);
         break;
       }
     }
