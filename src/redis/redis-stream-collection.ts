@@ -80,14 +80,14 @@ export class RedisStreamCollection<T extends Serializable>
 
   async *read(readerName: string): AsyncGenerator<T> {
     this.logger.info(
-      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}`,
+      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName} ${this.lastId}`,
     );
 
     let lastReadId = '0';
     //let numMessagesRead = 0;
     while (true) {
       const results = await this.redisClient.xRead(
-        [{ key: this.streamKey, id: this.lastId }],
+        [{ key: this.streamKey, id: lastReadId }],
         { COUNT: 1, BLOCK: 5000 },
       );
       this.logger.info(`Results in read>>>>: ${JSON.stringify(results)}`);
