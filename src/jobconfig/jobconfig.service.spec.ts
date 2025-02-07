@@ -363,6 +363,12 @@ it('should handle database errors in find method', async () => {
         path: '/target/path',
         protocol: 'FTP',
       },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
+      },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
       jobRuns: [
@@ -424,6 +430,12 @@ it('should handle database errors in find method', async () => {
         protocol: null,
       },
       destinationServer: {
+      },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
       },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
@@ -536,6 +548,13 @@ it('should handle database errors in find method', async () => {
       expect(res.length).toEqual(1);
       expect(res[0].jobType).toEqual(JobType.CutOver);
       expect(res[0].status).toEqual(JobStatus.Active);
+    })
+  })
+
+  describe('precheck', () => {
+    it('should return succes for precheck', async () => {
+      const result = await service.precheck({} as any);
+      expect(result.status).toEqual('success');
     })
   })
 });
