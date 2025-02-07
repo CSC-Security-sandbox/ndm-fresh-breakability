@@ -25,7 +25,7 @@ export class ConfigEntity extends Base {
     projectId: string;
 
     @ApiProperty({ description: 'status' })
-    @Column({ type: 'varchar', nullable: true,  name: 'status', default: ConfigStatus.DRAFT})
+    @Column({ type: 'varchar', nullable: true,  name: 'status'})
     status: ConfigStatus;
 
     @ApiProperty({ description: 'Scanned Date' })
@@ -40,5 +40,5 @@ export class ConfigEntity extends Base {
     project: ProjectEntity;
 
     @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.config)
-    fileServerWorkingDirectoryMapping: FileServerWorkingDirectoryMappingEntity;
+    workingDirectory: FileServerWorkingDirectoryMappingEntity;
 }
