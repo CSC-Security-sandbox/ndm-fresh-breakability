@@ -1,11 +1,9 @@
 import { proxyActivities } from '@temporalio/workflow';
 import type * as validate from '../../activities/validate-connection/validate-connection';
 
-
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
-
 
 const { validate: validateActivity } = proxyActivities<typeof validate>({
   startToCloseTimeout: '30s',
