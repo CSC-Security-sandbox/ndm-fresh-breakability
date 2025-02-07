@@ -97,22 +97,22 @@ export class InventoryService {
     }  
   async saveTasks(data: any) {
     try {
-    const {id,jobRunId,taskType,status,sPath,tPath,excludeFilePatterns,commands} = data;
+    const {jobRunId,taskType,status,sPath,tPath,excludeFilePatterns,commands} = data;
      let  workerId =  randomUUID();
     const task = this.taskRepo.create({
-      id: id,
+      id: randomUUID(),
       jobRunId: jobRunId,
       status:status,
       taskType:taskType,
-      workerId: workerId
+      workerId: '07150b58-43db-478d-9c21-13a32cbf8836'
     });
    const taskEntity=  await this.taskRepo.insert(task);
    console.log ('taskEntity',taskEntity);
     const operation = this.operationRepo.create({
-      taskId: id,
+      taskId: task.id,
      jobRunId: jobRunId,
-     sPathId: workerId,
-     tPathId:  tPath ?? null,
+     sPathId: '07150b58-43db-478d-9c21-13a32cbf8836',
+     tPathId:  '07150b58-43db-478d-9c21-13a32cbf8836',
      status : OperationStatus.COMPLETED,
      operationType: OperationType.SCAN,
      request:commands,

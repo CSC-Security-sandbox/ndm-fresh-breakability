@@ -56,6 +56,7 @@ const [jobRunId, readerName, consumerType] = args;
       console.error(`Error Log: ${JSON.stringify(error)}`);
     },
     tasks: async (task: Task) => {
+      console.log(`Task: ${JSON.stringify(task)}`);
       await inventoryService.saveTasks(task);
     },
     taskstats: async (taskStat) => {
