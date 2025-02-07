@@ -20,6 +20,9 @@ export class JobConfigController {
   @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
+    if (!bulkDiscovery.sourcePathIds || bulkDiscovery.sourcePathIds.length === 0) {
+      throw new BadRequestException('Source path IDs cannot be empty.');
+    }
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
     return jobConfig;
   }
@@ -63,26 +66,14 @@ export class JobConfigController {
     @Query('gid') gid?: string, 
     @Query('uid') uid?: string
   ) {
-    // Validate input: Only one parameter should be provided
     const params = { sid, gid, uid };
-    console.log(`params - ${params}`);
-    
     const activeParams = Object.keys(params).filter(key => params[key]);
-
-    console.log(`activeParams - ${activeParams}`);
-    
 
     if (activeParams.length !== 1) {
       throw new BadRequestException('Either sid, gid, or uid is required');
     }
 
-    // Get CSV file name
     const filename = this.jobConfigService.getTemplateFilename(params);
-
-    console.log(`filename - ${filename}`);
-    
-
-    // Serve the CSV file
     this.jobConfigService.sendCsvFile(filename, res);
   }
 
@@ -100,6 +91,14 @@ export class JobConfigController {
   @Get('cutover/:fileServerId')
   async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
       return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
+  }
+
+  @ApiOperation({ summary: 'Get Configs and Volumes by project ID' })
+  @ApiResponse({ status: 200, description: 'Configuration Found' })
+  @ApiResponse({ status: 404, description: 'Configuration Not Found' })
+  @Get('project/:projectId')
+  async getConfigurationsByProjectId(@Param('projectId') projectId: string) {
+      return await this.jobConfigService.getConfigsByProjectId(projectId);
   }
 
   @ApiOperation({ summary: 'Update a job by ID' })

@@ -8,8 +8,49 @@ import {
     IsOptional,
     IsString,
     IsUUID,
-    ValidateNested
+    ValidateNested,
+    Validate,
+    ValidatorConstraint, 
+    ValidatorConstraintInterface, 
+    ValidationArguments
 } from 'class-validator';
+
+
+@ValidatorConstraint({ name: 'UniqueSourcePathId', async: false })
+export class UniqueSourcePathIdConstraint implements ValidatorConstraintInterface {
+    validate(value: string, args: ValidationArguments) {
+        const bulkConfig = args.object as BulkMigrateJobConfig;
+        const sourceIds = bulkConfig.migrateConfigs.map(config => config.sourcePathId);
+        return sourceIds.filter(id => id === value).length === 1;
+    }
+
+    defaultMessage(args: ValidationArguments) {
+        return `sourcePathId must be unique across all migrateConfigs.`;
+    }
+}
+
+@ValidatorConstraint({ name: 'UniqueDestinationPathId', async: false })
+export class UniqueDestinationPathIdConstraint implements ValidatorConstraintInterface {
+    validate(value: string[], args: ValidationArguments) {
+        return new Set(value).size === value.length;
+    }
+
+    defaultMessage(args: ValidationArguments) {
+        return `Each destinationPathId array must contain unique values.`;
+    }
+}
+
+@ValidatorConstraint({ name: 'SourceNotInDestination', async: false })
+export class SourceNotInDestinationConstraint implements ValidatorConstraintInterface {
+    validate(value: string[], args: ValidationArguments) {
+        const migrateConfig = args.object as MigrateConfig;
+        return !value.includes(migrateConfig.sourcePathId);
+    }
+
+    defaultMessage(args: ValidationArguments) {
+        return `sourcePathId cannot be in destinationPathId array.`;
+    }
+}
 
 export class MigrateJobConfigOptions {
     @ApiProperty({ description: 'Exclude files older than this date', required: false })
@@ -31,12 +72,15 @@ export class MigrateJobConfigOptions {
   export class MigrateConfig {
     @ApiProperty({ description: 'UUID of the source path configurations' })
     @IsUUID()
+    @Validate(UniqueSourcePathIdConstraint)
     sourcePathId: string;
   
     @ApiProperty({ description: 'UUIDs of the destination file servers' }) 
     @IsArray()
     @ArrayUnique()
     @IsUUID('all', { each: true }) 
+    @Validate(UniqueDestinationPathIdConstraint)
+    @Validate(SourceNotInDestinationConstraint)
     destinationPathId: string[];
   }
   
@@ -46,7 +90,7 @@ export class MigrateJobConfigOptions {
     @IsDate()
     firstRunAt: Date;
   
-    @ApiProperty({ description: 'Future run schedule (incremental sync config)', required: false , })
+    @ApiProperty({ description: 'Future run schedule (incremental sync config)', required: false })
     @IsString()
     futureRunSchedule: string;
   
@@ -82,28 +126,3 @@ export class MigrateJobConfigOptions {
     })
     options: MigrateJobConfigOptions
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-  
- 

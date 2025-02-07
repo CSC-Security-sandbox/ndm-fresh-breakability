@@ -9,11 +9,12 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Module({
     imports: [
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity]),
     ],
     providers: [JobRunService, JobConfigService],
     controllers: [JobRunController]
