@@ -1,7 +1,9 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { JobContext, JobContextFactory, RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
+import * as path from 'path';
+import { FileInfo, JobContext, JobContextFactory, RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
+import { FileType } from "../type/task.type";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -51,4 +53,47 @@ export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promi
     const contextProvider = JobContextFactory.getProvider('redis', redisClient);
     const jobContext = await contextProvider.getJobContext(jobRunId);
     return {jobContext, connectionClient: redisClient}
+}
+
+
+export function getFileType(stats: fs.Stats): FileType {
+    switch (true) {
+      case stats.isFile():
+        return FileType.FILE;
+      case stats.isDirectory():
+        return FileType.DIRECTORY;
+      case stats.isSymbolicLink():
+        return FileType.SYMBOLIC_LINK;
+      case stats.isSocket():
+        return FileType.SOCKET;
+      case stats.isFIFO():
+        return FileType.FIFO;
+      case stats.isCharacterDevice():
+        return FileType.CHARACTER_DEVICE;
+      case stats.isBlockDevice():
+        return FileType.BLOCK_DEVICE;
+      default:
+        return FileType.UNKNOWN;
+    }
+  }
+
+export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string): Promise<FileInfo>  => {
+    const lStat = await fs.promises.lstat(fullFilePath);
+    return new FileInfo(
+        name,
+        relativePath,
+        relativePath,
+        lStat.isDirectory(),
+        lStat.uid,
+        lStat.gid,
+        lStat.size,
+        !lStat.isDirectory(),
+        lStat.birthtime,
+        lStat.mtime,
+        lStat.atime,
+        path.extname(fullFilePath),
+        getFilePermissions(lStat),
+        getFileType(lStat),
+        relativePath.split('/').length - 2,
+      );
 }

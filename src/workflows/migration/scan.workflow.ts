@@ -13,15 +13,15 @@ interface ScanWorkflowInput {
 
 export const ScanWorkflow = async ({jobRunId} : ScanWorkflowInput) => {
     const logger = new Logger()
-    let jobContext:JobContext | null = null, connection=null
+    let jobContext:JobContext | null = null, clientConnection=null
     while(true) {
-        if(!jobContext || connection) {
+        if(!jobContext || clientConnection) {
             const connecter = await getJobConnection({jobRunId})
-            jobContext = connecter.jobContext, connection = connection
+            jobContext = connecter.jobContext, clientConnection = connecter.connectionClient
         }else {
             const { tasks } = await fetchScanTask({jobContext, jobRunId, logger})
             for(const task of tasks) {
-                const { isTaskCreated } = await scanPath({task, jobContext, logger})
+                const { isTaskCreated } = await scanPath({task, jobContext, logger, clientConnection})
                 if(isTaskCreated)
                     await publishSanTask({jobRunId, jobContext, logger})
             }
