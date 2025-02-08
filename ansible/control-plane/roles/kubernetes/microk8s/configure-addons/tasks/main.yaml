@@ -22,6 +22,12 @@
     - item.name in microk8s_plugins
     - microk8s_plugins[item.name]
 
+- name: 6.3.1 Enable registry for local cluster
+  become: yes
+  command:
+    cmd: "{{ microk8s_bin_path }}microk8s.enable registry"
+  when: local_cluster is defined
+  
 - name: 6.4. Disable addons
   become: yes
   loop: "{{ microk8s_status.addons }}"

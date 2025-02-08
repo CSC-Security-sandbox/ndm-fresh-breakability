@@ -33,6 +33,13 @@
   args:
     executable: /bin/bash
 
+- name: 5.5.1 Copy kubectl config to local machine
+  fetch:
+    src: "{{ user_info_dict[vm_username]['home'] }}/.kube/config"
+    dest: "{{ playbook_dir }}/../files/{{ vm_username }}-microk8s-config"
+    flat: yes
+  when: local_cluster is defined
+
 - name: 5.6. Reaffirm permission on files
   become: yes
   file:

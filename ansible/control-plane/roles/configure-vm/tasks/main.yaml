@@ -25,6 +25,26 @@
 #   register: check_connectivity
 #   failed_when: "'200 OK' not in check_connectivity.stdout"
 
+- name: 2.1.1 Upgrade packages which are upgradable
+  apt:
+    upgrade: dist
+    update_cache: yes
+    cache_valid_time: 3600
+  when: local_cluster is defined
+
+- name: 2.1.2 Reboot the VM if required
+  reboot:
+    msg: "Rebooting the VM to apply updates"
+  register: reboot_result
+  when: local_cluster is defined
+
+- name: 2.1.3 Wait for the VM to come back online
+  wait_for_connection:
+    delay: 10
+    sleep: 5
+    timeout: 300
+  when: local_cluster is defined
+
 - name: 2.2. Ensure essential packages are installed
   apt:
     name:

@@ -3,7 +3,7 @@
 - name: delete vault-data directory if uninstall flag is defined 
   file:
     path: /data/vault-data
-    state: 
+    state: absent
     owner: 100
     group: 1000
     mode: 0755
