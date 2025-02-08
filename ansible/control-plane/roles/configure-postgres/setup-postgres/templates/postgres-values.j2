@@ -22,8 +22,8 @@ primary:
               
   initdb:
     scriptsConfigMap: postgres-init-config
-    user: dmadmin
-    password: {{ dmadmin_password }}
+    user: postgres
+    password: {{ postgres_root_password }}
 
 volumePermissions:
   enabled: true

@@ -10,7 +10,7 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl delete secret docker-registry azure-dev-acr-creds --namespace datamigrator
+    kubectl delete secret azure-dev-acr-creds --namespace datamigrator
   ignore_errors: yes
   when: dm_uninstall is defined
 

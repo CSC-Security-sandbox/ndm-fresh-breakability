@@ -130,11 +130,18 @@
   shell: |
     export POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/postgres-secrets/postgres-creds \
       POSTGRES_USER="postgres" \
       POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
       POSTGRES_DMADMIN_USER="dmadmin" \
-      POSTGRES_DMADMIN_PASSWORD="${POSTGRES_DMADMIN_PASSWORD}"
+      POSTGRES_DMADMIN_PASSWORD="${POSTGRES_DMADMIN_PASSWORD}" \
+      KEYCLOAK_POSTGRES_USER="kcadmin" \
+      KEYCLOAK_POSTGRES_PASSWORD="${KEYCLOAK_POSTGRES_PASSWORD}" \
+      LIQUIBASE_POSTGRES_USER="liquibase" \
+      LIQUIBASE_POSTGRES_PASSWORD="${LIQUIBASE_POSTGRES_PASSWORD}"
+
 
 - name: Generate Keycloak secrets
   become: yes

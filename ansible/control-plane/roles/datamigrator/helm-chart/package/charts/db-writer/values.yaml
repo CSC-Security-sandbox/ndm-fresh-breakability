@@ -8,6 +8,7 @@ image:
 
 annotations:
     vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-init-first: "true"
     vault.hashicorp.com/role: "datamigrator-role"
     vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
     vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
@@ -16,6 +17,8 @@ annotations:
       {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
       export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
       export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+      export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
+      export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
       {{- end }}
     vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
       {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
@@ -51,7 +54,7 @@ env:
   - name: DB_NAME
     value: "datamigrator"
   - name: SCHEMA
-    value: "migrateadmin"
+    value: "datamigrator"
   - name: RABBITMQ_INVENTORY_QUEUE
     value: "inventory"
   - name: RABBITMQ_REPORTS_QUEUE
@@ -61,3 +64,16 @@ service:
   type: ClusterIP
   port: 3000
   targetPort: 3000
+
+liquibase:
+  enabled: true
+  env:
+    - name: LIQUIBASE_COMMAND_URL
+      value: "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/datamigrator"
+    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
+      value: "liquibase"
+    - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
+      value: "datamigrator"
+  args: 
+    - "update"
+    - "--source-vault"

@@ -8,13 +8,13 @@ postgresql:
 externalDatabase:
     host: "postgres-postgresql.postgres.svc.cluster.local"
     port: 5432
-    user: dmadmin
-    database: datamigrator
+    user: kcadmin
+    database: keycloak
     existingSecret: "keycloak-credentials"
-    existingSecretPasswordKey: "datamigrator-db-password"
+    existingSecretPasswordKey: "keycloak-db-password"
 
 auth:
-  adminUser: kc-admin
+  adminUser: kcadmin
   existingSecret: "keycloak-credentials"
   passwordSecretKey: "keycloak-admin-password"
 
@@ -143,8 +143,8 @@ extraEnvVars:
     - name: DATAMIGRATOR_DB_SSL_MODE
       value: disable
     - name: DATAMIGRATOR_DB_SCHEMA
-      value: 'migrateadmin'
+      value: 'datamigrator'
     - name: KEYCLOAK_DATABASE_SCHEMA
-      value: 'migrateadmin'
+      value: 'keycloak'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded

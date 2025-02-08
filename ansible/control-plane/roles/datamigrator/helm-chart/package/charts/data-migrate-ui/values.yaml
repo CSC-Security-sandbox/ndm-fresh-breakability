@@ -7,6 +7,7 @@ image:
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
   vault.hashicorp.com/role: "datamigrator-role"
   vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
   vault.hashicorp.com/agent-inject-status: "update"
@@ -30,7 +31,7 @@ env:
   - name: NEXT_PUBLIC_PORT
     value: "3111"
   - name: NEXT_PUBLIC_HARD_CODE_ACCOUNT_ID
-    value: "1419c156-f370-473a-b886-7d0b952e77e1"
+    value: "753975cb-2f97-4230-b632-6815515a7d0d"
   - name: NEXT_PUBLIC_BASE_URL
     value: "/api/v1"
   - name: NEXT_PUBLIC_USER_ID
@@ -87,6 +88,8 @@ env:
     value: "/api/v1/report"
   - name: NEXT_PUBLIC_FILE_SERVICE_URL
     value: "/api/v1"
+  - name: NEXT_PUBLIC_TIME_INTERVAL
+    value: "30000"
 
 service:
   type: ClusterIP

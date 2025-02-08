@@ -11,15 +11,15 @@
   become_user: "{{ vm_username }}"
   shell: |
     export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_ADMIN_PASSWORD)
-    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
-    echo "POSTGRES_DMADMIN_PASSWORD:$POSTGRES_DMADMIN_PASSWORD"
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
+    echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
     echo "KEYCLOAK_ADMIN_PASSWORD:$KEYCLOAK_ADMIN_PASSWORD"
   register: keycloak_passwords
   
 - name: Set passwords as facts
   set_fact:
     keycloak_admin_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_ADMIN_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_ADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
-    postgres_dmadmin_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'POSTGRES_DMADMIN_PASSWORD:.*') | map('regex_replace', 'POSTGRES_DMADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    keycloak_postgres_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_POSTGRES_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
 - name: Keycloak namespace
   become: yes

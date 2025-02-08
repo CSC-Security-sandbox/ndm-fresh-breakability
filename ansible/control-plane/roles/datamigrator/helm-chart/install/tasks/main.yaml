@@ -36,7 +36,6 @@
   shell: |
     kubectl wait --namespace datamigrator --for=condition=Ready pod --all --timeout=600s
   register: wait_pods_output
-  ignore_errors: yes
 
 - name: Debug pod status output
   debug:

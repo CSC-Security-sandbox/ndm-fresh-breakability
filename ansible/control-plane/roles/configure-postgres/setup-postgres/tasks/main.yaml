@@ -12,17 +12,26 @@
   shell: |
     export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
     export DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
+    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.LIQUIBASE_POSTGRES_PASSWORD)
     echo "ROOT_PASSWORD:$POSTGRES_ROOT_PASSWORD"
     echo "DMADMIN_PASSWORD:$DMADMIN_PASSWORD"
+    echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
+    echo "LIQUIBASE_POSTGRES_PASSWORD:$LIQUIBASE_POSTGRES_PASSWORD"
   args:
     executable: /bin/bash      
   register: postgres_passwords
   
 - name: Set Base64-encoded passwords as facts
   set_fact:
+    postgres_root_password: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) }}"
     postgres_root_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
     dmadmin_password: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) }}"
     dmadmin_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    keycloak_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'KEYCLOAK_POSTGRES_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
+    keycloak_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'KEYCLOAK_POSTGRES_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    liquibase_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'LIQUIBASE_POSTGRES_PASSWORD:.*') | map('regex_replace', 'LIQUIBASE_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
+    liquibase_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'LIQUIBASE_POSTGRES_PASSWORD:.*') | map('regex_replace', 'LIQUIBASE_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
 - name: postgres-namespace template
   become: yes

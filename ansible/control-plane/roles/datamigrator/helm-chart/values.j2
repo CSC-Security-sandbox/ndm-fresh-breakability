@@ -10,18 +10,30 @@ global:
 admin-service:
   image:
     tag: {{ admin_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ admin_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
   
 config-service:
   image:
     tag: {{ config_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ config_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
 
 db-writer:
   image:
     tag: {{ db_writer_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ db_writer_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
 
 jobs-service:
   image:
     tag: {{ jobs_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ jobs_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
 
 file-service:
   image:
@@ -30,6 +42,9 @@ file-service:
 reports-service:
   image:
     tag: {{ reports_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ reports_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
   
 data-migrate-ui:
   image:

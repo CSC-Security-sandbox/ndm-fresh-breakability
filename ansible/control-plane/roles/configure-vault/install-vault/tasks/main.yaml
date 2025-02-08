@@ -78,9 +78,9 @@
   ansible.builtin.debug: 
     msg: "Helm Install (vault) => stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
-- name: Pause for 45 seconds to make sure vault is up
+- name: Pause for 90 seconds to make sure vault is up
   ansible.builtin.pause:
-    seconds: 45
+    seconds: 90
 
 - name: Get the unseal keys and store them in /opt/datamigrator/vault
   become: yes
