@@ -127,7 +127,6 @@ export class WorkManagerService {
             configsToStart.delete(id)
             const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
-            this.activeWorkers.set(id,null); 
         }
     }
 

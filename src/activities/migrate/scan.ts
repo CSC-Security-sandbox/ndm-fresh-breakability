@@ -2,7 +2,7 @@
 import * as fs from "fs";
 import { getChecksum, removePrefix, shouldExclude } from "../utils/utils";
 import * as path from "path";
-import { SyncContentInput, SyncContentOutput } from "./migrate.type";
+import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 
 function* getDirectoryContents(path: string): Generator<string> {
     if(!fs.existsSync(path)) return
@@ -16,19 +16,19 @@ function* getDirectoryContents(path: string): Generator<string> {
     }
 }
 
-const syncContent = async (syncInput: SyncContentInput) => {
-    const syncContentOutput: SyncContentOutput = {files: [], directory: []}
+const scanContent = async (scanInput: ScanContentInput) => {
+    const syncContentOutput: ScanContentOutput = {files: [], directory: []}
     try{
-        const sourceContent = new Set<string>(await getDirectoryContents(syncInput.sourcePath))
-        const targeContent = new Set<string>(await getDirectoryContents(syncInput.targetPath))
+        const sourceContent = new Set<string>(await getDirectoryContents(scanInput.sourcePath))
+        const targeContent = new Set<string>(await getDirectoryContents(scanInput.targetPath))
 
         for(const item of sourceContent) {
-            const sourceContentPath = path.join(syncInput.sourcePath, item);
+            const sourceContentPath = path.join(scanInput.sourcePath, item);
             if(!fs.existsSync(sourceContentPath)) continue;
             const sourceContent = fs.statSync(sourceContentPath)
-            const relativeSourcePath = removePrefix(sourceContentPath, syncInput.sourcePrefix)
+            const relativeSourcePath = removePrefix(sourceContentPath, scanInput.sourcePrefix)
 
-            if(sourceContent.isSymbolicLink() || shouldExclude(sourceContentPath, syncInput.excludePatterns)) 
+            if(sourceContent.isSymbolicLink() || shouldExclude(sourceContentPath, scanInput.excludePatterns)) 
                 continue;
 
             if(sourceContent.isDirectory())
@@ -38,7 +38,7 @@ const syncContent = async (syncInput: SyncContentInput) => {
                 syncContentOutput.files.push(relativeSourcePath)
 
             else {
-                const targetFilePath = path.join(syncInput.targetPath, item);
+                const targetFilePath = path.join(scanInput.targetPath, item);
                 if(fs.existsSync(targetFilePath)) {
                     const targetFile = fs.statSync(targetFilePath)
                     if(targetFile.isFile()) 
@@ -62,6 +62,10 @@ const syncContent = async (syncInput: SyncContentInput) => {
     return syncContentOutput;
 }
 
+
+export const scanPath = async ({task, jobContext,logger}: ScanPathInput):Promise<ScanPathOutput>  => {
+    return {isTaskCreated: false}
+}
 
 
 // const dir1 = "/Users/calfus-kunalavghade/Desktop/node-fs/test1";

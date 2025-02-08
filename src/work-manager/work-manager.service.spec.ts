@@ -277,8 +277,6 @@ describe('WorkManagerService', () => {
         .mockResolvedValue(undefined);
       await service.handleConfigurations(mockConfigs);
       expect(startWorkerSpy).toHaveBeenCalledTimes(2);
-
-      expect(service['activeWorkers'].size).toEqual(2);
     });
 
 
