@@ -26,24 +26,31 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       # Log in to Azure Container Registry
-      - name: 'Build and push image'
+      - name: 'Authenticate to ACR'
         uses: azure/docker-login@v2
         with:
           login-server: ${{ secrets.ACR_NAME }}.azurecr.io
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
-      # Build the Docker image using commit hash and latest tag
-      - name: Build Docker Image
-        run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} .
-          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest
+      # Set up QEMU for cross-architecture builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      # Push both the 'commit hash' and 'latest' tags
-      - name: Push Docker Images
+      # Set up Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build and push multi-platform Docker image
+      - name: Build and Push Multi-Platform Docker Image
         run: |
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest
+          docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest \
+            --push .
+        env:
+          GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          DOCKER_BUILDKIT: 1
 
   build-migrations:
     runs-on: ubuntu-latest
@@ -61,21 +68,28 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       # Log in to Azure Container Registry
-      - name: 'Build and push image'
+      - name: 'Authenticate to ACR'
         uses: azure/docker-login@v2
         with:
           login-server: ${{ secrets.ACR_NAME }}.azurecr.io
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
-      # Build the Docker image using commit hash and latest tag
-      - name: Build Docker Image for Migrations
-        run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} ./liquibase
-          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest
+      # Set up QEMU for cross-architecture builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      # Push both the 'commit hash' and 'latest' tags
-      - name: Push Docker Image for Migrations
+      # Set up Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build and push multi-platform Docker image for migrations
+      - name: Build and Push Multi-Platform Docker Image for Migrations
         run: |
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest
+          docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest \
+            --push ./liquibase
+        env:
+          GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          DOCKER_BUILDKIT: 1

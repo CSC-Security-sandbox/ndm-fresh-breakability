@@ -12,7 +12,9 @@ WORKDIR /app
 COPY ["package.json", "./"]
 COPY [".npmrc", "./"]
 
-RUN npm install 
+RUN --mount=type=secret,id=git_token \
+    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install
+
 RUN rm -f ./.npmrc
 
 COPY ./src ./src
