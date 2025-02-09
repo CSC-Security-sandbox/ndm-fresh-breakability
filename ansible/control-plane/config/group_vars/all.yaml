@@ -22,10 +22,16 @@ reports_service_tag: "latest"
 reports_service_liquibase_tag: "latest"
 admin_service_tag: "latest"
 db_writer_service_liquibase_tag: "latest"
-keycloak_customizations_tag: "microk8s-new"
+keycloak_customizations_tag: "latest"
 
-#acr_registry: "localhost:32000"
-acr_registry: "datamigratedev.azurecr.io"
+## uncomment the following lines to use a local registry
+acr_registry: "localhost:32000"
+local_cluster: true
+
+# uncomment the following line to use an azure registry
+#acr_registry: "datamigratedev.azurecr.io"
+#local_cluster: false
+
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
 azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
 

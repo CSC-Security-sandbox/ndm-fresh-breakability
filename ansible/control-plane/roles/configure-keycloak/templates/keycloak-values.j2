@@ -1,6 +1,8 @@
+{% if not local_cluster %}
 global:
   imagePullSecrets:
     - azure-dev-acr-creds
+{% endif %}
 
 postgresql:
     enabled: false

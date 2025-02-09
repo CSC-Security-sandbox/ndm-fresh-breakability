@@ -8,7 +8,7 @@ data:
     createSchema.sql: |
         GRANT ALL PRIVILEGES ON DATABASE datamigrator TO dmadmin;
 
-        CREATE USER kcadmin WITH PASSWORD {{ keycloak_postgres_password }};
+        CREATE USER kcadmin WITH PASSWORD '{{ keycloak_postgres_password }}';
         CREATE DATABASE keycloak OWNER kcadmin;
 
         GRANT ALL PRIVILEGES ON DATABASE keycloak TO kcadmin;
@@ -17,27 +17,23 @@ data:
 
         CREATE SCHEMA IF NOT EXISTS keycloak AUTHORIZATION kcadmin;
 
-        GRANT ALL PRIVILEGES ON SCHEMA keycloak TO kcadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON TABLES TO kcadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON SEQUENCES TO kcadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON FUNCTIONS TO kcadmin;
 
-
-        CREATE USER liquibase WITH PASSWORD {{ liquibase_postgres_password }};
+        CREATE USER liquibase WITH PASSWORD '{{ liquibase_postgres_password }}';
 
         GRANT CONNECT, CREATE ON DATABASE datamigrator TO liquibase;
 
         \connect datamigrator
 
         CREATE SCHEMA IF NOT EXISTS liquibase AUTHORIZATION liquibase;
-        CREATE SCHEMA IF NOT EXISTS datamigrator AUTHORIZATION liquibase;
+        CREATE SCHEMA IF NOT EXISTS datamigrator AUTHORIZATION dmadmin;
 
-        GRANT USAGE, CREATE ON SCHEMA datamigrator TO liquibase;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON SEQUENCES TO liquibase;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON FUNCTIONS TO liquibase;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON TABLES TO liquibase;
 
-        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator
-            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO liquibase;
-        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator
-            GRANT USAGE, SELECT ON SEQUENCES TO liquibase;
-        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator
-            GRANT EXECUTE ON FUNCTIONS TO liquibase;
-
-        GRANT ALL PRIVILEGES ON SCHEMA datamigrator TO dmadmin;
-
-        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO dmadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON SEQUENCES TO dmadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON FUNCTIONS TO dmadmin;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA datamigrator GRANT ALL PRIVILEGES ON TABLES TO dmadmin;

@@ -65,6 +65,7 @@
         --docker-server={{ acr_registry }} \
         --docker-username={{ azure_client_id }} \
         --docker-password={{ azure_client_secret }}
+  when: local_cluster is not defined
 
 - name: Deploy keycloak helm chart
   become: yes

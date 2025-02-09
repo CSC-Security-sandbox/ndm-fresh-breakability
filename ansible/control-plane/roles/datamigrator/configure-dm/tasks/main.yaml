@@ -12,7 +12,7 @@
   shell: |
     kubectl delete secret azure-dev-acr-creds --namespace datamigrator
   ignore_errors: yes
-  when: dm_uninstall is defined
+  when: dm_uninstall is defined and local_cluster is not defined
 
 - name: Create service account and namespace
   become: yes
@@ -31,3 +31,4 @@
         --docker-username={{ azure_client_id }} \
         --docker-password={{ azure_client_secret }}
   ignore_errors: yes
+  when: local_cluster is not defined

@@ -151,7 +151,7 @@
     export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/keycloak-secrets/keycloak-creds \
       KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \
-      KEYCLOAK_ADMIN_USER="kc-admin" \
+      KEYCLOAK_ADMIN_USER="kcadmin" \
       KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
   
 - name: Generate rabbitmq secrets

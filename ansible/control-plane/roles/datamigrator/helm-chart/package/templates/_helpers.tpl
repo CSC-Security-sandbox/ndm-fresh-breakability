@@ -18,9 +18,11 @@ spec:
       labels:
         app: {{ .Values.appName  }}
     spec:
+      {{- if not .Values.global.local_cluster }}
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
       {{- end }}
       {{- if .Values.differentNodes }}
       affinity:

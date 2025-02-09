@@ -6,7 +6,8 @@
 
 global:
   registry: {{ acr_registry }}
-
+  local_cluster: {{ local_cluster }}
+  
 admin-service:
   image:
     tag: {{ admin_service_tag | default(common_tag) | default("latest") }}
