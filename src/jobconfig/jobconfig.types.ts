@@ -1,6 +1,4 @@
-import { JobStatus, JobType } from "src/constants/enums";
-
-
+import { JobConfigBulkMigrateResStatus, JobStatus, JobType } from "src/constants/enums";
 
 export interface InActivateJobConfigPayload {
     jobConfigId: string
@@ -9,15 +7,9 @@ export interface InActivateJobConfigPayload {
 export interface JobConfigBulkMigrateRes {
     id: string;
     jobType: JobType;
-    status: JobStatus;
-    excludeOlderThan?: Date;
-    excludeFilePatterns?: string;
-    preserveAccessTime: boolean;
-    firstRunAt: Date;
-    futureScheduleAt: string;
+    status: JobConfigBulkMigrateResStatus;
     sourcePathId: string;
-    targetPathId: string[];
-    scheduler: string;
+    targetPathId: string;
 }
 
 export interface JobConfigBulkCutoverRes {
