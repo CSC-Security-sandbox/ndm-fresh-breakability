@@ -19,11 +19,13 @@ import { RequestTrackService } from './service/requesttack/requesttrack.service'
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity,OperationsEntity, WorkerJobRunMap, JobOptionsEntity])],
+    TypeOrmModule.forFeature([WorkerEntity, RequestTrackEntity, ProjectEntity, FileServerEntity, VolumeEntity, ConfigEntity, TaskEntity,OperationsEntity, WorkerJobRunMap, JobOptionsEntity, JobRunEntity, JobConfigEntity])],
   exports: [EventsGateway],
   providers: [EventsGateway, RabbitMqService, EventsService,FileConfigService, RequestTrackService, WorkManager],
   controllers: [EventsController, RabbiMqController]

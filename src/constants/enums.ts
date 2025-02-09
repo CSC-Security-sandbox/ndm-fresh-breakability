@@ -30,10 +30,15 @@ export enum JobStatus {
     Active = 'ACTIVE',
     InActive = 'IN_ACTIVE',
 }
-  
+
+export enum JobConfigBulkMigrateResStatus {
+    CREATED =  'CREATED',
+    FAILED = 'FAILED'
+}
+
 export enum JobType {
     DISCOVER = 'DISCOVER',
-    Migrate = 'MIGRATE',
+    MIGRATE = 'MIGRATE',
     CutOver = 'CUT_OVER',
 }
 

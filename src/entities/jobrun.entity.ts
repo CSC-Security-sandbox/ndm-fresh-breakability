@@ -9,7 +9,7 @@ import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
 
 
-@Entity({ name: "jobrun", schema: "migrateadmin" })
+@Entity({ name: 'jobrun' })
 export class JobRunEntity extends Base {
   @ApiProperty({ description: "UUID of the job run" })
   @PrimaryGeneratedColumn("uuid")
