@@ -30,6 +30,16 @@ else
     echo "azure cli is installed"
 fi
 
+# check if ~/.ssh/id_rsa is present
+if [ ! -f ~/.ssh/id_rsa ]
+then
+    echo "SSH private key ~/.ssh/id_rsa is missing"
+    echo "Please generate an SSH key using 'ssh-keygen' and try again"
+    exit
+else
+    echo "SSH private key ~/.ssh/id_rsa is present"
+fi
+
 # check if AZ_USERNAME, AZ_PASSWORD and AZ_TENANT environment variables are set or not
 if [ -z "$AZ_USERNAME" ] || [ -z "$AZ_PASSWORD" ] || [ -z "$AZ_TENANT" ]
 then
@@ -39,7 +49,7 @@ else
     echo "AZ_USERNAME, AZ_PASSWORD and AZ_TENANT environment variables are set"
 fi
 
-# chceck if GITOPS_USER_GITHUB_TOKEN environment variable is set or not
+# check if GITOPS_USER_GITHUB_TOKEN environment variable is set or not
 if [ -z "$GITOPS_USER_GITHUB_TOKEN" ]
 then
     echo "Please set the GITOPS_USER_GITHUB_TOKEN environment variable"
@@ -95,4 +105,4 @@ echo "      ansible_host: $ip_address" >> $inventory_file
 echo "      ansible_user: ubuntu" >> $inventory_file
 echo "      ansible_ssh_private_key_file: ~/.ssh/id_rsa" >> $inventory_file
 
-ansible-playbook ../../ansible/control-plane/playbooks/local-playbook.yaml -i ../../ansible/control-plane/config/inventory.yaml 
+ansible-playbook ../../ansible/control-plane/playbooks/local-playbook.yaml -i ../../ansible/control-plane/config/inventory.yaml -e local_cluster=true

@@ -1,40 +1,40 @@
-# - name: Configure user access on VM
-#   import_playbook: configure-user.yaml
+- name: Configure user access on VM
+  import_playbook: configure-user.yaml
 
-# - name: Configure VM by upgrading packages
-#   import_playbook: configure-vm.yaml
-#   vars:
-#     local_cluster: true
+- name: Configure VM by upgrading packages
+  import_playbook: configure-vm.yaml
+  vars:
+    local_cluster: true
   
-# - name: Configure firewall
-#   import_playbook: configure-firewall.yaml
+- name: Configure firewall
+  import_playbook: configure-firewall.yaml
 
-# - name: Install and configure microk8s cluster, users, addons
-#   import_playbook: configure-microk8s.yaml
-#   vars:
-#     local_cluster: true
+- name: Install and configure microk8s cluster, users, addons
+  import_playbook: configure-microk8s.yaml
+  vars:
+    local_cluster: true
 
-# - name: Configure vault
-#   import_playbook: configure-vault.yaml
+- name: Configure vault
+  import_playbook: configure-vault.yaml
 
-# - name: Configure postgres
-#   import_playbook: configure-postgres.yaml
+- name: Configure postgres
+  import_playbook: configure-postgres.yaml
 
-# - name: Configure rabbitmq
-#   import_playbook: configure-rabbitmq.yaml
+- name: Configure rabbitmq
+  import_playbook: configure-rabbitmq.yaml
 
-# - name: Configure keycloak
-#   import_playbook: configure-keycloak.yaml
-#   vars:
-#     local_cluster: true
+- name: Configure microk8s image registry with datamigrator application images
+  import_playbook: configure-microk8s-registry.yaml
 
-# - name: Configure microk8s image registry with datamigrator application images
-#   import_playbook: configure-microk8s-registry.yaml
+- name: Configure keycloak
+  import_playbook: configure-keycloak.yaml
+  vars:
+    local_cluster: true
 
-# - name: Configure datamigrator helm chart and resources
-#   import_playbook: configure-datamigrator.yaml
-#   vars:
-#     local_cluster: true
+- name: Configure datamigrator helm chart and resources
+  import_playbook: configure-datamigrator.yaml
+  vars:
+    local_cluster: true
 
 - name: Configure keycloak realm
   import_playbook: post-install.yaml

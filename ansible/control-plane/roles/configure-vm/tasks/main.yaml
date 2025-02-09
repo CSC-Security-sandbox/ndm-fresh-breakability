@@ -64,6 +64,20 @@
   # register: install_packages_result
   # until: install_packages_result is succeeded
 
+- name: 2.2.1. Ensure docker is installed on local cluster
+  apt:
+    name:
+      - docker.io
+    state: present
+  when: local_cluster is defined
+  
+- name: 2.2.2. Ensure Docker is started
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  when: local_cluster is defined
+
 - name: 2.3. Sets the /data directory owner as {{ vm_username }}
   file:
     path: /data

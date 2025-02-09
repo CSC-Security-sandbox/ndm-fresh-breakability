@@ -1,2 +1,4 @@
 *.tgz
 **/package/values.yaml
+/datamigrator/
+inventory.yaml
