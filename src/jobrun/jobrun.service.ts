@@ -123,7 +123,6 @@ export class JobRunService {
         firstRunAt: LessThan(currentTime)
       },
     })
-    console.log('ppppppaa--->'+JSON.stringify(jobs))
     jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
     return jobs;
   }
@@ -302,11 +301,11 @@ export class JobRunService {
       if(!redisClient.isOpen)await redisClient.connect();
       const jobContext = JobContextFactory.getProvider('redis', redisClient)
       .buildContext(jobRunId, jobConfig, JobRunStatus.Ready);
-       (await jobContext).appendToTaskList(await this.creatIntialTask(jobRunId,jobRunConfig));
+       (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId,jobRunConfig));
       redisClient.set(jobRunId, (await jobContext).serialize());
   }
 
-  async creatIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
+  async createIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
     const payload ={
       jobRunId: jobRunId,
       status: JobRunStatus.Ready,
@@ -324,7 +323,9 @@ export class JobRunService {
   }
 
   buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
-      const commands = new Command(operations.fPath, {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
+    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
+    const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.path}`;
+      const commands = new Command(this.buildFilepath(`${mountBasePath}/${sourcePath}`,operations.fPath), {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
       const task = new Task(
         taskEntity.id,
         taskEntity.jobRunId,
@@ -338,6 +339,9 @@ export class JobRunService {
       )
       return task;
   }
+  buildFilepath = (path: string, volumePath: string) => { 
+    return `${path}/${volumePath}`
+}
 
   async startMigrateWorkFlow(): Promise<{workflowId: string}> {
       //TODO: Implement the migration workflow

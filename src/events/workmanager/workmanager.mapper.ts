@@ -1,5 +1,5 @@
 
-export const buildScanPayload = (path: string) => ({
+export const buildScanPayload = (path:string) => ({
     fPath: path,
     ops: {
         0 : {
