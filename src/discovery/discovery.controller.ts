@@ -143,6 +143,29 @@ export class DiscoveryController {
     return this.discoveryService.createReportFile(jobRunId, reportType);
   }
 
+
+  @Post('/generate-jobs-report')
+  @ApiOperation({ summary: 'Generate jobs report' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        jobRunId: { type: 'string', description: 'The ID of the job run' },
+      },
+      required: ['jobRunId'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Report generated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Missing jobRunId' })
+  @Header('Content-Type', 'text/plain')
+  @Header('Content-Disposition', 'attachment; filename=generated-report.txt')
+  async generateJobsReport(
+    @Body('jobRunId') jobRunId: string,
+  ): Promise<Buffer> {
+    return await this.discoveryService.createJobsPDFReportData(jobRunId);
+  }
+
+
   @MessagePattern(Pattern.DISCOVERY_COMPLETED)
   async generateDiscoveryReport(@Payload() payload: DiscoveryCompletedPayload, @Ctx() context: RmqContext) {
     const channel = context.getChannelRef();

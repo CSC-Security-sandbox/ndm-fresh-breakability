@@ -90,6 +90,24 @@ export class DiscoveryService {
     }
   }
 
+  async createJobsPDFReportData(jobRunId: string): Promise<any> {
+    this.logger.log(
+      `Creating jobs report data for jobRunId: ${jobRunId}`
+    );
+    try {
+      await this.inventoryRepo.query(
+        "CALL migrateadmin.jobs_report_data($1);",
+        [jobRunId]
+      );
+      return { message: "Report data generated successfully for jobs report" };
+    } catch (error) {
+      this.logger.log(error);
+      throw new InternalServerErrorException(
+        `Failed to generate report for jobRunId: ${jobRunId}`
+      );
+    }
+  }
+
   formatAndWriteToFile(data: any[], filePath: string): void {
     const resultRow: { [key: string]: string | number } = {};
 

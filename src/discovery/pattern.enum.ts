@@ -4,5 +4,6 @@ export enum Pattern {
 
 export enum ReportType {
     COC = 'COC',
-    DISCOVERY = 'DISCOVERY'
+    DISCOVERY = 'DISCOVERY',
+    JOBS_REPORT = 'JOBS_REPORT'
 }

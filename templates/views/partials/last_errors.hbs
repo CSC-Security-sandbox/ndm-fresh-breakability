@@ -1,0 +1,52 @@
+  <h2>Last Errors</h2>
+  <table style="border:1px solid black;border-collapse: separate;border-spacing: 0;text-align:left;">
+   <thead>
+    <tr style="background-color:#dbdbdb;">
+     <th colspan="2" style="padding: 3px 8px;">Source</th>
+     <th colspan="5" style="padding: 3px 8px;">Target</th>
+     <th colspan="9" style="padding: 3px 8px;">Errors</th>
+    </tr>
+   </thead>
+   <thead>
+    <tr class="bottom" style="border-bottom:1px solid black;background-color:#dbdbdb;">
+     <th style="padding: 3px 8px;">File Server</th>
+     <th style="padding: 3px 8px;">Path</th>
+     <th style="padding: 3px 8px;">File Server</th>
+     <th style="padding: 3px 8px;">Path</th>
+     <th style="padding: 3px 8px;">Protocol</th>
+     <th style="padding: 3px 8px;">Version</th>
+     <th style="padding: 3px 8px;">Type</th>
+     <th style="padding: 3px 8px;">OK</th>
+     <th style="padding: 3px 8px;">Permission denied</th>
+     <th style="padding: 3px 8px;">Out of space</th>
+     <th style="padding: 3px 8px;">Not found</th>
+     <th style="padding: 3px 8px;">In use</th>
+     <th style="padding: 3px 8px;">Timed out</th>
+     <th style="padding: 3px 8px;">Network Issues</th>
+     <th style="padding: 3px 8px;">Modified externally</th>
+     <th style="padding: 3px 8px;">Other</th>
+    </tr>
+   </thead>
+   <tbody>
+   </tbody>
+   <tbody>
+    <tr class="darker bottom" style="border-top:1px solid black;background-color: #f0f0f0;">
+      <td style="padding: 3px 8px;">{{summary.source.file_server}}</td>
+      <td style="padding: 3px 8px;">{{summary.source.path}}</td>
+      <td style="padding: 3px 8px;">{{summary.target.file_server}}</td>
+      <td style="padding: 3px 8px;">{{summary.target.path}}</td>
+      <td style="padding: 3px 8px;">{{summary.source.protocol}}</td>
+      <td style="padding: 3px 8px;">{{summary.source.protocol_version}}</td>
+      <td style="padding: 3px 8px;">{{summary.source.job_type}}</td>
+     <td style="padding: 3px 8px;"></td>
+     <td style="padding: 3px 8px;"></td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">{{last_errors.others}}</td>
+    </tr>
+   </tbody>
+  </table>

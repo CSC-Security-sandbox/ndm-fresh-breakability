@@ -1,10 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import * as fs from 'fs';
 import * as path from "path";
+import { Repository } from 'typeorm';
 import * as puppeteer from 'puppeteer';
+import * as hbs from 'hbs';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Injectable, Logger } from '@nestjs/common';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
-import { Repository } from 'typeorm';
+import { ReportType } from 'src/constants/enums';
 
 @Injectable()
 export class PdfService {
@@ -16,8 +19,10 @@ export class PdfService {
     @InjectRepository(ReportsEntity)
     private readonly reportsRepo: Repository<ReportsEntity>) {}
 
-    async generatePdf(jobRunId:string,reportType:string): Promise<Buffer> {
+    async generatePdf(jobRunId:string, reportType:ReportType): Promise<Buffer> {
       this.logger.log( `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
+
+      if(reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
 
       await this.inventoryRepo.query(
         "CALL generate_discovery_report($1)",
@@ -118,4 +123,24 @@ export class PdfService {
       
         return htmlString;
       }
+
+    async generateJobsReportPdf(jobRunId: string): Promise<Buffer> {
+      const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
+      const reportContent = fs.readFileSync(reportPath, 'utf8');
+      const report = hbs.compile(reportContent);
+      const latestReportData = await this.reportsRepo.query(
+        `SELECT * FROM migrateadmin.jobs_report WHERE job_run_id = $1 and job_type = $2
+        order by created_at DESC
+        limit 1;
+        `,
+        [jobRunId, 'JOBS_REPORT']
+      )
+      const html = report(latestReportData[0].report_data);
+      const browser = await puppeteer.launch();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+      await browser.close();
+      return Buffer.from(pdfBuffer);
+    }
 }
