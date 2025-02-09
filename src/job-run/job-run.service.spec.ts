@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { JobRunService } from './job-run.service';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -57,10 +57,10 @@ describe('JobRunService', () => {
       const mockReport = { reportData: '{"test": "data"}' };
       mockReportsRepo.findOne.mockResolvedValue(mockReport);
 
-      const result = await service.jobRunReportByJobRunId(jobRunId);
+      const result = await service.jobRunReportByJobRunId(jobRunId, "");
 
       expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId },
+        where: { jobRunId , reportType:""},
         order: { createdAt: "DESC" },
         select: ["reportData"],
       });
@@ -68,20 +68,17 @@ describe('JobRunService', () => {
       expect(result).toEqual(mockReport.reportData);
     });
 
-    it("should return null when no report exists", async () => {
+    it("should return NotFoundException when no report exists", async () => {
       mockReportsRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.jobRunReportByJobRunId(jobRunId);
-
-      expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId },
-        order: { createdAt: "DESC" },
-        select: ["reportData"],
-      });
-
-      expect(result).toBeUndefined(); 
+      await expect(
+        service.jobRunReportByJobRunId(jobRunId, "DISCOVERY")
+      ).rejects.toThrow(
+        new NotFoundException("DISCOVERY - report is not generated yet")
+      );
     });
   });
+
 
   describe('getJobStatsId', () => {
     const jobId = '12345';
