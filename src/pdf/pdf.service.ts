@@ -129,7 +129,7 @@ export class PdfService {
       const reportContent = fs.readFileSync(reportPath, 'utf8');
       const report = hbs.compile(reportContent);
       const latestReportData = await this.reportsRepo.query(
-        `SELECT * FROM migrateadmin.jobs_report WHERE job_run_id = $1 and job_type = $2
+        `SELECT * FROM jobs_report WHERE job_run_id = $1 and job_type = $2
         order by created_at DESC
         limit 1;
         `,

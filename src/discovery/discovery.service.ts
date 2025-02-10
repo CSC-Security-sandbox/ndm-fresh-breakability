@@ -96,7 +96,7 @@ export class DiscoveryService {
     );
     try {
       await this.inventoryRepo.query(
-        "CALL migrateadmin.jobs_report_data($1);",
+        "CALL jobs_report_data($1);",
         [jobRunId]
       );
       return { message: "Report data generated successfully for jobs report" };
