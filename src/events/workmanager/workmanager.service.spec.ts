@@ -10,6 +10,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { Repository } from 'typeorm';
 import { WorkManager } from './workmanager.service';
 import { ConfigService } from '@nestjs/config';
+import { VolumeEntity } from 'src/entities/volume.entity';
 
 class MockRepository<T> extends Repository<T> {
     async save(e: any):Promise<any> {
@@ -31,6 +32,7 @@ describe('WorkManager', () => {
   let workManager: WorkManager;
   let operationsRepo: Repository<OperationsEntity>;
   let taskRepo: MockRepository<TaskEntity>;
+  let volumeRepo: MockRepository<VolumeEntity>;
   let workerJobRunMapRepo: MockRepository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
   let configService: ConfigService
@@ -51,6 +53,10 @@ describe('WorkManager', () => {
           provide: getRepositoryToken(WorkerJobRunMap),
           useClass: Repository,
         },
+        {
+          provide: getRepositoryToken(VolumeEntity),
+          useClass: Repository,
+        },
         EventEmitter2,
         ConfigService
       ],
@@ -60,6 +66,7 @@ describe('WorkManager', () => {
     configService = module.get<ConfigService>(ConfigService);
     operationsRepo = module.get<Repository<OperationsEntity>>(getRepositoryToken(OperationsEntity));
     taskRepo = module.get<MockRepository<TaskEntity>>(getRepositoryToken(TaskEntity));
+    volumeRepo = module.get<MockRepository<VolumeEntity>>(getRepositoryToken(VolumeEntity));
     workerJobRunMapRepo = module.get<MockRepository<WorkerJobRunMap>>(getRepositoryToken(WorkerJobRunMap));
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });

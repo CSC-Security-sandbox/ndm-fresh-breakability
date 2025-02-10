@@ -10,6 +10,7 @@ import { WorkerModule } from './workers/workers.module';
 import { JobRunModule } from './jobrun/jobrun.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkflowModule } from './workflow/workflow.module';
+import { WorkflowService } from './workflow/workflow.service';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WorkflowModule } from './workflow/workflow.module';
   ],
   controllers: [],
   providers: [],
+  exports: [],
 })
 export class AppModule {
   // configure(consumer: MiddlewareConsumer) {
