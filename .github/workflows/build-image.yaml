@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - temporal
 
 jobs:
   build-and-push:
@@ -33,17 +34,27 @@ jobs:
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
+       # Determine the tag suffix based on the branch
+      - name: Set Tag Suffix
+        id: set_tag_suffix
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/temporal" ]]; then
+            echo "TAG_SUFFIX=-temporal" >> $GITHUB_ENV
+          else
+            echo "TAG_SUFFIX=" >> $GITHUB_ENV
+          fi
+
       # Build the Docker image using commit hash and latest tag
       - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} .
-          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}${{ env.TAG_SUFFIX }} .
+          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}${{ env.TAG_SUFFIX }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest${{ env.TAG_SUFFIX }}
 
       # Push both the 'commit hash' and 'latest' tags
       - name: Push Docker Images
         run: |
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}${{ env.TAG_SUFFIX }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest${{ env.TAG_SUFFIX }}
 
   build-migrations:
     runs-on: ubuntu-latest
