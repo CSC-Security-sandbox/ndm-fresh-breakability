@@ -27,7 +27,7 @@ import { WorkflowService } from './workflow/workflow.service';
   ],
   controllers: [],
   providers: [],
-  exports: [WorkflowService],
+  exports: [],
 })
 export class AppModule {
   // configure(consumer: MiddlewareConsumer) {
