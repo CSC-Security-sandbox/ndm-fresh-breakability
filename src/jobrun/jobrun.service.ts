@@ -244,7 +244,7 @@ export class JobRunService {
 
   async intiateWorkflow(jobRunId: string, jobType: JobType,jobRunConfig: JobRunConfig) {
     const jobWorkflowMap = {
-      [JobType.Migrate]: () => this.startMigrateWorkFlow(),
+      [JobType.MIGRATE]: () => this.startMigrateWorkFlow(),
       [JobType.DISCOVER]: () => this.starDiscoveryWorkFlow(jobRunId,jobRunConfig,jobType),
     };    
     const jobRunWorkflow = await jobWorkflowMap[jobType]?.();
@@ -285,7 +285,7 @@ export class JobRunService {
     };
     sourcefileServerDetails= createFileServerDetails(sourceCredential);
 
-    if (jobType === JobType.Migrate) 
+    if (jobType === JobType.MIGRATE) 
       targetfileServerDetails= createFileServerDetails(targetCredential);
 
       const jobConfig = new JobConfig(
@@ -293,8 +293,8 @@ export class JobRunService {
         jobType,
         sourcefileServerDetails,
         jobRunConfig.connection.sourceCredential.path,
-        jobType === JobType.Migrate ? targetfileServerDetails : undefined,
-        jobType === JobType.Migrate ? jobRunConfig.connection.targetCredential.path : undefined,
+        jobType === JobType.MIGRATE ? targetfileServerDetails : undefined,
+        jobType === JobType.MIGRATE ? jobRunConfig.connection.targetCredential.path : undefined,
         jobRunConfig.workers
       )
       const redisClient = await RedisUtils.getClient();
@@ -333,7 +333,7 @@ export class JobRunService {
         taskEntity.status,
         'Worker-1', // needs to be looked into 
         jobRunConfig.connection.sourceCredential.path,
-        jobRunConfig.jobType===JobType.Migrate || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
+        jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
         jobRunConfig.excludeFilePatterns,
         [commands]
       )
@@ -505,7 +505,7 @@ export class JobRunService {
         inventoryCounts?.directorycount || "0"
       )?.toString(),
       totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
-      totalMigratedSize: jobConfigDetails.jobType === JobType.Migrate ? '' : '0',
+      totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? '' : '0',
       errors: [],
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -627,7 +627,7 @@ export class JobRunService {
           totalScannedSize: jobRun.jobtype === JobType.DISCOVER ? this.covertBytes(Number(
             inventoryCounts?.totalsize || "0"
           )) : '',
-          totalMigratedSize: jobRun.jobtype === JobType.Migrate ? '' : '0',
+          totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? '' : '0',
           errors: [],
         };
         return response;

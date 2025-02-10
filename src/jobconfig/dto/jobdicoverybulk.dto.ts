@@ -161,3 +161,19 @@ export class JobConfigCutoverBulk {
   @Type(() => MigrateConfig)
   migrateConfigs: MigrateConfig[]
 }
+
+export class JobConfigPrecheck {
+  @ApiProperty({ 
+    description: 'Details of all the bulk migrate configs', 
+    isArray: true, 
+    type: MigrateConfig 
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MigrateConfig)
+  migrateConfigs: MigrateConfig[]
+
+  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsBoolean()
+  preserveAccessTime: boolean;
+}
