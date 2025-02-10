@@ -5,10 +5,10 @@ import { FindManyOptions, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck, MigrateConfig } from './dto/jobdicoverybulk.dto';
 import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
+import { FlattenedCutoverConfig, InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
@@ -97,6 +97,13 @@ export class JobConfigService {
 
   async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     try {
+      // Step 1: flat the array with one source path with one destinataion path.
+      const allCutoverConfigs = this.flattenCutoverConfig(bulkCutover.cutoverConfig);
+      // Step 2: fetch base migration record and it's currosponding file_server, jobconfigs.
+      const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
+      return jobConfigs as any;
+      // Step 3: extract exclude pattern details.
+      // Step 4: create jobconfig for the step 1 with exclude patterns from step 3.
       return [
         {
           status: 'created',
@@ -121,6 +128,15 @@ export class JobConfigService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  flattenCutoverConfig(config: MigrateConfig[]): FlattenedCutoverConfig[] {
+    return config.flatMap(({ sourcePathId, destinationPathId }) =>
+      destinationPathId.map((destId) => ({
+        sourcePathId,
+        destinationPathId: destId,
+      }))
+    );
   }
 
   async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes[]> {
@@ -363,7 +379,24 @@ export class JobConfigService {
     } else {
         return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
-}
+  }
 
-
+  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
+    if (conditions.length === 0) return [];
+    const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
+    conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
+      if (index === 0) {
+        queryBuilder.where(
+          "(jobConfig.sourcePathId = :sourcePathId0 AND jobConfig.targetPathId = :destinationPathId0) and jobType = 'MIGRATE'",
+          { sourcePathId, destinationPathId }
+        );
+      } else {
+        queryBuilder.orWhere(
+          `(jobConfig.sourcePathId = :sourcePathId${index} AND jobConfig.targetPathId = :destinationPathId${index}) and jobType = 'MIGRATE'`,
+          { [`sourcePathId${index}`]: sourcePathId, [`targetPathId${index}`]: destinationPathId }
+        );
+      }
+    });
+    return await queryBuilder.getMany();
+  }
 }

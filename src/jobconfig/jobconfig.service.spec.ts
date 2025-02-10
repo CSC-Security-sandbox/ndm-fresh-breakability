@@ -619,4 +619,79 @@ it('should handle database errors in find method', async () => {
       expect(result[0].status).toEqual('success');
     })
   })
+
+  describe.only("flattenCutoverConfig", () => {
+    test("flattens multiple sourcePathIds with multiple destinationPathIds", () => {
+        const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1", "dest2"],
+          },
+          {
+            sourcePathId: "source2",
+            destinationPathId: ["dest3", "dest4"],
+          },
+        ]
+  
+      const expectedOutput = [
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+        { sourcePathId: "source2", destinationPathId: "dest3" },
+        { sourcePathId: "source2", destinationPathId: "dest4" },
+      ];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles a single sourcePathId with multiple destinationPathIds", () => {
+      const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1", "dest2", "dest3"],
+          },
+        ]
+  
+      const expectedOutput = [
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+        { sourcePathId: "source1", destinationPathId: "dest3" },
+      ];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles a single sourcePathId with a single destinationPathId", () => {
+      const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1"],
+          },
+        ]
+  
+      const expectedOutput = [{ sourcePathId: "source1", destinationPathId: "dest1" }];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles an empty cutoverConfig array", () => {
+      const input = []
+      expect(service.flattenCutoverConfig(input)).toEqual([]);
+    });
+  
+    test("handles sourcePathIds with empty destinationPathId arrays", () => {
+      const input = [
+          { sourcePathId: "source1", destinationPathId: [] },
+          { sourcePathId: "source2", destinationPathId: ["dest1"] },
+        ]
+  
+      const expectedOutput = [{ sourcePathId: "source2", destinationPathId: "dest1" }];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+ 
+    test("handles completely empty input object", () => {
+      const input = [];
+      expect(service.flattenCutoverConfig(input as any)).toEqual([]);
+    });
+  });
 });
