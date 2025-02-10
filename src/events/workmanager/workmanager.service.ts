@@ -26,6 +26,7 @@ export class WorkManager{
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+        @InjectRepository(VolumeEntity)
         private volumeRepo: Repository<VolumeEntity>,
         private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
