@@ -2,46 +2,31 @@ import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { RedisConsumerService } from "./redis-consumer.service";
 import { ConsumerDto } from "./consumer-dto";
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { ApiBody } from "@nestjs/swagger";
 
 @Controller("redis-consumer")
 export class RedisConsumerController {
   constructor(private readonly redisConsumerService: RedisConsumerService) {}
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
-  async handleCron(){
-     this.redisConsumerService.startConsumers()
-  }
-
   
   @Post("start")
+  @ApiBody({ description: 'Consumer Details', type: ConsumerDto })
   async start(
    @Body() consumerDto: ConsumerDto,
   ) {
-    const { streamKey, jobRunId, readerName, consumerType } = consumerDto;  
-    await this.redisConsumerService.startConsumer(
-      streamKey,
-      jobRunId,
-      readerName,
-      consumerType
-    );
-    return { message: `Consumer started for ${streamKey}` };
+    const {jobRunId, readerName, consumerType } = consumerDto;  
+   const result =  await this.redisConsumerService.startConsumer(jobRunId, readerName, consumerType);
+   return result;
   }
 
-  @Post("stop/:streamKey")
-  async stop(@Param("streamKey") streamKey: string) {
-    await this.redisConsumerService.stopConsumer(streamKey);
-    return { message: `Consumer stopped for ${streamKey}` };
+  @Post("stop/:jobRunId/:consumerType")
+  async stop(@Param("jobRunId") jobRunId: string, @Param("consumerType") consumerType: string) {
+   const response= await this.redisConsumerService.stopConsumer(jobRunId, consumerType);
+    return response;
   }
 
-  @Get("list")
-  async list() {
-    const consumers = await this.redisConsumerService.listRunningConsumers();
-    return { runningConsumers: consumers };
-  }
-
-  @Get("status/:streamKey")
-  async status(@Param("streamKey") streamKey: string) {
-    const status = await this.redisConsumerService.getConsumerStatus(streamKey);
-    return { streamKey, status };
+  @Get('list')
+  async listWorkers() {
+    return this.redisConsumerService.listConsumers();
   }
 }

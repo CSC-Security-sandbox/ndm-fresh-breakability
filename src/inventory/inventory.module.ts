@@ -11,6 +11,7 @@ import { OperationsEntity } from 'src/entities/operation.entity';
         TypeOrmModule.forFeature([InventoryEntity,TaskEntity,OperationsEntity]),
     ],
     controllers: [InventoryController],
-    providers: [InventoryService]
+    providers: [InventoryService],
+    exports: [InventoryService]
 })
 export class InventoryModule { }
