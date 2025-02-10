@@ -10,7 +10,7 @@ import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { Response } from 'express';
-import { JobConfigBulkMigrateResStatus, JobType } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -147,19 +147,32 @@ describe('JobConfigController', () => {
   });
 
   describe('downloadTemplate', () => {
-    it('should throw BadRequestException if multiple query params are provided', async () => {
-      const res = {} as Response;
-      await expect(controller.downloadTemplate(res, 'sid1', 'gid1')).rejects.toThrow(BadRequestException);
+    it('should download template successfully', async () => {
+      const res = {} as Response; // Mocking the Response object
+      const type: TemplateType = TemplateType.SID; // Assuming sid is a valid TemplateType
+
+      jest.spyOn(service, 'getTemplateFilename').mockReturnValue('template.csv');
+      jest.spyOn(service, 'sendCsvFile').mockImplementation(() => {});
+
+      await controller.downloadTemplate(res, type);
+
+      expect(service.getTemplateFilename).toHaveBeenCalledWith(type);
+      expect(service.sendCsvFile).toHaveBeenCalledWith('template.csv', res);
     });
 
-    it('should call sendCsvFile with correct filename', async () => {
-      const res = { send: jest.fn() } as unknown as Response;
-      mockJobConfigService.getTemplateFilename.mockReturnValue('template.csv');
-      mockJobConfigService.sendCsvFile.mockReturnValue(null);
+    it('should throw BadRequestException if type is not provided', async () => {
+      const res = {} as Response;
 
-      await controller.downloadTemplate(res, 'sid1', undefined, undefined);
-      expect(service.getTemplateFilename).toHaveBeenCalledWith({ sid: 'sid1', gid: undefined, uid: undefined });
-      expect(service.sendCsvFile).toHaveBeenCalledWith('template.csv', res);
+      await expect(controller.downloadTemplate(res, undefined)).rejects.toThrow(BadRequestException);
+      await expect(controller.downloadTemplate(res, undefined)).rejects.toThrow("Either sid, gid, or uid type is required");
+    });
+
+    it('should throw BadRequestException if type is invalid', async () => {
+      const res = {} as Response;
+      const invalidType = 'invalid-type' as TemplateType; // Simulating an invalid type
+
+      await expect(controller.downloadTemplate(res, invalidType)).rejects.toThrow(BadRequestException);
+      await expect(controller.downloadTemplate(res, invalidType)).rejects.toThrow("Invalid type");
     });
   });
 

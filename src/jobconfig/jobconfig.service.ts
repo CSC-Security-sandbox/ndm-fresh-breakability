@@ -10,7 +10,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
-import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -378,9 +378,8 @@ export class JobConfigService {
     uid: 'uid_template.csv',
   };
 
-  getTemplateFilename(params: { sid?: string; gid?: string; uid?: string }) {
-    const key = Object.keys(params).find(k => params[k]);    
-    return this.templates[key];
+  getTemplateFilename(type: TemplateType) {
+    return this.templates[type];
   }
 
   sendCsvFile(filename: string, res: Response) {
