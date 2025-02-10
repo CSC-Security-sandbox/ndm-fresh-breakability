@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS file_server_worker (
 	CONSTRAINT "FK_25cbd3119a71ce7db80d60e9039" FOREIGN KEY (worker_id) REFERENCES worker(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE INDEX IF NOT EXISTS "IDX_000b409f7a5fe4210cf89b958d" ON file_server_worker USING btree (file_server_id);
-CREATE INDEX IF NOT EXISTS"IDX_25cbd3119a71ce7db80d60e903" ON file_server_worker USING btree (worker_id);
+CREATE INDEX IF NOT EXISTS "IDX_25cbd3119a71ce7db80d60e903" ON file_server_worker USING btree (worker_id);
 
 CREATE TABLE IF NOT EXISTS fileserver_workingdirectory_mapping (
 	id uuid DEFAULT gen_random_uuid() NOT NULL,
