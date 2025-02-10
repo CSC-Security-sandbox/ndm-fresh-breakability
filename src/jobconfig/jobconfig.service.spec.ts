@@ -112,7 +112,7 @@ it('should handle empty sourcePathIds', async () => {
     firstRunAt: new Date(),
     createdBy: 'user123',
     sourcePathIds: ['qwsd']
-  } as JobConfigDiscoverBulk;
+  } as any;
 
   const mockFind = jest.spyOn(repo, 'find').mockResolvedValue([]);
   const mockUpdate = jest.spyOn(repo, 'update').mockResolvedValue(undefined);
@@ -363,6 +363,12 @@ it('should handle database errors in find method', async () => {
         path: '/target/path',
         protocol: 'FTP',
       },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
+      },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
       jobRuns: [
@@ -424,6 +430,12 @@ it('should handle database errors in find method', async () => {
         protocol: null,
       },
       destinationServer: {
+      },
+      aggregateData: {
+        scannedDirectoriesCount: 0,
+        scannedFilesCount: 0,
+        timeElapsed: 0,
+        totalScannedSize: "0 B"
       },
       status: 'ACTIVE',
       createdAt: mockJobConfig.createdAt,
@@ -497,7 +509,7 @@ it('should handle database errors in find method', async () => {
       const mokcResult = [
         {
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.Migrate,
+          jobType: JobType.MIGRATE,
           status: JobStatus.Active,
           excludeOlderThan: new Date('2025-02-01T00:00:00.000Z'),
           excludeFilePatterns: '*.log, *.tmp',
@@ -513,7 +525,7 @@ it('should handle database errors in find method', async () => {
       const res = await service.createBulkMigrate({} as any);
       expect(res).toEqual(mokcResult);
       expect(res.length).toEqual(1);
-      expect(res[0].jobType).toEqual(JobType.Migrate);
+      expect(res[0].jobType).toEqual(JobType.MIGRATE);
       expect(res[0].status).toEqual(JobStatus.Active);
     })
   })
@@ -536,6 +548,13 @@ it('should handle database errors in find method', async () => {
       expect(res.length).toEqual(1);
       expect(res[0].jobType).toEqual(JobType.CutOver);
       expect(res[0].status).toEqual(JobStatus.Active);
+    })
+  })
+
+  describe('precheck', () => {
+    it('should return succes for precheck', async () => {
+      const result = await service.precheck({} as any);
+      expect(result.status).toEqual('success');
     })
   })
 });
