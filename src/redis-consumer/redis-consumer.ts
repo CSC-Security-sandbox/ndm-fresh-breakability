@@ -14,9 +14,6 @@ const [jobRunId, readerName, consumerType] = args;
   const app = await NestFactory.create(AppModule);
   const inventoryService = app.get(InventoryService);
 
-  console.log(
-    `Starting consumer with jobRunId: ${jobRunId}, readerName: ${readerName}, consumerType: ${consumerType}`
-  );
   const redisClient = await RedisUtils.getClient();
   if (!redisClient.isOpen) await redisClient.connect();
 
@@ -25,7 +22,6 @@ const [jobRunId, readerName, consumerType] = args;
   while (true) {
 
   if (!jobContext) {
-    console.log(`Job context not found for ${jobRunId}`);
     process.exit(1);
   }
 
@@ -39,40 +35,28 @@ const [jobRunId, readerName, consumerType] = args;
 
   const reader = readerMap[consumerType];
   if (!reader) {
-    console.log(`Reader not found for ${consumerType}`);
     process.exit(1);
   }
 
   const consumerActions = {
     files: async (file) => {
-      console.log(`Processing File: ${file.fileName}`);
       await inventoryService.createInventory([file], jobRunId);
     },
     directories: async (directory) => {
-      console.log(`Processing Directory: ${directory.path}`);
       await inventoryService.createInventory([directory], jobRunId);
     },
     errors: async (error) => {
-      console.error(`Error Log: ${JSON.stringify(error)}`);
     },
     tasks: async (task: Task) => {
-      console.log(`Task: ${JSON.stringify(task)}`);
       await inventoryService.saveTasks(task);
     },
     taskstats: async (taskStat) => {
-      console.log(`Task Stats: ${JSON.stringify(taskStat)}`);
     },
   };
-
-  console.log(`Consumer Type: ${consumerType}`);
-  
-    console.log(`Reading from ${consumerType}`);
     for await (const data of reader) {
       if (consumerActions[consumerType]) {
         await consumerActions[consumerType](data);
-      } else {
-        console.warn(`No action defined for consumerType: ${consumerType}`);
-      }
+      } 
     }
   }
 })();
