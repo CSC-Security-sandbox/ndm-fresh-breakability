@@ -12,6 +12,13 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { ConfigService } from "@nestjs/config";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { WorkManager } from "src/events/workmanager/workmanager.service";
+import { Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { TaskEntity } from "src/entities/task.entity";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { VolumeEntity } from "src/entities/volume.entity";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -22,11 +29,20 @@ describe("JobRunService", () => {
   let inventoryRepo: Repository<InventoryEntity>;
   let jobOptions: Repository<JobOptionsEntity>
   let configService: ConfigService
+  let loggerFactoryMock = {
+    create: jest.fn().mockReturnValue({
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    }),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobRunService,
+        WorkflowService,
+        WorkManager,
         {
           provide: getRepositoryToken(JobRunEntity),
           useValue: {
@@ -88,6 +104,43 @@ describe("JobRunService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(TaskEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OperationsEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(VolumeEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        { provide: LoggerFactory, useValue: loggerFactoryMock },
+        { provide: WorkflowService, useValue : {
+          startWorkflow: jest.fn()
+        }},
         ConfigService,
         EventEmitter2,
       ],
@@ -108,6 +161,7 @@ describe("JobRunService", () => {
       getRepositoryToken(InventoryEntity)
     );
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
+
   });
 
   describe("scheduleAJob", () => {

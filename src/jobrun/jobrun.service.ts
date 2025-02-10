@@ -248,8 +248,8 @@ export class JobRunService {
       [JobType.DISCOVER]: () => this.starDiscoveryWorkFlow(jobRunId,jobRunConfig,jobType),
     };    
     const jobRunWorkflow = await jobWorkflowMap[jobType]?.();
-    await this.jobRunRepo.update({id: jobRunId}, {workFlowId: jobRunWorkflow.workflowId});
-    this.logger.log(`Starting ${jobType} workflow for jobRunId: ${jobRunId} , with workflowId: ${jobRunWorkflow.workflowId}`);
+    await this.jobRunRepo.update({id: jobRunId}, {workFlowId: jobRunWorkflow?.workflowId});
+    this.logger.log(`Starting ${jobType} workflow for jobRunId: ${jobRunId} , with workflowId: ${jobRunWorkflow?.workflowId}`);
   }
 
   async starDiscoveryWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {

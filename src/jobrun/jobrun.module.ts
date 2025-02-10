@@ -15,6 +15,7 @@ import { TaskEntity } from 'src/entities/task.entity';
 import { OperationsEntity } from 'src/entities/operation.entity';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerModule } from 'src/workers/workers.module';
 
 
 @Module({
@@ -22,8 +23,9 @@ import { VolumeEntity } from 'src/entities/volume.entity';
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity,TaskEntity,OperationsEntity, VolumeEntity]),
+        WorkerModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkManager],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkManager,WorkflowService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}
