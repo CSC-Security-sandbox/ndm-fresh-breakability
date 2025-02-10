@@ -8,7 +8,7 @@
    </changeSet>
 
    <changeSet id="5002" author="akunal">
-      <sqlFile path="liquibase/20250210_01_temporal_changes.sql"/>
+      <sqlFile path="liquibase/20250210_01_jobrun_table_add_column.sql"/>
    </changeSet>
 
 
