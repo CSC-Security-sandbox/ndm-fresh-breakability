@@ -7,4 +7,8 @@
       <sqlFile path="liquibase/20250124_01_create_all_config_existing_tables.sql"/>
    </changeSet>
 
+   <changeSet id="3002" author="akunal">
+      <sqlFile path="liquibase/20250210_01_worker_add_meta_config_column.sql"/>
+   </changeSet>
+
 </databaseChangeLog>

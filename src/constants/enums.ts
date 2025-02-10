@@ -34,10 +34,6 @@ export enum ConfigurationType {
     objectStorage = 'OBJECT_STORAGE'
 }
 
-export enum RabbitMq {
-    ListPaths ='ListPaths'
-}
-
 
 export enum WorkFlowType {
     PARENT_WORKFLOW='parent-workflow-tasks',
