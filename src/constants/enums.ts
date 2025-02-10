@@ -48,6 +48,12 @@ export enum JobIdMappingType {
     Sid = 'SID'
 }
 
+export enum TemplateType {
+    GID = 'gid',
+    UID = 'uid',
+    SID = 'sid',
+}
+
 // ---------- Job Run -----------/
 export enum JobRunStatus {
     Ready = 'READY',

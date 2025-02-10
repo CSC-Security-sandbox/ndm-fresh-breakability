@@ -8,6 +8,7 @@ import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck } from '
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
+import { TemplateType } from 'src/constants/enums';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -59,24 +60,6 @@ export class JobConfigController {
     return await this.jobConfigService.getAllJobConfig(projectId);
   }
 
-  @Get('download-template')
-  async downloadTemplate(
-    @Res() res: Response,
-    @Query('sid') sid?: string, 
-    @Query('gid') gid?: string, 
-    @Query('uid') uid?: string
-  ) {
-    const params = { sid, gid, uid };
-    const activeParams = Object.keys(params).filter(key => params[key]);
-
-    if (activeParams.length !== 1) {
-      throw new BadRequestException('Either sid, gid, or uid is required');
-    }
-
-    const filename = this.jobConfigService.getTemplateFilename(params);
-    this.jobConfigService.sendCsvFile(filename, res);
-  }
-
   @ApiOperation({ summary: 'Get jobfindallConfigPageDto: FindallConfigPageDto by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
@@ -91,6 +74,23 @@ export class JobConfigController {
   @Get('cutover/:fileServerId')
   async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
       return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
+  }
+
+  @Get("download-template/:type")
+  async downloadTemplate(
+    @Res() res: Response,
+    @Param('type') type: TemplateType
+  ) {
+    if (!type) {
+      throw new BadRequestException("Either sid, gid, or uid type is required");
+    }
+
+    if (!Object.values(TemplateType).includes(type)) {
+      throw new BadRequestException("Invalid type");
+    }
+
+    const filename = this.jobConfigService.getTemplateFilename(type);
+    this.jobConfigService.sendCsvFile(filename, res);
   }
 
   @ApiOperation({ summary: 'Get Configs and Volumes by project ID' })
