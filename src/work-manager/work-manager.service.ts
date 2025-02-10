@@ -11,6 +11,8 @@ import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { ConfigService } from '@nestjs/config';
+
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Injectable()
@@ -69,40 +71,37 @@ export class WorkManagerService {
     return result.metaConfig;
   }
 
-  createWorkerConfiguration = (workerId: string): WorkerConfiguration[] => [
-    {
-      configName: WorkFlowType.PARENT_WORKFLOW,
-      dynamicTaskQueue: false,
-      taskQueueId: null,
-      workerId: workerId,
-    },
-    {
-      configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
-      dynamicTaskQueue: true,
-      taskQueueId: workerId,
-      workerId: workerId,
-    },
-  ];
-
-  async validateConnection(payload: CreateRequestDto, traceId: string) {
-    const startWorkFlowPayload: StartWorkFlowPayload = {
-      workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
-      taskQueue: 'ParentWorkflow-TaskQueue',
-      args: [
+    createWorkerConfiguration = (workerId: string) : WorkerConfiguration[] => [
         {
-          traceId: traceId,
-          payload: { traceId, ...payload },
-          options: payload.options,
+            configName: WorkFlowType.PARENT_WORKFLOW,
+            dynamicTaskQueue:false,
+            taskQueueId: null,
+            workerId: workerId
         },
-      ],
-      ...payload.options,
-    };
-    const workflow = await this.workFlowService.startWorkflow(
-      WorkFlows.VALIDATE_CONNECTION,
-      startWorkFlowPayload,
-    );
-    return { workflowId: workflow.workflowId };
-  }
+        {
+            configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
+            dynamicTaskQueue:true,
+            taskQueueId: workerId,
+            workerId: workerId
+        }
+    ] 
+
+    async validateConnection(payload: CreateRequestDto, traceId: string ) {
+        const startWorkFlowPayload: StartWorkFlowPayload = {
+            workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
+            taskQueue: 'ParentWorkflow-TaskQueue',
+            args: [{ traceId: traceId, payload: {
+                    traceId,
+                    feature: this.configService.get('app.feature'), 
+                    ...payload
+                }, 
+                options: payload.options
+             }],
+            ...payload.options
+        }
+        const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_CONNECTION, startWorkFlowPayload)
+        return {workflowId : workflow.workflowId}
+    }
 
   async getChildWorkFlowRes(id: string) {
     return this.workFlowService.getWorkFlowRes(id);

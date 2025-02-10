@@ -1,10 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { WorkflowService } from './workflow.service';
+import { Test, TestingModule } from '@nestjs/testing';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { Client, Connection, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
-import { WorkFlows } from 'src/constants/enums';
-import { StartWorkFlowPayload } from './workflow.types';
+import { Client, Connection } from '@temporalio/client';
+import { WorkflowService } from './workflow.service';
 
 jest.mock('@temporalio/client');
 
@@ -162,5 +160,22 @@ describe('WorkflowService', () => {
   });
   
 
+  it('should close client connection if client exists', () => {
+    function setPrivateClient(value: any) {
+      Object.defineProperty(service, 'client', {
+          value,
+          writable: true,
+      });
+    }
+    const mockClient = {
+      connection: {
+          close: jest.fn(),
+      },
+    };
+    setPrivateClient(mockClient);
+    service.onModuleDestroy();
+    expect(mockClient.connection.close).toHaveBeenCalled();
+
+    });
 
 });

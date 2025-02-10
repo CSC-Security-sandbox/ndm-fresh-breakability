@@ -7,10 +7,9 @@ export default registerAs(
       host: process.env.APP_HOST || '0.0.0.0',
       port: parseInt(process.env.APP_PORT) || 3000,
     },
-    rabbitmq: {
-        urls: process.env.RABBITMQ_URL?.split(',') || [],
-        queue: process.env.RABBITMQ_QUEUE || '',
-        durable: process.env.RABBITMQ_QUEUE_IS_DURABLE || false
+    feature:{
+      enableVersionFetch: process.env.ENABLE_VERSIONS_FETCH === 'true' || false,
+      enablePreListPath: process.env.ENABLE_PRE_LIST_PATH  === 'true' || false
     }
   }),
 );

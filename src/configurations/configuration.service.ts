@@ -140,7 +140,7 @@ export class ConfigurationService {
         return config
     }
 
-    async createConfiguration(createConfig: ConfigDTO, userId: string, traceId) {
+    async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
         const credentials:Credentials[] = []
         try {
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
@@ -190,7 +190,7 @@ export class ConfigurationService {
             this.refreshConfig(update.id, traceId)
             return update;
         }catch(error) {
-            this.logger.error(`Error Occurred during creating Config ${error}`)
+            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during creating Config')
         }
     }
@@ -255,7 +255,7 @@ export class ConfigurationService {
             const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
 
             if (!mapping) {
-                this.logger.error(`Mapping for configId ${id} not found`);
+                this.logger.error(`Mapping for configId ${id} not found for request ${traceId}`);
                 throw new NotFoundException(`Mapping for configId ${id} not found`);
             }
 
@@ -272,7 +272,7 @@ export class ConfigurationService {
             this.refreshConfig(update.id, traceId)
             return update
         }catch(error) {
-            this.logger.error(`Error Occurred during updating Config ${error}`)
+            this.logger.error(`Error Occurred during updating Config ${error} for traceId ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during updating Config')
         }
     }
@@ -369,12 +369,10 @@ export class ConfigurationService {
                 volumePath: In(pathsMap[fileServer.protocol].paths)
             },{ reachableCount: pathsMap[fileServer.protocol].workers})
 
-            const existing  = new Set<string>();
-            fileServer.volumes.forEach(vol => existing.add(vol.volumePath))
-
+            const existingPaths = new Set(fileServer.volumes.map(vol => vol.volumePath));
             const founds: VolumeEntity[] = []
             pathsMap[fileServer.protocol].paths.forEach((path)=>{
-                if(!existing.has(path))
+                if(!existingPaths.has(path))
                     founds.push(this.volumes.create({
                         fileServerId: fileServer.id,
                         reachableCount:  pathsMap[fileServer.protocol].workers,

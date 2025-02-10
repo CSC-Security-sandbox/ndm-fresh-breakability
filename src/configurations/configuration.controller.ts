@@ -16,7 +16,7 @@ export class ConfigurationController{
     @ApiOperation({ summary: 'Create Configuration' })
     @ApiCreatedResponse({ description: 'Configuration Created Successfully.' })
     @ApiBearerAuth()
-    // @Auth(Permission.ManageConfig)
+    @Auth(Permission.ManageConfig)
     @Post('')
     @HttpCode(HttpStatus.CREATED)
     @ApiBody({ description: 'Configuration data', type: ConfigDTO })

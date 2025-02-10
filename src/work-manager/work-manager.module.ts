@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import appConfig from 'src/config/app.config';
 import { WorkflowModule } from 'src/workflow/workflow.module';
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Module({
@@ -14,7 +15,8 @@ import { JobRunEntity } from 'src/entities/jobrun.entity';
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [appConfig] }),
     TypeOrmModule.forFeature([WorkerEntity,JobRunEntity]),
-    WorkflowModule
+    WorkflowModule,
+    AuthKeycloakModule
   ],
   controllers: [WorkManagerController],
   providers: [WorkManagerService]
