@@ -8,7 +8,7 @@
    </changeSet>
 
    <changeSet id="3002" author="akunal">
-      <sqlFile path="liquibase/20250210_01_add_meta_config_and_worker_id_column.sql"/>
+      <sqlFile path="liquibase/20250210_01_add_meta_config_column.sql"/>
    </changeSet>
 
 </databaseChangeLog>
