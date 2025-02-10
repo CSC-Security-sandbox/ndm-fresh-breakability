@@ -58,11 +58,12 @@ describe('JobRunController', () => {
 
     mockJobRunService.jobRunReportByJobRunId.mockResolvedValue(mockReportData);
 
-    const result = await controller.getJobReportById(jobRunId);
+    const result = await controller.getJobReportById(jobRunId, "");
 
     expect(result).toEqual(JSON.parse(mockReportData));
     expect(mockJobRunService.jobRunReportByJobRunId).toHaveBeenCalledWith(
-      jobRunId
+      jobRunId,
+      ""
     );
   });
 });
