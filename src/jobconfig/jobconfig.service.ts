@@ -78,22 +78,39 @@ export class JobConfigService {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
 
-    bulkMigrate?.migrateConfigs.map((config) => {
-      config?.destinationPathId.map(async (destinationPath) => {
+    if (!bulkMigrate?.migrateConfigs) {
+      return [];
+    }
+
+    for (const config of bulkMigrate.migrateConfigs) {
+      if (!config?.destinationPathId) {
+        continue;
+      }
+
+      for (const destinationPath of config.destinationPathId) {
         const existingJobConfigs = await this.jobConfigRepo.find({
-          where: { jobType: JobType.MIGRATE, sourcePathId: config?.sourcePathId, targetPathId: destinationPath }, select: { sourcePathId: true, targetPathId: true, scheduler: true }
+          where: { jobType: JobType.MIGRATE, sourcePathId: config?.sourcePathId, targetPathId: destinationPath },
+          select: { sourcePathId: true, targetPathId: true, scheduler: true }
         });
 
         const existingSet = new Set(existingJobConfigs.map(jobConfig => `${jobConfig?.sourcePathId}-${jobConfig?.targetPathId}`));
 
         if (existingSet.has(`${config?.sourcePathId}-${destinationPath}`)) {
-          await this.jobConfigRepo.update({ jobType: JobType.MIGRATE, sourcePathId: config?.sourcePathId, targetPathId: destinationPath, scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING]) }, {
-            excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
-            preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
-            excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
-            firstRunAt: firstRunAt,
-            scheduler: ScheduleStatus.SCHEDULING
-          })
+          await this.jobConfigRepo.update(
+            {
+              jobType: JobType.MIGRATE,
+              sourcePathId: config?.sourcePathId,
+              targetPathId: destinationPath,
+              scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])
+            },
+            {
+              excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
+              preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              firstRunAt: firstRunAt,
+              scheduler: ScheduleStatus.SCHEDULING
+            }
+          );
         } else {
           jobConfigs.push(this.jobConfigRepo.create({
             status: JobStatus.Active,
@@ -106,19 +123,22 @@ export class JobConfigService {
             firstRunAt: firstRunAt,
             scheduler: ScheduleStatus.SCHEDULING,
             futureScheduleAt: bulkMigrate?.futureRunSchedule
-          })
-          );
+          }));
         }
-      });
-    });
+      }
+    }
 
-    return (await this.jobConfigRepo.save(jobConfigs)).map(({ id, jobType, sourcePathId, targetPathId }) => ({
-      id,
-      jobType,
-      status: JobConfigBulkMigrateResStatus.CREATED,
-      sourcePathId,
-      targetPathId
-    }));
+    if (jobConfigs.length > 0) {
+      return (await this.jobConfigRepo.save(jobConfigs)).map(({ id, jobType, sourcePathId, targetPathId }) => ({
+        id,
+        jobType,
+        status: JobConfigBulkMigrateResStatus.CREATED,
+        sourcePathId,
+        targetPathId
+      }));
+    } else {
+      return [];
+    }
   }
 
   async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
