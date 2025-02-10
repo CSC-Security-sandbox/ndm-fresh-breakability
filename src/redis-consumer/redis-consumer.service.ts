@@ -19,12 +19,10 @@ export class RedisConsumerService  {
   private consumers: Map<string, StreamStatus> = new Map();
   constructor(private inventoryService: InventoryService) {}
   async onModuleInit() {
-    console.log("Initializing Redis Consumer Service...");
     this.redisClient = await RedisUtils.getClient();
     if (!this.redisClient.isOpen) await this.redisClient.connect();
     this.redisClient.del("consumers");
     this.consumers = await this.redisClient.get("consumers");
-    console.log("Redis Consumer Service Initialized" + this.consumers);
   }
 
   
@@ -38,7 +36,6 @@ export class RedisConsumerService  {
         `pm2 start  dist/redis-consumer/redis-consumer.js --name ${jobRunId}-${consumerType}-consumer -- ${jobRunId} ${readerName} ${consumerType}`,
         (error, stdout, stderr) => {
           if (error) {
-            console.error(`Error starting worker: ${error}`);
             return reject({"message": `Error while starting consumer`});
           }
           resolve({"message": `consumer started:`});
@@ -52,7 +49,6 @@ export class RedisConsumerService  {
     return new Promise((resolve, reject) => {
       exec(`pm2 stop ${jobRunId}-${consumerType}-consumer`, (error, stdout, stderr) => {
         if (error) {
-          console.error(`Error stopping worker: ${error}`);
           return reject({"message": `Error while stopping consumer`});
         }
         resolve({"message": `consumer stopped:`});
@@ -64,7 +60,6 @@ export class RedisConsumerService  {
     return new Promise((resolve, reject) => {
       exec(`pm2 list`, (error, stdout, stderr) => {
         if (error) {
-          console.error(`Error listing workers: ${error}`);
           return reject(error);
         }
         resolve(stdout);

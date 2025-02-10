@@ -107,7 +107,6 @@ export class InventoryService {
       workerId: '07150b58-43db-478d-9c21-13a32cbf8836'
     });
    const taskEntity=  await this.taskRepo.insert(task);
-   console.log ('taskEntity',taskEntity);
     const operation = this.operationRepo.create({
       taskId: task.id,
      jobRunId: jobRunId,
