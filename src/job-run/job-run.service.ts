@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -24,14 +24,13 @@ export class JobRunService {
         private reportsRepo: Repository<ReportsEntity>,
     ){}
 
-    async jobRunReportByJobRunId(id:string) {
-      const report = await this.reportsRepo.findOne(
-        {
-          where:{jobRunId:id},
-          order:{createdAt:'DESC'},
-          select:["reportData"]
-        }
-      )
+    async jobRunReportByJobRunId(jobRunId:string, reportType:string) {
+      const report = await this.reportsRepo.findOne({
+        where: { jobRunId: jobRunId , reportType: reportType},
+        order: { createdAt: "DESC" },
+        select: ["reportData"],
+      });
+      if(!report) throw new NotFoundException(`${reportType} - report is not generated yet`)
       if(report) return report.reportData
     }
 
@@ -54,6 +53,7 @@ export class JobRunService {
           select: {
             id: true,
             startTime: true,
+            isReportReady:true,
             status: true,
             endTime: true,
             worker: {workerId: true},

@@ -1,4 +1,4 @@
-import { ClassSerializerInterceptor, Controller, Get, Param, SerializeOptions, UseInterceptors } from '@nestjs/common';
+import { ClassSerializerInterceptor, Controller, Get, Param, Query, SerializeOptions, UseInterceptors } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
@@ -7,6 +7,28 @@ import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsR
 @Controller("job-run")
 export class JobRunController {
   constructor(private readonly jobRunService: JobRunService) {}
+
+  @ApiOperation({ summary: "Get job run Report by JobRunId" })
+  @ApiOkResponse({
+    description: "Returns a job run report by its JobRunId.",
+    type: JobReportResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Job run report not found for the provided JobRunId.",
+  })
+  @SerializeOptions({ type: JobReportResponseDto })
+  @Get("job-report")
+  async getJobReportById(
+    @Query("jobRunId") jobRunId: string,
+    @Query("reportType") reportType: string
+  ) {
+    const response = await this.jobRunService.jobRunReportByJobRunId(
+      jobRunId,
+      reportType
+    );
+    return JSON.parse(response);
+  }
 
   @ApiOperation({ summary: "Get job run Details by ID" })
   @ApiOkResponse({
@@ -19,18 +41,5 @@ export class JobRunController {
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
     return serializeJobRunDetailsResponse(response);
-  }
-
-  @ApiOperation({ summary: "Get job run Report by ID" })
-  @ApiOkResponse({
-    description: "Returns a job run report by its ID.",
-    type: JobReportResponseDto,
-  })
-  @ApiResponse({ status: 404, description: "Job run report not found for job id provided." })
-  @SerializeOptions({ type: JobReportResponseDto })
-  @Get("job-report-data/:id")
-  async getJobReportById(@Param("id") id: string) {
-    const response = await this.jobRunService.jobRunReportByJobRunId(id);
-    return JSON.parse(response);
   }
 }

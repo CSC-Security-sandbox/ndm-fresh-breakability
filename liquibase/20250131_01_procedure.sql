@@ -812,14 +812,12 @@ aggregated_json;
 
 
 
-insert
-	into
-	reports(report_data,
-	report_type,
-	job_run_id)
-values(aggregated_json,
-'DISCOVERY',
-jobrunid);
+insert into reports (report_data, report_type, job_run_id)
+values (aggregated_json, 'DISCOVERY', jobrunid)
+on CONFLICT (job_run_id, report_type)
+DO update set report_data = EXCLUDED.report_data;
+
+update jobrun set is_report_ready = TRUE where id = jobrunid;
 
 -- Add more aggregations if needed in similar fashion
 end;
