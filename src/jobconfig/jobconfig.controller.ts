@@ -4,8 +4,8 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
-import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes } from './jobconfig.types';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -36,6 +36,13 @@ export class JobConfigController {
     return await this.jobConfigService.createBulkCutover(bulkCutover);
   }
 
+  @ApiOperation({ summary: 'precheck for migration job' })
+  @ApiResponse({ status: 200, description: 'Precheck is passed' })
+  @Post('/precheck')
+  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
+    return await this.jobConfigService.precheck(precheckData);
+  }
+
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
   @ApiQuery({name:'projectId',required:true,description:'Project Id',type:String})
@@ -53,6 +60,14 @@ export class JobConfigController {
   @Get(':id')
   async getJobConfigById(@Param('id') id: string): Promise<any> {
     return await this.jobConfigService.getJobConfigById(id);
+  }
+
+  @ApiOperation({ summary: 'Get Cutover details' })
+  @ApiResponse({ status: 200, description: 'Cutover details Found' })
+  @ApiResponse({ status: 404, description: 'Cutover details Not Found' })
+  @Get('cutover/:fileServerId')
+  async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
+      return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
   }
 
   @ApiOperation({ summary: 'Update a job by ID' })

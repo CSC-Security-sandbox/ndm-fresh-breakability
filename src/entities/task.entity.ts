@@ -6,7 +6,7 @@ import { OperationsEntity } from './operation.entity';
 import { WorkerEntity } from './worker.entity';
 
 
-@Entity({ name: 'tasks', schema: 'migrateadmin' })
+@Entity({ name: 'tasks' })
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])

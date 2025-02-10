@@ -8,7 +8,7 @@ import { WorkerJobRunMap } from './workerjobrun.entity';
 import { TaskEntity } from './task.entity';
 
 
-@Entity({name:'worker', schema:'migrateadmin'})
+@Entity({name:'worker'})
 export class WorkerEntity extends Base  {
   @ApiProperty({ description: 'workerId' })
   @PrimaryColumn({ type: 'uuid', name: 'id' })

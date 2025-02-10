@@ -28,3 +28,7 @@ export interface JobConfigBulkCutoverRes {
     sourcePathId: string;
     targetPathId: string[];
 }
+
+export interface JobConfigPrecheckRes {
+    status: 'success'
+}
