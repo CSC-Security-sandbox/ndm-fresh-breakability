@@ -1,1 +1,0 @@
-ALTER TABLE worker ADD COLUMN IF NOT EXISTS meta_config json;

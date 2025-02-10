@@ -3,7 +3,7 @@ import { WorkerEntity } from "./worker.entity";
 import { JobRunEntity } from "./jobrun.entity";
 
 
-@Entity({ name: 'worker_jobrun_mapping', schema: 'migrateadmin' })
+@Entity({ name: 'worker_jobrun_mapping'})
 export class WorkerJobRunMap {
 
     @PrimaryGeneratedColumn('uuid')
