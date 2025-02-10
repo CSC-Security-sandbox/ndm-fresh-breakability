@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PdfController } from './pdf.controller';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
+import { ReportType } from 'src/constants/enums';
 
 describe('PdfController', () => {
   let controller: PdfController;
@@ -27,7 +28,7 @@ describe('PdfController', () => {
   describe('generatePdf', () => {
     it('should generate a PDF and set the appropriate response headers', async () => {
       const jobRunId = '123';
-      const reportType = 'summary';
+      const reportType = ReportType.DISCOVERY;
       const pdfData = Buffer.from('mocked-pdf-data');
       const responseMock = {
         setHeader: jest.fn(),

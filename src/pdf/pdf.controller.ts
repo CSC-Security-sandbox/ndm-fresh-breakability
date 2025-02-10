@@ -2,6 +2,7 @@ import { Controller, Get, Res, HttpException, HttpStatus, Body, Post } from '@ne
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ReportType } from 'src/constants/enums';
 
 
 @ApiTags('Generate PDF')
@@ -21,7 +22,7 @@ export class PdfController {
           },
           'report-type': {
             type: 'string',
-            enum: ['COC', 'DISCOVERY'],
+            enum: Object.values(ReportType),
             description: 'Type of the report to download',
           },
         },
@@ -31,7 +32,7 @@ export class PdfController {
     @ApiResponse({ status: 200, description: 'Files downloaded successfully' })
     @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
     async generatePdf(@Res() res: Response, @Body('jobRunId') jobRunId: string,
-    @Body('report-type') reportType: string) {
+    @Body('report-type') reportType: ReportType) {
       try {
         const pdf = await this.pdfService.generatePdf(jobRunId, reportType);
         res.setHeader('Content-Type', 'application/pdf');

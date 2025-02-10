@@ -3,6 +3,7 @@ import { PdfService } from './pdf.service';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ReportsEntity } from 'src/entities/reports.entity';
+import { ReportType } from 'src/constants/enums';
 
 describe('PdfService', () => {
   let pdfService: PdfService;
@@ -40,7 +41,7 @@ describe('PdfService', () => {
     it('should generate a PDF buffer', async () => {
       // Mock the necessary dependencies and setup the test data
       const jobRunId = '123';
-      const reportType = 'DISCOVERY';
+      const reportType = ReportType.DISCOVERY;
       const latestReport = new ReportsEntity();
       latestReport.reportData = JSON.stringify([
         { category: 'Category 1', sub_category: 'Sub Category 1', count_or_space: 10 },
