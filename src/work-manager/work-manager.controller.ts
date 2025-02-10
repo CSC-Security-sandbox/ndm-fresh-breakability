@@ -58,9 +58,6 @@ export class WorkManagerController {
     @Body('jobRunId') jobRunId: string,
     @Body('workerIds') workerIds: string[],
   ) {
-    console.log(
-      `[WorkersController] - updateWorkerConfigurations - jobRunId: ${jobRunId} - workerIds: ${workerIds}`,
-    );
     return  this.workManagerService.updateWorkerConfigurations(
       jobRunId,
       workerIds,
