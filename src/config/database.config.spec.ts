@@ -9,6 +9,7 @@ import { VolumeEntity } from "src/entities/volume.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 
 describe('TypeORM Config', () => {
@@ -29,6 +30,7 @@ describe('TypeORM Config', () => {
     process.env.DB_USER = 'testuser';
     process.env.DB_PASSWORD = 'testpassword';
     process.env.DB_NAME = 'testdb';
+    process.env.SCHEMA = 'migrateadmin';
 
     const config = typeormConfig();
 
@@ -36,6 +38,7 @@ describe('TypeORM Config', () => {
       type: 'postgres',
       host: 'localhost',
       port: 5432,
+      schema:'migrateadmin',
       username: 'testuser',
       password: 'testpassword',
       database: 'testdb',
@@ -50,7 +53,8 @@ describe('TypeORM Config', () => {
         ProjectEntity,
         JobConfigEntity,
         JobRunEntity,
-        FileServerWorkingDirectoryMappingEntity
+        FileServerWorkingDirectoryMappingEntity,
+        WorkerJobRunMap
       ],
       migrations: []
     };
