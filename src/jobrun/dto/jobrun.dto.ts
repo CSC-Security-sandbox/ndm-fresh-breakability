@@ -94,7 +94,8 @@ export interface JobRunsDTO {
   scannedDirectoriesCount: string;
   totalScannedSize: string;
   errors: string[];
-  totalMigratedSize: string
+  totalMigratedSize: string;
+  isReportReady:boolean;
 }
 
 export interface ServerDetailsDTO {

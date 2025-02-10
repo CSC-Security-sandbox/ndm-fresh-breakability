@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS jobrun (
 	iteration_number int4 NOT NULL,
 	job_config_id uuid NOT NULL,
 	job_options_id uuid NULL,
+	is_report_ready boolean DEFAULT false NOT NULL,
 	CONSTRAINT "PK_39c91b190948f08d1d392f404e6" PRIMARY KEY (id),
 	CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES jobconfig(id) ON DELETE CASCADE
 );

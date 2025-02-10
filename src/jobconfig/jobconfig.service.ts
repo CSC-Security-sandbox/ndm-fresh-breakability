@@ -188,6 +188,7 @@ export class JobConfigService {
         .getRawOne();
       return {
         jobRunId: jobRun.id,
+        isReportReady: jobRun.isReportReady,
         status: jobRun.status,
         startTime: jobRun.startTime,
         endTime: jobRun.endTime, 
