@@ -8,11 +8,6 @@ import { ApiBody } from "@nestjs/swagger";
 export class RedisConsumerController {
   constructor(private readonly redisConsumerService: RedisConsumerService) {}
 
-  // @Cron(CronExpression.EVERY_10_SECONDS)
-  // async handleCron(){
-  //  //  this.redisConsumerService.startConsumers()
-  // }
-
   
   @Post("start")
   @ApiBody({ description: 'Consumer Details', type: ConsumerDto })

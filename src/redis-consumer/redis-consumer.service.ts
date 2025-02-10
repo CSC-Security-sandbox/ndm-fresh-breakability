@@ -41,7 +41,6 @@ export class RedisConsumerService  {
             console.error(`Error starting worker: ${error}`);
             return reject({"message": `Error while starting consumer`});
           }
-          console.log(`Worker started: ${stdout}`);
           resolve({"message": `consumer started:`});
         }
       );
@@ -56,7 +55,6 @@ export class RedisConsumerService  {
           console.error(`Error stopping worker: ${error}`);
           return reject({"message": `Error while stopping consumer`});
         }
-        console.log(`Worker stopped: ${stdout}`);
         resolve({"message": `consumer stopped:`});
       });
     });
@@ -69,7 +67,6 @@ export class RedisConsumerService  {
           console.error(`Error listing workers: ${error}`);
           return reject(error);
         }
-        console.log(`PM2 Process List: ${stdout}`);
         resolve(stdout);
       });
     });
