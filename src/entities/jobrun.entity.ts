@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
+import { WorkerConfiguration } from 'src/constants/types';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 
 export enum JobRunStatus {
   Ready = 'READY',
@@ -39,4 +41,13 @@ export class JobRunEntity extends Base {
   @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
   @JoinColumn({ name: 'job_config_id' })
   jobConfig: JobConfigEntity; 
+
+  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  metaConfig: WorkerConfiguration[];
+
+  @Column({ type: 'text', nullable: true, name: 'workflow_id' })
+  workFlowId: string;
+
+  @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
+  workerMap: WorkerJobRunMap[]
 }
