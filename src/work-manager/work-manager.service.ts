@@ -12,7 +12,6 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { ConfigService } from '@nestjs/config';
-
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Injectable()
@@ -25,6 +24,7 @@ export class WorkManagerService {
     private readonly workFlowService: WorkflowService,
     @InjectRepository(JobRunEntity)
     private readonly jobRunRepo: Repository<JobRunEntity>,
+    private readonly configService: ConfigService
   ) {
     this.logger = this.loggerFactory.create(WorkManagerService.name);
   }
@@ -56,7 +56,6 @@ export class WorkManagerService {
       ? workerConfig.jobrunmetaconfig
       : [];
      const mergedMetaConfig = [...workerMetaConfig, ...jobRunMetaConfig];
-     console.log('mergedMetaConfig---->', mergedMetaConfig);
     if (workerConfig) return mergedMetaConfig;
     const rawWorker = this.workerEntity.create({
       workerId: id,

@@ -1,11 +1,5 @@
 import { Body, Controller, Get, Logger, Param, Post, Req } from '@nestjs/common';
-import {
-  ApiBody,
-  ApiNotFoundResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiResponse,
-} from '@nestjs/swagger';
+import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { WorkerConfiguration } from 'src/constants/types';
 import { WorkManagerService } from './work-manager.service';
 import { ClientIp } from 'src/middleware/clientip';
