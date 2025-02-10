@@ -14,7 +14,7 @@ COPY [".npmrc", "./"]
 RUN npm install 
 RUN rm -f ./.npmrc
 
-COPY ./src .
+COPY ./src ./src
 COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
