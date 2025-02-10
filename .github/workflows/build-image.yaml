@@ -79,14 +79,22 @@ jobs:
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
+      - name: Set Tag Suffix
+        id: set_tag_suffix
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/temporal" ]]; then
+            echo "TAG_SUFFIX=-temporal" >> $GITHUB_ENV
+          else
+            echo "TAG_SUFFIX=" >> $GITHUB_ENV
+          fi
       # Build the Docker image using commit hash and latest tag
       - name: Build Docker Image for Migrations
         run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} ./liquibase
-          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}${{ env.TAG_SUFFIX }} ./liquibase
+          docker tag ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}${{ env.TAG_SUFFIX }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest${{ env.TAG_SUFFIX }}
 
       # Push both the 'commit hash' and 'latest' tags
       - name: Push Docker Image for Migrations
         run: |
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}${{ env.TAG_SUFFIX }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest${{ env.TAG_SUFFIX }}
