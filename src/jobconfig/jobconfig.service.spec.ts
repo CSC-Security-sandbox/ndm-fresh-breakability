@@ -112,7 +112,7 @@ it('should handle empty sourcePathIds', async () => {
     firstRunAt: new Date(),
     createdBy: 'user123',
     sourcePathIds: ['qwsd']
-  };
+  } as any;
 
   const mockFind = jest.spyOn(repo, 'find').mockResolvedValue([]);
   const mockUpdate = jest.spyOn(repo, 'update').mockResolvedValue(undefined);
@@ -132,7 +132,7 @@ it('should default firstRunAt to current date when undefined', async () => {
     futureSchedule: null,
     firstRunAt: null,
     createdBy: 'user123',
-  };
+  } as any;
 
   const mockCreate = jest.spyOn(repo, 'create');
   jest.spyOn(repo, 'find').mockResolvedValue([]);
@@ -152,7 +152,7 @@ it('should handle database errors in find method', async () => {
     futureSchedule: null,
     firstRunAt: new Date(),
     createdBy: 'user123',
-  };
+  } as any;
 
   jest.spyOn(repo, 'find').mockRejectedValue(new Error('Database error'));
 
