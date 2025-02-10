@@ -13,6 +13,7 @@ import { UnScannedRes } from "../events.type";
 import { buildScanPayload,buildMigrationPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { ConfigService } from "@nestjs/config";
+import { VolumeEntity } from "src/entities/volume.entity";
 
 
 @Injectable()
@@ -25,6 +26,7 @@ export class WorkManager{
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+        private volumeRepo: Repository<VolumeEntity>,
         private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
     ){}
@@ -37,17 +39,23 @@ export class WorkManager{
 
     async createTaskForJobRun(payload:TaskEventPayload) {
         try{
+            const sourceVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.sourceCredential?.pathId}})
+            const targetVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.targetCredential?.pathId}})
+            if(!sourceVolume || !targetVolume) {
+                this.logger.error(`Volume not found for Source : ${payload.details.connection.sourceCredential?.pathId} | Target : ${payload.details.connection.targetCredential?.pathId}`)
+                return
+            }
             const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-           // const sourcePath =  `${mountBasePath}/${payload.jobRunId}`
-            const sourcePath =  `${mountBasePath}`
+            const sourcePath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            //const sourcePath =  `${mountBasePath}`
             const targetPath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.targetCredential?.pathId}`
             //const targetPath =  `${mountBasePath}/${payload.jobRunId}`
-           // this.logger.error(sourcePath)
-            const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(sourcePath) : buildMigrationPayload(sourcePath,targetPath)  
+             this.logger.log(`Source Path : ${sourcePath} | Target Path : ${targetPath}`)
+            const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath)) : buildMigrationPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath),this.buildFilepath(targetPath,targetVolume?.volumePath))  
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
-                fPath: sourcePath,
+                fPath: sourceVolume?.volumePath,
                 sPathId: payload.details.connection.sourceCredential?.pathId,
                 tPathId: payload.details.connection.targetCredential?.pathId,
                 retryCount: 0,
@@ -60,6 +68,10 @@ export class WorkManager{
             this.logger.error(e)
         }
 
+    }
+
+    buildFilepath = (path: string, volumePath: string) => { 
+        return `${path}/${volumePath}`
     }
 
     // ------------------------------- Update Worker Mount Status -----------------------------------//

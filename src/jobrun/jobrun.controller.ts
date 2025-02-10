@@ -59,6 +59,7 @@ export class JobRunController {
   @ApiResponse({ status: 200, description: 'The job run status updated successfully .' })
   @Patch('/:jobRunId/:status')
   async updateJobRunStatus(@Param('jobRunId') jobRunId: string, @Param('status') status: JobRunStatus) {
+    console.log('updatingStatus' + 'jobRunId', jobRunId, 'status', status);
     return await this.jobRunService.updateJobRunStatus(jobRunId, status);
   }
 
