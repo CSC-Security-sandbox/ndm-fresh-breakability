@@ -12,7 +12,7 @@ export class FileServerDetails implements Serializable {
 
 
 
-  constructor(hostname: string, protocols: Protocol[], password:string, pathId: string, username: string, path:string, workingDirectory:string) {
+  constructor(hostname: string, protocols: Protocol[],pathId: string, path:string,username?: string, password?:string,  workingDirectory?:string) {
     this.hostname = hostname;
     this.protocols = protocols;
     this.password = password;
