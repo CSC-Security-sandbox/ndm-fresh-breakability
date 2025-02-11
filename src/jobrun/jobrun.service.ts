@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobStatus, JobType, OperationStatus, Protocol, TaskStatus, WorkFlowType, WorkFlows } from "src/constants/enums";
+import { ConsumerType, JobRunStatus, JobStatus, JobType, OperationStatus, Protocol, TaskStatus, WorkFlowType, WorkFlows } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -35,6 +35,7 @@ import { WorkManager } from "src/events/workmanager/workmanager.service";
 import { TaskEntity } from "src/entities/task.entity";
 import { operationsTypeToTaskType } from "src/utils/mapper";
 import { OperationsEntity } from "src/entities/operation.entity";
+import axios from 'axios';
 
 @Injectable()
 export class JobRunService {
@@ -199,6 +200,7 @@ export class JobRunService {
   // ------------------ Create job run  -------------------- //
   async createJobRun(jobConfigId: string , currentTime: Date) {
     const details:JobRunConfig = await this.getJobConfig(jobConfigId)
+    console.log('details--->', JSON.stringify(details)) 
     
     if(details.workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)
@@ -268,7 +270,25 @@ export class JobRunService {
       options:options
     }
   const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+  await this.startStreamConsumer(jobRunId)
   return {workflowId : workflow.workflowId}
+  }
+
+  startStreamConsumer = async (jobRunId:string) => {
+    const START_CONSUMER_URL = this.configService.get<string>('app.paths.startConsumer');
+    for (const consumerType of Object.values(ConsumerType)) {
+      const payload = {
+        jobRunId: jobRunId,
+        readerName: `${consumerType}-reader`,
+        consumerType: consumerType,
+      };
+   try {
+      const response = await axios.post(START_CONSUMER_URL, payload);
+      this.logger.log(`Started consumer for ${consumerType}:`, response.data);
+    } catch (error) {
+      this.logger.error(`Failed to start consumer for ${consumerType}:`, error.message);
+    }
+    }
   }
 
   async buildJobContext(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType) {
@@ -280,8 +300,8 @@ export class JobRunService {
 
     const createFileServerDetails = (credential: any) => {
       return credential.protocol === Protocol.NFS
-        ? new FileServerDetails(credential.host, [new NFS(credential.username)])
-        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)]);
+        ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory)
+        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)],credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory);
     };
     sourcefileServerDetails= createFileServerDetails(sourceCredential);
 
@@ -324,22 +344,25 @@ export class JobRunService {
 
   buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
     const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-    const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.path}`;
+    const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
       const commands = new Command(this.buildFilepath(`${mountBasePath}/${sourcePath}`,operations.fPath), {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
       const task = new Task(
         taskEntity.id,
         taskEntity.jobRunId,
         taskEntity.taskType,
         taskEntity.status,
-        'Worker-1', // needs to be looked into 
+        jobRunConfig.workers[0], //TODO: need to change it
         jobRunConfig.connection.sourceCredential.path,
+        [commands],
         jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
         jobRunConfig.excludeFilePatterns,
-        [commands]
       )
       return task;
   }
   buildFilepath = (path: string, volumePath: string) => { 
+    if(path.startsWith('/')){
+      return `${path}${volumePath}`
+    }
     return `${path}/${volumePath}`
 }
 
