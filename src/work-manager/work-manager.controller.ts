@@ -19,7 +19,7 @@ export class WorkManagerController {
     @AuthWorker()
     @Get('config')
     async getConfiguration(@ClientIp() ip: string, @Req() req: any): Promise<WorkerConfiguration[]> {
-        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'], req['worker_name'])
+        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'])
     }
 
   @ApiOperation({ summary: 'Create a new request' })

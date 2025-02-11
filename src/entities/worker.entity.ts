@@ -33,6 +33,10 @@ export class WorkerEntity extends Base  {
   @Column({ type: 'varchar', name:'status' })
   status: WorkerStatus;
 
+  @ApiProperty({ description: 'workerNumber' })
+  @Column({ type: 'int', generated: 'increment', name: 'worker_number' })
+  workerNumber: number;
+
   @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
   metaConfig: WorkerConfiguration[];
 

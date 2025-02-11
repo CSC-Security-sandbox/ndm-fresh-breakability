@@ -1,9 +1,22 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { createParamDecorator, ExecutionContext, Logger } from '@nestjs/common';
 
 export const ClientIp = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest();
-    const clientIp = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
+
+    const xForwardedFor = request.headers['x-forwarded-for'];
+    const xRealIp = request.headers['x-real-ip'];
+    const cfConnectingIp = request.headers['cf-connecting-ip'];
+    let clientIp;
+    if (xForwardedFor) {      
+      clientIp = xForwardedFor.split(',')[0].trim();
+    } else if (xRealIp) {        
+      clientIp = xRealIp;
+    } else if (cfConnectingIp) {        
+      clientIp = cfConnectingIp;
+    } else {
+      clientIp = request.connection.remoteAddress;
+    }
     return Array.isArray(clientIp) ? clientIp[0] : clientIp;
   },
 );

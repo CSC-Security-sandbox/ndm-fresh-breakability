@@ -30,7 +30,6 @@ describe('WorkManagerController', () => {
       const workerId = '123123';
       const ip = '127.0.0.1';
       const projectId = 'projectId';
-      const workerName = 'workerName';
       const mockConfig: WorkerConfiguration[] = [
         {
           configName: 'TestConfig',
@@ -44,14 +43,13 @@ describe('WorkManagerController', () => {
 
       const reqMock = {
         'project_id': projectId,
-        'worker_name': workerName,
         'worker_id': '123123'
       };
 
       const result = await controller.getConfiguration(ip, reqMock);
 
       expect(result).toEqual(mockConfig);
-      expect(serviceMock.getConfiguration).toHaveBeenCalledWith(workerId, ip, projectId, workerName);
+      expect(serviceMock.getConfiguration).toHaveBeenCalledWith(workerId, ip, projectId);
     });
   });
 
