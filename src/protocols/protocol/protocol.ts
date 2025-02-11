@@ -17,7 +17,7 @@ export abstract class Protocol {
     abstract mountPath(traceId: string, payload: ProtocolPayload): Promise<any>;  
     abstract unmountPath(traceId: string, payload: ProtocolPayload): Promise<any>;
 
-    protected async executeCommand(
+    public async executeCommand(
         traceId: string,
         protocolType: string,
         payload: ProtocolPayload,

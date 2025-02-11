@@ -5,26 +5,43 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "bin": "dist/main.js",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "nest start --watch",
+    "start:dev": "nest start --watch  --trace-warnings",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
+    "pkg": "pkg .",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:report": "jest --coverage --verbose  --detectOpenHandles",
     "test:coverage": "jest --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text-summary --outputFile=coverage/unit-test-cases-results.json --json"
   },
+  "pkg": {
+    "assets": [
+      "node_modules/axios/**",
+      "node_modules/sqlite3/**/*",
+      "dist/**",
+      "logs/**"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-macos-arm64",
+      "node18-win-x64"
+    ],
+    "outputPath": "pkg",
+    "logLevel": "info"
+  },
   "dependencies": {
     "@nestjs/axios": "^4.0.0",
     "@nestjs/common": "^10.0.0",
-    "@nestjs/config": "^4.0.0",
+    "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^5.0.0",
@@ -107,11 +124,7 @@
       "/coverage",
       "/dist",
       "/test/",
-      "/entities/",
-      ".*\\.protocol\\.ts$",
-      "src/protocols/protocol/protocol.ts",
-      "src/logger/logger.service.ts",
-      "src/work-manager/work-manager.service.ts"
+      "src/logger/logger.service.ts"
     ]
   }
 }

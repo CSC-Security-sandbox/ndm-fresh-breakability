@@ -18,20 +18,31 @@ export class NFSProtocol extends Protocol {
   // --------------------------- Validate Connection -------------------------- //
   async validateConnection(traceId:string, options: ProtocolPayload ): Promise<any> {
     const client = new net.Socket();
+    const timeout = 2000;
     try {
+      this.logger.info(`[${traceId}] Attempting to connect... Protocol: ${ProtocolTypes.NFS}`);
+      await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            client.destroy();
+            reject(new Error(`Connection timed out`));
+          }, timeout);
+          client.connect(2049, options.hostname, () => {
+              clearTimeout(timer);
+              resolve();
+          });
+          client.on('error', (err) => {
+              clearTimeout(timer);
+              reject(err);
+          });
+      });
 
-        this.logger.info(`[${traceId}] Attempting to connect... Protocol: ${ProtocolTypes.NFS}`);
-        await new Promise<void>((resolve, reject) => {
-            client.connect(2049, options.hostname, resolve);
-            client.on('error', reject);
-        });
-        this.logger.info(`[${traceId}] Connection established for Protocol: ${ProtocolTypes.NFS}`);
-        client.end();
-        return 'Connection established';
+      this.logger.info(`[${traceId}] Connection established for Protocol: ${ProtocolTypes.NFS}`);
+      return 'Connection established';
     } catch (error) {
         this.logger.error(`Error during connection: ${error.message}`);
         throw new Error(handleConnectionError(error, options.hostname, 2049));
     } finally {
+        client.end();
         client.destroy();
     }
   }

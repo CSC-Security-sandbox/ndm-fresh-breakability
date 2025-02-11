@@ -60,3 +60,5 @@ package-lock.json
 
 # pkg folder
 pkg/
+
+.npmrc
