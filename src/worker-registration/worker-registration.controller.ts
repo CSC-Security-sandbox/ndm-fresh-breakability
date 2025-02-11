@@ -9,7 +9,7 @@ import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 export class WorkerRegistrationController {
     constructor(private readonly workerRegistrationService: WorkerRegistrationService) {}
 
-    @Auth()
+    // @Auth()
     @ApiBearerAuth()
     @Post()
     @ApiOperation({
