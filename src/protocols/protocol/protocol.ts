@@ -33,14 +33,14 @@ export abstract class Protocol {
           workerId: this.workerId,
           message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
         };
-      
         const command = commandPattern
           ?.replace('${hostname}', payload?.hostname)
           ?.replace('${USERNAME}', payload?.username)
           ?.replace('${PASSWORD}', payload?.password)
           ?.replace('${path}', payload?.path)
+          ?.replace('${baseMountDir}', payload?.workingDirectory) 
           ?.replace('${jobRunId}', payload?.jobRunId)
-          ?.replace('${baseMountDir}', this.baseMountDir);
+          ?.replace('${pathId}', payload?.pathId);
 
           console.log('command-->', command);
       

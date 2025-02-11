@@ -4,4 +4,5 @@ export {discovery} from './discovery/discovery';
 export {publishTask} from './discovery/publish-task';
 export {fetchTasks} from './discovery/fetch-tasks'
 export {setup} from './setup-worker/setup-worker';
+export {cleanup} from './setup-worker/setup-worker';
 export {discoveryStatusUpdate} from './discovery/discovery-status-update'

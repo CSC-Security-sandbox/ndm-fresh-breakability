@@ -26,7 +26,7 @@ export class WorkManagerService {
         @Inject(HttpService) private readonly httpService: HttpService,
         @Inject(Logger) private readonly logger: Logger,
     ) {
-        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}config/${this.configService.get('worker.workerId')}`;
+        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}config`;
         console.log('sssssssss->'+this.workerConfigUrl)
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout')
@@ -41,7 +41,7 @@ export class WorkManagerService {
         }
     }
 
-    @Cron(CronExpression.EVERY_30_SECONDS)
+    @Cron(CronExpression.EVERY_5_SECONDS)
     async handleCron() {
         console.log('Called when the current second is 42');
         console.log(`${this.workerConfigUrl} ${this.configService.get('worker.workerName')} ${this.configService.get('worker.projectId')}`);
@@ -78,6 +78,7 @@ export class WorkManagerService {
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {
+        console.log('Configs' + JSON.stringify(configs));
         let activeConfigs: Set<string> = new Set<string>()
         let configsToStart: Map<string, WorkerConfiguration> = new Map<string, WorkerConfiguration>()
         for(let i = 0; i < configs.length; i++) {
@@ -95,7 +96,7 @@ export class WorkManagerService {
             }
         }
         for(let [id, config] of configsToStart) {
-            this.logger.info(`Starting worker ${id}`)
+            this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
             configsToStart.delete(id)
             const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
@@ -104,6 +105,7 @@ export class WorkManagerService {
     }
 
     async startWorker(id: string, workerOptions: any){
+        console.log('workerOptions---->', workerOptions)
         try {
         const worker: Worker = await Worker.create(workerOptions);
             this.activeWorkers.set(id,worker);

@@ -7,6 +7,8 @@ export interface ProtocolPayload{
     password?: string;
     path?: string;
     jobRunId?: string
+    pathId?: string;
+    workingDirectory?: string;
 }
 
 export interface CommandOutput{

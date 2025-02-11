@@ -34,6 +34,8 @@ export const WorkerOptionsFactory = (id: string, config: WorkerConfiguration, wo
             return new WorkFlowOptions( id, workerId, connection, 'ParentWorkflow-TaskQueue', config)
         case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
             return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
+        case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
+            return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
         default:
             return undefined
     }

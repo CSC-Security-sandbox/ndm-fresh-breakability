@@ -38,14 +38,14 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options } = args;
   log(
     args.traceId,
-    `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args.options)}`,
+    `Starting DiscoveryWorkerWorkflow with args: ${JSON.stringify(args.options)}`,
   );
 
   let discoveryResponse: any = {};
   try {
     while (true) {
       const tasks = await fetchTaskActivity(traceId);
-      console.log(`Tasks fetched :}`);
+      console.log(`Tasks fetched`);
       if (!tasks || tasks.length === 0) {
         log(traceId, `No more tasks in the stream. Exiting workflow.`);
         await updateDiscoveryStatus(traceId, 'COMPLETED')

@@ -86,7 +86,7 @@ export class NFSProtocol extends Protocol {
     );
 
     if (response['status'] === 'success') {
-      const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+      const mountDir = `${payload.workingDirectory}/${payload.jobRunId}/${payload.pathId}`;
       if (fs.existsSync(mountDir)) {
         fs.rmdirSync(mountDir, { recursive: false });
         this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
@@ -100,10 +100,10 @@ export class NFSProtocol extends Protocol {
 
   async mountPath(traceId: string, payload: any): Promise<any> {
    console.log(
-      `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
+      `[${traceId}] Mounting path for ${payload.hostname} of type ${payload} from ${this.workerId}`,
     );
 
-    const mountDir = `${WorkersConfig.get('baseMountDir')}/${payload.jobRunId}`;
+    const mountDir = `${payload.workingDirectory}/${payload.jobRunId}/${payload.pathId}`;
     if (fs.existsSync(mountDir)) {
       this.logger.info(`[${traceId}] Directory already exists: ${mountDir}`);
       return {
@@ -131,12 +131,15 @@ export class NFSProtocol extends Protocol {
       }
     }
     
-    return this.executeCommand(
+    const mountResult =  await  this.executeCommand(
       traceId,
       ProtocolTypes.NFS,
       payload,
       WorkersConfig.get('nfsMountCommand'),
       'NFS Mount',
     );
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    this.logger.info(`[${traceId}] Mount result: ${mountResult.message}`);  
+
   }
 }

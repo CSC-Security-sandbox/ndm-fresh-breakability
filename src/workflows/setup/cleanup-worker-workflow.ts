@@ -15,24 +15,15 @@ const { cleanup: cleanupWorkerActivity } = proxyActivities<
 export async function CleanupWorkerWorkflow(
   args: any,
 ): Promise<any> {
-  const fileServer = args.fileServer;
+  //const fileServer = args.fileServer;
 
   log(
     args.traceId,
-    `Starting CleanupWorkerWorkflow with args: ${JSON.stringify(fileServer)}`,
+    `Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`,
   );
 
   //cleanup all the workers
-  const results = await Promise.all(
-    fileServer.protocols.map(async (protocol) => {
-      return await cleanupWorkerActivity(args.traceId, protocol.type, {
-        hostname: fileServer.hostname,
-        path: args.path,
-        jobRunId: args.jobRunId,
-        ...protocol,
-      });
-    }),
-  );
+  const results = await cleanupWorkerActivity(args.jobRunId);
 
   return results;
 }

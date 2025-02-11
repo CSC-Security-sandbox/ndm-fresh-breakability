@@ -7,6 +7,8 @@ export async function publishTask(traceId: string): Promise<any> {
   logger.log(`[${traceId}] Starting publishTask`);
 
   let redisClient = null;
+  let commandsBatch=[];
+
 
   try {
     redisClient = await RedisUtils.getClient();
@@ -29,6 +31,7 @@ export async function publishTask(traceId: string): Promise<any> {
     // Process files and append tasks
     const directoryBatchSize = 500;
     let counter=0;
+   
     for await (const directory of jobContext.groupReadDirs('consumer-1',directoryBatchSize)) {
       counter++;
       if (counter > directoryBatchSize){
@@ -42,24 +45,42 @@ export async function publishTask(traceId: string): Promise<any> {
         },
       };
 
-      const commands = [new Command(directory.path, ops, `cmd-${uuid4()}`)];
+      const commands = new Command(directory.path, ops, `cmd-${uuid4()}`);
+      commandsBatch.push(commands);
+      if(commandsBatch && commandsBatch.length>=100){
+        const task = new Task(
+          uuid4(),
+          traceId,
+          'SCAN',
+          'PENDING',
+          jobContext.jobConfig.workerIds[0],
+          jobContext.jobConfig.sourceFileServer.pathId,
+          commandsBatch,
+        );
+        const id =  await jobContext.appendToTaskList(task);
+        jobContext.tasksInfo.lastId = id;
+        logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+        await redisClient.set(traceId, jobContext.serialize());
+        logger.log(`[${traceId}] JobContext updated in Redis.`);
+        commandsBatch=[];
+       }
+      }
+    if(commandsBatch && commandsBatch.length>0){
       const task = new Task(
         uuid4(),
         traceId,
         'SCAN',
         'PENDING',
-        'worker-1',
-        '/mnt/nfs/test.txt',
-        commands,
+        jobContext.jobConfig.workerIds[0],
+        jobContext.jobConfig.sourceFileServer.pathId,
+        commandsBatch,
       );
-
-     const id =  await jobContext.appendToTaskList(task);
-     jobContext.tasksInfo.lastId = id;
-     logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+      const id =  await jobContext.appendToTaskList(task);
+      jobContext.tasksInfo.lastId = id;
+      logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+      await redisClient.set(traceId, jobContext.serialize());
+      logger.log(`[${traceId}] JobContext updated in Redis.`);
     }
-    await redisClient.set(traceId, jobContext.serialize());
-    logger.log(`[${traceId}] JobContext updated in Redis.`);
-
     return { status: 'success', message: 'Task published successfully' };
   } catch (error) {
     logger.error(`[${traceId}] Error in publishing task: ${error.message}`, error.stack); 

@@ -8,6 +8,7 @@ import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import {DiscoveryJobWorkflow } from './discovery-job-workflow';
 import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
+import { boolean } from 'joi';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -32,34 +33,41 @@ export async function DiscoveryWorkflow({
     `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`,
   );
 
-  // const responseArray = await Promise.all(
-  //   payload.workers.map((workerId) =>
-  //     executeChild(SetupWorkerWorkflow, {
-  //       args: [
-  //         {
-  //           traceId: traceId,
-  //           jobRunId: traceId,
-  //         },
-  //       ],
-  //       workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
-  //       taskQueue: `${workerId}-TaskQueue`,
-  //       ...options,
-  //       cancellationType:
-  //         ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-  //       parentClosePolicy: ParentClosePolicy.TERMINATE,
-  //     }),
-  //   ),
-  // );
-  // //Worker setup is successful, now discovery workflow can run all the active workers
-  // let result = responseArray.flat();
-  // result.map((r) => {
-  //   log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(r)}`);
-  //   if (r.status === 'success') {
-  //     activeWorkerIds.push(r.workerId);
-  //   }
-  // });  
-const result = [];
-const activeWorkerIds = payload.workers;
+  let activeWorkerIds=[];
+  const responseArray = await Promise.all(
+    payload.workers.map((workerId) =>
+      executeChild(SetupWorkerWorkflow, {
+        args: [
+          {
+            jobRunId: traceId,
+          },
+        ],
+        workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
+        taskQueue: `${workerId}-TaskQueue`,
+        ...options,
+        cancellationType:
+          ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        parentClosePolicy: ParentClosePolicy.TERMINATE,
+      }),
+    ),
+  );
+  
+  let result = responseArray.flat();
+  result.map((r) => {
+    log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
+    if (r.status === 'success') {
+      activeWorkerIds.push(r.workerId);
+    }
+  });  
+
+  if(activeWorkerIds.length === 0){
+    return {
+      traceId: traceId,
+      status: 'error',
+      message: `No active workers found for ${traceId} Discovery Cannot be Initiated`,
+    };
+  }
+
 
 log(traceId, `Active workers: ${activeWorkerIds}`);
 const discoveryResponse:any =  await Promise.all(
@@ -71,7 +79,7 @@ const discoveryResponse:any =  await Promise.all(
           },
         ],
         workflowId: `DiscoveryJobWorkflow-${traceId}`,
-        taskQueue: `${workerId}-TaskQueue`,
+        taskQueue: `${traceId}-TaskQueue`,
         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       })
@@ -92,37 +100,34 @@ const discoveryResponse:any =  await Promise.all(
       message: `Failed to do discovery for  ${traceId} : ${error}`,
     };
   });
-  console.log("disoovery res--->" + JSON.stringify(discoveryResponse));
+  console.log("disoovery response" + JSON.stringify(discoveryResponse));
   let discoveryResult = discoveryResponse;
   result.push(discoveryResult);
 
-  //cleanup all the workers
-  // if (activeWorkerIds.length > 0) {
-  //   const cleanupResponse = await Promise.all(
-  //     activeWorkerIds.map((workerId) =>
-  //       executeChild(CleanupWorkerWorkflow, {
-  //         args: [
-  //           {
-  //             traceId: traceId,
-  //             fileServer: payload.fileServer,
-  //             path: payload.path,
-  //             jobRunId: traceId,
-  //           },
-  //         ],
-  //         workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
-  //         taskQueue: `${workerId}-TaskQueue`,
-  //         ...options,
-  //         cancellationType:
-  //           ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-  //         parentClosePolicy: ParentClosePolicy.TERMINATE,
-  //       }),
-  //     ),
-  //   );
 
-  //   cleanupResponse.flat().map((r) =>
-  //     result.push(r),
-  //   );
-  // }
+  if (activeWorkerIds.length > 0) {
+    const cleanupResponse = await Promise.all(
+      activeWorkerIds.map((workerId) =>
+        executeChild(CleanupWorkerWorkflow, {
+          args: [
+            {
+              jobRunId: traceId,
+            },
+          ],
+          workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          ...options,
+          cancellationType:
+            ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        }),
+      ),
+    );
+
+    cleanupResponse.flat().map((r) =>
+      result.push(r),
+    );
+  }
 
   log(
     traceId,
