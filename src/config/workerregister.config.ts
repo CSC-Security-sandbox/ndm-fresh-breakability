@@ -7,6 +7,6 @@ export type WorkerRegisterConfig = {
   export default registerAs(
     'workerRegister',
     (): WorkerRegisterConfig => ({
-        controlPlaneIp: process.env.CONTROL_PLANE_IP || 'stert'
+        controlPlaneIp: process.env.CONTROL_PLANE_IP || 'localhost'
     }),
   );

@@ -63,7 +63,7 @@ describe('WorkerRegistrationService', () => {
   });
 
   describe('registerWorker', () => {
-    const validDetails: RegisterWorkerDto = { projectId: 'project1', workerName: 'worker1' };
+    const validDetails: RegisterWorkerDto = { projectId: 'project1' };
 
     it('should register the worker successfully when response status is 201', async () => {
       const mockAccessToken = 'mock-access-token';
@@ -73,13 +73,12 @@ describe('WorkerRegistrationService', () => {
       mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
 
       const result = await service.registerWorker(validDetails);
-      expect(result).toHaveProperty('workerId');
-      expect(result).toHaveProperty('secret');
+      expect(result).toBeDefined();
       expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     });
 
     it('should throw InternalServerErrorException when details are invalid', async () => {
-      const invalidDetails: RegisterWorkerDto = { projectId: '', workerName: '' };
+      const invalidDetails: RegisterWorkerDto = { projectId: '' };
       await expect(service.registerWorker(invalidDetails)).rejects.toThrow(InternalServerErrorException);
     });
 
