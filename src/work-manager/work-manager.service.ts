@@ -6,7 +6,6 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom, lastValueFrom, retry, timer } from 'rxjs';
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
-
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
@@ -31,6 +30,7 @@ export class WorkManagerService {
         @Inject(HttpService) private readonly httpService: HttpService,
         @Inject(Logger) private readonly logger: Logger,
     ) {
+
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}`;
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout');
@@ -50,7 +50,6 @@ export class WorkManagerService {
             throw err;
         }
     }
-
     async getAccessToken(): Promise<string | null> {
         const now = Math.floor(Date.now() / 1000); 
         if (this.accessToken && now < this.expiresAt) 
@@ -123,7 +122,7 @@ export class WorkManagerService {
             }
         }
         for(let [id, config] of configsToStart) {
-            this.logger.info(`Starting worker ${id}`)
+            this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
             configsToStart.delete(id)
             const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
@@ -132,12 +131,11 @@ export class WorkManagerService {
     }
 
     async startWorker(id: string, workerOptions: any){
-        const worker: Worker = await Worker.create(workerOptions);
-        this.activeWorkers.set(id,worker);
         try {
+        const worker: Worker = await Worker.create(workerOptions);
+            this.activeWorkers.set(id,worker);
             if (worker.getState() === WorkerState.INITIALIZED) 
                 worker.run();
-
             while (worker.getState() !== WorkerState.RUNNING) {
                 this.logger.debug( `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()}`);
                 //sleep 
