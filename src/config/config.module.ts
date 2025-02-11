@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { config } from 'dotenv';
 import keycloakConfig from './keycloak.config';
+import workerRegisterConfig from './workerregister.config';
 
 config(); // Load .env file
 
@@ -10,7 +11,7 @@ config(); // Load .env file
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Makes config available throughout the app
-      load: [keycloakConfig], // Load keycloak config
+      load: [keycloakConfig, workerRegisterConfig], // Load keycloak config
     }), // Automatically loads .env
     TypeOrmModule.forRoot({
       type: 'postgres', // Adjust according to your DB type

@@ -1,18 +1,21 @@
 import { Injectable, InternalServerErrorException, Logger, BadRequestException } from '@nestjs/common';
 import axios from 'axios';
 import { ClientConfig } from './mappers/client-register.config';
-import { RegisterWorkerDto } from './dto/register-worker.dto';
+import { RegisterWorkerDto, RegisterWorkerResponseDto } from './dto/register-worker.dto';
 import { ConfigService } from '@nestjs/config';
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
+import { WorkerRegisterConfig } from 'src/config/workerregister.config';
 
 @Injectable()
 export class WorkerRegistrationService {
     private readonly logger = new Logger(WorkerRegistrationService.name);
     
     readonly keycloak: KeycloakAdminConfig;
+    readonly workerRegisterConfig: WorkerRegisterConfig;
 
     constructor(private readonly configService: ConfigService) {
         this.keycloak = this.configService.get<KeycloakAdminConfig>('keycloakAdmin');
+        this.workerRegisterConfig = this.configService.get<WorkerRegisterConfig>('workerRegister');
     }
 
     async getAdminAccessToken(): Promise<string> {
@@ -36,10 +39,10 @@ export class WorkerRegistrationService {
 
     async registerWorker(details: RegisterWorkerDto) {
         try {
-            if (!details.projectId || !details.workerName) 
-                throw new BadRequestException('Invalid worker registration details');
+            if (!details.projectId) 
+                throw new BadRequestException('Invalid project Id');
             
-            const clientConfig = new ClientConfig(details.projectId, details.workerName).getConfig();
+            const clientConfig = new ClientConfig(details.projectId).getConfig();
             const accessToken = await this.getAdminAccessToken();
             
             const response = await axios.post(
@@ -52,8 +55,13 @@ export class WorkerRegistrationService {
                     } 
                 }
             );
+            
             if (response.status === 201) {
-                return { workerId: clientConfig.clientId, secret: clientConfig.secret };
+                return  new RegisterWorkerResponseDto(
+                    clientConfig.clientId, 
+                    clientConfig.secret, 
+                    this.workerRegisterConfig.controlPlaneIp
+                )
             }
             throw new InternalServerErrorException(`Failed to register worker with status code ${response.status}`);
         } catch (error) {

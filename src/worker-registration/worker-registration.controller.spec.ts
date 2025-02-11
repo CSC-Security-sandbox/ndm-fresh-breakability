@@ -32,8 +32,6 @@ describe('WorkerRegistrationController', () => {
   describe('registerWorker', () => {
     it('should successfully register a worker and return client id and secret', async () => {
       const registerWorkerDto: RegisterWorkerDto = {
-        // mock the necessary fields for RegisterWorkerDto
-        workerName: 'johndoe@example.com',
         projectId: 'worker',
       };
 
@@ -48,7 +46,6 @@ describe('WorkerRegistrationController', () => {
 
     it('should throw BadRequestException if service throws an error', async () => {
       const registerWorkerDto: RegisterWorkerDto = {
-        workerName: 'johndoe@example.com',
         projectId: 'worker',
       };
 

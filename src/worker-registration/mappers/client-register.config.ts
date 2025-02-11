@@ -20,10 +20,10 @@ export class ClientConfig {
   serviceAccountsEnabled:boolean
   protocolMappers: ProtocolMapper[];
 
-  constructor(projectId: string, workerName?: string | undefined) {
+  constructor(projectId: string | undefined) {
     this.clientId = uuidv4();
     this.enabled = true;
-    this.name = workerName ?? `worker-${this.clientId}`;
+    this.name = `worker-${this.clientId}`;
     this.clientAuthenticatorType = "client-secret";
     this.secret = uuidv4();
     this.fullScopeAllowed = false;
@@ -42,19 +42,6 @@ export class ClientConfig {
           "jsonType.label": "String",
         }
       },
-      {
-        name: "worker-name-claim",
-        protocol: "openid-connect",
-        protocolMapper: "oidc-hardcoded-claim-mapper",
-        consentRequired: false,
-        config: {
-            "claim.name": "worker_name",
-            "claim.value": workerName,
-            "id.token.claim": true,
-            "access.token.claim": true,
-            "jsonType.label": "String",
-        }
-      }
     ];
   }
 
