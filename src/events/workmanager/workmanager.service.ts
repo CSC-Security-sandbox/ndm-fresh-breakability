@@ -51,7 +51,7 @@ export class WorkManager{
             //const sourcePath =  `${mountBasePath}`
             const targetPath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.targetCredential?.pathId}`
             //const targetPath =  `${mountBasePath}/${payload.jobRunId}`
-             this.logger.log(`Source Path : ${sourcePath} | Target Path : ${targetPath}`)
+            this.logger.log(`Source Path : ${sourcePath} | Target Path : ${targetPath}`)
             const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath)) : buildMigrationPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath),this.buildFilepath(targetPath,targetVolume?.volumePath))  
             const operation = this.operationsRepo.create({
                 jobRunId: payload.jobRunId,
