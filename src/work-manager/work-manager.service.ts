@@ -32,8 +32,7 @@ export class WorkManagerService {
   async getConfiguration(
     id: string,
     ip: string,
-    projectId: string,
-    workerName: string,
+    projectId: string
   ): Promise<WorkerConfiguration[]> {
     try {
       const workerConfig = await this.workerEntity
@@ -41,42 +40,49 @@ export class WorkManagerService {
         .leftJoin(
           'worker_jobrun_mapping',
           'mapping',
-          'mapping.workerId = worker.workerId',
+          'mapping.workerId = worker.workerId'
         )
         .leftJoin('jobrun', 'jobRun', 'mapping.jobRunId = jobRun.id')
         .where('worker.workerId = :id', { id })
         .select([
           'worker.metaConfig AS workerMetaConfig',
-          'jobRun.metaConfig AS jobRunMetaConfig',
+          'jobRun.metaConfig AS jobRunMetaConfig'
         ])
         .getRawOne();
-      const workerMetaConfig = workerConfig?.workermetaconfig
-        ? workerConfig.workermetaconfig
-        : [];
-      const jobRunMetaConfig = workerConfig?.jobrunmetaconfig
-        ? workerConfig.jobrunmetaconfig
-        : [];
-      const mergedMetaConfig = [...workerMetaConfig, ...jobRunMetaConfig];
-      if (workerConfig) return mergedMetaConfig;
-      const rawWorker = this.workerEntity.create({
+  
+      if (workerConfig) {
+        return [
+          ...(workerConfig?.workermetaconfig ?? []),
+          ...(workerConfig?.jobrunmetaconfig ?? [])
+        ];
+      }
+
+      this.logger.warn(`project ID : ${projectId}`)
+      const newWorker = this.workerEntity.create({
         workerId: id,
         ipAddress: ip,
         metaConfig: this.createWorkerConfiguration(id),
         status: WorkerStatus.Online,
-        workerName: workerName,
+        workerName: id,
         createdBy: id,
-        projectId: projectId,
+        projectId
       });
-      const result = await this.workerEntity.save(rawWorker);
+  
+      const result = await this.workerEntity.save(newWorker);
+      await this.workerEntity.update(
+        { workerId: result.workerId },
+        { workerName: `Worker-${result.workerNumber}` }
+      );
+  
       return result.metaConfig;
     } catch (error) {
       this.logger.error(
-        `Error while fetching worker configuration for workerId: ${id}`,
-        error.stack,
+        `Error while fetching worker configuration for workerId: ${id}, ${error}`,
       );
       throw new Error('Error while fetching worker configuration');
     }
   }
+  
 
   createWorkerConfiguration = (workerId: string): WorkerConfiguration[] => [
     {

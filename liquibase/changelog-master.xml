@@ -11,4 +11,8 @@
       <sqlFile path="liquibase/20250210_01_add_meta_config_column.sql"/>
    </changeSet>
 
+   <changeSet id="3003" author="akunal">
+      <sqlFile path="liquibase/20250211_01_worker_table_add_worker_number_column.sql"/>
+   </changeSet>
+   
 </databaseChangeLog>
