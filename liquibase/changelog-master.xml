@@ -10,8 +10,4 @@
    <changeSet id="1002" author="aniketd">
       <sqlFile path="liquibase/20250203_01_seed.sql" splitStatements="false"/>
    </changeSet>
-
-   <changeSet id="1002" author="aniketd">
-      <sqlFile path="liquibase/20250203_01_seed.sql" splitStatements="false"/>
-   </changeSet>
 </databaseChangeLog>
