@@ -126,7 +126,7 @@ export class WorkManagerService {
         const workerConfiguration = workerIds.map((worker) => ({
           configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
           dynamicTaskQueue: true,
-          taskQueueId: `${jobRunId}-taskQueue`,
+          taskQueueId: `${jobRunId}`,
           workerId: worker,
         }));
 
