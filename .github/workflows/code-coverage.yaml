@@ -19,8 +19,8 @@ jobs:
           node-version: '22'
 
       - name: Replace GitHub Token Placeholder in .npmrc
-      run: |
-        sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+        run: |
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
 
       - name: Install dependencies
         run: npm install
