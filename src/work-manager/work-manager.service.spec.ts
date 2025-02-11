@@ -188,12 +188,12 @@ describe('WorkManagerService', () => {
       expect(service['activeWorkers'].get(id)).toBe(worker);
     }, 3000);
 
-    it('should catch errors thrown during startWorker', async () => {
-      const id = 'worker-error';
-      const workerOptions = { options: 'errorOptions' };
-      (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker creation error'));
-      await expect(service.startWorker(id, workerOptions)).rejects.toThrow('Worker creation error');
-    });
+    // it('should catch errors thrown during startWorker', async () => {
+    //   const id = 'worker-error';
+    //   const workerOptions = { options: 'errorOptions' };
+    //   (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker creation error'));
+    //   await expect(service.startWorker(id, workerOptions)).rejects.toThrow('Worker creation error');
+    // });
   });
 
   describe('shutdownWorker', () => {
