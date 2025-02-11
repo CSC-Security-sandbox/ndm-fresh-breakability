@@ -345,7 +345,7 @@ export class JobRunService {
   buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
     const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
     const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
-      const commands = new Command(this.buildFilepath(`${mountBasePath}/${sourcePath}`,operations.fPath), {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
+      const commands = new Command(`${mountBasePath}/${sourcePath}`, {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
       const task = new Task(
         taskEntity.id,
         taskEntity.jobRunId,
