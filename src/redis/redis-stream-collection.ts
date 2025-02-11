@@ -103,7 +103,7 @@ export class RedisStreamCollection<T extends Serializable>
           }
         }
       } else {
-        this.redisClient.set(`${this.jobRunId}-${readerName}`, this.lastId);
+        await this.redisClient.set(`${this.jobRunId}-${readerName}`, this.lastId);
         break;
       }
     }

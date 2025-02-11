@@ -4,10 +4,22 @@ import { Serializable } from './serializable';
 export class FileServerDetails implements Serializable {
   hostname: string;
   protocols: Protocol[];
+  password:string;
+  pathId: string;
+  username: string;
+  path:string;
+  workingDirectory:string;
 
-  constructor(hostname: string, protocols: Protocol[]) {
+
+
+  constructor(hostname: string, protocols: Protocol[], password:string, pathId: string, username: string, path:string, workingDirectory:string) {
     this.hostname = hostname;
     this.protocols = protocols;
+    this.password = password;
+    this.pathId = pathId;
+    this.username = username;
+    this.path = path;
+    this.workingDirectory = workingDirectory;
   }
 
   serialize(): string {
@@ -18,5 +30,10 @@ export class FileServerDetails implements Serializable {
     const obj = JSON.parse(json);
     this.hostname = obj.hostname;
     this.protocols = obj.protocols;
+    this.password = obj?.password;
+    this.pathId = obj?.pathId;
+    this.username = obj?.username;
+    this.path = obj?.path;
+    this.workingDirectory = obj?.workingDirectory;
   }
 }
