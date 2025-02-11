@@ -283,7 +283,7 @@ export class JobRunService {
         consumerType: consumerType,
       };
    try {
-      const response = await axios.post(START_CONSUMER_URL, payload);
+      const response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, payload);
       this.logger.log(`Started consumer for ${consumerType}:`, response.data);
     } catch (error) {
       this.logger.error(`Failed to start consumer for ${consumerType}:`, error.message);
