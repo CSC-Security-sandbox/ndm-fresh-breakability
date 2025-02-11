@@ -1,9 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobType, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
+import * as parser from 'cron-parser'
+import { JobRunStatus, JobType, JobStatus, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
-import { SocketEvents } from "src/constants/status";
+import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
@@ -14,6 +15,8 @@ import { buildScanPayload,buildMigrationPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { ConfigService } from "@nestjs/config";
 import { VolumeEntity } from "src/entities/volume.entity";
+import { JobRunEntity } from "src/entities/jobrun.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
 
 
 @Injectable()
@@ -24,6 +27,10 @@ export class WorkManager{
         private operationsRepo: Repository<OperationsEntity>,
         @InjectRepository(TaskEntity)
         private taskRepo: Repository<TaskEntity>,
+        @InjectRepository(JobRunEntity)
+        private jobRunRepo: Repository<JobRunEntity>,
+        @InjectRepository(JobConfigEntity)
+        private jobConfigRepo: Repository<JobConfigEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
         @InjectRepository(VolumeEntity)
@@ -243,7 +250,23 @@ export class WorkManager{
             jobRunId: task.jobRunId,
             sPathId: task.sPath,
             tPathId: task?.tPath
-        })
+        });
+
+        const jobRunDetail = await this.jobRunRepo.findOne({
+            where: { id: task.jobRunId },
+            relations: ['jobConfig'],
+        });
+
+        if (jobRunDetail?.jobConfig?.futureScheduleAt) {
+            await this.jobConfigRepo.update(
+                { id: jobRunDetail.jobConfig.id },
+                {
+                    firstRunAt: parser.parseExpression(jobRunDetail.jobConfig.futureScheduleAt).next().toDate(),
+                    scheduler: ScheduleStatus.SCHEDULING,
+                    status: JobStatus.Active,
+                }
+            );
+        }
         this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         switch(task.taskType) {
             case TaskType.Scan:

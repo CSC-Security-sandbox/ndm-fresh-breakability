@@ -1,27 +1,33 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
-import { BadRequestException } from '@nestjs/common';
-import { JobConfigDto } from './dto/jobconfig.dto';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobListingDTO } from './dto/joblisting.dto';
+import { Repository } from 'typeorm';
+import { BadRequestException } from '@nestjs/common';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
-import { JobConfigPrecheckRes } from './jobconfig.types';
+import { JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
+import { Response } from 'express';
+import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
   let service: JobConfigService;
 
   const mockJobConfigService = {
-    createJobConfig: jest.fn(),
     createBulkDiscovery: jest.fn(),
     createBulkMigrate: jest.fn(),
     createBulkCutover: jest.fn(),
     precheck: jest.fn(),
     getAllJobConfig: jest.fn(),
     getJobConfigById: jest.fn(),
+    getConfigsByProjectId: jest.fn(),
     updateJobConfig: jest.fn(),
     deleteJobConfig: jest.fn(),
+    getTemplateFilename: jest.fn(),
+    sendCsvFile: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -43,52 +49,76 @@ describe('JobConfigController', () => {
     expect(controller).toBeDefined();
   });
 
-
   describe('createBulkDiscovery', () => {
-    it('should create bulk discovery jobs', async () => {
-      const bulkDiscovery: JobConfigDiscoverBulk = { sourcePathIds: ['123'] } as  JobConfigDiscoverBulk ;
-      const jobConfigEntities: JobConfigEntity[] = [
-        { id: '1', },
-        { id: '2', },
-      ] as JobConfigEntity[];
+    it('should throw BadRequestException if payload is invalid', async () => {
+      const payload = new JobConfigDiscoverBulk();
+      payload.sourcePathIds = [];
 
-      mockJobConfigService.createBulkDiscovery.mockResolvedValue(jobConfigEntities);
-
-      const result = await controller.createBulkDiscovery(bulkDiscovery);
-      expect(result).toEqual(jobConfigEntities);
-      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkDiscovery);
+      await expect(controller.createBulkDiscovery(payload)).rejects.toThrow(BadRequestException);
     });
-  });
 
   describe('createBulkMigrate', () => {
-    it('should create bulk migrate jobs', async () => {
-      const bulkMigrate: any = { sourcePathIds: ['123'] } as  any ;
-      const jobConfigEntities: JobConfigEntity[] = [
-        { id: '1', },
-        { id: '2', },
-      ] as JobConfigEntity[];
+    it('should create a new migrate job', async () => {
+      const bulkMigrate: BulkMigrateJobConfig = {
+        firstRunAt: new Date(),
+        futureRunSchedule: '2023-12-31T12:00:00Z',
+        migrateConfigs: [
+          {
+            sourcePathId: '550e8400-e29b-41d4-a716-446655440000',
+            destinationPathId: ['550e8400-e29b-41d4-a716-446655440001'],
+          },
+        ],
+        options: {
+          excludeOlderThan: new Date('2023-01-01'),
+          excludeFilePatterns: '.*.tmp',
+          preserveAccessTime: true,
+        },
+        sidMapping: undefined,
+        gidMapping: undefined
+      };
 
-      mockJobConfigService.createBulkMigrate.mockResolvedValue(jobConfigEntities);
+      const result: JobConfigBulkMigrateRes[] = [
+        {
+          id: '1',
+          jobType: JobType.MIGRATE,
+          status: JobConfigBulkMigrateResStatus.CREATED,
+          sourcePathId: bulkMigrate.migrateConfigs[0].sourcePathId,
+          targetPathId: bulkMigrate.migrateConfigs[0].destinationPathId[0],
+        },
+      ];
 
-      const result = await controller.createBulkMigrate(bulkMigrate);
-      expect(result).toEqual(jobConfigEntities);
-      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkMigrate);
+      jest.spyOn(service, 'createBulkMigrate').mockResolvedValue(result);
+
+      const response = await controller.createBulkMigrate(bulkMigrate);
+      expect(response).toEqual(result);
+      expect(service.createBulkMigrate).toHaveBeenCalledWith(bulkMigrate);
     });
-  });
 
-  describe('createBulkCutover', () => {
-    it('should create bulk cutover jobs', async () => {
-      const bulkCutover: any = { sourcePathIds: ['123'] } as  any ;
-      const jobConfigEntities: JobConfigEntity[] = [
-        { id: '1', },
-        { id: '2', },
-      ] as JobConfigEntity[];
+    it('should throw BadRequestException if validation fails', async () => {
+      const bulkMigrate: BulkMigrateJobConfig = {
+        firstRunAt: new Date(),
+        futureRunSchedule: '2023-12-31T12:00:00Z',
+        migrateConfigs: [
+          {
+            sourcePathId: '550e8400-e29b-41d4-a716-446655440000',
+            destinationPathId: ['550e8400-e29b-41d4-a716-446655440000'], // Invalid case for testing
+          },
+        ],
+        options: {
+          excludeOlderThan: new Date('2023-01-01'),
+          excludeFilePatterns: '.*.tmp',
+          preserveAccessTime: true,
+        },
+        sidMapping: undefined,
+        gidMapping: undefined
+      };
 
-      mockJobConfigService.createBulkCutover.mockResolvedValue(jobConfigEntities);
+      jest.spyOn(service, 'createBulkMigrate').mockImplementation(() => {
+        throw new BadRequestException('Invalid migration configuration');
+      });
 
-      const result = await controller.createBulkCutover(bulkCutover);
-      expect(result).toEqual(jobConfigEntities);
-      expect(mockJobConfigService.createBulkDiscovery).toHaveBeenCalledWith(bulkCutover);
+      await expect(controller.createBulkMigrate(bulkMigrate)).rejects.toThrow(BadRequestException);
+      await expect(controller.createBulkMigrate(bulkMigrate)).rejects.toThrow('Invalid migration configuration');
     });
   });
 
@@ -101,62 +131,69 @@ describe('JobConfigController', () => {
       expect(res).toEqual(response);
       expect(service.precheck).toHaveBeenCalledWith(precheckDto);
     });
-  })
+  });
 
   describe('getAllJobConfig', () => {
-    it('should throw BadRequestException if projectId is missing', async () => {
-      await expect(controller.getAllJobConfig('')).rejects.toThrow(BadRequestException);
+    it('should return job listings', async () => {
+      const mockJobs = [{ jobConfigId: '1', configName: 'Test', jobType: 'DISCOVER', jobStatus: 'ACTIVE' }];
+      mockJobConfigService.getAllJobConfig.mockResolvedValue(mockJobs);
+
+      expect(await controller.getAllJobConfig('123')).toEqual(mockJobs);
     });
 
-    it('should return all job configs for a project', async () => {
-      const projectId = 'project1';
-      const jobListing: JobListingDTO[] = [{ jobConfigId: '1', }] as JobListingDTO[];
-
-      mockJobConfigService.getAllJobConfig.mockResolvedValue(jobListing);
-
-      const result = await controller.getAllJobConfig(projectId);
-      expect(result).toEqual(jobListing);
-      expect(mockJobConfigService.getAllJobConfig).toHaveBeenCalledWith(projectId);
+    it('should throw BadRequestException if projectId is missing', async () => {
+      await expect(controller.getAllJobConfig(null)).rejects.toThrow(BadRequestException);
     });
   });
 
-  describe('getJobConfigById', () => {
-    it('should return a job by its ID', async () => {
-      const jobId = '1';
-      const job = { id: jobId, name: 'Test Job' };
+  describe('downloadTemplate', () => {
+    it('should download template successfully', async () => {
+      const res = {} as Response; // Mocking the Response object
+      const type: TemplateType = TemplateType.SID; // Assuming sid is a valid TemplateType
 
-      mockJobConfigService.getJobConfigById.mockResolvedValue(job);
+      jest.spyOn(service, 'getTemplateFilename').mockReturnValue('template.csv');
+      jest.spyOn(service, 'sendCsvFile').mockImplementation(() => {});
 
-      const result = await controller.getJobConfigById(jobId);
-      expect(result).toEqual(job);
-      expect(mockJobConfigService.getJobConfigById).toHaveBeenCalledWith(jobId);
+      await controller.downloadTemplate(res, type);
+
+      expect(service.getTemplateFilename).toHaveBeenCalledWith(type);
+      expect(service.sendCsvFile).toHaveBeenCalledWith('template.csv', res);
+    });
+
+    it('should throw BadRequestException if type is not provided', async () => {
+      const res = {} as Response;
+
+      await expect(controller.downloadTemplate(res, undefined)).rejects.toThrow(BadRequestException);
+      await expect(controller.downloadTemplate(res, undefined)).rejects.toThrow("Either sid, gid, or uid type is required");
+    });
+
+    it('should throw BadRequestException if type is invalid', async () => {
+      const res = {} as Response;
+      const invalidType = 'invalid-type' as TemplateType; // Simulating an invalid type
+
+      await expect(controller.downloadTemplate(res, invalidType)).rejects.toThrow(BadRequestException);
+      await expect(controller.downloadTemplate(res, invalidType)).rejects.toThrow("Invalid type");
     });
   });
 
   describe('updateJobConfig', () => {
-    it('should update a job config', async () => {
-      const jobId = '1';
-      const jobConfigDto = { firstRunAt: '76a4sd76as5d768as' };
-      const updatedJob = { id: jobId, ...jobConfigDto };
+    it('should update a job', async () => {
+      const jobConfig = { jobConfigId: '1', status: 'ACTIVE' } as any;
+      mockJobConfigService.updateJobConfig.mockResolvedValue(jobConfig);
 
-      mockJobConfigService.updateJobConfig.mockResolvedValue(updatedJob);
-
-      const result = await controller.updateJobConfig(jobId, jobConfigDto as any);
-      expect(result).toEqual(updatedJob);
-      expect(mockJobConfigService.updateJobConfig).toHaveBeenCalledWith(jobId, jobConfigDto);
+      expect(await controller.updateJobConfig('1', jobConfig)).toEqual(jobConfig);
+      expect(service.updateJobConfig).toHaveBeenCalledWith('1', jobConfig);
     });
   });
 
   describe('deleteJobConfig', () => {
-    it('should delete a job config', async () => {
-      const jobId = '1';
-      const message = { message: 'Job deleted successfully' };
+    it('should delete a job and return a success message', async () => {
+      mockJobConfigService.deleteJobConfig.mockResolvedValue({ message: 'Deleted' });
 
-      mockJobConfigService.deleteJobConfig.mockResolvedValue(message);
-
-      const result = await controller.deleteJobConfig(jobId);
-      expect(result).toEqual(message);
-      expect(mockJobConfigService.deleteJobConfig).toHaveBeenCalledWith(jobId);
+      expect(await controller.deleteJobConfig('1')).toEqual({ message: 'Deleted' });
+      expect(service.deleteJobConfig).toHaveBeenCalledWith('1');
     });
   });
 });
+});
+

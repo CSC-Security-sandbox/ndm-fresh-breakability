@@ -30,7 +30,12 @@ export enum JobStatus {
     Active = 'ACTIVE',
     InActive = 'IN_ACTIVE',
 }
-  
+
+export enum JobConfigBulkMigrateResStatus {
+    CREATED =  'CREATED',
+    FAILED = 'FAILED'
+}
+
 export enum JobType {
     DISCOVER = 'DISCOVER',
     MIGRATE = 'MIGRATE',
@@ -41,6 +46,12 @@ export enum JobIdMappingType {
     Gid = 'GID',
     Uid = 'UID',
     Sid = 'SID'
+}
+
+export enum TemplateType {
+    GID = 'gid',
+    UID = 'uid',
+    SID = 'sid',
 }
 
 // ---------- Job Run -----------/
