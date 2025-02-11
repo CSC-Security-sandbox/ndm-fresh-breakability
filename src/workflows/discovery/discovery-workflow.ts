@@ -7,8 +7,6 @@ import { executeChild } from '@temporalio/workflow';
 import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import {DiscoveryJobWorkflow } from './discovery-job-workflow';
-import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
-import { boolean } from 'joi';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);

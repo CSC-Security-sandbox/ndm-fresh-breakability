@@ -6,7 +6,6 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom, lastValueFrom, retry, timer } from 'rxjs';
 import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
-import * as crypto from 'crypto';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
@@ -106,7 +105,6 @@ export class WorkManagerService {
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {
-        console.log('Configs' + JSON.stringify(configs));
         let activeConfigs: Set<string> = new Set<string>()
         let configsToStart: Map<string, WorkerConfiguration> = new Map<string, WorkerConfiguration>()
         for(let i = 0; i < configs.length; i++) {
@@ -133,11 +131,9 @@ export class WorkManagerService {
     }
 
     async startWorker(id: string, workerOptions: any){
-        console.log('workerOptions---->', workerOptions)
         try {
         const worker: Worker = await Worker.create(workerOptions);
             this.activeWorkers.set(id,worker);
-            console.log('worker.getState()---->', worker.getState())
             if (worker.getState() === WorkerState.INITIALIZED) 
                 worker.run();
             while (worker.getState() !== WorkerState.RUNNING) {
@@ -146,7 +142,6 @@ export class WorkManagerService {
                 await new Promise((resolve) => setTimeout( resolve, this.workerStartupTimeout));
             }
         } catch (err) {
-            console.log('err---->', err)
             this.logger.error(err);
         }
     }
