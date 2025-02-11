@@ -6,34 +6,47 @@ services:
       context: .
       dockerfile: Dockerfile
     deploy:
-      replicas: 3
-    entrypoint: ["/entrypoint.sh"]
+      replicas: 1
+    entrypoint: ["/app/entrypoint.sh"]
     networks:
       - app-network
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
+      - RABBITMQ_HOST=host.docker.internal
+      - RABBITMQ_PORT=5674,5673,5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASSWORD=guest
-    depends_on:
-      - rabbitmq
+      - RABBITMQ_URL_EXCHANGE=defaultEX
+      - RABBITMQ_URL_ROUTING_KEY=socketConnetion
+      - RABBITMQ_QUEUE=kunal-queue3
+      - RABBITMQ_QUEUE_IS_DURABLE=true
+      - RABBITMQ_INVENTORY_QUEUE=inventory
+      - RABBITMQ_URL=amqp://guest:guest@host.docker.internal:5674
+      - DB_PORT=5432
+      - DB_NAME=datamigrate
+      - DB_HOST=host.docker.internal
+      - DB_USER=dmadmin
+      - DB_PASSWORD=dmadmin
+      - SCHEMA=migrateadmin
+      - TEMPLATES_PATH=src/templates
+    # depends_on:
+    #   - rabbitmq
 
-  nginx:
-    image: nginx:latest
+  # nginx:
+  #   image: nginx:latest
     ports:
-      - "3000:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    networks:
-      - app-network
+      - "3000:3000"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #   networks:
+  #     - app-network
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "15672:15672" # Management UI
-      - "5672:5672"   # AMQP port
-    networks:
-      - app-network
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "15672:15672" # Management UI
+  #     - "5672:5672"   # AMQP port
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:

@@ -566,6 +566,7 @@ export class JobRunService {
       })
       .select([
         "jobRun.id AS jobRunId",
+        "jobRun.isReportReady AS isReportReady",
         "jobConfig.jobType AS jobType",
         "jobConfig.id AS jobConfigId",
         "jobConfig.futureScheduleAt AS nextSchedule",
@@ -601,6 +602,7 @@ export class JobRunService {
           startTime: jobRun.starttime,
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
+          isReportReady:jobRun.isreportready,
           jobConfigId: jobRun?.jobconfigid,
           nextSchedule: jobRun?.nextschedule,
           sourceServer: {
