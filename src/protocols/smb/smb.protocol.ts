@@ -14,7 +14,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- Validate Connection -------------------------- //
   async validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
-    return
+    await this.listPaths(traceId, payload)
   }
 
   // --------------------------- Get Protocol Versions -------------------------- //
@@ -67,16 +67,16 @@ export class SMBProtocol extends Protocol {
         'Connect SMB via Cred',
       )
       if(result?.toLowerCase().includes("successfully.")){
-        this.executeCommand(
+        const response = await this.executeCommand(
           traceId,
           ProtocolTypes.SMB,
           payload,
           this.getCommandPattern(CommandPattern.LIST_PATHS),
           'SMB Show Shares',
-        ).then((response) => {
-          this.logger.info(`[${traceId}] ${response.message}`);
-          return parseWindowsShares(response.message);
-        })
+        );
+
+        this.logger.info(`[${traceId}] ${response.message}`);
+        return parseWindowsShares(response.message);
       }
     }
     catch(e) {
