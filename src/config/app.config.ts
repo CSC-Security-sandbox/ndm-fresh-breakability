@@ -15,7 +15,7 @@ export default registerAs(
     },
     paths: {
       mountBasePath: process.env.MOUNT_BASE_PATH || '/mnt/datamigrate',
-      startConsumer: process.env.START_CONSUMER || 'http://localhost:3009/api/v1/redis-consumer/start',
+      startConsumer: process.env.START_CONSUMER || 'http://localhost:3009',
     }
   }),
 );
