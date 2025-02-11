@@ -42,6 +42,9 @@ describe('RedisJobContextProvider', () => {
         new FileServerDetails(
           'localhost',
           [new NFS('root')],
+          'user',
+          'password',
+          'domain',
         ),
         '/mnt/nfs'      
       );

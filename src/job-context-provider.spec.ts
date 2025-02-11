@@ -59,8 +59,10 @@ describe('JobContextProvider', () => {
         new FileServerDetails(
           'localhost',
           [new NFS('root')],
+          'pathId',
+          'path',
         ),
-        '/mnt/nfs'      
+        '/source',
       );
 
     const context = await provider.buildContext(jobRunId, jobConfig, jobStatus);

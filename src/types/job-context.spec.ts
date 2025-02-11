@@ -82,7 +82,7 @@ class TestJobContext extends JobContext {
 
 describe('JobContext Class', () => {
   it('should create a JobContext instance', () => {
-    const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ]);
+    const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
     const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
     const jobContext = new TestJobContext('job1', jobConfig, 'running');
     expect(jobContext.getJobRunId()).toBe('job1');
