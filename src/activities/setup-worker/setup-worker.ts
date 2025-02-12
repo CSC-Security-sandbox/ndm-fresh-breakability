@@ -68,7 +68,7 @@ export async function setup(jobRunId: any): Promise<any> {
       `[${jobRunId}] - Active workers: ${JSON.stringify(activeWorkerIds)}, Control Plan URL: ${workerConfigUrl}`,
     );
 
-    await axios.post(`${workerConfigUrl}update/configs`, {
+    await axios.post(`${workerConfigUrl}/update/configs`, {
       jobRunId: jobRunId,
       workerIds: activeWorkerIds,
     });

@@ -21,6 +21,12 @@ jest.mock('src/logger/logger.service', () => ({
 }));
 
 class TestProtocol extends Protocol {
+  mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+    return Promise.resolve([]);
+  }
+  unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+    return Promise.resolve([]);
+  }
   listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {
     return Promise.resolve([]);
   }
@@ -30,6 +36,7 @@ class TestProtocol extends Protocol {
   validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
     return Promise.resolve();
   }
+  
 }
 
 describe('Protocol', () => {
