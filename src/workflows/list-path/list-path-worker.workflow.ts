@@ -1,6 +1,6 @@
 import { proxyActivities } from '@temporalio/workflow';
 
-import type { ListPathActivity } from 'src/activities/list-path/list-path';
+import type { ListPathActivity } from 'src/activities/list-path/list-path.service';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);

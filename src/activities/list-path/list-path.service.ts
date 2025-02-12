@@ -1,17 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { WorkersConfig } from 'src/config/app.config';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Logger } from 'src/logger/logger.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ListPathActivity {
-  constructor(private readonly logger: Logger) {}
+  readonly workerId: string;
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    private readonly logger: Logger,
+  ) {
+    this.workerId = this.configService.get('worker.workerId');
+  }
 
   async listPath(traceId: string, protocolType: string, payload: any): Promise<any> {
-    const workerId = WorkersConfig.get('workerId');
     this.logger.info(
-      `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${workerId}`,
+      `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
     );
 
     const response = {
@@ -19,9 +25,9 @@ export class ListPathActivity {
       status: 'success',
       protocolType: protocolType,
       hostname: payload.hostname,
-      workerId: workerId,
+      workerId: this.workerId,
       paths: [],
-      message: `[${protocolType}] Connection to ${payload.hostname} from ${workerId} validated successfully`,
+      message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
 
     try {
@@ -34,7 +40,7 @@ export class ListPathActivity {
         status: 'error',
         protocolType: protocolType,
         hostname: payload.hostname,
-        workerId: workerId,
+        workerId: this.workerId,
         paths: [],
         message: `Failed to List Path for ${payload.hostname} of type ${protocolType}: ${error}`,
       };

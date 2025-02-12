@@ -1,16 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkerConfiguration } from "../work-manager.types";
-import { ListPathActivity } from "src/activities/list-path/list-path";
+import { ListPathActivity } from "src/activities/list-path/list-path.service";
 import { WorkFlowType } from "./worker-options.types";
 import { NativeConnection } from "@temporalio/worker";
-import { ValidateConnectionService } from "src/activities/validate-connection/validate-connection";
+import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
 
 @Injectable()
 export class WorkerOptionsService {
   constructor(
     private readonly listPathActivityService: ListPathActivity,
-    private readonly validateConnectionService: ValidateConnectionService
+    private readonly validateConnectionService: ValidateConnectionActivity
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
