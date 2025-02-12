@@ -28,21 +28,45 @@ export async function publishTask(traceId: string): Promise<any> {
 
     // Process files and append tasks
     const directoryBatchSize = 500;
-    let counter=0;
-    for await (const directory of jobContext.groupReadDirs('consumer-1',directoryBatchSize)) {
+    let counter = 0;
+    let commandsBatch: Command[] = [];
+    
+    const directories = jobContext.groupReadDirs('consumer-1', directoryBatchSize);
+    
+    for await (const directory of directories) {
       counter++;
-      if (counter > directoryBatchSize){
-        console.log("breaking the loop of pubish task"); 
+      // Create a command and add it to the batch
+      const command = new Command(directory.path, { 
+        0: { cmd: 'SCAN', status: 'PENDING' } 
+      }, `cmd-${uuid4()}`);
+      
+      commandsBatch.push(command);
+    
+      // If we reach directoryBatchSize, create a new task
+      if (commandsBatch.length >= directoryBatchSize) {
+        const task = new Task(
+          uuid4(),
+          traceId,
+          'SCAN',
+          'PENDING',
+          'worker-1',
+          '/mnt/nfs/test.txt',
+          commandsBatch, // Task now holds 500 commands
+        );
+    
+        jobContext.tasksInfo.lastId = await jobContext.appendToTaskList(task);
+        logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+        commandsBatch = [];
+      }
+    
+      if (counter >= directoryBatchSize) {
+        console.log('Breaking the loop of publish task');
         break;
       }
-      const ops = {
-        0: {
-          cmd: 'SCAN',
-          status: 'PENDING',
-        },
-      };
-
-      const commands = [new Command(directory.path, ops, `cmd-${uuid4()}`)];
+    }
+    
+    // If there are remaining commands that didn't reach 500, process them
+    if (commandsBatch.length > 0) {
       const task = new Task(
         uuid4(),
         traceId,
@@ -50,15 +74,15 @@ export async function publishTask(traceId: string): Promise<any> {
         'PENDING',
         'worker-1',
         '/mnt/nfs/test.txt',
-        commands,
+        commandsBatch,
       );
-
-     const id =  await jobContext.appendToTaskList(task);
-     jobContext.tasksInfo.lastId = id;
-     logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
+      jobContext.tasksInfo.lastId = await jobContext.appendToTaskList(task);
+      logger.debug(`[${traceId}] Task appended: ${JSON.stringify(task)}`);
     }
+    
+    // Save the updated job context in Redis
     await redisClient.set(traceId, jobContext.serialize());
-    logger.log(`[${traceId}] JobContext updated in Redis.`);
+    logger.log(`[${traceId}] JobContext updated in Redis.`);    
 
     return { status: 'success', message: 'Task published successfully' };
   } catch (error) {
