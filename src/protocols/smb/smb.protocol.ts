@@ -3,10 +3,11 @@ import { ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
+import { WorkersConfig } from 'src/config/app.config';
+import * as fs from 'fs';
 
 
 export class SMBProtocol extends Protocol {
-
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
@@ -96,6 +97,46 @@ export class SMBProtocol extends Protocol {
       default :
         throw Error(`Unsupported platform ${this.platform}`)
     }
+  }
+
+  async unmountPath(traceId: string, payload: any): Promise<any> {
+    this.logger.info(
+      `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
+    );
+
+    const response = this.executeCommand(
+      traceId,
+      ProtocolTypes.SMB,
+      payload,
+      WorkersConfig.get('smbUnmountCommand'),
+      'SMB Unmount',
+    );
+
+    if (response['status'] === 'success') {
+      const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+      if (fs.existsSync(mountDir)) {
+        fs.rmdirSync(mountDir, { recursive: false });
+        this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+      } else {
+        this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+      }
+      
+      return response;
+    }
+  }
+
+  async mountPath(traceId: string, payload: any): Promise<any> {
+    this.logger.info(
+      `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
+    );
+
+    return this.executeCommand(
+      traceId,
+      ProtocolTypes.SMB,
+      payload,
+      WorkersConfig.get('smbMountCommand'),
+      'SMB Mount',
+    );
   }
 
 }
