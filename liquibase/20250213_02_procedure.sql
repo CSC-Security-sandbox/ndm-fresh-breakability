@@ -831,9 +831,14 @@ aggregated_json;
 
 
 
-insert into datamigrator.reports (report_data, report_type, job_run_id) 
-values (aggregated_json, 'DISCOVER', jobrunid) ;
---on CONFLICT (job_run_id, report_type) DO update set report_data = EXCLUDED.report_data;
+UPDATE datamigrator.reports 
+SET report_data = aggregated_json
+WHERE job_run_id = jobrunid AND report_type = 'DISCOVER';
+ 
+IF NOT FOUND THEN
+    INSERT INTO datamigrator.reports (job_run_id, report_type, report_data)
+    VALUES (jobrunid, 'DISCOVER', aggregated_json);
+END IF;
 
 update datamigrator.jobrun set is_report_ready = TRUE where id = jobrunid;
 
