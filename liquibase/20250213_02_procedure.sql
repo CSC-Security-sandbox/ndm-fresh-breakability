@@ -43,7 +43,7 @@ create temp table temp_categorized_files as
 	path,
 	file_type
 from
-	datamigrator.inventory
+	inventory
 where
 	job_run_id = jobrunid;
 -- Perform aggregation directly using subqueries
@@ -532,6 +532,8 @@ union all
 
 aggregated_json := aggregated_json || temp_json;
 
+
+
 SELECT
     jsonb_agg(
         jsonb_build_object(
@@ -830,17 +832,16 @@ aggregated_json := aggregated_json || temp_json;
 aggregated_json;
 
 
-
-UPDATE datamigrator.reports 
+UPDATE reports 
 SET report_data = aggregated_json
 WHERE job_run_id = jobrunid AND report_type = 'DISCOVER';
  
 IF NOT FOUND THEN
-    INSERT INTO datamigrator.reports (job_run_id, report_type, report_data)
+    INSERT INTO reports (job_run_id, report_type, report_data)
     VALUES (jobrunid, 'DISCOVER', aggregated_json);
 END IF;
 
-update datamigrator.jobrun set is_report_ready = TRUE where id = jobrunid;
+update jobrun set is_report_ready = TRUE where id = jobrunid;
 
 -- Add more aggregations if needed in similar fashion
 end;
