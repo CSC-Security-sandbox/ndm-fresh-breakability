@@ -5,15 +5,19 @@ import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import appConfig from 'src/config/app.config';
 import { LoggerModule } from 'src/logger/logger.module';
+import keycloakConfig from 'src/config/keycloak.config';
+import { ActivitiesModule } from 'src/activities/activities.module';
+import { WorkerOptionsService } from './factory/worker-options.factory.service';
 
 
 @Module({
   imports: [ 
-    ConfigModule.forRoot({ load: [appConfig] }), 
+    ConfigModule.forRoot({ load: [appConfig, keycloakConfig] }), 
     ScheduleModule.forRoot(), 
     HttpModule,
-    LoggerModule
+    LoggerModule,
+    ActivitiesModule
   ],
-  providers: [WorkManagerService]
+  providers: [WorkManagerService, WorkerOptionsService]
 })
 export class WorkManagerModule {}

@@ -17,7 +17,7 @@ export abstract class Protocol {
     abstract mountPath(traceId: string, payload: ProtocolPayload): Promise<any>;  
     abstract unmountPath(traceId: string, payload: ProtocolPayload): Promise<any>;
 
-    protected async executeCommand(
+    public async executeCommand(
         traceId: string,
         protocolType: string,
         payload: ProtocolPayload,
@@ -33,14 +33,14 @@ export abstract class Protocol {
           workerId: this.workerId,
           message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
         };
-      
         const command = commandPattern
-          ?.replace('${hostname}', payload?.hostname)
+          ?.replace('${HOST}', payload?.hostname)
           ?.replace('${USERNAME}', payload?.username)
           ?.replace('${PASSWORD}', payload?.password)
-          ?.replace('${path}', payload?.path)
-          ?.replace('${jobRunId}', payload?.jobRunId)
-          ?.replace('${baseMountDir}', this.baseMountDir);
+          ?.replace('${PATH}', payload?.path)
+          ?.replace('${BASE_DIR}', payload?.workingDirectory) 
+          ?.replace('${JOB_RUN_ID}', payload?.jobRunId)
+          ?.replace('${PATH_ID}', payload?.pathId);
 
           console.log('command-->', command);
       

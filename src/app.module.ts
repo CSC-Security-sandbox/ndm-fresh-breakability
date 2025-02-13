@@ -1,17 +1,18 @@
 import { Module } from '@nestjs/common';
-
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import appConfig, { WorkersConfig } from './config/app.config';
 import commandConfig, { CommandConfig } from './config/command.config';
 import temporalConfig from './config/temporal.config';
 import { WorkManagerModule } from './work-manager/work-manager.module';
 import { LoggerModule } from './logger/logger.module';
+import { ActivitiesModule } from './activities/activities.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ load: [appConfig, commandConfig, temporalConfig] }),
     WorkManagerModule,
-    LoggerModule
+    LoggerModule,
+    ActivitiesModule
   ],
   providers: [WorkersConfig, CommandConfig],
 })

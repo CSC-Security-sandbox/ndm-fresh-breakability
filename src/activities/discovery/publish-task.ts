@@ -7,6 +7,8 @@ export async function publishTask(traceId: string): Promise<any> {
   logger.log(`[${traceId}] Starting publishTask`);
 
   let redisClient = null;
+  let commandsBatch=[];
+
 
   try {
     redisClient = await RedisUtils.getClient();

@@ -18,12 +18,12 @@ export async function SetupWorkerWorkflow(
   //const fileServer = args.fileServer;
 
   log(
-    args.traceId,
+    args.jobRunId,
     `Starting SaetupWorkerWorkflow with args: ${JSON.stringify(args)}`,
   );
 
   //setup all the workers first who can run discovery workflow
-  const results = await setupWorkerActivity(args.traceId);
+  const results = await setupWorkerActivity(args.jobRunId);
     // fileServer.protocols.map(async (protocol) => {
     //   return await setupWorkerActivity(args.traceId, protocol.type, {
     //     hostname: fileServer.hostname,

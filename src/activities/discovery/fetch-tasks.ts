@@ -39,10 +39,10 @@ export async function fetchTasks(traceId: string): Promise<any[]> {
     logger.error(`[${traceId}] Failed to fetch the task: ${error}`);
     return []; 
   } 
-  // finally {
-  //   if (redisClient && redisClient.isOpen) {
-  //     await redisClient.quit();
-  //     logger.log(`[${traceId}] Redis client connection closed.`);
-  //   }
-  // }
+  finally {
+    if (redisClient && redisClient.isOpen) {
+      await redisClient.quit();
+      logger.log(`[${traceId}] Redis client connection closed.`);
+    }
+  }
 }

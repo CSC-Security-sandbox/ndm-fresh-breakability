@@ -16,6 +16,19 @@ export class Logger implements LoggerService {
 
   private loggerInstance: winston.Logger;
   private static isRuntimeInstalled = false;
+  public defaultLogger = new DefaultLogger('WARN', (entry) => {
+    this.loggerInstance.log({
+      label: entry.meta?.activityId
+        ? 'activity'
+        : entry.meta?.workflowId
+        ? 'workflow'
+        : 'worker',
+      level: entry.level.toLowerCase(),
+      message: entry.message,
+      timestamp: Number(entry.timestampNanos / 1_000_000n),
+      ...entry.meta,
+    });
+  });
 
   constructor() {
     if (!fs.existsSync(Logger.logDir)) {
@@ -51,20 +64,7 @@ export class Logger implements LoggerService {
     });
 
     if (!Logger.isRuntimeInstalled) {
-      Runtime.install({
-        logger: new DefaultLogger('WARN', (entry) => {
-          this.loggerInstance.log({
-            label: entry.meta?.activityId
-              ? 'activity'
-              : entry.meta?.workflowId
-              ? 'workflow'
-              : 'worker',
-            level: entry.level.toLowerCase(),
-            message: entry.message,
-            timestamp: Number(entry.timestampNanos / 1_000_000n),
-            ...entry.meta,
-          });
-        }),
+      Runtime.install({ logger: this.defaultLogger,
         telemetryOptions: {
           logging: {
             forward: {},

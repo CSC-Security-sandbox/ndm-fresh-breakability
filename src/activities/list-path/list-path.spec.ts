@@ -1,4 +1,4 @@
-import { listPath } from './list-path';
+import { listPath } from './list-path.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Logger } from 'src/logger/logger.service';

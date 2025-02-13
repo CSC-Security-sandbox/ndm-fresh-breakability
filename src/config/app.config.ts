@@ -36,12 +36,12 @@ export default registerAs(
       'nmap -p 445 --script smb-protocols ${hostname}',
     nfsMountCommand:
       process.env.NFS_MOUNT_COMMAND ||
-      'mount -t nfs -o resvport ${hostname}:${path} ${baseMountDir}/${jobRunId}',
+      'mount -t nfs -o resvport ${HOST}:${PATH} ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}',
     smbMountCommand:
       process.env.SMB_MOUNT_COMMAND ||
       'mount -t cifs //${hostname}/${path} ${baseMountDir}/${jobRunId} -o username=${username},password=${password}',
     nfsUnmountCommand:
-      process.env.NFS_UNMOUNT_COMMAND || 'umount ${baseMountDir}/${jobRunId}',
+      process.env.NFS_UNMOUNT_COMMAND || 'umount ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}',
     smbUnmountCommand:
       process.env.SMB_UNMOUNT_COMMAND || 'umount ${baseMountDir}/${jobRunId}',
   }),
