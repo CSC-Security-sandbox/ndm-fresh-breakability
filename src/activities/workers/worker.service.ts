@@ -23,17 +23,14 @@ class WorkerManager {
           await this.dispatch(message, jobContext);
           if (message.type === MessageType.ScanCompleted && !isCompleted) {
             isCompleted = true;
-            resolve({
-              status: 'success',
-              data: message
-            });
+            resolve({ status: 'success' });
           }
-        },
+        }
       })
-        .catch((error: Error) => {
-          console.error(`Error executing worker task: ${error.message}`);
-          reject(error);
-        });
+      .catch((error: Error) => {
+        console.error(`Error executing worker task: ${error.message}`);
+        reject(error);
+      });
     });
   }
 
@@ -46,13 +43,11 @@ class WorkerManager {
             const id = await jobContext.appendToDirList(i);
             jobContext.dirsInfo.lastId = id;
             jobContext.dirsInfo.numMessages++;
-            console.log(i.jobRunId, `***************Appending to dir list***************`);
           } else {
             if (!jobContext.filesInfo) jobContext.filesInfo.init();
             const id = await jobContext.appendToFileList(i);
             jobContext.filesInfo.lastId = id;
             jobContext.filesInfo.numMessages++;
-            console.log(i.jobRunId, `***************Appending to file list***************`);
           }
         })
       }

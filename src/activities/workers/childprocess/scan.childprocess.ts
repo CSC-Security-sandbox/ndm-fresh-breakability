@@ -21,7 +21,7 @@ export async function discovery(data: DiscoveryPayload, batchSize: number = 2000
                 batchSize,
                 workerId: ids.workerId,
                 commandId: cmd.commandId || 'test',
-                excludePattern: data.data.excludeFilePatterns.split(','),
+                excludePattern: [],
                 taskId: ids.taskId
             });
             // taskStats.numFiles += accumulatedResult.length;

@@ -43,51 +43,39 @@ const { discoveryStatusUpdate: updateDiscoveryStatus } = proxyActivities<
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options } = args;
   log(args.traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args.options)}`);
-
   try {
     while (true) {
       const tasks = await fetchTaskActivity(traceId);
-      console.log(`Tasks fetched :}`);
       if (!tasks || tasks.length === 0) {
-        log(traceId, `No more tasks in the stream. Exiting workflow.`);
         await updateDiscoveryStatus(traceId, 'COMPLETED')
           .then(() => log(traceId, `Discovery status updated to Completed`))
           .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
         return { message: 'Discovery Completed' };
       }
-
       for (const task of tasks) {
-        const discoveryResponse: any = await discoveryActivity({
-          data: {
-              id: args.traceId,
-              jobRunId: task.jobRunId,
-              taskType: '',
-              status: 'PENDING',
-              workerId: task.workerId,
-              sPath: task.sPath,
-              tPath: task.tPath,
-              excludeFilePatterns: task.excludeFilePatterns,
-              commands: task.commands
-            }
-          },
-          args.traceId,
-        );
-        log(traceId, `Discovery findings: ${JSON.stringify(discoveryResponse)}`);
-        const res = await publishTaskActivity(traceId);
-        console.log(res);
-        // if (discoveryResponse && discoveryResponse.numDirs > 0) {}
+        await discoveryActivity({ data: {
+          id: args.traceId,
+          jobRunId: task.jobRunId,
+          taskType: '',
+          status: 'PENDING',
+          workerId: task.workerId,
+          sPath: task.sPath,
+          tPath: task.tPath,
+          excludeFilePatterns: task.excludeFilePatterns,
+          commands: task.commands
+        }}, args.traceId);
+        // await scanActivity(
+        //   args.traceId,
+        //   args?.options,
+        //   task,
+        // );
+        await publishTaskActivity(traceId);
       }
     }
   } catch (error) {
-    log(traceId, `Error  occured during discovery : ${error}`);
     await updateDiscoveryStatus(traceId, 'FAILED')
-      .then(() => {
-        log(traceId, `Discovery status updated to Completed`);
-      })
-      .catch((err) => {
-        log(traceId, `Failed to update discovery status: ${err}`);
-      });
-    log(traceId, `Discovery status updated to Completed`);
+      .then(() => log(traceId, `Discovery status updated to Completed`))
+      .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
     return { message: 'Discovery failed' };
   }
 }
