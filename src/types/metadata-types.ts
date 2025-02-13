@@ -171,14 +171,13 @@ export class Task implements Serializable {
 }
 
 export class DMError implements Serializable {
-  file: string;
-  error: Error;
+tasks: TaskError;
+operation: OperationError;
 
-  constructor(file: string, error: Error) {
-    this.file = file;
-    this.error = error;
-  }
-
+constructor(tasks?: TaskError,operation?: OperationError) {
+  this.tasks = tasks;
+  this.operation = operation;
+}
   serialize(): string {
     return JSON.stringify(this);
   }
@@ -186,4 +185,15 @@ export class DMError implements Serializable {
   static deserialize(serialized: string): DMError {
     return JSON.parse(serialized);
   }
+}
+
+export interface TaskError{
+  taskId: string;
+  errorCode: string;
+  errorMessage: string;
+}
+export interface OperationError{
+  operationId: string;
+  errorCode: string;
+  errorMessage: string;
 }
