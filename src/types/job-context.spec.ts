@@ -179,7 +179,12 @@ describe('JobContext Class', () => {
 
     it('should append to error list', async () => {
       const jobContext = new TestJobContext('job1');
-      const errorInfo: DMError = new DMError('file', new Error('error'));
+      const taskError={
+        taskId: 'taskId',
+        errorCode: '500',
+        errorMessage: 'errorMessage',
+      }
+      const errorInfo: DMError = new DMError(taskError);
       jest.spyOn(jobContext.errorsInfo, 'append').mockResolvedValue('errorId');
       const result = await jobContext.appendToErrorList(errorInfo);
       expect(result).toBe('errorId');
@@ -386,7 +391,12 @@ describe('JobContext Class', () => {
 
     it('should read errors', async () => {
       const jobContext = new TestJobContext('job1');
-      const errorInfo: DMError = new DMError('file', new Error('error'));
+      const taskError={
+        taskId: 'taskId',
+        errorCode: '500',
+        errorMessage: 'errorMessage',
+      }
+      const errorInfo: DMError = new DMError(taskError);
       jest.spyOn(jobContext.errorsInfo, 'read').mockReturnValue((async function* () { yield errorInfo; })());
       const errors = [];
       for await (const error of jobContext.readErrors('reader1')) {
@@ -397,7 +407,17 @@ describe('JobContext Class', () => {
 
     it('should group read errors', async () => {
       const jobContext = new TestJobContext('job1');
-      const errorInfo: DMError = new DMError('file', new Error('error'));
+      const taskError={
+        taskId: 'taskId',
+        errorCode: '500',
+        errorMessage: 'errorMessage',
+      }
+      const operationError={
+        operationId: 'operationId',
+        errorCode: '500',
+        errorMessage: 'errorMessage',
+      }
+      const errorInfo: DMError = new DMError(taskError,operationError);
       jest.spyOn(jobContext.errorsInfo, 'groupRead').mockReturnValue((async function* () { yield errorInfo; })());
       const errors = [];
       for await (const error of jobContext.groupReadErrors('reader1',10)) {
