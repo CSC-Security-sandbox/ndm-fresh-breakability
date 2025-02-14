@@ -41,7 +41,10 @@ export interface ScanPathOutput{
 
 export interface PublishScanTaskInput{
     jobRunId: string;
-    jobContext: JobContext;
-    clientConnection: any
-    logger: Logger
+}
+
+export interface PublishScanTaskOutput{
+    jobRunId: string;
+    status :  'success' | 'error',
+    message: string
 }
