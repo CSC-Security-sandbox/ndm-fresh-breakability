@@ -66,10 +66,9 @@ export async function DiscoveryWorkflow({
     };
   }
 
-
 log(traceId, `Active workers: ${activeWorkerIds}`);
-const discoveryResponse:any =  await Promise.all(
-    activeWorkerIds.map((workerId) =>
+const discoveryResponse:any = await Promise.all(
+     activeWorkerIds.map((workerId) =>
       executeChild(DiscoveryJobWorkflow,{
         args: [
           {
@@ -77,7 +76,7 @@ const discoveryResponse:any =  await Promise.all(
           },
         ],
         workflowId: `DiscoveryJobWorkflow-${traceId}`,
-        taskQueue: `${traceId}-TaskQueue`,
+        taskQueue: `${workerId}-TaskQueue`,
         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       })

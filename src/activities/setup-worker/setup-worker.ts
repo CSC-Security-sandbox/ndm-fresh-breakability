@@ -41,7 +41,7 @@ export async function setup(jobRunId: any): Promise<any> {
     const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
     const hostname = context.jobConfig.sourceFileServer.hostname;
     const { pathId, path, workingDirectory } =
-      context.jobConfig.sourceFileServer;
+      context.jobConfig.sourceFileServer as any;
     logger.info(`hostname , ${hostname}`);
     const payload = {
       hostname: hostname,
@@ -132,7 +132,7 @@ export async function cleanup(jobRunId: string): Promise<any> {
   const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
   const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
   const hostname = context.jobConfig.sourceFileServer.hostname;
-  const { pathId, path, workingDirectory } = context.jobConfig.sourceFileServer;
+  const { pathId, path, workingDirectory } = context.jobConfig.sourceFileServer as any;
   logger.info(`hostname , ${hostname}`);
   const payload = {
     hostname: hostname,

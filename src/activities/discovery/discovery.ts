@@ -1,61 +1,50 @@
-
+import { DMError, FileInfo, JobContextFactory, RedisUtils, TaskStats, Command } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as path from 'path';
 import * as fs from 'fs';
-import { DMError, FileInfo, JobContextFactory, RedisUtils, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
+
 import { FileEntry, FileType, ProcessFolderReadParams } from '../types/tasks';
 
+type ProcessTaskArgs = {
+  commands: Command[];
+  traceId: string;
+  workerId?: string;
+  taskId?: string;
+  sourcePath: string;
+  excludeFilePatterns?: string;
+  options: any
+};
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
-export async function discovery(
-  traceId: string,
-  options: any,
-  streamMessage: any,
-) {
+
+export async function discovery(traceId: string, options: any, streamMessage: any ) {
   try {
     log(traceId, `Starting discovery`);
-
-    const inventoryStats = await processTask(
-      streamMessage.commands,
+    const inventoryStats = await processTask({
+      commands: streamMessage.commands,
       traceId,
-      streamMessage?.workerId,
-      streamMessage?.taskId,
-      streamMessage.sourcePath,
-      streamMessage?.excludeFilePatterns,
+      workerId: streamMessage?.workerId,
+      taskId: streamMessage?.taskId,
+      sourcePath: streamMessage.sourcePath,
+      excludeFilePatterns: streamMessage?.excludeFilePatterns,
       options,
-    );
+    });
     return inventoryStats;
   } catch (error) {
-    
-    
+    log('ERROR -> ', error)
   }
 }
 
-async function processTask(
-  commands: any,
-  traceId: string,
-  workerId: string,
-  taskId: string,
-  sourcePath: string,
-  excludeFilePatterns: string,
-  options: any,
-): Promise<any> {
-  if (!commands) {
-    log(traceId, `No commands found`);
-    return {};
-  }
-
-  const ids = {
-    jobRunId: traceId,
-    workerId: workerId,
-    taskId: taskId,
-  };
+async function processTask(args: ProcessTaskArgs) {
+  const { commands, traceId, workerId, taskId, sourcePath, excludeFilePatterns, options } = args;
+  if (!commands.length) return {};
+  const ids = { jobRunId: traceId, workerId: workerId, taskId: taskId };
   let taskStats = undefined;
   try {
     let redisClient = await RedisUtils.getClient();
     console.log(`Redis Client: ${redisClient}`);
-    if (!redisClient.isOpen) redisClient = await redisClient.connect();
+    if(!redisClient.isOpen) redisClient = await redisClient.connect();
     console.log(`Redis Client connect: ${redisClient}`);
     const contextProvider = JobContextFactory.getProvider('redis', redisClient);
     let jobContext = await contextProvider.getJobContext(traceId);
@@ -80,9 +69,7 @@ async function processTask(
             workerId: ids.workerId,
             commandId: cmd.commandId || 'test',
             excludePattern: excludeFilePatterns?.split(','),
-            taskId: ids.taskId,
-            jobContext,
-            client: redisClient,
+            taskId: ids.taskId
           });
           taskStats.numFiles =
             taskStats.numFiles +
@@ -129,14 +116,18 @@ export async function processFolderRead({
   commandId,
   excludePattern,
   taskId,
-  jobContext,
-  client,
 }: ProcessFolderReadParams) {
   const payload: any = {
     accumulatedResult: [],
     unScannedPaths: [],
   };
   const ids = { jobRunId, workerId, transactionId: '' };
+  let redisClient = await RedisUtils.getClient();
+  console.log(`Redis Client: ${redisClient}`);
+  if(!redisClient.isOpen) redisClient = await redisClient.connect();
+  console.log(`Redis Client connect: ${redisClient}`);
+  const contextProvider = JobContextFactory.getProvider('redis', redisClient);
+  let jobContext = await contextProvider.getJobContext(jobRunId);
   for (const file of files) {
     try{
     const fullPath = path.join(chunkPath, file);
@@ -176,7 +167,7 @@ export async function processFolderRead({
     const dmError = new DMError(file, error);
     const id = await jobContext.appendToErrorList(dmError);
     jobContext.errorsInfo.lastId = id;
-    client.set(jobRunId, jobContext.serialize());
+    // client.set(jobRunId, jobContext.serialize());
     return {
       traceId: jobRunId,
       status: 'error',
@@ -226,7 +217,7 @@ export async function processFolderRead({
       log(jobRunId, `***************Appending to file list***************`);
     }
   });
-  client.set(jobRunId, jobContext.serialize());
+  // client.set(jobRunId, jobContext.serialize());
   return { payload };
 }
 

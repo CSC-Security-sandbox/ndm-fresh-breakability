@@ -101,3 +101,5 @@ export class Logger implements LoggerService {
     this.loggerInstance.verbose(message);
   }
 }
+
+export { LoggerService };
