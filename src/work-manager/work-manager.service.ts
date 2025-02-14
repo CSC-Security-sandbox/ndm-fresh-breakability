@@ -12,7 +12,7 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { ConfigService } from '@nestjs/config';
-import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class WorkManagerService {
@@ -32,32 +32,32 @@ export class WorkManagerService {
   async getConfiguration(
     id: string,
     ip: string,
-    projectId: string
+    projectId: string,
   ): Promise<WorkerConfiguration[]> {
     try {
-      const workerConfig = await this.workerEntity
-        .createQueryBuilder('worker')
-        .leftJoin(
-          'worker_jobrun_mapping',
-          'mapping',
-          'mapping.workerId = worker.workerId'
-        )
-        .leftJoin('jobrun', 'jobRun', 'mapping.jobRunId = jobRun.id')
-        .where('worker.workerId = :id', { id })
-        .select([
-          'worker.metaConfig AS workerMetaConfig',
-          'jobRun.metaConfig AS jobRunMetaConfig'
-        ])
-        .getRawOne();
-  
-      if (workerConfig) {
-        return [
-          ...(workerConfig?.workermetaconfig ?? []),
-          ...(workerConfig?.jobrunmetaconfig ?? [])
+      const status = JobRunStatus.Completed;
+      const workerMetaConfig = await this.workerEntity.findOne({
+        where: { workerId: id },
+      });
+      if (workerMetaConfig) {
+        const jobRunConfig = await this.jobRunRepo
+          .createQueryBuilder('jobrun')
+          .leftJoin(
+            'worker_jobrun_mapping',
+            'mapping',
+            'mapping.jobRunId = jobrun.id',
+          )
+          .where('mapping.workerId = :id', { id })
+          .andWhere('jobrun.status <> :status', { status })
+          .select(['jobrun.metaConfig AS jobRunMetaConfig'])
+          .getRawMany();
+        const mergedConfigs = [
+          ...workerMetaConfig.metaConfig,
+          ...jobRunConfig.map((data) => data.jobrunmetaconfig),
         ];
+        return mergedConfigs;
       }
-
-      this.logger.warn(`project ID : ${projectId}`)
+      this.logger.warn(`project ID : ${projectId}`);
       const newWorker = this.workerEntity.create({
         workerId: id,
         ipAddress: ip,
@@ -65,15 +65,15 @@ export class WorkManagerService {
         status: WorkerStatus.Online,
         workerName: id,
         createdBy: id,
-        projectId
+        projectId,
       });
-  
+
       const result = await this.workerEntity.save(newWorker);
       await this.workerEntity.update(
         { workerId: result.workerId },
-        { workerName: `Worker-${result.workerNumber}` }
+        { workerName: `Worker-${result.workerNumber}` },
       );
-  
+
       return result.metaConfig;
     } catch (error) {
       this.logger.error(
@@ -82,7 +82,6 @@ export class WorkManagerService {
       throw new Error('Error while fetching worker configuration');
     }
   }
-  
 
   createWorkerConfiguration = (workerId: string): WorkerConfiguration[] => [
     {
