@@ -18,7 +18,10 @@ import { Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { TaskEntity } from "src/entities/task.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
-import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
+import {
+  LoggerFactory,
+  LoggerService,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -27,8 +30,8 @@ describe("JobRunService", () => {
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
   let inventoryRepo: Repository<InventoryEntity>;
-  let jobOptions: Repository<JobOptionsEntity>
-  let configService: ConfigService
+  let jobOptions: Repository<JobOptionsEntity>;
+  let configService: ConfigService;
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
       log: jest.fn(),
@@ -138,9 +141,12 @@ describe("JobRunService", () => {
           },
         },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
-        { provide: WorkflowService, useValue : {
-          startWorkflow: jest.fn()
-        }},
+        {
+          provide: WorkflowService,
+          useValue: {
+            startWorkflow: jest.fn(),
+          },
+        },
         ConfigService,
         EventEmitter2,
       ],
@@ -161,7 +167,6 @@ describe("JobRunService", () => {
       getRepositoryToken(InventoryEntity)
     );
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
-
   });
 
   describe("scheduleAJob", () => {
@@ -193,66 +198,67 @@ describe("JobRunService", () => {
     });
   });
 
-
-  describe('jobRunUpdateStatus', ()=> {
-    it('should update endTime and status to Completed, and call auxiliary methods for Completed status', async () => {
+  describe("jobRunUpdateStatus", () => {
+    it("should update endTime and status to Completed, and call auxiliary methods for Completed status", async () => {
       const payload = {
-        jobRunId: '123',
+        jobRunId: "123",
         status: JobRunStatus.Completed,
-        jobConfig : {
-          firstRunAt: 'undefined'
-        }
+        jobConfig: {
+          firstRunAt: "undefined",
+        },
       };
 
-      jest.spyOn(jobRunRepo,'findOne').mockResolvedValue({jobConfigId: "4567",  jobConfig : {
-        firstRunAt: 'undefined'
-      }} as any)
-  
-      await service.jobRunStatusUpdate(payload);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({
+        jobConfigId: "4567",
+        jobConfig: {
+          firstRunAt: "undefined",
+        },
+      } as any);
 
+      await service.jobRunStatusUpdate(payload);
     });
-  
-    it('should update status for non-Completed statuses', async () => {
-      const payload = {
-        jobRunId: '456',
-        status: JobRunStatus.Failed, 
-        jobConfig : {
-          firstRunAt: 'undefined'
-        }
-      };
-  
-      await service.jobRunStatusUpdate(payload);
-  
-    })
-  })
 
-  describe('getJobConfig', ()=>{
-    it('should retrieve and process job configuration without targetPathId', async () => {
+    it("should update status for non-Completed statuses", async () => {
+      const payload = {
+        jobRunId: "456",
+        status: JobRunStatus.Failed,
+        jobConfig: {
+          firstRunAt: "undefined",
+        },
+      };
+
+      await service.jobRunStatusUpdate(payload);
+    });
+  });
+
+  describe("getJobConfig", () => {
+    it("should retrieve and process job configuration without targetPathId", async () => {
       const mockJobConfig = {
-        id: '123',
+        id: "123",
         sourcePath: {
-          volumePath: '/source/path',
-          id: 'source-id',
+          volumePath: "/source/path",
+          id: "source-id",
           fileServer: {
-            protocol: 'FTP',
-            userName: 'source-user',
-            password: 'source-pass',
-            host: 'source-host',
-            config: { workingDirectory: '/source/working' },
-            workers: [{ workerId: 'worker-1' }, { workerId: 'worker-2' }],
+            protocol: "FTP",
+            userName: "source-user",
+            password: "source-pass",
+            host: "source-host",
+            config: { workingDirectory: "/source/working" },
+            workers: [{ workerId: "worker-1" }, { workerId: "worker-2" }],
           },
         },
         targetPath: null,
-        jobType: 'DATA_TRANSFER',
+        jobType: "DATA_TRANSFER",
       };
-  
-      
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
-  
-      const result = await service.getJobConfig('123');
-  
-      expect(jest.spyOn(jobConfigRepo, 'findOne')).toHaveBeenCalledWith({
-        where: { id: '123' },
+
+      jest
+        .spyOn(jobConfigRepo, "findOne")
+        .mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig("123");
+
+      expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
+        where: { id: "123" },
         relations: {
           sourcePath: {
             fileServer: { config: true, workers: true },
@@ -262,61 +268,63 @@ describe("JobRunService", () => {
           },
         },
       });
-  
+
       expect(result).toEqual({
         connection: {
           sourceCredential: {
-            path: '/source/path',
-            pathId: 'source-id',
-            protocol: 'FTP',
-            username: 'source-user',
-            password: 'source-pass',
-            host: 'source-host',
+            path: "/source/path",
+            pathId: "source-id",
+            protocol: "FTP",
+            username: "source-user",
+            password: "source-pass",
+            host: "source-host",
             workingDirectory: undefined,
           },
         },
-        workers: ['worker-1', 'worker-2'],
-        jobType: 'DATA_TRANSFER',
+        workers: ["worker-1", "worker-2"],
+        jobType: "DATA_TRANSFER",
       });
     });
-  
-    it('should retrieve and process job configuration with targetPathId', async () => {
+
+    it("should retrieve and process job configuration with targetPathId", async () => {
       const mockJobConfig = {
-        id: '123',
+        id: "123",
         sourcePath: {
-          volumePath: '/source/path',
-          id: 'source-id',
+          volumePath: "/source/path",
+          id: "source-id",
           fileServer: {
-            protocol: 'FTP',
-            userName: 'source-user',
-            password: 'source-pass',
-            host: 'source-host',
-            config: { workingDirectory: '/source/working' },
-            workers: [{ workerId: 'worker-1' }, { workerId: 'worker-2' }],
+            protocol: "FTP",
+            userName: "source-user",
+            password: "source-pass",
+            host: "source-host",
+            config: { workingDirectory: "/source/working" },
+            workers: [{ workerId: "worker-1" }, { workerId: "worker-2" }],
           },
         },
         targetPath: {
-          volumePath: '/target/path',
-          id: 'target-id',
+          volumePath: "/target/path",
+          id: "target-id",
           fileServer: {
-            protocol: 'SFTP',
-            userName: 'target-user',
-            password: 'target-pass',
-            host: 'target-host',
-            config: { workingDirectory: '/target/working' },
-            workers: [{ workerId: 'worker-2' }, { workerId: 'worker-3' }],
+            protocol: "SFTP",
+            userName: "target-user",
+            password: "target-pass",
+            host: "target-host",
+            config: { workingDirectory: "/target/working" },
+            workers: [{ workerId: "worker-2" }, { workerId: "worker-3" }],
           },
         },
-        targetPathId: 'target-id',
-        jobType: 'DATA_TRANSFER',
+        targetPathId: "target-id",
+        jobType: "DATA_TRANSFER",
       };
-  
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
-  
-      const result = await service.getJobConfig('123');
-  
-      expect(jest.spyOn(jobConfigRepo, 'findOne')).toHaveBeenCalledWith({
-        where: { id: '123' },
+
+      jest
+        .spyOn(jobConfigRepo, "findOne")
+        .mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig("123");
+
+      expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
+        where: { id: "123" },
         relations: {
           sourcePath: {
             fileServer: { config: true, workers: true },
@@ -326,34 +334,33 @@ describe("JobRunService", () => {
           },
         },
       });
-  
+
       expect(result).toEqual({
         connection: {
           sourceCredential: {
-            path: '/source/path',
-            pathId: 'source-id',
-            protocol: 'FTP',
-            username: 'source-user',
-            password: 'source-pass',
-            host: 'source-host',
-            workingDirectory: undefined
+            path: "/source/path",
+            pathId: "source-id",
+            protocol: "FTP",
+            username: "source-user",
+            password: "source-pass",
+            host: "source-host",
+            workingDirectory: undefined,
           },
           targetCredential: {
-            path: '/target/path',
-            pathId: 'target-id',
-            protocol: 'SFTP',
-            username: 'target-user',
-            password: 'target-pass',
-            host: 'target-host',
-            workingDirectory: undefined
+            path: "/target/path",
+            pathId: "target-id",
+            protocol: "SFTP",
+            username: "target-user",
+            password: "target-pass",
+            host: "target-host",
+            workingDirectory: undefined,
           },
         },
-        workers: ['worker-2'],
-        jobType: 'DATA_TRANSFER',
+        workers: ["worker-2"],
+        jobType: "DATA_TRANSFER",
       });
     });
-  })
-
+  });
 
   describe("createJobRun", () => {
     it("should create a job run if workers exist", async () => {
@@ -362,18 +369,16 @@ describe("JobRunService", () => {
         sourcePath: { volumePath: "src" },
         targetPath: { volumePath: "tgt" },
       } as any;
-      const mockWorkers ={
-          connection: {
-            sourceCredential: {
-              path:"asdfghjk",
-            }
+      const mockWorkers = {
+        connection: {
+          sourceCredential: {
+            path: "asdfghjk",
           },
-        workers: ["worker1", "worker2"]
+        },
+        workers: ["worker1", "worker2"],
       };
 
-      jest
-        .spyOn(service, "getJobConfig")
-        .mockResolvedValue(mockWorkers as any);
+      jest.spyOn(service, "getJobConfig").mockResolvedValue(mockWorkers as any);
       jest
         .spyOn(workerJobRunMapRepo, "create")
         .mockImplementation((data) => data as any);
@@ -396,8 +401,8 @@ describe("JobRunService", () => {
       const mockJob = "1" as any;
 
       jest
-        .spyOn(service, "getJobConfig" )
-        .mockResolvedValue({workers: []} as any);
+        .spyOn(service, "getJobConfig")
+        .mockResolvedValue({ workers: [] } as any);
 
       const loggerSpy = jest.spyOn(service["logger"], "warn");
 
@@ -631,7 +636,6 @@ describe("JobRunService", () => {
     ]);
   });
 
-
   it("should return job runs with calculated stats scanned data as 0 for migration", async () => {
     const filter = { projectId: "project123" };
     const mockJobRuns = [
@@ -751,29 +755,29 @@ describe("JobRunService", () => {
     } as any);
 
     const result = await service.getJobAllRuns(filter);
-  
+
     expect(result).toBeDefined();
   });
-  describe('getJobRun', () => {
-    it('should return job run details when it exists', async () => {
+  describe("getJobRun", () => {
+    it("should return job run details when it exists", async () => {
       // Arrange
-      const jobId = '1';
-      const jobRunId = '123';
-      const jobConfigId = '456';
+      const jobId = "1";
+      const jobRunId = "123";
+      const jobConfigId = "456";
       const jobType = JobType.DISCOVER;
-      const sourceServerName = 'SourceServer';
-      const sourcePath = '/source/path';
-      const sourceProtocol = 'HTTP';
-      const targetServerName = 'TargetServer';
-      const targetPath = '/target/path';
-      const targetProtocol = 'FTP';
+      const sourceServerName = "SourceServer";
+      const sourcePath = "/source/path";
+      const sourceProtocol = "HTTP";
+      const targetServerName = "TargetServer";
+      const targetPath = "/target/path";
+      const targetProtocol = "FTP";
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + 1000);
-      const fileCount = '0';
-      const directoryCount = '0';
-      const totalSize = '0';
+      const fileCount = "0";
+      const directoryCount = "0";
+      const totalSize = "0";
 
-      jest.spyOn(service['jobRunRepo'], 'findOne').mockResolvedValueOnce({
+      jest.spyOn(service["jobRunRepo"], "findOne").mockResolvedValueOnce({
         id: jobRunId,
         status: JobRunStatus.Completed,
         startTime,
@@ -782,7 +786,7 @@ describe("JobRunService", () => {
         tasks: [],
       } as JobRunEntity);
 
-      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValueOnce({
+      jest.spyOn(service["jobConfigRepo"], "findOne").mockResolvedValueOnce({
         id: jobConfigId,
         jobType,
         sourcePath: {
@@ -805,43 +809,47 @@ describe("JobRunService", () => {
         },
         preserveAccessTime: false,
         firstRunAt: new Date().toDateString(),
-        futureScheduleAt: '0 0 0 * * *',
+        futureScheduleAt: "0 0 0 * * *",
         excludeOlderThan: new Date(),
-        excludeFilePatterns: 'test',
+        excludeFilePatterns: "test",
         status: JobStatus.Active,
-        createdBy: 'test',
-        sourcePathId: '1',
-        targetPathId: '2',
+        createdBy: "test",
+        sourcePathId: "1",
+        targetPathId: "2",
         jobRuns: [],
         createdAt: new Date(),
         updatedAt: new Date(),
-        updatedBy: 'test',
+        updatedBy: "test",
       } as unknown as JobConfigEntity);
 
-      jest.spyOn(service['inventoryRepo'], 'createQueryBuilder').mockReturnValueOnce({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValueOnce({
-          fileCount,
-          directoryCount,
-          totalSize,
-        }),
-      } as any);
+      jest
+        .spyOn(service["inventoryRepo"], "createQueryBuilder")
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce({
+            fileCount,
+            directoryCount,
+            totalSize,
+          }),
+        } as any);
       const result = await service.getJobRun(jobId);
-    
+
       expect(service["jobConfigRepo"].findOne).toHaveBeenCalledWith({
         where: { id: jobConfigId },
         relations: [
-          'jobRuns',
-          'sourcePath',
-          'sourcePath.fileServer',
-          'sourcePath.fileServer.config',
-          'targetPath',
-          'targetPath.fileServer',
-          'targetPath.fileServer.config',
+          "jobRuns",
+          "sourcePath",
+          "sourcePath.fileServer",
+          "sourcePath.fileServer.config",
+          "targetPath",
+          "targetPath.fileServer",
+          "targetPath.fileServer.config",
         ],
       });
-      expect(service["inventoryRepo"].createQueryBuilder).toHaveBeenCalledWith('inventory');
+      expect(service["inventoryRepo"].createQueryBuilder).toHaveBeenCalledWith(
+        "inventory"
+      );
       expect(result).toEqual({
         jobRunId,
         jobConfigId,
@@ -863,30 +871,30 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
-        totalMigratedSize: '0',
+        totalMigratedSize: "0",
         errors: [],
         tasks: [],
       });
     });
-    it('should return job run details when it exists with stats', async () => {
+    it("should return job run details when it exists with stats", async () => {
       // Arrange
-      const jobId = '1';
-      const jobRunId = '123';
-      const jobConfigId = '456';
+      const jobId = "1";
+      const jobRunId = "123";
+      const jobConfigId = "456";
       const jobType = JobType.MIGRATE;
-      const sourceServerName = 'SourceServer';
-      const sourcePath = '/source/path';
-      const sourceProtocol = 'HTTP';
-      const targetServerName = 'TargetServer';
-      const targetPath = '/target/path';
-      const targetProtocol = 'FTP';
+      const sourceServerName = "SourceServer";
+      const sourcePath = "/source/path";
+      const sourceProtocol = "HTTP";
+      const targetServerName = "TargetServer";
+      const targetPath = "/target/path";
+      const targetProtocol = "FTP";
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + 1000);
-      const fileCount = '0';
-      const directoryCount = '0';
-      const totalSize = '0';
+      const fileCount = "0";
+      const directoryCount = "0";
+      const totalSize = "0";
 
-      jest.spyOn(service['jobRunRepo'], 'findOne').mockResolvedValueOnce({
+      jest.spyOn(service["jobRunRepo"], "findOne").mockResolvedValueOnce({
         id: jobRunId,
         status: JobRunStatus.Completed,
         startTime,
@@ -895,7 +903,7 @@ describe("JobRunService", () => {
         tasks: [],
       } as JobRunEntity);
 
-      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValueOnce({
+      jest.spyOn(service["jobConfigRepo"], "findOne").mockResolvedValueOnce({
         id: jobConfigId,
         jobType,
         sourcePath: {
@@ -918,43 +926,47 @@ describe("JobRunService", () => {
         },
         preserveAccessTime: false,
         firstRunAt: new Date().toDateString(),
-        futureScheduleAt: '0 0 0 * * *',
+        futureScheduleAt: "0 0 0 * * *",
         excludeOlderThan: new Date(),
-        excludeFilePatterns: 'test',
+        excludeFilePatterns: "test",
         status: JobStatus.Active,
-        createdBy: 'test',
-        sourcePathId: '1',
-        targetPathId: '2',
+        createdBy: "test",
+        sourcePathId: "1",
+        targetPathId: "2",
         jobRuns: [],
         createdAt: new Date(),
         updatedAt: new Date(),
-        updatedBy: 'test',
+        updatedBy: "test",
       } as unknown as JobConfigEntity);
 
-      jest.spyOn(service['inventoryRepo'], 'createQueryBuilder').mockReturnValueOnce({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValueOnce({
-          fileCount,
-          directoryCount,
-          totalSize,
-        }),
-      } as any);
+      jest
+        .spyOn(service["inventoryRepo"], "createQueryBuilder")
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce({
+            fileCount,
+            directoryCount,
+            totalSize,
+          }),
+        } as any);
       const result = await service.getJobRun(jobId);
-    
+
       expect(service["jobConfigRepo"].findOne).toHaveBeenCalledWith({
         where: { id: jobConfigId },
         relations: [
-          'jobRuns',
-          'sourcePath',
-          'sourcePath.fileServer',
-          'sourcePath.fileServer.config',
-          'targetPath',
-          'targetPath.fileServer',
-          'targetPath.fileServer.config',
+          "jobRuns",
+          "sourcePath",
+          "sourcePath.fileServer",
+          "sourcePath.fileServer.config",
+          "targetPath",
+          "targetPath.fileServer",
+          "targetPath.fileServer.config",
         ],
       });
-      expect(service["inventoryRepo"].createQueryBuilder).toHaveBeenCalledWith('inventory');
+      expect(service["inventoryRepo"].createQueryBuilder).toHaveBeenCalledWith(
+        "inventory"
+      );
       expect(result).toEqual({
         jobRunId,
         jobConfigId,
@@ -976,51 +988,50 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0",
-        totalMigratedSize: '',
+        totalMigratedSize: "",
         errors: [],
         tasks: [],
       });
     });
   });
 
-  describe('service.covertBytes', () => {
-    it('should return bytes for values less than 1024', () => {
-        expect(service.covertBytes(500)).toBe('500 B');
-        expect(service.covertBytes(0)).toBe('0 B');
+  describe("service.covertBytes", () => {
+    it("should return bytes for values less than 1024", () => {
+      expect(service.covertBytes(500)).toBe("500 B");
+      expect(service.covertBytes(0)).toBe("0 B");
     });
 
-    it('should return kilobytes for values between 1024 and 1 MB', () => {
-        expect(service.covertBytes(1024)).toBe('1.00 KB');
-        expect(service.covertBytes(1536)).toBe('1.50 KB');
+    it("should return kilobytes for values between 1024 and 1 MB", () => {
+      expect(service.covertBytes(1024)).toBe("1.00 KB");
+      expect(service.covertBytes(1536)).toBe("1.50 KB");
     });
 
-    it('should return megabytes for values between 1 MB and 1 GB', () => {
-        expect(service.covertBytes(1048576)).toBe('1.00 MB'); // 1 MB
-        expect(service.covertBytes(2097152)).toBe('2.00 MB'); // 2 MB
-        expect(service.covertBytes(1572864)).toBe('1.50 MB'); // 1.5 MB
+    it("should return megabytes for values between 1 MB and 1 GB", () => {
+      expect(service.covertBytes(1048576)).toBe("1.00 MB"); // 1 MB
+      expect(service.covertBytes(2097152)).toBe("2.00 MB"); // 2 MB
+      expect(service.covertBytes(1572864)).toBe("1.50 MB"); // 1.5 MB
     });
 
-    it('should return gigabytes for values between 1 GB and 1 TB', () => {
-        expect(service.covertBytes(1073741824)).toBe('1.00 GB'); // 1 GB
-        expect(service.covertBytes(2147483648)).toBe('2.00 GB'); // 2 GB
-        expect(service.covertBytes(1610612736)).toBe('1.50 GB'); // 1.5 GB
+    it("should return gigabytes for values between 1 GB and 1 TB", () => {
+      expect(service.covertBytes(1073741824)).toBe("1.00 GB"); // 1 GB
+      expect(service.covertBytes(2147483648)).toBe("2.00 GB"); // 2 GB
+      expect(service.covertBytes(1610612736)).toBe("1.50 GB"); // 1.5 GB
     });
 
-    it('should return terabytes for values between 1 TB and 1 PB', () => {
-        expect(service.covertBytes(1099511627776)).toBe('1.00 TB'); // 1 TB
-        expect(service.covertBytes(2199023255552)).toBe('2.00 TB'); // 2 TB
-        expect(service.covertBytes(1649267441664)).toBe('1.50 TB'); // 1.5 TB
+    it("should return terabytes for values between 1 TB and 1 PB", () => {
+      expect(service.covertBytes(1099511627776)).toBe("1.00 TB"); // 1 TB
+      expect(service.covertBytes(2199023255552)).toBe("2.00 TB"); // 2 TB
+      expect(service.covertBytes(1649267441664)).toBe("1.50 TB"); // 1.5 TB
     });
 
-    it('should return petabytes for values greater than or equal to 1 PB', () => {
-        expect(service.covertBytes(1125899906842624)).toBe('1.00 PB'); // 1 PB
-        expect(service.covertBytes(2251799813685248)).toBe('2.00 PB'); // 2 PB
-        expect(service.covertBytes(1693247244558336)).toBe('1.50 PB'); // 1.5 PB
+    it("should return petabytes for values greater than or equal to 1 PB", () => {
+      expect(service.covertBytes(1125899906842624)).toBe("1.00 PB"); // 1 PB
+      expect(service.covertBytes(2251799813685248)).toBe("2.00 PB"); // 2 PB
+      expect(service.covertBytes(1693247244558336)).toBe("1.50 PB"); // 1.5 PB
     });
 
-    it('should handle very large numbers gracefully', () => {
-        expect(service.covertBytes(1125899906842624000)).toBe('1000.00 PB'); // 1000 PB
+    it("should handle very large numbers gracefully", () => {
+      expect(service.covertBytes(1125899906842624000)).toBe("1000.00 PB"); // 1000 PB
     });
   });
-
 });
