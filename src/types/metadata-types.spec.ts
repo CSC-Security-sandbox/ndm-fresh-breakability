@@ -33,10 +33,20 @@ describe('Metadata Types', () => {
   });
 
   it('should create and serialize DMError', () => {
-    const error = new DMError('file1', { name: 'error1', message: 'error message' });
+    const taskError={
+      taskId: 'taskId',
+      errorCode: '500',
+      errorMessage: 'errorMessage',
+    }
+    const operationError={
+      operationId: 'operationId',
+      errorCode: '500',
+      errorMessage: 'errorMessage',
+    }
+    const error = new DMError(taskError, operationError);
     const serialized = error.serialize();
     const deserialized: DMError = DMError.deserialize(serialized);
-    expect(deserialized.file).toBe('file1');
+    expect(deserialized.operation.errorCode).toBe('500');
   });
 
 });

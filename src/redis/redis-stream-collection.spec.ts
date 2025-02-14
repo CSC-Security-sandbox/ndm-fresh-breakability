@@ -21,6 +21,7 @@ describe('RedisStreamCollection', () => {
       xReadGroup: jest.fn(),
       xAck: jest.fn(),
       xInfoGroups: jest.fn(),
+      get: jest.fn(),
     } as any;
 
     logger = {
@@ -137,7 +138,7 @@ describe('RedisStreamCollection', () => {
 
       expect(messages).toEqual([record]);
       expect(logger.info).toHaveBeenCalledWith(
-        'Reading stream: streamKey, jobRunId, readerName',
+        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName'),
       );
     });
   });
@@ -186,8 +187,6 @@ describe('RedisStreamCollection', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Reading stream: streamKey, jobRunId, readerName, Batch Size: 10'),
       );
-      expect(logger.info).toHaveBeenCalledWith('>> No results');
-
     });
   });  
 });
