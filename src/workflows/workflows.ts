@@ -8,6 +8,6 @@ export {DiscoveryJobWorkflow} from '../workflows/discovery/discovery-job-workflo
 export {DiscoveryWorkflow} from '../workflows/discovery/discovery-workflow'
 
 // export {MigrationWorkflow} from '../workflows/migration/core/migrate.workflow'
-export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
-export {SetupMigratorWorkFlow} from '../workflows/migration/setup/setup-migrator.workflow'
-export {MigrationWorkflow} from '../workflows/migration/initiator/migration-job-workflow'
+// export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
+// export {SetupMigratorWorkFlow} from '../workflows/migration/setup/setup-migrator.workflow'
+// export {MigrationWorkflow} from '../workflows/migration/initiator/migration-job-workflow'

@@ -1,6 +1,6 @@
 import { WorkFlows } from "src/work-manager/work-manager.types";
 import { ValidateConnectionsWorkflow } from "./validate-connection/validate-connection.workflow";
-import { ListPathsWorkflow } from "./workflows";
+import { DiscoveryWorkflow, ListPathsWorkflow } from "./workflows";
 
 export class WorkflowManager {
   static createWorkflowInstance(name: string): any {
@@ -9,6 +9,8 @@ export class WorkflowManager {
         return ValidateConnectionsWorkflow
       case WorkFlows.LIST_PATHS:
         return ListPathsWorkflow
+      case WorkFlows.DISCOVERY:
+        return DiscoveryWorkflow
       default:
         throw new Error(`Workflow with ${name} not found`);
     }

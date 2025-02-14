@@ -74,8 +74,6 @@ export interface ProcessFolderReadParams {
     commandId: string;
     excludePattern: string[];
     taskId;
-    jobContext:JobContext;
-    client:RedisClientType;
 }
 
 export interface FileEntry {

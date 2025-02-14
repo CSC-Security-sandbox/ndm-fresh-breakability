@@ -69,9 +69,7 @@ async function processTask(args: ProcessTaskArgs) {
             workerId: ids.workerId,
             commandId: cmd.commandId || 'test',
             excludePattern: excludeFilePatterns?.split(','),
-            taskId: ids.taskId,
-            jobContext,
-            client: redisClient,
+            taskId: ids.taskId
           });
           taskStats.numFiles =
             taskStats.numFiles +
@@ -118,14 +116,18 @@ export async function processFolderRead({
   commandId,
   excludePattern,
   taskId,
-  jobContext,
-  client,
 }: ProcessFolderReadParams) {
   const payload: any = {
     accumulatedResult: [],
     unScannedPaths: [],
   };
   const ids = { jobRunId, workerId, transactionId: '' };
+  let redisClient = await RedisUtils.getClient();
+  console.log(`Redis Client: ${redisClient}`);
+  if(!redisClient.isOpen) redisClient = await redisClient.connect();
+  console.log(`Redis Client connect: ${redisClient}`);
+  const contextProvider = JobContextFactory.getProvider('redis', redisClient);
+  let jobContext = await contextProvider.getJobContext(jobRunId);
   for (const file of files) {
     try{
     const fullPath = path.join(chunkPath, file);
@@ -165,7 +167,7 @@ export async function processFolderRead({
     const dmError = new DMError(file, error);
     const id = await jobContext.appendToErrorList(dmError);
     jobContext.errorsInfo.lastId = id;
-    client.set(jobRunId, jobContext.serialize());
+    // client.set(jobRunId, jobContext.serialize());
     return {
       traceId: jobRunId,
       status: 'error',
@@ -215,7 +217,7 @@ export async function processFolderRead({
       log(jobRunId, `***************Appending to file list***************`);
     }
   });
-  client.set(jobRunId, jobContext.serialize());
+  // client.set(jobRunId, jobContext.serialize());
   return { payload };
 }
 
