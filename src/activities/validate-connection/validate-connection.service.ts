@@ -1,9 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { WorkersConfig } from 'src/config/app.config';
-import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
-import { Protocol } from 'src/protocols/protocol/protocol';
-import { Logger } from 'src/logger/logger.service';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from 'src/logger/logger.service';
+import { Protocol } from 'src/protocols/protocol/protocol';
+import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 
 @Injectable()
 export class ValidateConnectionActivity {
@@ -17,7 +16,6 @@ export class ValidateConnectionActivity {
   }
 
   async validate(traceId: string, protocolType: string, payload: any, feature: any): Promise<any> {
-
     this.logger.info(
       `[${traceId}] Validating connection for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
     );
