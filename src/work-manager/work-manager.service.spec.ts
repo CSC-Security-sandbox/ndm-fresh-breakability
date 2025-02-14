@@ -7,7 +7,7 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigService } from '@nestjs/config';
-import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 describe('WorkManagerService', () => {
@@ -66,41 +66,97 @@ describe('WorkManagerService', () => {
 
   describe('getConfiguration', () => {
     it('should return existing worker configuration if found', async () => {
+      const mockWorkerMetaConfig = {
+        metaConfig: [{ key: 'worker_config' }],
+      };
+
+      const mockJobRunConfig = [
+        { jobrunmetaconfig: { key: 'job_run_config' } },
+      ];
+
+      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(
+        mockWorkerMetaConfig,
+      );
+
       const mockQueryBuilder = {
         leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({
-          workermetaconfig: [{ key: 'worker_config' }],
-          jobrunmetaconfig: [{ key: 'job_run_config' }],
-        }),
+        getRawMany: jest.fn().mockResolvedValue(mockJobRunConfig),
       };
 
-      (workerEntityMock.createQueryBuilder as jest.Mock).mockReturnValue(mockQueryBuilder);
+      jobRunEntityMock.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQueryBuilder);
+
+      (jobRunEntityMock.createQueryBuilder as jest.Mock).mockReturnValue(
+        mockQueryBuilder,
+      );
+
       const workerId = '123';
       const projectId = 'projectId';
       const result = await service.getConfiguration(workerId, '', projectId);
-      expect(result).toEqual([{ key: 'worker_config' }, { key: 'job_run_config' }]);
+
+      expect(result).toEqual([
+        { key: 'worker_config' },
+        { key: 'job_run_config' },
+      ]);
+      expect(workerEntityMock.findOne).toHaveBeenCalledWith({
+        where: { workerId: workerId },
+      });
       expect(mockQueryBuilder.leftJoin).toHaveBeenCalled();
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        'mapping.workerId = :id',
+        { id: workerId },
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'jobrun.status <> :status',
+        { status: JobRunStatus.Completed },
+      );
     });
 
     it('should return existing worker configuration if found', async () => {
+      const mockWorkerMetaConfig = {
+        metaConfig: [{ key: 'worker_config' }],
+      };
+
+      const mockJobRunConfig = [];
+
+      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(
+        mockWorkerMetaConfig,
+      );
+
       const mockQueryBuilder = {
         leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({
-          workermetaconfig: undefined,
-          jobrunmetaconfig: undefined,
-        }),
+        getRawMany: jest.fn().mockResolvedValue(mockJobRunConfig),
       };
 
-      (workerEntityMock.createQueryBuilder as jest.Mock).mockReturnValue(mockQueryBuilder);
+      jobRunEntityMock.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQueryBuilder);
+
       const workerId = '123';
       const projectId = 'projectId';
       const result = await service.getConfiguration(workerId, '', projectId);
+
       expect(result).toBeDefined();
+      expect(result).toEqual([{ key: 'worker_config' }]);
+      expect(workerEntityMock.findOne).toHaveBeenCalledWith({
+        where: { workerId: workerId },
+      });
       expect(mockQueryBuilder.leftJoin).toHaveBeenCalled();
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        'mapping.workerId = :id',
+        { id: workerId },
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'jobrun.status <> :status',
+        { status: JobRunStatus.Completed },
+      );
     });
 
     it('should create a new worker if not found and return its configuration', async () => {
@@ -240,7 +296,7 @@ describe('WorkManagerService', () => {
     const expectedWorkerConfiguration = workerIds.map((worker) => ({
       configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
       dynamicTaskQueue: true,
-      taskQueueId: `${jobRunId}-taskQueue`,
+      taskQueueId: `${jobRunId}`,
       workerId: worker,
     }));
 
