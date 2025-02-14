@@ -6,7 +6,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkerConfiguration } from 'src/constants/types';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
@@ -35,26 +35,28 @@ export class WorkManagerService {
     projectId: string,
   ): Promise<WorkerConfiguration[]> {
     try {
-      const status = JobRunStatus.Completed;
       const workerMetaConfig = await this.workerEntity.findOne({
         where: { workerId: id },
       });
       if (workerMetaConfig) {
-        const jobRunConfig = await this.jobRunRepo
-          .createQueryBuilder('jobrun')
-          .leftJoin(
-            'worker_jobrun_mapping',
-            'mapping',
-            'mapping.jobRunId = jobrun.id',
-          )
-          .where('mapping.workerId = :id', { id })
-          .andWhere('jobrun.status <> :status', { status })
-          .select(['jobrun.metaConfig AS jobRunMetaConfig'])
-          .getRawMany();
-        const mergedConfigs = [
-          ...workerMetaConfig.metaConfig,
-          ...jobRunConfig.map((data) => data.jobrunmetaconfig),
-        ];
+        const jobRunConfig = await this.jobRunRepo.find({
+          where: {
+            status: Not(JobRunStatus.Completed),
+            workerMap: {
+              workerId: id,
+            },
+            metaConfig: Not(IsNull())
+          },
+          relations: {
+            workerMap: true
+          },
+          select: {
+            workerMap: false,
+            metaConfig: true
+          }
+        })
+        let mergedConfigs = [ ...workerMetaConfig.metaConfig];
+        jobRunConfig.forEach((data) => mergedConfigs = [...mergedConfigs, ...data.metaConfig])
         return mergedConfigs;
       }
       this.logger.warn(`project ID : ${projectId}`);
