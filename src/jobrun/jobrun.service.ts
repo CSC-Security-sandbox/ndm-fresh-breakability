@@ -684,8 +684,19 @@ export class JobRunService {
     }
   }
 
-  updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
-    return this.jobRunRepo.update({ id: jobRunId }, { status: status, endTime: new Date() });
-  }
+  async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
+    const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+    });
+    if (!jobRunDetails)
+      throw new Error(`Job run with id ${jobRunId} not found`);
+    this.jobConfigRepo.update(
+      { id: jobRunDetails.jobConfigId },
+      { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+    );
+    return this.jobRunRepo.update(
+      { id: jobRunId },
+      { status: status, endTime: new Date() }
+    );  }
 
 }
