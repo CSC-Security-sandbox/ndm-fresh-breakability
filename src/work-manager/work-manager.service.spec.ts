@@ -4,7 +4,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { of, throwError } from 'rxjs';
 import { Logger } from 'src/logger/logger.service';
-import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 
@@ -35,7 +34,6 @@ describe('WorkManagerService', () => {
   let httpService: HttpService;
   let configService: ConfigService;
   let logger: Logger;
-  let workerOptionsFactory: typeof WorkerOptionsFactory;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -84,7 +82,6 @@ describe('WorkManagerService', () => {
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<ConfigService>(ConfigService);
     logger = module.get<Logger>(Logger);
-    workerOptionsFactory = WorkerOptionsFactory;
   });
 
   it('should be defined', () => {

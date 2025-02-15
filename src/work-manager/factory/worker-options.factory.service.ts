@@ -30,6 +30,8 @@ export class WorkerOptionsService {
             discoveryStatusUpdate: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
             discoveryProcess: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
             scanActivity: this.discoveryScanActivity.scanActivity.bind(this.discoveryScanActivity),
+            publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
+
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, undefined);

@@ -1,4 +1,4 @@
-import { JobContext } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { RedisClientType } from "redis";
 
 export interface TaskPayload {
@@ -26,7 +26,7 @@ export interface ScanCommands {
 }
 
 export interface DiscoveryPayload {
-  data?: TaskPayload;
+  data?: Task;
 }
 
 export interface WorkerMessage {

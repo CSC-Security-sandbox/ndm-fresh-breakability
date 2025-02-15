@@ -6,6 +6,7 @@ import { RedisService } from 'src/redis/redis.service';
 import * as path from 'path';
 import * as fs from 'fs';
 import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { OperationStatus, TaskStatus } from './enums';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -16,6 +17,13 @@ export class DiscoveryScanActivity {
 
   async scanActivity(payload: DiscoveryPayload, traceId: string): Promise<any> {
     const jobContext: JobContext = await this.redisService.getJobContext(traceId);
+    payload.data.status=TaskStatus.Running
+    payload.data.commands.map((cmd: any) => {
+      cmd.status = OperationStatus.IN_PROCESS;
+    });
+    const id = await jobContext.appendToTaskList(payload.data);
+    jobContext.tasksInfo.lastId = id;
+    await  this.redisService.setJobContext(traceId, jobContext);
     return await this.discovery(payload, jobContext);
   }
 
@@ -66,12 +74,16 @@ export class DiscoveryScanActivity {
           const batch = inventoryData.splice(0, batchSize);
           await this.processInventory(batch, jobContext)
         }
-        return { ...cmd, ops: { 0: { ...cmd.ops[0], status: 'COMPLETED' } } };
+        return { ...cmd, ops: { 0: { ...cmd.ops[0], status: TaskStatus.Completed } } };
       } catch (error) {
-        return { ...cmd, ops: { 0: { ...cmd.ops[0], status: 'ERROR' } } };
+        return { ...cmd, ops: { 0: { ...cmd.ops[0], status: TaskStatus.Errored} } };
       }
     }));
     await this.processInventory(inventoryData, jobContext)
+    data.data.status = TaskStatus.Completed;
+    const taskId = await jobContext.appendToTaskList(data.data);
+    jobContext.tasksInfo.lastId = taskId;
+    this.redisService.setJobContext(data.data.jobRunId, jobContext);
     return 'success';
   }
 
