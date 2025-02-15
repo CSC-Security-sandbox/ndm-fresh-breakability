@@ -13,6 +13,14 @@ import { RedisConsumerService } from "./redis-consumer.service";
 const args = process.argv.slice(2);
 const [jobRunId, readerName, consumerType] = args;
 
+
+export enum ConsumerType {
+  files='files',
+  directories='directories',
+  tasks='tasks',
+  updatedTask = 'updatedTask'
+}
+
 (async () => {
   const app = await NestFactory.create(AppModule);
   const inventoryService = app.get(InventoryService);
@@ -38,6 +46,7 @@ const [jobRunId, readerName, consumerType] = args;
     errors: jobContext.groupReadErrors(readerName, 500),
     tasks: jobContext.readTasks(readerName),
     taskstats: jobContext.groupReadTaskStats(readerName,500),
+    updatedTask: jobContext.readUpdatedTaskInfo(readerName)
   };
 
   const reader = readerMap[consumerType];
@@ -51,7 +60,7 @@ const [jobRunId, readerName, consumerType] = args;
         //update the dob as completed and also stop the consumer.
         await axios.patch(`${jobServiceUrl}/${jobRunId}/COMPLETED`);
         console.log(`[${jobRunId}] Discovery status updated to Completed`);
-        await redisService.stopConsumer(jobRunId,consumerType);
+        Object.keys(ConsumerType).forEach(async (consumer) => await redisService.stopConsumer(jobRunId, consumer))
         console.log(`[${jobRunId}] Consumer stopped`);
         const payload = {
           jobRunIds : [jobRunId],
@@ -70,6 +79,10 @@ const [jobRunId, readerName, consumerType] = args;
       await inventoryService.saveTasks(task);
     },
     taskstats: async (taskStat) => {
+    },
+    updatedTask: async (task: Task) => {
+      // await inventoryService.saveTasks(task);
+      
     },
   };
     for await (const data of reader) {
