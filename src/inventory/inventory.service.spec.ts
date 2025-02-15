@@ -63,7 +63,7 @@ describe('InventoryService', () => {
   describe('createInventory', () => {
     it('should save inventory records successfully', async () => {
       mockInventoryRepo.create.mockReturnValueOnce(mockPayload.data);
-      await service.createInventory(mockPayload.data,'8092ce59-5dfd-4d2f-939a-af51d3580238');
+      await service.createInventory(mockPayload.data,'8092ce59-5dfd-4d2f-939a-af51d3580238','12234');
 
       expect(mockInventoryRepo.create).toHaveBeenCalledWith(mockPayload.data);
       expect(mockInventoryRepo.insert).toHaveBeenCalledWith(mockPayload.data);
@@ -73,7 +73,7 @@ describe('InventoryService', () => {
       mockInventoryRepo.create.mockReturnValueOnce(mockPayload.data);
       mockInventoryRepo.insert.mockRejectedValueOnce(new Error('Insert failed'));
 
-      await expect(service.createInventory(mockPayload.data,'8092ce59-5dfd-4d2f-939a-af51d3580238')).rejects.toThrow(
+      await expect(service.createInventory(mockPayload.data,'8092ce59-5dfd-4d2f-939a-af51d3580238','1111')).rejects.toThrow(
         'Error while saving inventory records to the database',
       );
 

@@ -48,9 +48,9 @@ export class InventoryService {
         });
     }
     
-    async createInventory(data: CreateInventory[],jobRunId: string) {
+    async createInventory(data: CreateInventory[],jobRunId: string,pathId: string) {
         try {
-            const mappedData = this.mapSourceToTarget(data[0],jobRunId);
+            const mappedData = this.mapSourceToTarget(data[0],jobRunId,pathId);
             const inventoryRecords = this.inventoryRepo.create(mappedData);
              await this.inventoryRepo.insert(inventoryRecords);
         } catch (err) {
@@ -58,7 +58,7 @@ export class InventoryService {
             throw new Error('Error while saving inventory records to the database');
         }
     }
-     mapSourceToTarget(file: any,jobRunId:string): any {
+     mapSourceToTarget(file: any,jobRunId:string,pathId:string): any {
         return {
           path: file.path,
           isDirectory: file.isDirectory,
@@ -69,14 +69,15 @@ export class InventoryService {
           fileName: file.fileName,
           uid: file.uid.toString(),
           gid: file.gid.toString(),
-          fileSize: BigInt(file.size),
+          fileSize: BigInt(file.fileSize),
           extension: file.extension,
           fileType: file.fileType as any,
-          modifiedTime: file.mtime.toISOString(),
-          accessTime: file.atime.toISOString(),
+          modifiedTime: file.modifiedTime,
+          accessTime: file.accessTime,
           permission: file.permission,
           jobRunId: jobRunId, 
-          birthTime: file.ctime.toISOString(),
+          birthTime: file.birthTime,
+          pathId: pathId,
         };
       }
 
