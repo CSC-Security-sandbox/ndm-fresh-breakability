@@ -89,7 +89,7 @@ export class RedisStreamCollection<T extends Serializable>
     while (true) {
       const results = await this.redisClient.xRead(
         [{ key: this.streamKey, id: lastReadId }],
-        { COUNT: 1, BLOCK: 5000 },
+        { COUNT: 1, BLOCK: 500 },
       );
       this.logger.info(`Results in read>>>>: ${JSON.stringify(results)}`);
       if (results) {
@@ -122,7 +122,7 @@ export class RedisStreamCollection<T extends Serializable>
         this.jobRunId,
         readerName,
         [{ key: this.streamKey, id: '>' }],
-        { COUNT: 1, BLOCK: 5000 },
+        { COUNT: 1, BLOCK: 500 },
       );
   
       if (results) {

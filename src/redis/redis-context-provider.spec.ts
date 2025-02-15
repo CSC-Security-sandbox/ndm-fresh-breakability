@@ -75,6 +75,7 @@ describe('RedisJobContextProvider', () => {
         errorsInfo: { numMessages: 2, lastId: '3-0' },
         tasksInfo: { numMessages: 8, lastId: '4-0' },
         taskStats: { numMessages: 3, lastId: '5-0' },
+        updatedTaskInfo: { numMessages: 1, lastId: '6-0' },
       });
       redisClient.get.mockResolvedValue(mockValue);
 
