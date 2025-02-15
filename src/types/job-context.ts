@@ -83,6 +83,10 @@ export abstract class JobContext {
     return await this.errorsInfo.append(errorInfo);
   }
 
+  async appendToUpdatedTaskList(task: Task): Promise<string> {
+    return await this.updatedTaskInfo.append(task);
+  }
+
   async *readFiles(readerName: string): AsyncGenerator<FileInfo> {
     yield* this.filesInfo.read(readerName);
   }

@@ -25,3 +25,4 @@ export interface ErrorCollection extends StreamCollection<DMError> {}
 export interface DirectoryCollection extends StreamCollection<FileInfo> {}
 export interface TaskStatsCollection extends StreamCollection<TaskStats> {}
 export interface TaskCollection extends StreamCollection<Task> {}
+export interface UpdatedTaskCollection extends StreamCollection<Task> {}

@@ -5,6 +5,7 @@ import {
   FileCollection,
   TaskCollection,
   TaskStatsCollection,
+  UpdatedTaskCollection,
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
@@ -102,6 +103,26 @@ export class RedisTaskStatsCollection
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'tasks-stats'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisUpdatedTasksCollection
+  extends RedisStreamCollection<Task>
+  implements UpdatedTaskCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'tasks-updated'),
       numMessages,
       lastId,
       redisClient,
