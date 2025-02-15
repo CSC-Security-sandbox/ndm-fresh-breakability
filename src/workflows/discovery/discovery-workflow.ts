@@ -76,7 +76,7 @@ const discoveryResponse:any = await Promise.all(
           },
         ],
         workflowId: `DiscoveryJobWorkflow-${traceId}`,
-        taskQueue: `${workerId}-TaskQueue`,
+        taskQueue: `${traceId}-TaskQueue`,
         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       })
