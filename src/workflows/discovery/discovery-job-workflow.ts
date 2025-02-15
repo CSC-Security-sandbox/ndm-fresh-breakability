@@ -29,6 +29,7 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(options)}`);
 
   try {
+    await updateDiscoveryStatus(traceId, 'RUNNING');
     while (true) {
       let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {

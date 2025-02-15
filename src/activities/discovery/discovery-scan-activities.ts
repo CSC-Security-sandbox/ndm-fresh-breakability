@@ -21,8 +21,8 @@ export class DiscoveryScanActivity {
     payload.data.commands.map((cmd: any) => {
       cmd.status = OperationStatus.IN_PROCESS;
     });
-    const id = await jobContext.appendToTaskList(payload.data);
-    jobContext.tasksInfo.lastId = id;
+    const id = await jobContext.appendToUpdatedTaskList(payload.data);
+    jobContext.updatedTaskInfo.lastId = id;
     await  this.redisService.setJobContext(traceId, jobContext);
     return await this.discovery(payload, jobContext);
   }
@@ -35,11 +35,10 @@ export class DiscoveryScanActivity {
             const id = await jobContext.appendToDirList(item);
             jobContext.dirsInfo.lastId = id;
             jobContext.dirsInfo.numMessages++;
-          } else {
-            const id = await jobContext.appendToFileList(item);
-            jobContext.filesInfo.lastId = id;
-            jobContext.filesInfo.numMessages++;
           }
+          const id = await jobContext.appendToFileList(item);
+          jobContext.filesInfo.lastId = id;
+          jobContext.filesInfo.numMessages++;
         })
       );
       return result;
@@ -81,8 +80,8 @@ export class DiscoveryScanActivity {
     }));
     await this.processInventory(inventoryData, jobContext)
     data.data.status = TaskStatus.Completed;
-    const taskId = await jobContext.appendToTaskList(data.data);
-    jobContext.tasksInfo.lastId = taskId;
+    const taskId = await jobContext.appendToUpdatedTaskList(data.data);
+    jobContext.updatedTaskInfo.lastId = taskId;
     this.redisService.setJobContext(data.data.jobRunId, jobContext);
     return 'success';
   }

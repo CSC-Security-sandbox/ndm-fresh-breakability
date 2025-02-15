@@ -79,11 +79,11 @@ export class WorkManagerService {
         if (this.loadingConfigs) return;
         this.loadingConfigs = true;
         try {
-            // const accessToken = await this.getAccessToken();
-            // if (!accessToken) throw new Error('Access token is null');
+            const accessToken = await this.getAccessToken();
+            if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
-                this.httpService.get(`${this.workerConfigUrl}/config/${this.workerId}`, {
-                    // headers: { Authorization: `Bearer ${''}` },
+                this.httpService.get(`${this.workerConfigUrl}/config`, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
                 }).pipe(
                     retry({
                         count: 3,
