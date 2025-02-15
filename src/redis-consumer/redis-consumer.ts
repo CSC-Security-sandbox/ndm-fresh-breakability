@@ -63,8 +63,8 @@ export enum ConsumerType {
         Object.keys(ConsumerType).forEach(async (consumer) => await redisService.stopConsumer(jobRunId, consumer))
         console.log(`[${jobRunId}] Consumer stopped`);
         const payload = {
-          jobRunIds : [jobRunId],
-          reportType: 'DISCOVER'
+          "jobRunId" : jobRunId,
+          "report-type" : 'DISCOVER'
         }
         await axios.post(`${reportServiceUrl}/inventory/generate-report`,payload);
       }else
