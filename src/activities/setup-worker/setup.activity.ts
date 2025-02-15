@@ -41,13 +41,8 @@ export class SetupActivityService {
         await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
         return { jobRunId, status: 'success', protocolType, hostname, workerId:this.workerId, message: `Worker ${this.workerId} successfully set up.` };
     } catch (error) {
-      this.logger.error(`[${jobRunId}] - Setup failed: ${error.message}`);
-      return { jobRunId, status: 'error', workerId: this.workerId, message: `Setup failed: ${error.message}` };
-    } finally {
-      if (redisClient?.isOpen) {
-        await redisClient.quit();
-        this.logger.log(`[${jobRunId}] - Redis client connection closed.`);
-      }
+        this.logger.error(`[${jobRunId}] - Setup failed: ${error.message}`);
+        return { jobRunId, status: 'error', workerId: this.workerId, message: `Setup failed: ${error.message}` };
     }
   }
 
