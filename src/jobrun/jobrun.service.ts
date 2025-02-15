@@ -337,8 +337,9 @@ export class JobRunService {
       taskType: operationsTypeToTaskType(operation.operationType),
       status: TaskStatus.Pending
   });
+   const savedTask = await this.taskRepo.save(taskEntity)
    await this.operationRepo.update({id: operation.id}, {taskId: taskEntity.id, status: OperationStatus.READY});
-   const task =  this.buildTaskPaylod(taskEntity,jobRunConfig,operation);
+   const task =  this.buildTaskPaylod(savedTask,jobRunConfig,operation);
    return task;
   }
 
@@ -688,15 +689,21 @@ export class JobRunService {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
     });
-    if (!jobRunDetails)
-      throw new Error(`Job run with id ${jobRunId} not found`);
-    this.jobConfigRepo.update(
-      { id: jobRunDetails.jobConfigId },
-      { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-    );
-    return this.jobRunRepo.update(
-      { id: jobRunId },
-      { status: status, endTime: new Date() }
-    );  }
-
+    if (!jobRunDetails) throw new Error(`Job run with id ${jobRunId} not found`);
+    if(status !== JobRunStatus.Running) {
+      this.jobConfigRepo.update(
+        { id: jobRunDetails.jobConfigId },
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+      );
+      return this.jobRunRepo.update(
+        { id: jobRunId },
+        { status: status, endTime: new Date() }
+      );
+    } else {
+      return this.jobRunRepo.update(
+        { id: jobRunId },
+        { status: status }
+      );
+    };
+  }
 }
