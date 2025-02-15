@@ -6,6 +6,7 @@ import {
   DirectoryCollection,
   TaskCollection,
   TaskStatsCollection,
+  UpdatedTaskCollection,
 } from './stream-collection';
 
 export abstract class JobContext {
@@ -17,7 +18,7 @@ export abstract class JobContext {
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
   tasksInfo: TaskCollection;
-  updatedTaskInfo :TaskCollection
+  updatedTaskInfo :UpdatedTaskCollection
   protected stats: Map<string, number>;
 
   constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
