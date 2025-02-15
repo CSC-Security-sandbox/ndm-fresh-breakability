@@ -43,7 +43,8 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     dirsInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
                                                     tasksInfo: { numMessages: 0, lastId: '0-0' },
-                                                    taskStats: { numMessages: 0, lastId: '0-0' } };
+                                                    taskStats: { numMessages: 0, lastId: '0-0' },
+                                                    updatedTaskInfo: { numMessages: 0, lastId: '0-0' } };
     this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
@@ -53,6 +54,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
+    jobContext.updatedTaskInfo = new RedisTaskCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
     return jobContext;
   }
 }

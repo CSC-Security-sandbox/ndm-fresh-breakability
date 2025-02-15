@@ -196,4 +196,9 @@ export interface OperationError{
   operationId: string;
   errorCode: string;
   errorMessage: string;
+  errorFiles: ErroredFile;  
+}
+export interface ErroredFile{
+  fileName: string;
+  filePath: string;
 }

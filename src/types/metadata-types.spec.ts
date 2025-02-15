@@ -1,5 +1,5 @@
 import { JobType } from './enums';
-import { FileInfo, TaskStats, Command, Task, DMError, TaskStatsType, CommandOperation } from './metadata-types';
+import { FileInfo, TaskStats, Command, Task, DMError, TaskStatsType, CommandOperation, ErroredFile } from './metadata-types';
 
 describe('Metadata Types', () => {
   it('should create and serialize FileInfo', () => {
@@ -42,6 +42,7 @@ describe('Metadata Types', () => {
       operationId: 'operationId',
       errorCode: '500',
       errorMessage: 'errorMessage',
+      errorFiles:{} as ErroredFile,
     }
     const error = new DMError(taskError, operationError);
     const serialized = error.serialize();

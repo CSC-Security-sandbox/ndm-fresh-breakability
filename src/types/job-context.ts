@@ -17,6 +17,7 @@ export abstract class JobContext {
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
   tasksInfo: TaskCollection;
+  updatedTaskInfo :TaskCollection
   protected stats: Map<string, number>;
 
   constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
@@ -122,6 +123,14 @@ export abstract class JobContext {
     yield* this.errorsInfo.groupRead(readerName,batchSize);
   }
 
+  async *readUpdatedTaskInfo(readerName: string): AsyncGenerator<Task> {
+    yield* this.updatedTaskInfo.read(readerName);
+  }
+
+  async *groupReadUpdatedTaskInfo(readerName: string,batchSize:number): AsyncGenerator<Task> {
+    yield* this.updatedTaskInfo.groupRead(readerName,batchSize);
+  }
+
   serialize(): string {
     const info = {
       jobRunId: this.jobRunId,
@@ -154,6 +163,12 @@ export abstract class JobContext {
         ? {
             numMessages: this.taskStats.numMessages,
             lastId: this.taskStats.lastId,
+          }
+        : { numMessages: 0, lastId: '0-0' },
+      updatedTaskInfo: this.updatedTaskInfo
+        ? {
+            numMessages: this.updatedTaskInfo.numMessages,
+            lastId: this.updatedTaskInfo.lastId,
           }
         : { numMessages: 0, lastId: '0-0' },
     };

@@ -1,6 +1,6 @@
 import { JobContext } from './job-context';
 import { JobConfig } from './job-config';
-import { FileInfo, DMError, TaskStats, Task, Command } from './metadata-types';
+import { FileInfo, DMError, TaskStats, Task, Command, ErroredFile } from './metadata-types';
 import { FileServerDetails } from './file-server';
 import { NFS } from './protocols';
 
@@ -201,6 +201,7 @@ describe('JobContext Class', () => {
         errorsInfo: { numMessages: 0, lastId: '0-0' },
         tasksInfo: { numMessages: 0, lastId: '0-0' },
         taskStats: { numMessages: 0, lastId: '0-0' },
+        updatedTaskInfo: { numMessages: 0, lastId: '0-0' },
       }));
     });
 
@@ -416,6 +417,7 @@ describe('JobContext Class', () => {
         operationId: 'operationId',
         errorCode: '500',
         errorMessage: 'errorMessage',
+        errorFiles:{} as ErroredFile,
       }
       const errorInfo: DMError = new DMError(taskError,operationError);
       jest.spyOn(jobContext.errorsInfo, 'groupRead').mockReturnValue((async function* () { yield errorInfo; })());
