@@ -1,0 +1,58 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { WorkersConfig } from 'src/config/app.config';
+import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { Protocol } from 'src/protocols/protocol/protocol';
+import { Logger } from 'src/logger/logger.service';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class ValidateConnectionActivity {
+
+  readonly workerId: string;
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    private readonly logger: Logger,
+  ) {
+    this.workerId = this.configService.get('worker.workerId');
+  }
+
+  async validate(traceId: string, protocolType: string, payload: any, feature: any): Promise<any> {
+
+    this.logger.info(
+      `[${traceId}] Validating connection for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
+    );
+    const response = {
+      traceId: traceId,
+      status: 'success',
+      protocolType: protocolType,
+      hostname: payload.hostname,
+      workerId: this.workerId,
+      paths: [],
+      protocolVersions: [],
+      message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
+    };
+    try {
+      const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      await protocol.validateConnection(traceId, payload);
+      if (feature.enablePreListPath) {
+        response.paths = await protocol.listPaths(traceId, payload);
+      }
+      if (feature.enableVersionFetch) {
+        response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
+      }
+      this.logger.info(`[${traceId}] Paths: ${response.paths}`);
+      return response;
+    } catch (error) {
+      return {
+        traceId: traceId,
+        status: 'error',
+        protocolType: protocolType,
+        hostname: payload.hostname,
+        workerId: this.workerId,
+        paths: [],
+        protocolVersions: [],
+        message: `Failed to validate connection for ${payload.hostname} of type ${protocolType}: ${error}`,
+      };
+    }
+  }
+}

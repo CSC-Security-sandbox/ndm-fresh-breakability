@@ -1,31 +1,21 @@
 import { proxyActivities } from '@temporalio/workflow';
-import type * as discovery from '../../activities/discovery/discovery';
-import type * as fetchTasks from '../../activities/discovery/fetch-tasks';
-import * as publishTask from '../../activities/discovery/publish-task';
-import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
+import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
+import { DiscoveryScanActivity } from 'src/activities/discovery/discovery-scan-activities';
+
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { discovery: scanActivity } = proxyActivities<typeof discovery>({
-  startToCloseTimeout: '300s',
-});
-const { fetchTasks: fetchTaskActivity } = proxyActivities<typeof fetchTasks>({
-  startToCloseTimeout: '300s',
-});
+const { scanActivity: scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '300s' });
 
-const { publishTask: publishTaskActivity } = proxyActivities<
-  typeof publishTask
->({
-  startToCloseTimeout: '300s',
-});
+const { 
+  fetchTasks: fetchTaskActivity,
+  publishTask: publishTaskActivity,
+  discoveryStatusUpdate: updateDiscoveryStatus,
+  publishLastEntry: updateLastEntry
+} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '300s' });
 
-const { discoveryStatusUpdate: updateDiscoveryStatus } = proxyActivities<
-  typeof discoveryStatusUpdate
->({
-  startToCloseTimeout: '30s',
-});
 
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
@@ -36,55 +26,30 @@ const { discoveryStatusUpdate: updateDiscoveryStatus } = proxyActivities<
  */
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options } = args;
-  log(
-    args.traceId,
-    `Starting DiscoveryWorkerWorkflow with args: ${JSON.stringify(args.options)}`,
-  );
+  log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(options)}`);
 
-  let discoveryResponse: any = {};
   try {
+    await updateDiscoveryStatus(traceId, 'RUNNING');
     while (true) {
-      const tasks = await fetchTaskActivity(traceId);
-      console.log(`Tasks fetched`);
+      let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {
-        log(traceId, `No more tasks in the stream. Exiting workflow.`);
-        await updateDiscoveryStatus(traceId, 'COMPLETED')
-          .then(() => {
-            log(traceId, `Discovery status updated to Completed`);
-          })
-          .catch((err) => {
-            log(traceId, `Failed to update discovery status: ${err}`);
-          });
+        log(traceId, `No tasks found. Checking again to ensure no new tasks were just published...`);
+        // Immediately re-fetch tasks to ensure we didn’t miss newly published tasks
+        await updateLastEntry(traceId)
+          .then(() => log(traceId, `Discovery status updated to Completed`))
+          .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
         return { message: 'Discovery Completed' };
       }
 
-      for (const task of tasks) {
-        const discoveryResponse = await scanActivity(
-          args.traceId,
-          args?.options,
-          task,
-        );
-
-        log(
-          traceId,
-          `Discovery findings: ${JSON.stringify(discoveryResponse)}`,
-        );
-
-        if (discoveryResponse && discoveryResponse.numDirs > 0) {
-          await publishTaskActivity(traceId);
-        }
+      for(const task of tasks) {
+        await scanActivity({data:task}, traceId)
+        await publishTaskActivity(traceId)
       }
     }
   } catch (error) {
-    log(traceId, `Error  occured during discovery : ${error}`);
     await updateDiscoveryStatus(traceId, 'FAILED')
-      .then(() => {
-        log(traceId, `Discovery status updated to Completed`);
-      })
-      .catch((err) => {
-        log(traceId, `Failed to update discovery status: ${err}`);
-      });
-    log(traceId, `Discovery status updated to Completed`);
+      .then(() => log(traceId, `Discovery status updated to Failed`))
+      .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
     return { message: 'Discovery failed' };
   }
 }

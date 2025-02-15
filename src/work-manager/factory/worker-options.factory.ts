@@ -1,9 +1,9 @@
 import { NativeConnection } from "@temporalio/worker";
-import { WorkFlowType } from "./worker-options.types";
 import { WorkerConfiguration } from "../work-manager.types";
-import * as activities from '../../activities/activities';
+import { WorkFlowType } from "./worker-options.types";
+// import { WorkerConfiguration } from "../work-manager.types";
 
-class WorkFlowOptions {
+export class WorkFlowOptions {
     identity: string;
     workerId: string;
     connection: NativeConnection;
@@ -28,15 +28,14 @@ class WorkFlowOptions {
     }
 }
 
-export const WorkerOptionsFactory = (id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) => {
-    switch (config.configName) {
-        case WorkFlowType.PARENT_WORKFLOW:
-            return new WorkFlowOptions( id, workerId, connection, 'ParentWorkflow-TaskQueue', config)
-        case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
-            return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
-        case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
-            return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
-        default:
-            return undefined
-    }
-}
+// export const WorkerOptionsFactory = (id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) => {
+//     switch (config.configName) {
+//         case WorkFlowType.PARENT_WORKFLOW:
+//             return new WorkFlowOptions( id, workerId, connection, 'ParentWorkflow-TaskQueue', config)
+//         case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
+//             return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
+//         case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
+//             return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
+//         default:
+//             return undefined
+//     }

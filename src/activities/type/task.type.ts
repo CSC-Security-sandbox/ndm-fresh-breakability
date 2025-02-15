@@ -1,4 +1,4 @@
-import { JobContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobContext } from "@netapp-cloud-datamigrate/jobs-lib";
 import { RedisClientType } from "redis";
 
 export interface TaskPayload {
@@ -26,7 +26,7 @@ export interface ScanCommands {
 }
 
 export interface DiscoveryPayload {
-  data?: Task;
+  data?: TaskPayload;
 }
 
 export interface WorkerMessage {
@@ -74,28 +74,8 @@ export interface ProcessFolderReadParams {
     commandId: string;
     excludePattern: string[];
     taskId;
-    jobContext: JobContext
-}
-
-export interface FileEntry {
-    taskId: string;
-    pathId: string;
-    fileName: string;
-    path: string;
-    parentPath: string;
-    jobRunId: string;
-    isDirectory: boolean;
-    uid: string;
-    gid: string;
-    fileSize: number;
-    blocks: number;
-    modifiedTime: string;
-    birthTime: string;
-    extension: string;
-    permission: string;
-    accessTime: string;
-    fileType: string;
-    depth: number;
+    jobContext:JobContext;
+    client:RedisClientType;
 }
 export enum FileType {
     FILE = "FILE",

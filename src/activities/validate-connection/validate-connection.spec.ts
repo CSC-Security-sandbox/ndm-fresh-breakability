@@ -1,7 +1,7 @@
 import { WorkersConfig } from 'src/config/app.config';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Logger } from 'src/logger/logger.service';
-import { validate } from './validate-connection';
+import { validate } from './validate-connection.service';
 
 jest.mock('src/config/app.config', () => ({
   WorkersConfig: {

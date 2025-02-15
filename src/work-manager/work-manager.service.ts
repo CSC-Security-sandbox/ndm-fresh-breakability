@@ -4,11 +4,11 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom, lastValueFrom, retry, timer } from 'rxjs';
-import { WorkerOptionsFactory } from './factory/worker-options.factory';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
+import { WorkerOptionsService } from './factory/worker-options.factory.service';
 
 
 @Injectable()
@@ -29,6 +29,7 @@ export class WorkManagerService {
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
         @Inject(Logger) private readonly logger: Logger,
+        @Inject(WorkerOptionsService) private readonly workerOptions: WorkerOptionsService,
     ) {
 
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}`;
@@ -124,7 +125,7 @@ export class WorkManagerService {
         for(let [id, config] of configsToStart) {
             this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
             configsToStart.delete(id)
-            const workerOptions = WorkerOptionsFactory(id, config, this.workerId, this.connection)
+            const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
         }
     }

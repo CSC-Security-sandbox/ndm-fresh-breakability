@@ -10,14 +10,14 @@ export default registerAs(
     buildId: process.env.BUILD_ID || '1.0.0',
     workerConfigUrl:
       process.env.WORKER_CONFIG_URL ||
-      'http://localhost:3000/api/v1/workers/configs',
+      'http://localhost:3004/api/v1/workers/configs',
     workerJobServiceUrl:
       process.env.WORKER_JOB_SERVICE_URL ||
-      'http://localhost:3008/api/v1/job-run',
+      'http://localhost:3001/api/v1/job-run',
     platform: process.platform,
     baseMountDir: process.env.BASE_MOUNT_DIR || '/Users/avadoot.narvekar/code_base/netapp/netapp_code_base/mount1',
     workerName: process.env.WORKER_NAME || 'worker',
-    projectId: process.env.PROJECT_ID || '8092ce59-5dfd-4d2f-939a-af51d3580233',
+    projectId: process.env.PROJECT_ID || 'cb6cbe71-676b-4fcc-913e-f30610c8b755',
     smbValidateCommand:
       process.env.SMB_VALIDATE_CONNECTION_COMMAND ||
       'smbutil view //${username}:${password}@${hostname}',
