@@ -22,8 +22,6 @@ export class SetupActivityService {
   }
 
   async setup(jobRunId: string): Promise<any> {
-
-    let redisClient = null;
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
 
     try {
