@@ -75,7 +75,7 @@ const scanContent = async (scanInput: ScanContentInput) => {
     }catch(error) {
         if (!scanInput.jobContext.errorsInfo) 
             scanInput.jobContext.errorsInfo.init();
-        const dmError = new DMError(scanInput.sourcePath, error);
+        const dmError = new DMError(scanInput.sourcePath as any, error);
         await scanInput.jobContext.appendToErrorList(dmError);
     }finally{
         scanInput.clientConnection?.set(scanInput.jobRunId, scanInput.jobContext)

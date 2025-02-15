@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'src/logger/logger.service';
 import { ConfigService } from '@nestjs/config';
-import { Command, JobConfig, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 import { uuid4 } from '@temporalio/workflow';
 import { WorkersConfig } from 'src/config/app.config';
@@ -37,7 +37,7 @@ export class DiscoveryActivity {
         try {
             const jobContext = await this.redisService.getJobContext(traceId);
             this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
-            const directoryBatchSize = 2500;
+            const directoryBatchSize = 500;
             let counter = 0;
             let commandsBatch: Command[] = [];
             for await (const directory of jobContext.groupReadDirs('consumer-1', directoryBatchSize)) {
@@ -57,7 +57,7 @@ export class DiscoveryActivity {
                     );
                     const id = await jobContext.appendToTaskList(task);
                     jobContext.tasksInfo.lastId = id;
-                    await this.redisService.setJobContext(traceId, jobContext.serialize());
+                    await this.redisService.setJobContext(traceId, jobContext);
                     commandsBatch = [];
                 }
             }
@@ -73,7 +73,7 @@ export class DiscoveryActivity {
                 );
                 const id = await jobContext.appendToTaskList(task);
                 jobContext.tasksInfo.lastId = id;
-                await this.redisService.setJobContext(traceId, jobContext.serialize());
+                await this.redisService.setJobContext(traceId, jobContext);
             }
             return { status: 'success', message: 'Task published successfully' };
         } catch (error) {

@@ -74,6 +74,7 @@ export interface ProcessFolderReadParams {
     commandId: string;
     excludePattern: string[];
     taskId;
+    jobContext: JobContext
 }
 
 export interface FileEntry {

@@ -1,16 +1,12 @@
 import { proxyActivities } from '@temporalio/workflow';
-import type * as discovery from '../../activities/discovery/discovery';
-import type * as fetchTasks from '../../activities/discovery/fetch-tasks';
-import * as publishTask from '../../activities/discovery/publish-task';
-import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { WorkerService } from 'src/activities/workers/worker.service';
+import { DiscoveryScanActivity } from 'src/activities/discovery/discovery-scan-activities';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { assignTasksToWorkerThread: assignTasksToWorkerThread } = proxyActivities<WorkerService>({ startToCloseTimeout: '300s' });
+const { scanActivity: scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '300s' });
 
 const { 
   fetchTasks: fetchTaskActivity,
@@ -41,25 +37,22 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         return { message: 'Discovery Completed' };
       }
 
-      await Promise.all(
-        tasks.map(async (task) => {
-          await assignTasksToWorkerThread({
-            data: {
-              id: traceId,
-              jobRunId: task.jobRunId,
-              taskType: '',
-              status: 'PENDING',
-              workerId: task.workerId,
-              sPath: task.sPath,
-              tPath: task.tPath,
-              excludeFilePatterns: task.excludeFilePatterns,
-              commands: task.commands,
-            },
-          }, traceId);
-      
-          await publishTaskActivity(traceId);
-        })
-      );
+      for(const task of tasks) {
+        await scanActivity({
+          data: {
+            id: traceId,
+            jobRunId: task.jobRunId,
+            taskType: '',
+            status: 'PENDING',
+            workerId: task.workerId,
+            sPath: task.sPath,
+            tPath: task.tPath,
+            excludeFilePatterns: task.excludeFilePatterns,
+            commands: task.commands,
+          },
+        }, traceId);
+        await publishTaskActivity(traceId);
+      }
     }
   } catch (error) {
     await updateDiscoveryStatus(traceId, 'FAILED')
