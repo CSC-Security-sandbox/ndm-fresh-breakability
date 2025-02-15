@@ -14,15 +14,14 @@ export class SetupActivityService {
   readonly workerConfigUrl: string
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.workerConfigUrl = WorkersConfig.get('worker.workerConfigUrl');
+    this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
   }
 
   async setup(jobRunId: string): Promise<any> {
-    this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
+    console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
 
     try {
         const context = await this.redisService.getJobContext(jobRunId);
@@ -36,12 +35,12 @@ export class SetupActivityService {
         const payload = { hostname, username: 'root', password: '', path, workingDirectory, pathId, jobRunId };
         await protocol.mountPath(jobRunId, payload);
 
-        this.logger.log(`[${jobRunId}] - Worker ${this.workerId} set up for ${hostname}/${path}`);
+        console.log(`[${jobRunId}] - Worker ${this.workerId} set up for ${hostname}/${path}`);
 
         await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
         return { jobRunId, status: 'success', protocolType, hostname, workerId:this.workerId, message: `Worker ${this.workerId} successfully set up.` };
     } catch (error) {
-        this.logger.error(`[${jobRunId}] - Setup failed: ${error.message}`);
+        console.error(`[${jobRunId}] - Setup failed: ${error.message}`);
         return { jobRunId, status: 'error', workerId: this.workerId, message: `Setup failed: ${error.message}` };
     }
   }
@@ -60,11 +59,11 @@ export class SetupActivityService {
             const payload = { hostname, username: 'root', password: '', path, workingDirectory, pathId, jobRunId };
             await protocol.unmountPath(jobRunId, payload);
 
-            this.logger.log(`[${jobRunId}] - Worker ${this.workerId} cleanup completed for ${hostname}/${path}`);
+            console.log(`[${jobRunId}] - Worker ${this.workerId} cleanup completed for ${hostname}/${path}`);
             return { jobRunId, status: 'success', protocolType, hostname, workerId: this.workerId, message: `Cleanup successful.` };
         } 
         catch (error) {
-            this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
+            console.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
             return { jobRunId, status: 'error', workerId: this.workerId, message: `Cleanup failed: ${error.message}` };
         }
     }

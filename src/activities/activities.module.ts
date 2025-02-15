@@ -14,6 +14,6 @@ import { SetupActivityService } from './setup-worker/setup.activity';
   imports: [HttpModule, LoggerModule, ConfigModule],
   controllers: [],
   providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
-  exports: [ ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
 })
 export class ActivitiesModule {}
