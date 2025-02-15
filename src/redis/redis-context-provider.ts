@@ -4,7 +4,7 @@ import { JobContextProvider } from '../job-context-provider';
 import { RedisClientType } from 'redis';
 import { RedisJobContext } from './redis-job-context';
 import { Logger } from '../utils/logging';
-import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection, RedisTaskStatsCollection } from './redis-collections';
+import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
 
 export class RedisJobContextProvider implements JobContextProvider {
   private logger: Logger;
@@ -54,7 +54,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
-    jobContext.updatedTaskInfo = new RedisTaskCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
+    jobContext.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
     return jobContext;
   }
 }
