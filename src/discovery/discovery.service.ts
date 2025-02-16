@@ -32,7 +32,7 @@ export class DiscoveryService {
 
   async createReportFile(jobRunId: string, reportType: string): Promise<any> {
     this.logger.log(
-      `Creating report for jobRunIdooo: ${jobRunId} and reportType: ${reportType}`
+      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
     );
     try {
       if (!fs.existsSync(this.reportsDirectory)) {
@@ -40,7 +40,7 @@ export class DiscoveryService {
       }
 
       await this.inventoryRepo.query(
-        "CALL generate_discovery_report($1)",
+        `CALL ${process.env.SCHEMA}.generate_discovery_report($1)`,
         [jobRunId]
       );
 
@@ -121,11 +121,10 @@ export class DiscoveryService {
   });
 
     const csvData = [headers.join(","), values.join(",")].join("\n");
-    console.log("csvData: ", csvData);
-    if(filePath.startsWith(this.reportsDirectory)) {
+   // if(filePath.startsWith(this.reportsDirectory)) {
       fs.writeFileSync(filePath, csvData);
       console.log(`Data has been written to ${filePath}`);
-    }
+  //  }
   }
 
   async getReportsAsZip(

@@ -27,6 +27,7 @@ const mockReportsRepo = {
   findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
+  update: jest.fn(),
 };
 
 describe('JobRunService', () => {
@@ -83,8 +84,15 @@ describe('JobRunService', () => {
   describe('getJobStatsId', () => {
     const jobId = '12345';
 
-    it('should return saved report if it exists', async () => {
-      const savedReport = { reportData: JSON.stringify({ test: 'data' }) };
+    it("should return saved report if it exists", async () => {
+      const jobId = "123";
+
+      const mockLatestReportStatus = { isReportReady: true };
+      mockJobRunRepo.findOne.mockResolvedValue(mockLatestReportStatus);
+
+      const savedReport = {
+        reportData: JSON.stringify({ test: "data", isReportReady: false }),
+      };
       mockReportsRepo.findOne.mockResolvedValue(savedReport);
 
       const result = await service.getJobStatsId(jobId);
@@ -93,7 +101,15 @@ describe('JobRunService', () => {
         where: { jobRunId: jobId, reportType: ReportType.JOB_RUN_STATS },
         select: { reportData: true },
       });
-      expect(result).toEqual(JSON.parse(savedReport.reportData));
+
+      expect(mockJobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobId },
+        select: ["isReportReady"],
+      });
+
+      expect(result.isReportReady).toEqual(
+        mockLatestReportStatus.isReportReady
+      );
     });
 
     it('should throw NotFoundException if job run does not exist', async () => {
