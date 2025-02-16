@@ -35,10 +35,23 @@ export class JobRunService {
     }
 
     async getJobStatsId(id: string) {
-
+          const getLatestReportStatus = await this.jobRunRepo.findOne({
+            where: { id: id },
+            select: ['isReportReady'],
+          });
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
-        if(saved) 
-          return JSON.parse(saved.reportData)
+        if (saved) {
+          const parsedReport = JSON.parse(saved.reportData);
+          if (parsedReport.isReportReady !==  getLatestReportStatus.isReportReady) {
+            parsedReport.isReportReady = getLatestReportStatus.isReportReady;
+            saved.reportData = JSON.stringify(parsedReport);
+            await this.reportsRepo.update(
+              { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
+              { reportData: JSON.stringify(parsedReport) }
+            );
+          }
+          return parsedReport;
+        }
         
         const volumeSearch = {
           volumePath: true,
