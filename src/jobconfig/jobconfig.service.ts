@@ -13,6 +13,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
 import { nextDate } from 'src/utils/mapper';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class JobConfigService {
@@ -21,8 +22,10 @@ export class JobConfigService {
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(InventoryEntity)
-    private inventoryRepo: Repository<InventoryEntity>
-  ) { }
+    private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(JobRunEntity)
+    private jobRunRepo: Repository<JobRunEntity>
+  ) {}
 
   // ------------ Events ---------------- //
   @OnEvent(EmitterEvents.IN_ACTIVE_JOB_CONFIG)
@@ -94,40 +97,109 @@ export class JobConfigService {
     }
   }
 
-
-  async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
+  async createBulkCutover(
+    bulkCutover: JobConfigCutoverBulk
+  ): Promise<JobConfigBulkCutoverRes[]> {
     try {
-      // Step 1: flat the array with one source path with one destinataion path.
-      const allCutoverConfigs = this.flattenCutoverConfig(bulkCutover.cutoverConfig);
-      // Step 2: fetch base migration record and it's currosponding file_server, jobconfigs.
+      const allCutoverConfigs = this.flattenCutoverConfig(
+        bulkCutover.cutoverConfig
+      );
       const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
-      return jobConfigs as any;
-      // Step 3: extract exclude pattern details.
-      // check condition only create when atleat one migration is completed for specific source path and target path.
-      // also check with netapp if that is hard requirement.
-      // Step 4: create jobconfig for the step 1 with exclude patterns from step 3.
-      return [
-        {
-          status: 'created',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.CutOver,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
-        },
-        {
-          status: 'failed',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
-          jobType: JobType.CutOver,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd',
+      const jobRunStatuses = await this.jobRunRepo.find({
+        where: { jobConfigId: In(jobConfigs.map((j) => j.id)) },
+        order: { endTime: "DESC" }, 
+      });
+
+      const latestJobStatusMap = new Map<
+        string,
+        { status: JobRunStatus; endTime: Date }
+      >();
+
+      jobRunStatuses.forEach((jobRun) => {
+        if (!latestJobStatusMap.has(jobRun.jobConfigId)) {
+          latestJobStatusMap.set(jobRun.jobConfigId, {
+            status: jobRun.status,
+            endTime: jobRun.endTime,
+          });
         }
-      ];
+      });
+
+      const completedMigrations = jobConfigs.filter(
+        (config) =>
+          config.jobType === JobType.MIGRATE &&
+          latestJobStatusMap.has(config.id) &&
+          latestJobStatusMap.get(config.id)!.status === JobRunStatus.Completed
+      );
+
+      const jobConfigMap = new Map<string, JobConfigEntity>();
+      completedMigrations.forEach((config) => {
+        jobConfigMap.set(config.id, config);
+      });
+
+      const newCutoverJobs: JobConfigEntity[] = [];
+
+      for (const { sourcePathId, destinationPathId } of allCutoverConfigs) {
+        for (const config of jobConfigMap.values()) {
+          if (
+            config.sourcePathId === sourcePathId &&
+            config.targetPathId === destinationPathId
+          ) {
+            const existingCutover = await this.jobConfigRepo.findOne({
+              where: {
+                jobType: JobType.CutOver,
+                sourcePathId,
+                targetPathId: destinationPathId,
+              },
+            });
+
+            if (!existingCutover) {
+              newCutoverJobs.push(
+                this.jobConfigRepo.create({
+                  jobType: JobType.CutOver,
+                  sourcePathId,
+                  targetPathId: destinationPathId,
+                  excludeFilePatterns: config.excludeFilePatterns,
+                  scheduler: config.scheduler,
+                  futureScheduleAt: config.futureScheduleAt,
+                  status: config.status,
+                  preserveAccessTime: config.preserveAccessTime,
+                  firstRunAt: config.firstRunAt,
+                })
+              );
+            }
+          }
+        }
+      }
+
+      const savedJobs = await this.jobConfigRepo.save(newCutoverJobs);
+
+      if (savedJobs.length === 0) {
+        throw new HttpException(
+          {
+            status: "failed",
+            message:
+              "No completed migration found for the given source path ID or its already exists",
+          },
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return savedJobs.map((job) => ({
+        id: job.id,
+        jobType: job.jobType,
+        sourcePathId: job.sourcePathId,
+        targetPathId: job.targetPathId,
+        status: "created",
+      }));
     } catch (error) {
-      throw new HttpException({
-          status: 'failed',
-          message: error.message || 'An error occurred while creating bulk cutover job',
+      throw new HttpException(
+        {
+          status: "failed",
+          message:
+            error.message ||
+            "An error occurred while creating bulk cutover job",
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -387,15 +459,17 @@ export class JobConfigService {
     if (conditions.length === 0) return [];
     const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
     conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
+      const sourceParam = `sourcePathId_${index}`;
+      const targetParam = `destinationPathId_${index}`;
       if (index === 0) {
         queryBuilder.where(
-          "(jobConfig.sourcePathId = :sourcePathId0 AND jobConfig.targetPathId = :destinationPathId0) and jobType = 'MIGRATE'",
-          { sourcePathId, destinationPathId }
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam}) AND jobConfig.jobType = 'MIGRATE'`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
         );
       } else {
         queryBuilder.orWhere(
-          `(jobConfig.sourcePathId = :sourcePathId${index} AND jobConfig.targetPathId = :destinationPathId${index}) and jobType = 'MIGRATE'`,
-          { [`sourcePathId${index}`]: sourcePathId, [`targetPathId${index}`]: destinationPathId }
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam})`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
         );
       }
     });

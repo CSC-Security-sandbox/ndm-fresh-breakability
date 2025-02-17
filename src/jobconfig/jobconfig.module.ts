@@ -6,10 +6,11 @@ import { JobConfigService } from './jobconfig.service';
 
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobIdMappingEntity } from '../entities/jobmapping.entity';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([JobConfigEntity, JobIdMappingEntity,InventoryEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobIdMappingEntity,InventoryEntity, JobRunEntity]),
     ],
     providers: [JobConfigService],
     controllers: [JobConfigController]
