@@ -3,3 +3,4 @@
 /datamigrator/
 inventory.yaml
 .ansible
+.vscode
