@@ -10,17 +10,3 @@
       - nfs-common
       - smbclient
     state: present
-
-- name: 2.3. Ensure directories exist and have correct ownership
-  file:
-    path: "{{ item.path }}"
-    state: directory
-    owner: "{{ vm_username }}"
-    group: "{{ vm_username }}"
-    mode: '0755'
-  loop:
-    - { path: "/opt/datamigrator" }
-    - { path: "/opt/datamigrator/bin" }
-    - { path: "/opt/datamigrator/conf" }
-    - { path: "/opt/datamigrator/logs" }
-    - { path: "/var/log/datamigrator" }

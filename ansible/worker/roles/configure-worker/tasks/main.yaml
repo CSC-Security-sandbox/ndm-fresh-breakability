@@ -1,5 +1,5 @@
 ---
-- name: Ensure destination directories exist
+- name: 4.1. Ensure destination directories exist
   become: yes
   file:
     path: "{{ item.path }}"
@@ -15,20 +15,20 @@
     - { path: "/opt/datamigrator/logs" }
     - { path: "/var/log/datamigrator" }
 
-- name: Copy binary file to remote server
+- name: 4.2. Copy binary file to remote server
   become: yes
   ansible.builtin.copy:
     src: "{{ local_binary_path }}"
     dest: "{{ remote_binary_path }}"
     mode: '0755'
 
-- name: Make the binary file executable
+- name: 4.3. Make the binary file executable
   become: yes
   ansible.builtin.file:
     path: "{{ remote_binary_path }}"
     mode: '0755'
 
-- name: Update systemd service file with the latest binary
+- name: 4.4. Update systemd service file with the latest binary
   become: yes
   ansible.builtin.template:
     src: ./templates/worker.service.j2
@@ -37,7 +37,7 @@
     group: root
     mode: '0644'
 
-- name: Copy worker-register.j2 to /opt/datamigrator/bin/
+- name: 4.5. Copy worker-register.j2 to /opt/datamigrator/bin/
   become: yes
   copy:
     src: ./templates/worker-register.j2
@@ -45,9 +45,10 @@
     mode: '0755'
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
+  when: local_worker_update is not defined
 
 
-- name: Copy worker env to /opt/datamigrator/conf/
+- name: 4.6. Copy worker env to /opt/datamigrator/conf/
   become: yes
   copy:
     src: ./templates/worker.env.j2
@@ -55,14 +56,33 @@
     mode: '0644'
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
+  when: local_worker_update is not defined
 
-- name: Reload systemd daemon
+- name: 4.7. Reload systemd daemon
   become: yes
   ansible.builtin.command: systemctl daemon-reload
 
-- name: Disable the datamigrator worker service from starting on boot
+- name: 4.8. Disable the datamigrator worker service from starting on boot
   become: yes
   ansible.builtin.systemd_service:
     name: datamigrator-worker.service
     enabled: false
     state: stopped
+  when: local_worker_update is not defined
+
+- name: 4.8.1. Restart worker service
+  ansible.builtin.service:
+    name: datamigrator-worker.service
+    state: restarted
+  when: local_worker_update is defined
+
+- name: 4.8.2. Print last 20 lines of the worker log
+  ansible.builtin.command:
+    cmd: tail -n 20 /opt/datamigrator/logs/datamigrator-worker.log
+  register: log_output
+  when: local_worker_update is defined
+
+- name: 4.8.3. Debug last 20 lines of the log
+  ansible.builtin.debug:
+    msg: "{{ log_output.stdout }}"
+  when: local_worker_update is defined

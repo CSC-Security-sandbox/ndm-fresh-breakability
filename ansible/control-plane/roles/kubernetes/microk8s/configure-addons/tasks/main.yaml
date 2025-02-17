@@ -22,10 +22,26 @@
     - item.name in microk8s_plugins
     - microk8s_plugins[item.name]
 
-- name: 6.3.1 Enable registry for local cluster
+- name: 6.3.1. Enable registry for local cluster
   become: yes
   command:
     cmd: "{{ microk8s_bin_path }}microk8s.enable registry"
+  when: local_cluster is defined
+
+- name: 6.3.2. Fetch private IP of the server
+  set_fact:
+    private_ip: "{{ ansible_default_ipv4.address }}"
+  when: local_cluster is defined
+
+- name: 6.3.3. Display private_ip
+  debug:
+    var: private_ip
+  when: local_cluster is defined
+
+- name: 6.3.3 Enable metallb load balancer
+  become: yes
+  command:
+    cmd: "{{ microk8s_bin_path }}microk8s.enable metallb:{{ private_ip }}/32"
   when: local_cluster is defined
   
 - name: 6.4. Disable addons

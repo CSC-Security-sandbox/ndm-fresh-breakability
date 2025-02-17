@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 
 # Configuration
 MAX_RETRIES=3
 RETRY_DELAY=5
 WAIT_TIMEOUT=600
+ENV_FILE="/opt/datamigrator/conf/worker.env"
 
 # Function to log messages with timestamps
 log_message() {
@@ -12,20 +13,20 @@ log_message() {
 
 # Retry function to handle retries
 retry() {
-    local retries=$1
-    local command=$2
-    local delay=${3:-$RETRY_DELAY}
-    local timeout=${4:-$WAIT_TIMEOUT}
-    local attempt=1
+    retries=$1
+    command=$2
+    delay=${3:-$RETRY_DELAY}
+    timeout=${4:-$WAIT_TIMEOUT}
+    attempt=1
 
-    while [ $attempt -le $retries ]; do
+    while [ "$attempt" -le "$retries" ]; do
         log_message "Attempt $attempt: $command"
-        timeout $timeout bash -c "$command"
-        if [ $? -eq 0 ]; then
+        sh -c "$command"
+        if [ "$?" -eq 0 ]; then
             return 0
         fi
         log_message "Command failed, retrying in $delay seconds..."
-        sleep $delay
+        sleep "$delay"
         attempt=$((attempt + 1))
     done
     log_message "Command failed after $retries attempts: $command"
@@ -40,45 +41,48 @@ handle_failure() {
 
 # Check if required environment variables are set
 log_message "Checking required environment variables..."
-if [[ -z "${CONTROL_PLANE_IP}" || -z "${PROJECT_API_KEY}" ]]; then
-  handle_failure "One or more required environment variables (CONTROL_PLANE_IP, PROJECT_API_KEY) are missing."
+if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] || [ -z "$REDIS_PASSWORD" ]; then
+    handle_failure "One or more required environment variables (CONTROL_PLANE_IP, WORKER_ID, WORKER_SECRET) are missing."
 fi
 log_message "Required environment variables are set."
 
-# Create and write to /opt/datamigrator/conf/worker.env
-log_message "Creating /opt/datamigrator/conf/worker.env with CONTROL_PLANE_IP and SOCKET_SERVER."
+# Check for existing environment variables in the worker.env file
+log_message "Checking for existing variables in $ENV_FILE."
+if [ -f "$ENV_FILE" ]; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|REDIS_PORT)=" "$ENV_FILE" >/dev/null; then
+        log_message "WARNING: Some environment variables already exist in $ENV_FILE."
+        handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
+    fi
+fi
+
+# Create and write to worker.env
+log_message "Creating $ENV_FILE with necessary environment variables."
 {
-  echo ""
-  echo "FILE_SERVICE_BASEURL=https://${CONTROL_PLANE_IP}/api/v1"
-  echo "SOCKET_SERVER=wss://${CONTROL_PLANE_IP}/event"
-} >> /opt/datamigrator/conf/worker.env
+    echo ""
+    echo "WORKER_CONFIG_URL=https://${CONTROL_PLANE_IP}/api/v1/work-manager"
+    echo "WORKER_JOB_SERVICE_URL=https://${CONTROL_PLANE_IP}/api/v1/job-run"
+    echo "TEMPORAL_ADDRESS=${CONTROL_PLANE_IP}:7233"
+    echo "KEYCLOAK_BASE_URL=https://${CONTROL_PLANE_IP}/keycloak"
+    echo "WORKER_ID=${WORKER_ID}"
+    echo "WORKER_SECRET=${WORKER_SECRET}"
+    echo "REDIS_HOST=${CONTROL_PLANE_IP}"
+    echo "REDIS_USERNAME=default"
+    echo "REDIS_PASSWORD=welcome"
+    echo "REDIS_PORT=6379"
+} >> "$ENV_FILE"
 
 # Check if the worker.env file was created successfully
-if [[ $? -ne 0 ]]; then
-  handle_failure "Failed to create /opt/datamigrator/conf/worker.env."
+if [ "$?" -ne 0 ]; then
+    handle_failure "Failed to create $ENV_FILE."
 fi
-log_message "worker.env file created successfully."
+log_message "$ENV_FILE file created successfully."
 
-# Create and write to /opt/datamigrator/conf/worker-config.json
-log_message "Creating /opt/datamigrator/conf/worker-config.json with PROJECT_API_KEY."
-cat <<EOF > /opt/datamigrator/conf/worker-config.json
-{
-  "api_key": "${PROJECT_API_KEY}"
-}
-EOF
-
-# Check if the worker-config.json file was created successfully
-if [[ $? -ne 0 ]]; then
-  handle_failure "Failed to create /opt/datamigrator/conf/worker-config.json."
-fi
-log_message "worker-config.json file created successfully."
-
-# Start the worker service (Log only setup-related information here)
+# Start the worker service 
 log_message "Starting the worker service."
-retry $MAX_RETRIES "systemctl start datamigrator-worker.service" || handle_failure "Failed to start worker service."
+retry "$MAX_RETRIES" "systemctl start datamigrator-worker.service" || handle_failure "Failed to start worker service."
 
 # Ensure the worker service is enabled to start on boot
 log_message "Enabling worker service to start on boot."
-retry $MAX_RETRIES "systemctl enable datamigrator-worker.service" || handle_failure "Failed to enable worker service to start on boot."
+retry "$MAX_RETRIES" "systemctl enable datamigrator-worker.service" || handle_failure "Failed to enable worker service to start on boot."
 
 log_message "Worker service setup complete. Service started and enabled successfully."

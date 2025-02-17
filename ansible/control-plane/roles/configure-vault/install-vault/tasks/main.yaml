@@ -82,6 +82,18 @@
   ansible.builtin.pause:
     seconds: 90
 
+- name: Waiting for vault-0 to be ready
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl wait --namespace="vault" --for=jsonpath='{.status.phase}'=Running pod/vault-{{ item }}
+  with_items:
+    - 0
+  args:
+    chdir: $HOME
+  retries: 6
+  delay: 20
+
 - name: Get the unseal keys and store them in /opt/datamigrator/vault
   become: yes
   become_user: "{{ vm_username }}"
@@ -95,6 +107,19 @@
 - name: Pause for 45 seconds to make sure vault is up
   ansible.builtin.pause:
     seconds: 45
+
+- name: Waiting for vault-1, vault-2 to be ready
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl wait --namespace="vault" --for=jsonpath='{.status.phase}'=Running pod/vault-{{ item }}
+  with_items:
+    - 1
+    - 2
+  args:
+    chdir: $HOME
+  retries: 6
+  delay: 20
 
 - name: Unseal the vault
   become: yes

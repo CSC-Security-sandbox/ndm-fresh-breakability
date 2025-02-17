@@ -10,7 +10,6 @@ annotations:
     vault.hashicorp.com/agent-init-first: "true"
     vault.hashicorp.com/role: "datamigrator-role"
     vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
-    vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
     vault.hashicorp.com/agent-inject-status: "update"
     vault.hashicorp.com/agent-inject-template-postgres.env: |
       {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
@@ -18,10 +17,6 @@ annotations:
       export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
       export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
       export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
-      {{- end }}
-    vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
-      {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
-      export RABBITMQ_URLS=amqp://{{ .Data.RABBITMQ_USERNAME }}:{{ .Data.RABBITMQ_PASSWORD }}@rabbitmq.rabbitmq.svc.cluster.local:5672
       {{- end }}
     
 serviceAccountName: datamigrator-vault-sa
@@ -49,8 +44,6 @@ env:
     value: "datamigrator"
   - name: SCHEMA 
     value: "datamigrator"
-  - name: REPORTS_QUEUE
-    value: "reports-queue"
   - name: REPORT_DOWNLOAD_LOCATION
     value: "/app"
 
@@ -58,8 +51,11 @@ env:
   #   value: ""
   # - name: DB_PASSWORD # from secret
   #   value: ""
-  # - name: RABBITMQ_URLS # from secret - rabbitmq username and password
-  #   value: ""
+
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_DIR
+    value: "/logs"
 
 
 service:

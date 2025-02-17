@@ -11,7 +11,7 @@ annotations:
     vault.hashicorp.com/agent-init-first: "true"
     vault.hashicorp.com/role: "datamigrator-role"
     vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
-    vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
+    vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
     vault.hashicorp.com/agent-inject-status: "update"
     vault.hashicorp.com/agent-inject-template-postgres.env: |
       {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
@@ -20,9 +20,14 @@ annotations:
       export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
       export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
       {{- end }}
-    vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
-      {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
-      export RABBITMQ_URLS=amqp://{{ .Data.RABBITMQ_USERNAME }}:{{ .Data.RABBITMQ_PASSWORD }}@rabbitmq.rabbitmq.svc.cluster.local:5672
+    # vault.hashicorp.com/agent-inject-template-redis.env: |
+    #   {{- with secret "secrets/redis-secrets/redis-creds" -}}
+    #   export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
+    #   export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"      
+    #   {{- end }}
+    vault.hashicorp.com/agent-inject-template-redis.env: |
+      {{- with secret "secrets/redis-secrets/redis-creds" -}}
+      export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}" 
       {{- end }}
     
 serviceAccountName: datamigrator-vault-sa
@@ -49,21 +54,43 @@ env:
   #   value: ""
   # - name: DB_PASSWORD # from secret
   #   value: ""
-  # - name: RABBITMQ_URLS # from secret
-  #   value: ""
   - name: DB_NAME
     value: "datamigrator"
   - name: SCHEMA
     value: "datamigrator"
-  - name: RABBITMQ_INVENTORY_QUEUE
-    value: "inventory"
-  - name: RABBITMQ_REPORTS_QUEUE
-    value: "reports-queue"
+  - name: DB_SCHEMA
+    value: "datamigrator"
+
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_DIR
+    value: "/logs"
+  - name: REDIS_HOST
+    value: "redis-cluster.redis.svc.cluster.local"
+
+  # - name: REDIS_USERNAME
+  #   value: "default"
+  - name: REDIS_PASSWORD
+    value: "welcome"
+
+  - name: REDIS_PORT
+    value: "6379"
 
 service:
   type: ClusterIP
   port: 3000
   targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(redis-consumer)/*"
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  ingressClassName: public
+  tls:
+    enabled: false
+  host: ""
 
 liquibase:
   enabled: true

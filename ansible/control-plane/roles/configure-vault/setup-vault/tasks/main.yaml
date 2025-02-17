@@ -32,7 +32,8 @@
   with_items:
     - keycloak
     - postgres
-    - rabbitmq
+    - redis
+    - temporal
   
 - name: Vault roles creation -- datamigrator
   become: yes
@@ -41,7 +42,7 @@
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-vault-sa \
     bound_service_account_namespaces=datamigrator \
-    policies=keycloak-policy,postgres-policy,rabbitmq-policy \
+    policies=keycloak-policy,postgres-policy,redis-policy \
     ttl=24h
   with_items:
     - datamigrator
@@ -69,31 +70,30 @@
     ttl=24h
   with_items:
     - postgres
-  
-- name: Vault roles creation -- rabbitmq
+
+- name: Vault roles creation -- redis
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
     bound_service_account_names={{ item }}-sa \
-    bound_service_account_namespaces=datamigrator,rabbitmq \
-    policies=rabbitmq-policy \
+    bound_service_account_namespaces=datamigrator,redis \
+    policies=redis-policy \
     ttl=24h
   with_items:
-    - rabbitmq
+    - redis
 
-# - name: Vault roles creation
-#   become: yes
-#   become_user: "{{ vm_username }}"
-#   shell: |
-#     kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
-#     bound_service_account_names={{ item }}-sa \
-#     bound_service_account_namespaces=datamigrator,keycloak,postgres \
-#     policies={{ item }}-policy \
-#     ttl=24h
-#   with_items:
-#     - keycloak
-#     - postgres
+- name: Vault roles creation -- temporal
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti vault-0 -n vault -- vault write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-sa \
+    bound_service_account_namespaces=datamigrator,temporal \
+    policies=temporal-policy \
+    ttl=24h
+  with_items:
+    - temporal
 
 - name: Create Vault password policy file
   become: yes
@@ -132,6 +132,7 @@
     export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec vault-0 -n vault -- vault kv put secrets/postgres-secrets/postgres-creds \
       POSTGRES_USER="postgres" \
       POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
@@ -140,7 +141,9 @@
       KEYCLOAK_POSTGRES_USER="kcadmin" \
       KEYCLOAK_POSTGRES_PASSWORD="${KEYCLOAK_POSTGRES_PASSWORD}" \
       LIQUIBASE_POSTGRES_USER="liquibase" \
-      LIQUIBASE_POSTGRES_PASSWORD="${LIQUIBASE_POSTGRES_PASSWORD}"
+      LIQUIBASE_POSTGRES_PASSWORD="${LIQUIBASE_POSTGRES_PASSWORD}" \
+      TEMPORAL_POSTGRES_USER="temporal" \
+      TEMPORAL_POSTGRES_PASSWORD="${TEMPORAL_POSTGRES_PASSWORD}"
 
 
 - name: Generate Keycloak secrets
@@ -154,12 +157,14 @@
       KEYCLOAK_ADMIN_USER="kcadmin" \
       KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
   
-- name: Generate rabbitmq secrets
+- name: Generate Redis secrets
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export RABBITMQ_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    kubectl exec vault-0 -n vault -- vault kv put secrets/rabbitmq-secrets/rabbitmq-creds RABBITMQ_USERNAME="rabbitmq" RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD}"
+    export REDIS_PASSWORD=$(kubectl exec -i vault-0 -n vault -- vault read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    kubectl exec vault-0 -n vault -- vault kv put secrets/redis-secrets/redis-creds \
+      REDIS_PASSWORD="${REDIS_PASSWORD}" \
+      REDIS_USERNAME="default"
 
 - name: Delete vault directory
   become: yes

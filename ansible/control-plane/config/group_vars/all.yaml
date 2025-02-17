@@ -1,21 +1,21 @@
 ---
 
 # Microservices release tags of docker images
-data_migrate_ui_tag: "latest"
-config_service_tag: "latest"
-config_service_liquibase_tag: "latest"
-db_writer_service_tag: "latest"
-admin_service_liquibase_tag: "latest"
-jobs_service_tag: "latest"
-jobs_service_liquibase_tag: "latest"
+data_migrate_ui_tag: "latest-temporal"
+config_service_tag: "latest-temporal"
+config_service_liquibase_tag: "latest-temporal"
+db_writer_service_tag: "latest-temporal"
+admin_service_liquibase_tag: "latest-temporal"
+jobs_service_tag: "latest-temporal"
+jobs_service_liquibase_tag: "latest-temporal"
 file_service_tag: "latest"
-reports_service_tag: "latest"
-reports_service_liquibase_tag: "latest"
-admin_service_tag: "latest"
-db_writer_service_liquibase_tag: "latest"
-keycloak_customizations_tag: "latest"
+reports_service_tag: "latest-temporal"
+reports_service_liquibase_tag: "latest-temporal"
+admin_service_tag: "latest-temporal"
+db_writer_service_liquibase_tag: "latest-temporal"
+keycloak_customizations_tag: "microk8s-new"
 
-acr_registry: "{{ 'localhost:32000' if local_cluster == 'true' else 'datamigratedev.azurecr.io' }}"
+acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
 
 
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
@@ -89,9 +89,11 @@ ports_to_open:
   - 443/tcp
   - 2379-2381/tcp
   - 5432/tcp
+  - 6379/tcp
   - 6443/tcp
   - 6781-6784/tcp
   - 6781-6784/udp
+  - 7233/tcp
   - 8090-8091/tcp
   - 8472/udp
   - 9153/tcp
@@ -109,14 +111,15 @@ ports_to_open:
 postgres_version: 16.2.5
 postgres_data_volume_size: 30Gi
 
-rabbitmq_version: 15.2.1
-rabbitmq_replicas: 3
-rabbitmq_data_volume_size: 8Gi
-
 vault_version: 0.29.1
 vault_data_volume_size: 8Gi
 
 keycloak_version: 24.3.2
+
+redis_version: 11.4.1
+redis_data_volume_size: 30Gi
+
+temporal_version: 0.55.0
 
 kube_prometheus_stack_version: 68.3.2
 loki_stack_version: 2.10.2

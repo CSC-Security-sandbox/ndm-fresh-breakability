@@ -10,7 +10,7 @@ annotations:
     vault.hashicorp.com/agent-init-first: "true"
     vault.hashicorp.com/role: "datamigrator-role"
     vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
-    vault.hashicorp.com/agent-inject-secret-rabbitmq.env: "secrets/rabbitmq-secrets/rabbitmq-creds"
+    vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
     vault.hashicorp.com/agent-inject-status: "update"
     vault.hashicorp.com/agent-inject-template-postgres.env: |
       {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
@@ -19,10 +19,15 @@ annotations:
       export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
       export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
       {{- end }}
-    vault.hashicorp.com/agent-inject-template-rabbitmq.env: |
-      {{- with secret "secrets/rabbitmq-secrets/rabbitmq-creds" -}}
-      export RABBITMQ_URL=amqp://{{ .Data.RABBITMQ_USERNAME }}:{{ .Data.RABBITMQ_PASSWORD }}@rabbitmq.rabbitmq.svc.cluster.local:5672
+    vault.hashicorp.com/agent-inject-template-redis.env: |
+      {{- with secret "secrets/redis-secrets/redis-creds" -}}
+      export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
       {{- end }}
+    # vault.hashicorp.com/agent-inject-template-redis.env: |
+    #   {{- with secret "secrets/redis-secrets/redis-creds" -}}
+    #   export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
+    #   export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"      
+    #   {{- end }}
     
 serviceAccountName: datamigrator-vault-sa
 
@@ -58,26 +63,33 @@ env:
   # - name: DB_USER # from secret
   #   value: "dmadmin"
   # - name: DB_PASSWORD # from secret
-  #   value: "dmadmin"
-  # - name: RABBITMQ_URL # from secret
-  #   value: "amqp://guest:guest@rabbitmq1:5672"
+  #   value: "default"
 
-  - name: REPLICA_INDEX
-    value: "$(POD_NAME)"
-  - name: RABBITMQ_URL_EXCHANGE
-    value: "defaultEX"
-  - name: RABBITMQ_URL_ROUTING_KEY
-    value: "socketConnetion"
-  - name: RABBITMQ_QUEUE
-    value: "jobservice-queue"
-  - name: RABBITMQ_QUEUE_IS_DURABLE
-    value: "true"
-  - name: RABBITMQ_INVENTORY_QUEUE
-    value: "inventory"
   - name: SERVICE
-    value: "job-service"
+    value: "/job-service"
   - name: MOUNT_BASE_PATH
-    value: "/home/datamigrator/jobs"
+    value: "/mnt/datamigrator"
+
+  - name: DB_SCHEMA
+    value: "datamigrator"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
+  - name: REDIS_HOST
+    value: "redis-cluster.redis.svc.cluster.local"
+  # - name: REDIS_USERNAME
+  #   value: "default"
+  - name: REDIS_PASSWORD
+    value: "welcome"
+  - name: REDIS_PORT
+    value: "6379"
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_DIR
+    value: "/logs"
+  - name: TEMPLATES_PATH
+    value: "src/templates"
+  - name: START_CONSUMER
+    value: "http://db-writer-service:3000"
 
 
 service:

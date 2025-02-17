@@ -55,8 +55,9 @@
 - name: Display images with tags
   debug:
     msg: >-
+      Repositories with their available tags:
       {% for repo in formatted_images %}
-      {{ repo.repository }}: {{ repo.tags | default([]) | join(', ') }}
+      - {{ repo.name }}: {{ repo.tags | default([]) | join(', ') }}
       {% endfor %}
   when: formatted_images | length > 0
 

@@ -1,4 +1,4 @@
-- name: Copy cloud-init configuration
+- name: 3.1. Copy cloud-init configuration
   become: yes
   copy:
     src: ./templates/cloud-init.j2

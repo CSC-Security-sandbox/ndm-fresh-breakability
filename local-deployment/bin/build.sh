@@ -38,7 +38,7 @@ if $initial_build; then
 else
     echo -e "\nFetching multipass IP for the registry..."
     multipass_output=$(multipass list)
-    ip_address=$(echo "$multipass_output" | awk '/datamigrator/ {print $3}')
+    ip_address=$(echo "$multipass_output" | awk '/datamigrator-cp/ {print $3}')
     repo_url="${ip_address}:32000"
     echo -e "\nUsing remote registry: $repo_url"
 fi

@@ -56,19 +56,19 @@ Navigate to the packer/worker directory to execute the Packer build process.
 Run the following command to initialize the Packer configuration:
 ```
 cd packer/worker
-packer init -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+packer init -var-file=cloud-packer.json -var "worker_binary_path=/path/to/binary/worker-linux-x64" ubuntu-packer-cloud.pkr.hcl 
 ```
 
 ### Validate Configuration
 
 To validate the Packer configuration, run:
 ```
-packer validate -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+packer validate -var-file=cloud-packer.json -var "worker_binary_path=/path/to/binary/worker-linux-x64" ubuntu-packer-cloud.pkr.hcl
 ```
 
 ### Build Command
 
 Run the following command to build the cloud image:
 ```
-packer build -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+packer build -var-file=cloud-packer.json -var "worker_binary_path=/path/to/binary/worker-linux-x64" ubuntu-packer-cloud.pkr.hcl
 ```

@@ -1,0 +1,112 @@
+---
+- name: Creates temporal directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/temporal
+    state: directory
+
+- name: Generate random password for temporal
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
+    echo "TEMPORAL_POSTGRES_PASSWORD:$TEMPORAL_POSTGRES_PASSWORD"
+  args:
+    executable: /bin/bash      
+  register: temporal_passwords
+  
+- name: Set Base64-encoded password as fact
+  set_fact:
+    temporal_db_password: "{{ (temporal_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
+    temporal_db_password_base64: "{{ (temporal_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+
+- name: temporal-namespace template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/temporal-namespace.j2 dest=$HOME/temporal/temporal-namespace.yaml
+
+- name: temporal-secret template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/temporal-secret.j2 dest=$HOME/temporal/temporal-secret.yaml
+
+- name: temporal-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/temporal-values.j2 dest=$HOME/temporal/temporal-values.yaml
+
+- name: Cleanup service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl delete serviceaccount -n temporal temporal-sa
+  when: temporal_uninstall is defined
+
+- name: remove previous installation
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm delete temporal --namespace "temporal"
+    kubectl delete pvc --all --namespace "temporal"
+    kubectl delete -f $HOME/temporal/temporal-secret.yaml
+    kubectl delete -f $HOME/temporal/temporal-namespace.yaml
+  when: temporal_uninstall is defined    
+  args:
+    chdir: $HOME
+
+- name: setup namespace and secret for temporal
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/temporal/temporal-namespace.yaml
+    kubectl apply -f $HOME/temporal/temporal-secret.yaml
+  args:
+    chdir: $HOME
+
+- name: Create service account
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create serviceaccount temporal-sa -n temporal
+
+- name: Deploy temporal helm chart
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm upgrade --install --repo https://go.temporal.io/helm-charts -f $HOME/temporal/temporal-values.yaml temporaltest temporal --version "{{ temporal_version }}" --namespace "temporal"
+    exit 0
+  args:
+    executable: /bin/bash      
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Helm Install (temporal): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for 150 seconds before waiting for pods to come up
+  ansible.builtin.pause:
+    seconds: 150
+
+- name: Wait for non-completed pods to be ready
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl wait --namespace="temporal" --for=condition=Ready pod \
+    --selector='!job-name' --field-selector=status.phase!=Succeeded
+  register: kubectl_get_pods
+  args:
+    chdir: $HOME
+  retries: 5
+  delay: 20
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Get pods (temporal): {{ kubectl_get_pods.stdout | split('\n') }}"
+
+- name: Delete temporal directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/temporal
+    state: absent

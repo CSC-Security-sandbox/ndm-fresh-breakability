@@ -1,4 +1,4 @@
-{% if not local_cluster %}
+{% if not local_cluster | default(false) %}
 global:
   imagePullSecrets:
     - azure-dev-acr-creds

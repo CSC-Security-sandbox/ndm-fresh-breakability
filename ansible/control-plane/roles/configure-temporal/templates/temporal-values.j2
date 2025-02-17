@@ -1,0 +1,77 @@
+server:
+  enabled: true
+  replicaCount: 2
+  # additionalEnv:
+  #   - name: TEMPORAL_UI_PUBLIC_PATH
+  #     value: "/temporal/ui"
+  config:
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 7d
+    persistence:
+      default:
+        driver: "sql"
+        sql:
+          driver: "postgres12"
+          database: "temporal"
+          port: 5432
+          host: "postgres-postgresql.postgres.svc.cluster.local"
+          user: "temporal"
+          secretKey: "temporal-db-password"
+          secretName: "temporal-credentials"
+          maxConns: 20
+          maxConnLifetime: "1h"
+      visibility:
+        driver: "sql"
+        sql:
+          driver: "postgres12"
+          database: "temporal_visibility"
+          port: 5432
+          host: "postgres-postgresql.postgres.svc.cluster.local"
+          user: "temporal"
+          secretKey: "temporal-db-password"
+          secretName: "temporal-credentials"
+          maxConns: 20
+          maxConnLifetime: "1h"
+      
+  frontend:
+    service:
+      type: ClusterIP
+      port: 7233
+
+
+web:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: "public"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - "/temporal/ui(.*)"
+  additionalEnv:
+    - name: TEMPORAL_UI_PUBLIC_PATH
+      value: "/temporal/ui"
+
+adminTools:
+  enabled: true
+
+postgresql:
+  enabled: false
+
+elasticsearch:
+  enabled: false
+
+cassandra:
+  enabled: false
+
+mysql:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false

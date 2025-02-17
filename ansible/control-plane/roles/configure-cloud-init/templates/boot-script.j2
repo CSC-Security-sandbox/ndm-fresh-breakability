@@ -99,7 +99,7 @@ unseal_vault() {
 }
 
 restart_statefulsets() {
-    local services=("postgres-postgresql:postgres" "rabbitmq:rabbitmq" "keycloak:keycloak")
+    local services=("postgres-postgresql:postgres" "keycloak:keycloak" "redis-cluster:redis")
 
     for service in "${services[@]}"; do
         IFS=':' read -r statefulset namespace <<< "$service"
@@ -122,6 +122,33 @@ restart_statefulsets() {
             handle_failure "Pods for StatefulSet $statefulset in namespace $namespace are not Ready"
         else
             log "StatefulSet $statefulset in namespace $namespace restarted successfully and all pods are Ready."
+        fi
+    done
+}
+
+restart_temporal_deployments() {
+    local deployments=("temporaltest-frontend" "temporaltest-history" "temporaltest-worker" "temporaltest-admintools" "temporaltest-web" "temporaltest-matching")
+    local namespace="temporal"
+
+    for deployment in "${deployments[@]}"; do
+        log "Restarting Deployment $deployment in namespace $namespace..."
+
+        if ! retry $MAX_RETRIES "kubectl rollout restart deployment $deployment -n $namespace"; then
+            handle_failure "Failed to restart Deployment $deployment in namespace $namespace"
+            continue
+        fi
+
+        log "Waiting for Deployment $deployment rollout to complete in namespace $namespace..."
+        if ! retry $MAX_RETRIES "kubectl rollout status deployment/$deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+            handle_failure "Rollout of Deployment $deployment in namespace $namespace failed"
+            continue
+        fi
+
+        log "Waiting for all pods in Deployment $deployment to become Ready in namespace $namespace..."
+        if ! retry $MAX_RETRIES "kubectl wait --namespace=\"$namespace\" --for=condition=Ready pod -l app=$deployment --timeout=${WAIT_TIMEOUT}s"; then
+            handle_failure "Pods for Deployment $deployment in namespace $namespace are not Ready"
+        else
+            log "Deployment $deployment in namespace $namespace restarted successfully and all pods are Ready."
         fi
     done
 }
@@ -160,10 +187,6 @@ post_checks() {
     log "Checking PostgreSQL..."
     retry $MAX_RETRIES "kubectl exec -n postgres $(kubectl get pod -n postgres -l app=postgres-postgresql -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -c '\l'" || handle_failure "PostgreSQL is not responding"
 
-    # RabbitMQ
-    log "Checking RabbitMQ..."
-    retry $MAX_RETRIES "kubectl exec -n rabbitmq $(kubectl get pod -n rabbitmq -l app=rabbitmq -o jsonpath='{.items[0].metadata.name}') -- rabbitmqctl status" || handle_failure "RabbitMQ is not responding"
-
     # datamigrator Services
     log "Checking datamigrator microservices..."
     retry $MAX_RETRIES "kubectl get pods -n datamigrator --no-headers | grep -v Running && false" || log "All datamigrator pods are running"
@@ -184,6 +207,7 @@ main() {
     
     unseal_vault
     restart_statefulsets
+    restart_temporal_deployments
     
     log "Restarting datamigrator pods..."
     retry $MAX_RETRIES "kubectl delete pod --all -n datamigrator" || handle_failure "Failed to delete datamigrator pods"

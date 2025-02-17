@@ -14,10 +14,12 @@
     export DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
     export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
     export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.LIQUIBASE_POSTGRES_PASSWORD)
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
     echo "ROOT_PASSWORD:$POSTGRES_ROOT_PASSWORD"
     echo "DMADMIN_PASSWORD:$DMADMIN_PASSWORD"
     echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
     echo "LIQUIBASE_POSTGRES_PASSWORD:$LIQUIBASE_POSTGRES_PASSWORD"
+    echo "TEMPORAL_POSTGRES_PASSWORD:$TEMPORAL_POSTGRES_PASSWORD"
   args:
     executable: /bin/bash      
   register: postgres_passwords
@@ -32,6 +34,8 @@
     keycloak_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'KEYCLOAK_POSTGRES_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
     liquibase_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'LIQUIBASE_POSTGRES_PASSWORD:.*') | map('regex_replace', 'LIQUIBASE_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
     liquibase_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'LIQUIBASE_POSTGRES_PASSWORD:.*') | map('regex_replace', 'LIQUIBASE_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
+    temporal_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
+    temporal_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
 - name: postgres-namespace template
   become: yes
@@ -126,15 +130,22 @@
 - name: wait for pods to come up
   become: yes
   become_user: "{{ vm_username }}"
-  shell: kubectl wait --namespace="postgres" --for=condition=Ready pod --all 
+  shell: kubectl wait --namespace="postgres" --for=condition=Ready pod --all
   register: kubectl_get_pods
-  until: kubectl_get_pods.stdout|split('\n')|length == 1
-  retries: 6
-  delay: 10
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
 
 - name: debug output
   ansible.builtin.debug: 
     msg: "Get pods (postgres): {{ kubectl_get_pods.stdout | split('\n') }}"
+
+- name: Check postgres pod status
+  shell: kubectl get pods -n postgres
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
 
 - name: Delete postgres directory
   become: yes

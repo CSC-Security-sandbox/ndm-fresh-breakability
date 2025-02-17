@@ -2,3 +2,4 @@
 **/package/values.yaml
 /datamigrator/
 inventory.yaml
+.ansible

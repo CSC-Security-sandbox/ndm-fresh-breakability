@@ -16,14 +16,18 @@
 - name: Configure postgres
   import_playbook: configure-postgres.yaml
 
-- name: Configure rabbitmq
-  import_playbook: configure-rabbitmq.yaml
+- name: Configure redis
+  import_playbook: configure-redis.yaml
+
+- name: Configure temporal
+  import_playbook: configure-temporal.yaml
+
+- name: Configure microk8s image registry with datamigrator application images
+  import_playbook: configure-microk8s-registry.yaml
+  when: local_cluster is defined
 
 - name: Configure keycloak
   import_playbook: configure-keycloak.yaml
-
-# - name: Configure microk8s image registry with datamigrator application images
-#   import_playbook: configure-microk8s-registry.yaml
 
 - name: Configure datamigrator helm chart and resources
   import_playbook: configure-datamigrator.yaml
@@ -33,6 +37,8 @@
 
 - name: Configure cloud init
   import_playbook: configure-cloud-init.yaml
+  when: local_cluster is not defined
 
 - name: Reset Cluster
   import_playbook: reset-cluster.yaml
+  when: local_cluster is not defined
