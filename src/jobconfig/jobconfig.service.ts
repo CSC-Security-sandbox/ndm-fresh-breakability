@@ -103,6 +103,8 @@ export class JobConfigService {
       const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
       return jobConfigs as any;
       // Step 3: extract exclude pattern details.
+      // check condition only create when atleat one migration is completed for specific source path and target path.
+      // also check with netapp if that is hard requirement.
       // Step 4: create jobconfig for the step 1 with exclude patterns from step 3.
       return [
         {
