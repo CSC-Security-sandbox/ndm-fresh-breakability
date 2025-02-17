@@ -25,7 +25,7 @@ export class PdfService {
       if(reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
 
       await this.inventoryRepo.query(
-        "CALL generate_discovery_report($1)",
+        `CALL ${process.env.SCHEMA}.generate_discovery_report($1)`,
         [jobRunId]
       );
 
