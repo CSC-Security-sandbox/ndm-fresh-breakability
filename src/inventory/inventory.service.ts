@@ -9,6 +9,8 @@ import { OperationStatus, OperationType, Pattern } from 'src/enum/queues.enum';
 import { TaskEntity } from 'src/entities/task.entity';
 import { OperationsEntity } from 'src/entities/operation.entity';
 import { randomUUID } from 'crypto';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { TaskErrorEntity } from 'src/entities/task-error.entity';
 
 @Injectable()
 export class InventoryService {
@@ -29,6 +31,10 @@ export class InventoryService {
         private readonly taskRepo: Repository<TaskEntity>,
         @InjectRepository(OperationsEntity)
         private readonly operationRepo: Repository<OperationsEntity>,
+        @InjectRepository(OperationErrorEntity)
+        private readonly operationErrorRepo: Repository<OperationErrorEntity>,
+        @InjectRepository(OperationErrorEntity)
+        private readonly TaskErrorRepo: Repository<TaskErrorEntity>,
 
     ) { 
 
@@ -98,30 +104,82 @@ export class InventoryService {
     }  
   async saveTasks(data: any) {
     try {
-    const {jobRunId,taskType,status,sPath,tPath,excludeFilePatterns,commands} = data;
-     let  workerId =  randomUUID();
-    const task = this.taskRepo.create({
+      const { jobRunId, taskType, status, sPath, tPath, excludeFilePatterns, commands } = data;
+      let workerId = randomUUID();
+  
+      const task = this.taskRepo.create({
+        id: randomUUID(),
+        jobRunId: jobRunId,
+        status: status,
+        taskType: taskType,
+        workerId: '07150b58-43db-478d-9c21-13a32cbf8836'
+      });
+      const taskEntity = await this.taskRepo
+        .createQueryBuilder()
+        .insert()
+        .into('tasks')
+        .values(task)
+        .orUpdate(
+          ['status'],
+          ['id'] 
+        )
+        .execute();
+      commands.forEach(async (command: any) => {
+      const operation = this.operationRepo.create({
+        taskId: task.id,
+        id: randomUUID(),
+        jobRunId: jobRunId,
+        sPathId: '07150b58-43db-478d-9c21-13a32cbf8836',
+        tPathId: '07150b58-43db-478d-9c21-13a32cbf8836',
+        status: command?.status,
+        operationType: command.operationType,
+        request: command,
+        fPath: command?.fPath
+      });
+      await this.operationRepo
+        .createQueryBuilder()
+        .insert()
+        .into('operations')
+        .values(operation)
+        .orUpdate(
+          ['status'], 
+          ['id']
+        )
+        .execute();
+      });
+    } catch (err) {
+      this.logger.error(`Failed to save task records: ${err.message}`, err.stack);
+      throw new Error('Error while saving task records to the database');
+    }
+}
+async saveOperationError(data: any) { 
+  try {
+    const {opertionId,errorCode,errorMessage} = data;
+    const operationError = this.operationErrorRepo.create({
       id: randomUUID(),
-      jobRunId: jobRunId,
-      status:status,
-      taskType:taskType,
-      workerId: '07150b58-43db-478d-9c21-13a32cbf8836'
+      errorCode: errorCode,
+      errorMessage: errorMessage,
+      operation: opertionId,
     });
-   const taskEntity=  await this.taskRepo.insert(task);
-    const operation = this.operationRepo.create({
-      taskId: task.id,
-     jobRunId: jobRunId,
-     sPathId: '07150b58-43db-478d-9c21-13a32cbf8836',
-     tPathId:  '07150b58-43db-478d-9c21-13a32cbf8836',
-     status : OperationStatus.COMPLETED,
-     operationType: OperationType.SCAN,
-     request:commands,
-     fPath: commands[0]?.fPath
+    await this.operationErrorRepo.save(operationError);
+  }catch(err){
+    this.logger.error(`Failed to save operation error records: ${err.message}`, err.stack);
+    throw new Error('Error while saving operation error records to the database');
+  }
+}
+async saveTaskError(data: any) {
+  try {
+    const {taskId,errorCode,errorMessage} = data;
+    const taskError = this.TaskErrorRepo.create({
+      id: randomUUID(),
+      errorCode: errorCode,
+      errorMessage: errorMessage,
+      task: taskId,
     });
-    await this.operationRepo.insert(operation);
-  }catch(err){  
-    this.logger.error(`Failed to save task records: ${err.message}`, err.stack);
-    throw new Error('Error while saving task records to the database');
+    await this.TaskErrorRepo.save(taskError);
+  }catch(err){
+    this.logger.error(`Failed to save task error records: ${err.message}`, err.stack);
+    throw new Error('Error while saving task error records to the database');
   }
 }
 }
