@@ -6,7 +6,7 @@ async function log(traceId: string, message: string) {
 }
 
 const { validate: validateActivity } = proxyActivities<ValidateConnectionActivity>({
-  startToCloseTimeout: '30s',
+  startToCloseTimeout: '300s',
 });
 
 export async function ValidateWorkerConnectionWorkflow(

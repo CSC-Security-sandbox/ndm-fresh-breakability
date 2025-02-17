@@ -7,14 +7,14 @@ async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { scanActivity: scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '300s' });
+const { scanActivity: scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '5h' });
 
 const { 
   fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
   publishLastEntry: updateLastEntry
-} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '300s' });
+} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
 
 
 /**
