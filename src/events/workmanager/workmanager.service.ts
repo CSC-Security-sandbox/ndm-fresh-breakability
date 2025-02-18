@@ -40,12 +40,12 @@ export class WorkManager{
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
-    @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
-    async createInitDiscovery(payload: TaskEventPayload){
-        await this.createTaskForJobRun(payload)
-    }
+    // @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
+    // async createInitDiscovery(payload: TaskEventPayload){
+    //     await this.createTaskForJobRun(payload)
+    // }
 
-    async createTaskForJobRun(payload:TaskEventPayload) {
+    async createTaskForJobRun(payload:TaskEventPayload, taskId: string) {
         try{
             const sourceVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.sourceCredential?.pathId}})
             const targetVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.targetCredential?.pathId}})
@@ -61,6 +61,7 @@ export class WorkManager{
             this.logger.log(`Source Path : ${sourcePath} | Target Path : ${targetPath}`)
             const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath)) : buildMigrationPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath),this.buildFilepath(targetPath,targetVolume?.volumePath))  
             const operation = this.operationsRepo.create({
+                taskId,
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
                 fPath: sourceVolume?.volumePath,
