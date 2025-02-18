@@ -3,7 +3,7 @@ import { ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
-import { WorkersConfig } from 'src/config/app.config';
+// import { WorkersConfig } from 'src/config/app.config';
 import * as fs from 'fs';
 
 
@@ -103,12 +103,12 @@ export class SMBProtocol extends Protocol {
     this.logger.info(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
-
     const response = this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
       payload,
-      WorkersConfig.get('smbUnmountCommand'),
+      // WorkersConfig.get('smbUnmountCommand'),
+      this.getCommandPattern(CommandPattern.UNMOUNT_PATH),
       'SMB Unmount',
     );
 
@@ -134,7 +134,7 @@ export class SMBProtocol extends Protocol {
       traceId,
       ProtocolTypes.SMB,
       payload,
-      WorkersConfig.get('smbMountCommand'),
+      this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'SMB Mount',
     );
   }
