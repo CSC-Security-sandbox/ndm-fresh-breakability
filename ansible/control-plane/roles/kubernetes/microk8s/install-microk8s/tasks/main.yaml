@@ -7,10 +7,7 @@
 
 # Install MicroK8s
 - name: 4.2. Install MicroK8s
-  snap:
-    name: microk8s
-    classic: yes
-    channel: "{{ microk8s_version }}"
+  command: "snap install {{ microk8s_bin_path }}microk8s --classic --channel={{ microk8s_version }}"
 
 # Wait for MicroK8s to be ready
 - name: 4.3. Wait for MicroK8s to be ready

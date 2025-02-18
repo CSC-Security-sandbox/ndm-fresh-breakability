@@ -54,7 +54,7 @@ env:
   - name: DB_NAME
     value: "datamigrator"
   - name: DB_HOST
-    value: "postgres-postgresql.postgres.svc.cluster.local"
+    value: "postgresql.postgres.svc.cluster.local"
   - name: SCHEMA
     value: "datamigrator"
   - name: DB_SCHEMA
@@ -75,7 +75,7 @@ env:
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
   - name: REDIS_HOST
-    value: "redis-cluster.redis.svc.cluster.local"
+    value: "redis-master.redis.svc.cluster.local"
   # - name: REDIS_USERNAME
   #   value: "default"
   - name: REDIS_PASSWORD
@@ -112,7 +112,7 @@ liquibase:
   enabled: true
   env:
     - name: LIQUIBASE_COMMAND_URL
-      value: "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/datamigrator"
+      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
     - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
       value: "liquibase"
     - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME

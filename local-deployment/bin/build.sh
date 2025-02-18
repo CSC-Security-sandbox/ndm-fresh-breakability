@@ -1,15 +1,15 @@
 #!/bin/bash
 set -e  # Exit on any error
 
-echo -e "\nLogging in to Azure..."
-az login --service-principal \
-  --username  "${AZ_USERNAME}" \
-  --password "${AZ_PASSWORD}" \
-  --tenant "${AZ_TENANT}"
+# check if GITOPS_USER_GITHUB_TOKEN environment variable is set or not
+if [ -z "$GITOPS_USER_GITHUB_TOKEN" ]
+then
+    echo "Please set the GITOPS_USER_GITHUB_TOKEN environment variable"
+    exit 1
+else
+    echo "GITOPS_USER_GITHUB_TOKEN environment variable is set"
+fi
  
-echo -e "\nLogging in to Azure Container Registry..."
-az acr login --name datamigratedev
-
 script_dir=$(dirname "$0")
 base_dir=$(realpath "$script_dir/../../..")
 datamigrator_dir="$base_dir/app-deployment/datamigrator"

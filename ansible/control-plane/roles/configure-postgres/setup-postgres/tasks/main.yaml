@@ -113,7 +113,7 @@
   become_user: "{{ vm_username }}"
   shell: |
     
-    helm upgrade --install postgres oci://registry-1.docker.io/bitnamicharts/postgresql -f $HOME/postgres/postgres-values.yaml --version "{{ postgres_version }}" --namespace "postgres"
+    helm upgrade --install postgresql oci://registry-1.docker.io/bitnamicharts/postgresql -f $HOME/postgres/postgres-values.yaml --version "{{ postgres_version }}" --namespace "postgres"
     exit 0
   args:
     executable: /bin/bash      

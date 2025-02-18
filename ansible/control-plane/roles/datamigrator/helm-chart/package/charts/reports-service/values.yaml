@@ -37,7 +37,7 @@ env:
     value: "$(MY_HOST_IP)"
 
   - name: DB_HOST
-    value: "postgres-postgresql.postgres.svc.cluster.local"
+    value: "postgresql.postgres.svc.cluster.local"
   - name: DB_PORT
     value: "5432"
   - name: DB_NAME
@@ -78,7 +78,7 @@ liquibase:
   enabled: true
   env:
     - name: LIQUIBASE_COMMAND_URL
-      value: "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/datamigrator"
+      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
     - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
       value: "liquibase"
     - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME

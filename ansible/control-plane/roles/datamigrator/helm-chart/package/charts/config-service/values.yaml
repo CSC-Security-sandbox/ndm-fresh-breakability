@@ -40,7 +40,7 @@ env:
   - name: DB_NAME
     value: "datamigrator"
   - name: DB_HOST
-    value: "postgres-postgresql.postgres.svc.cluster.local"
+    value: "postgresql.postgres.svc.cluster.local"
 
   # - name: DB_USER # from secret
   #   value: ""
@@ -84,7 +84,7 @@ liquibase:
   enabled: true
   env:
     - name: LIQUIBASE_COMMAND_URL
-      value: "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/datamigrator"
+      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
     - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
       value: "liquibase"
     - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME

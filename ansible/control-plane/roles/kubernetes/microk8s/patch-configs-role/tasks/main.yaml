@@ -11,27 +11,27 @@
   become: yes
   template:
     src: data-configmap.j2
-    dest: $HOME/configmap-patch.yaml
-
-- name: Patch the ConfigMap
-  become_user: "{{ vm_username }}"
-  become: yes
-  shell: kubectl patch configmap nginx-ingress-tcp-microk8s-conf -n ingress --type merge --patch-file $HOME/configmap-patch.yaml
-  args:
-    executable: /bin/bash
-    chdir: $HOME
+    dest: $HOME/ingress/configmap-patch.yaml
 
 - name: Create patch file for DaemonSet
   become_user: "{{ vm_username }}"
   become: yes
   template:
     src: patch-daemonset.j2
-    dest: $HOME/ingress-nginx-controller-patch.json
+    dest: $HOME/ingress/ingress-nginx-controller-patch.json
+
+- name: Patch the ConfigMap
+  become_user: "{{ vm_username }}"
+  become: yes
+  shell: kubectl patch configmap nginx-ingress-tcp-microk8s-conf -n ingress --type merge --patch-file $HOME/ingress/configmap-patch.yaml
+  args:
+    executable: /bin/bash
+    chdir: $HOME
 
 - name: Patch the DaemonSet
   become_user: "{{ vm_username }}"
   become: yes
-  shell: kubectl patch daemonset nginx-ingress-microk8s-controller -n ingress --type json --patch-file $HOME/ingress-nginx-controller-patch.json
+  shell: kubectl patch daemonset nginx-ingress-microk8s-controller -n ingress --type json --patch-file $HOME/ingress/ingress-nginx-controller-patch.json
   args:
     executable: /bin/bash
     chdir: $HOME

@@ -99,7 +99,7 @@ unseal_vault() {
 }
 
 restart_statefulsets() {
-    local services=("postgres-postgresql:postgres" "keycloak:keycloak" "redis-cluster:redis")
+    local services=("postgresql:postgres" "keycloak:keycloak" "redis-master:redis")
 
     for service in "${services[@]}"; do
         IFS=':' read -r statefulset namespace <<< "$service"
@@ -112,14 +112,9 @@ restart_statefulsets() {
         fi
 
         log "Waiting for StatefulSet $statefulset rollout to complete in namespace $namespace..."
-        if ! retry $MAX_RETRIES "kubectl rollout status statefulset/$statefulset -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+        if ! retry $MAX_RETRIES "kubectl rollout status --watch statefulset/$statefulset -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
             handle_failure "Rollout of StatefulSet $statefulset in namespace $namespace failed"
             continue
-        fi
-
-        log "Waiting for all pods in StatefulSet $statefulset to become Ready in namespace $namespace..."
-        if ! retry $MAX_RETRIES "kubectl wait --namespace=\"$namespace\" --for=condition=Ready pod -l statefulset.kubernetes.io/pod-name=$statefulset --timeout=${WAIT_TIMEOUT}s"; then
-            handle_failure "Pods for StatefulSet $statefulset in namespace $namespace are not Ready"
         else
             log "StatefulSet $statefulset in namespace $namespace restarted successfully and all pods are Ready."
         fi
@@ -127,30 +122,39 @@ restart_statefulsets() {
 }
 
 restart_temporal_deployments() {
-    local deployments=("temporaltest-frontend" "temporaltest-history" "temporaltest-worker" "temporaltest-admintools" "temporaltest-web" "temporaltest-matching")
     local namespace="temporal"
+    log "Restarting Deployments in namespace $namespace..."
 
-    for deployment in "${deployments[@]}"; do
-        log "Restarting Deployment $deployment in namespace $namespace..."
+    if ! retry $MAX_RETRIES "kubectl rollout restart deployment -n $namespace"; then
+        handle_failure "Failed to restart Deployments in namespace $namespace"
+        continue
+    fi
 
-        if ! retry $MAX_RETRIES "kubectl rollout restart deployment $deployment -n $namespace"; then
-            handle_failure "Failed to restart Deployment $deployment in namespace $namespace"
-            continue
-        fi
+    log "Waiting for Deployments rollout to complete in namespace $namespace..."
+    if ! retry $MAX_RETRIES "kubectl rollout status  --watch  deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Rollout of Deployments in namespace $namespace failed"
+        continue
+    else
+        log "Deployments in namespace $namespace restarted successfully and all pods are Ready."
+    fi
+}
 
-        log "Waiting for Deployment $deployment rollout to complete in namespace $namespace..."
-        if ! retry $MAX_RETRIES "kubectl rollout status deployment/$deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
-            handle_failure "Rollout of Deployment $deployment in namespace $namespace failed"
-            continue
-        fi
+restart_datamigrator_deployments() {
+    local namespace="datamigrator"
+    log "Restarting Deployments in namespace $namespace..."
 
-        log "Waiting for all pods in Deployment $deployment to become Ready in namespace $namespace..."
-        if ! retry $MAX_RETRIES "kubectl wait --namespace=\"$namespace\" --for=condition=Ready pod -l app=$deployment --timeout=${WAIT_TIMEOUT}s"; then
-            handle_failure "Pods for Deployment $deployment in namespace $namespace are not Ready"
-        else
-            log "Deployment $deployment in namespace $namespace restarted successfully and all pods are Ready."
-        fi
-    done
+    if ! retry $MAX_RETRIES "kubectl rollout restart deployment -n $namespace"; then
+        handle_failure "Failed to restart Deployments in namespace $namespace"
+        continue
+    fi
+
+    log "Waiting for Deployments rollout to complete in namespace $namespace..."
+    if ! retry $MAX_RETRIES "kubectl rollout status  --watch  deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Rollout of Deployments in namespace $namespace failed"
+        continue
+    else
+        log "Deployments in namespace $namespace restarted successfully and all pods are Ready."
+    fi
 }
 
 setup_metallb() {
@@ -210,8 +214,7 @@ main() {
     restart_temporal_deployments
     
     log "Restarting datamigrator pods..."
-    retry $MAX_RETRIES "kubectl delete pod --all -n datamigrator" || handle_failure "Failed to delete datamigrator pods"
-    retry $MAX_RETRIES "kubectl wait --namespace=\"datamigrator\" --for=condition=Ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "datamigrator pods not ready"
+    restart_datamigrator_deployments
     
     setup_metallb
     log "MicroK8s cloud init setup completed successfully"

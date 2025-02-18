@@ -8,7 +8,7 @@ postgresql:
     enabled: false
 
 externalDatabase:
-    host: "postgres-postgresql.postgres.svc.cluster.local"
+    host: "postgresql.postgres.svc.cluster.local"
     port: 5432
     user: kcadmin
     database: keycloak
@@ -137,7 +137,7 @@ extraEnvVars:
     - name: KEYCLOAK_HOSTNAME
       value: "https://$(MY_HOST_IP)/keycloak/"
     - name: DATAMIGRATOR_DB_HOST
-      value: postgres-postgresql.postgres.svc.cluster.local
+      value: postgresql.postgres.svc.cluster.local
     - name: DATAMIGRATOR_DB_PORT
       value: '5432'
     - name: DATAMIGRATOR_DB_NAME

@@ -4,11 +4,11 @@
   gather_facts: yes
   become: yes
   roles:
-    - { role: ../roles/configure-redis/redis-data, tags: 'redis-data' }
+    - { role: ../roles/configure-redis-cluster/redis-data, tags: 'redis-data' }
 
 - name: Configure Redis
   hosts: default
   gather_facts: yes
   become: yes
   roles:
-    - { role: ../roles/configure-redis/setup-redis, tags: 'setup-redis' }
+    - { role: ../roles/configure-redis-cluster/setup-redis, tags: 'setup-redis' }

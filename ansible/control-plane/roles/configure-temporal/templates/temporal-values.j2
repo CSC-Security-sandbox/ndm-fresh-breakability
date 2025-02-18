@@ -17,7 +17,7 @@ server:
           driver: "postgres12"
           database: "temporal"
           port: 5432
-          host: "postgres-postgresql.postgres.svc.cluster.local"
+          host: "postgresql.postgres.svc.cluster.local"
           user: "temporal"
           secretKey: "temporal-db-password"
           secretName: "temporal-credentials"
@@ -29,7 +29,7 @@ server:
           driver: "postgres12"
           database: "temporal_visibility"
           port: 5432
-          host: "postgres-postgresql.postgres.svc.cluster.local"
+          host: "postgresql.postgres.svc.cluster.local"
           user: "temporal"
           secretKey: "temporal-db-password"
           secretName: "temporal-credentials"

@@ -4,3 +4,4 @@
 inventory.yaml
 .ansible
 .vscode
+.DS_Store

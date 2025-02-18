@@ -76,13 +76,18 @@
     state: restarted
   when: local_worker_update is defined
 
-- name: 4.8.2. Print last 20 lines of the worker log
+- name: 4.8.2. Pause for 90 seconds to make sure worker is up
+  ansible.builtin.pause:
+    seconds: 90
+  when: local_worker_update is defined
+
+- name: 4.8.3. Print last 20 lines of the worker log
   ansible.builtin.command:
     cmd: tail -n 20 /opt/datamigrator/logs/datamigrator-worker.log
   register: log_output
   when: local_worker_update is defined
 
-- name: 4.8.3. Debug last 20 lines of the log
+- name: 4.8.4. Debug last 20 lines of the log
   ansible.builtin.debug:
     msg: "{{ log_output.stdout }}"
   when: local_worker_update is defined

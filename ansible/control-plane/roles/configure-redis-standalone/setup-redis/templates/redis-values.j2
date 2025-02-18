@@ -1,0 +1,21 @@
+auth:
+  enabled: true
+  password: "welcome"
+
+existingConfigmap: "redis-config"
+
+master:
+  count: 1
+  persistence:
+    enabled: true
+    storageClass: "local-storage-redis"
+    size: {{ redis_data_volume_size }}
+    selector:
+        matchLabels:
+            role: redis-data
+
+volumePermissions:
+  enabled: true
+
+replica:
+  replicaCount: 0

@@ -17,7 +17,7 @@
   import_playbook: configure-postgres.yaml
 
 - name: Configure redis
-  import_playbook: configure-redis.yaml
+  import_playbook: configure-redis-standalone.yaml
 
 - name: Configure temporal
   import_playbook: configure-temporal.yaml

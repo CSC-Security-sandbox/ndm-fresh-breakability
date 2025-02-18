@@ -6,9 +6,9 @@
 
 global:
   registry: {{ acr_registry }}
-  {% if local_cluster is defined %}
+{% if local_cluster is defined %}
   local_cluster: {{ local_cluster }}
-  {% endif %}
+{% endif %}
   
 admin-service:
   image:
