@@ -7,7 +7,7 @@ import { NativeConnection } from "@temporalio/worker";
 import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
-import { SetupActivityService } from "src/activities/setup-worker/setup.activity";
+import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
 
 @Injectable()
 export class WorkerOptionsService {

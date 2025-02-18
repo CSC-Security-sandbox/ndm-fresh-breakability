@@ -1,5 +1,5 @@
 import { proxyActivities } from '@temporalio/workflow';
-import { SetupActivityService } from 'src/activities/setup-worker/setup.activity';
+import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -13,15 +13,8 @@ const {
 export async function CleanupWorkerWorkflow(
   args: any,
 ): Promise<any> {
-  //const fileServer = args.fileServer;
 
-  log(
-    args.traceId,
-    `Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`,
-  );
+  log( args.traceId,`Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`);
 
-  //cleanup all the workers
-  const results = await cleanupWorkerActivity(args.jobRunId);
-
-  return results;
+  return await cleanupWorkerActivity(args.jobRunId);
 }

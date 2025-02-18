@@ -12,8 +12,6 @@ async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-
-
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
  * @param traceId Unique identifier to trace the request

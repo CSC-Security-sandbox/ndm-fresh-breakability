@@ -7,7 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DiscoveryActivity } from './discovery/discovery.activities';
 import { RedisService } from 'src/redis/redis.service';
 import { DiscoveryScanActivity } from './discovery/discovery-scan-activities';
-import { SetupActivityService } from './setup-worker/setup.activity';
+import { SetupActivityService } from './setup-worker/setup.activity.service';
 
 
 @Module({
