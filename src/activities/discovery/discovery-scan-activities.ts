@@ -32,7 +32,7 @@ export class DiscoveryScanActivity {
 
   private async processInventory(inventory, jobContext: JobContext, taskId, discoveryStats: TaskStats): Promise<any> {
     try {
-      log(jobContext.jobRunId, `Processing ${inventory?.payload?.accumulatedResult?.length} files`);
+      log(jobContext.jobRunId, `Processing ${inventory.length} files`);
       const result = await Promise.all(
         inventory.map(async (item) => {
           if (item.isDirectory) {
@@ -40,7 +40,7 @@ export class DiscoveryScanActivity {
               const id = await jobContext.appendToDirList(item);
               jobContext.dirsInfo.lastId = id;
               jobContext.dirsInfo.numMessages++;
-              log(jobContext.jobRunId, `*************** Appending to dir list ***************`)
+              log(jobContext.jobRunId, `*************** Appending to dir list ***************`);
             } catch (error) {
               const errorCode = this.getErrorCode(error, 'TASK');
               await this.processErrors(new DMError({ taskId: item.taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
@@ -57,7 +57,7 @@ export class DiscoveryScanActivity {
           }
         })
       );
-      log(jobContext.jobRunId, `Processed ${inventory?.payload?.accumulatedResult?.length} files`);
+      log(jobContext.jobRunId, `Processed ${inventory.length} files`);
       return result;
     } catch (error) {
       const errorCode = this.getErrorCode(error, 'TASK');
