@@ -29,7 +29,8 @@
       "node_modules/sqlite3/**/*",
       "dist/**",
       "logs/**",
-      "node_modules/tslib/**"
+      "node_modules/tslib/**",
+      "node_modules/@netapp-cloud-datamigrate/**"
     ],
     "targets": [
       "node18-linux-x64",
