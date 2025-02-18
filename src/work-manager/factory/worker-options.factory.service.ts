@@ -6,7 +6,8 @@ import { WorkFlowType } from "./worker-options.types";
 import { NativeConnection } from "@temporalio/worker";
 import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
-import { WorkerService } from "src/activities/workers/worker.service";
+import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
+import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -14,7 +15,8 @@ export class WorkerOptionsService {
     private readonly listPathActivityService: ListPathActivity,
     private readonly validateConnectionService: ValidateConnectionActivity,
     private readonly discoveryActivities: DiscoveryActivity,
-    private readonly workerService: WorkerService
+    private readonly discoveryScanActivity: DiscoveryScanActivity,
+    private readonly setupActivityService: SetupActivityService
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -29,10 +31,22 @@ export class WorkerOptionsService {
             publishTask: this.discoveryActivities.publishTask.bind(this.discoveryActivities),
             discoveryStatusUpdate: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
             discoveryProcess: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
-            assignTasksToWorkerThread: this.workerService.assignTasksToWorkerThread.bind(this.workerService),
+            scanActivity: this.discoveryScanActivity.scanActivity.bind(this.discoveryScanActivity),
+            publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
+            setup: this.setupActivityService.setup.bind(this.setupActivityService),
+            cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
-        return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, undefined);
+        return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
+          fetchTasks: this.discoveryActivities.fetchTasks.bind(this.discoveryActivities),
+          publishTask: this.discoveryActivities.publishTask.bind(this.discoveryActivities),
+          discoveryStatusUpdate: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
+          discoveryProcess: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
+          scanActivity: this.discoveryScanActivity.scanActivity.bind(this.discoveryScanActivity),
+          publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
+          setup: this.setupActivityService.setup.bind(this.setupActivityService),
+          cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+        });
       default:
         return undefined;
     }

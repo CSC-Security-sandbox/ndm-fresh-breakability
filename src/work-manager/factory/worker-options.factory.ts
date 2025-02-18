@@ -1,5 +1,6 @@
 import { NativeConnection } from "@temporalio/worker";
 import { WorkerConfiguration } from "../work-manager.types";
+import { WorkFlowType } from "./worker-options.types";
 // import { WorkerConfiguration } from "../work-manager.types";
 
 export class WorkFlowOptions {
@@ -38,4 +39,3 @@ export class WorkFlowOptions {
 //         default:
 //             return undefined
 //     }
-// }

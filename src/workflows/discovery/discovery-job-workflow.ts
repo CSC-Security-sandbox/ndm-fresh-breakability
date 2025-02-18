@@ -1,22 +1,21 @@
 import { proxyActivities } from '@temporalio/workflow';
-import type * as discovery from '../../activities/discovery/discovery';
-import type * as fetchTasks from '../../activities/discovery/fetch-tasks';
-import * as publishTask from '../../activities/discovery/publish-task';
-import * as discoveryStatusUpdate from '../../activities/discovery/discovery-status-update';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { WorkerService } from 'src/activities/workers/worker.service';
+import { DiscoveryScanActivity } from 'src/activities/discovery/discovery-scan-activities';
+
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { assignTasksToWorkerThread: assignTasksToWorkerThread } = proxyActivities<WorkerService>({ startToCloseTimeout: '300s' });
+const { scanActivity: scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '5h' });
 
 const { 
   fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
-  discoveryStatusUpdate: updateDiscoveryStatus
-} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '300s' });
+  discoveryStatusUpdate: updateDiscoveryStatus,
+  publishLastEntry: updateLastEntry
+} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
+
 
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
@@ -30,36 +29,22 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(options)}`);
 
   try {
+    await updateDiscoveryStatus(traceId, 'RUNNING');
     while (true) {
       let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {
         log(traceId, `No tasks found. Checking again to ensure no new tasks were just published...`);
         // Immediately re-fetch tasks to ensure we didn’t miss newly published tasks
-        await updateDiscoveryStatus(traceId, 'COMPLETED')
+        await updateLastEntry(traceId)
           .then(() => log(traceId, `Discovery status updated to Completed`))
           .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
         return { message: 'Discovery Completed' };
       }
 
-      await Promise.all(
-        tasks.map(async (task) => {
-          await assignTasksToWorkerThread({
-            data: {
-              id: traceId,
-              jobRunId: task.jobRunId,
-              taskType: '',
-              status: 'PENDING',
-              workerId: task.workerId,
-              sPath: task.sPath,
-              tPath: task.tPath,
-              excludeFilePatterns: task.excludeFilePatterns,
-              commands: task.commands,
-            },
-          }, traceId);
-      
-          await publishTaskActivity(traceId);
-        })
-      );
+      for(const task of tasks) {
+        await scanActivity({data:task}, traceId)
+        await publishTaskActivity(traceId)
+      }
     }
   } catch (error) {
     await updateDiscoveryStatus(traceId, 'FAILED')

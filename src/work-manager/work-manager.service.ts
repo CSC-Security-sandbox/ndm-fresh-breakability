@@ -74,16 +74,16 @@ export class WorkManagerService {
         }
     }
     
-    @Cron(CronExpression.EVERY_SECOND)
+    @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
         if (this.loadingConfigs) return;
         this.loadingConfigs = true;
         try {
-            // const accessToken = await this.getAccessToken();
-            // if (!accessToken) throw new Error('Access token is null');
+            const accessToken = await this.getAccessToken();
+            if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
-                this.httpService.get(`${this.workerConfigUrl}/config/${this.workerId}`, {
-                    // headers: { Authorization: `Bearer ${''}` },
+                this.httpService.get(`${this.workerConfigUrl}/config`, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
                 }).pipe(
                     retry({
                         count: 3,
