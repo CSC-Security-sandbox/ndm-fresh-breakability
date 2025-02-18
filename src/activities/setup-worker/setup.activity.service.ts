@@ -47,9 +47,10 @@ export class SetupActivityService {
 
   async setup(jobRunId: string): Promise<any> {
     console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
-
     try {
         const context = await this.redisService.getJobContext(jobRunId);
+        console.log(`[${jobRunId}] - [${this.workerId}] Setting up worke12iey12iuy12iur`);
+        console.log(context)
         if (!context) {
             throw new Error(`Context not found for traceId ${jobRunId}`);
         }
@@ -57,13 +58,14 @@ export class SetupActivityService {
         const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
         const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
         // mount source path
+        console.log(`[${jobRunId}] - [${this.workerId}] Setting up worke12iey12iuy12iur`);
         await this.mountPath(context.jobConfig.sourceFileServer, protocol, jobRunId);
 
         // mount destination path if exists
         if(context.jobConfig?.destinationFileServer) 
             await this.mountPath(context.jobConfig.destinationFileServer, protocol, jobRunId);
 
-        await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
+        // await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
         return { jobRunId, status: 'success', protocolType, workerId:this.workerId, message: `Worker ${this.workerId} successfully set up.` };
     } catch (error) {
         console.error(`[${jobRunId}] - Setup failed: ${error.message}`);

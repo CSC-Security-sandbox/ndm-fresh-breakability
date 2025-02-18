@@ -34,7 +34,7 @@ export const MigrationWorkflow = async ({
   let result = responseArray.flat();
 
   result.map((r) => {
-    log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
+    log(traceId, `MigrationWorkflow response in setup workflow: ${JSON.stringify(r)}`);
     if (r.status === 'success') {
       activeWorkerIds.push(r.workerId);
     }
@@ -66,9 +66,6 @@ export const MigrationWorkflow = async ({
     );
   }
 
-  log(
-    traceId,
-    `DiscoveryWorkflow response: ${JSON.stringify(result)}`,
-  );
+  log(traceId, `MigrationWorkflow response: ${JSON.stringify(result)}`);
   return result;
 }

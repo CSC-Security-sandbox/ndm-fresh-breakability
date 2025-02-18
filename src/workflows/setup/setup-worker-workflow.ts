@@ -14,6 +14,6 @@ export async function SetupWorkerWorkflow(
   args: any,
 ): Promise<any> {
 
-  log(args.jobRunId, `Starting SaetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
+  log(args.jobRunId, `Starting SetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
   return await setupWorkerActivity(args.jobRunId);
 }
