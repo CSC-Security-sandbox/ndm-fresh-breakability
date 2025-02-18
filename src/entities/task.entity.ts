@@ -11,7 +11,7 @@ import { Base } from './base.entity';
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])
-export class TaskEntity extends Base{
+export class TaskEntity {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
   id: string;

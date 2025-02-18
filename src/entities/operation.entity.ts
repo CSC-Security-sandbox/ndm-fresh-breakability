@@ -10,7 +10,7 @@ import {  OperationErrorEntity } from './operation-error.entity';
 @Index('idx_operation_run_status', ['jobRunId', 'status'])
 @Index('idx_file_path_task', ['fPath', 'taskId'])
 @Index('idx_operation_type', ['operationType'])
-export class OperationsEntity extends Base {
+export class OperationsEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
