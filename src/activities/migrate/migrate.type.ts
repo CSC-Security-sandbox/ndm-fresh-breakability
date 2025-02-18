@@ -7,9 +7,7 @@ export interface ScanContentInput{
     targetPath: string;
     sourcePrefix: string;
     excludePatterns: string[];
-    jobContext: JobContext,
-    logger: Logger,
-    clientConnection: any
+    jobContext: JobContext;
 }
 export interface ScanContentOutput{
     files: string[],
@@ -18,21 +16,16 @@ export interface ScanContentOutput{
 }
 
 export interface FetchScanTaskInput {
-    jobContext: JobContext,
     jobRunId: string
-    logger: Logger
+
 }
 export interface FetchScanTaskOutPut {
     tasks: Task[]
 
 }
 
-
 export interface ScanPathInput{
     task: Task;
-    jobContext: JobContext;
-    logger: Logger,
-    clientConnection: any
 }
 export interface ScanPathOutput{
     isTaskCreated: boolean

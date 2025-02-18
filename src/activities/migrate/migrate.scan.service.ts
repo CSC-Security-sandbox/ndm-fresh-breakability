@@ -10,7 +10,6 @@ import { RedisService } from "src/redis/redis.service";
 @Injectable()
 export class MigrationScanService {
 
-
     readonly workerId: string;
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -81,27 +80,27 @@ export class MigrationScanService {
             }
         } catch (error) {
             scanInput.jobContext.errorsInfo?.init();
-            const dmError = new DMError(scanInput.sourcePath, error);
-            await scanInput.jobContext.appendToErrorList(dmError);
+            // const dmError = new DMError(scanInput.sourcePath, error);
+            // await scanInput.jobContext.appendToErrorList(dmError);
         } finally {
-            scanInput.clientConnection?.set(scanInput.jobRunId, scanInput.jobContext);
+            this.redisService?.setJobContext(scanInput.jobRunId, scanInput.jobContext);
         }
         return syncContentOutput;
     }
 
-    async scanPath({ task, jobContext, logger, clientConnection }: ScanPathInput): Promise<ScanPathOutput> {
+    async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
         const scanPath: ScanPathOutput = { isTaskCreated: false };
         for (const cmd of task.commands) {
+            const jobContext = await this.redisService.getJobContext(task.jobRunId);
             const scanInput: ScanContentInput = {
                 excludePatterns: task.excludeFilePatterns.split(","),
-                jobContext,
-                logger,
                 sourcePath: `${task.sPath}/${cmd.fPath}`,
                 sourcePrefix: task.sPath,
                 targetPath: `${task.tPath}/${cmd.fPath}`,
-                clientConnection,
-                jobRunId: task.jobRunId
+                jobRunId: task.jobRunId,
+                jobContext
             };
+           
             const result = await this.scanContent(scanInput);
             if (result.isGeneratedTask) scanPath.isTaskCreated = true;
         }

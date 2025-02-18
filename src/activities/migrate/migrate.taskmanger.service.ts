@@ -85,11 +85,11 @@ export class MigrationTaskService {
   }
 
 
-  async fetchScanTask({ jobContext, jobRunId }: FetchScanTaskInput): Promise<FetchScanTaskOutPut> {
+  async fetchScanTask({ jobRunId }: FetchScanTaskInput): Promise<FetchScanTaskOutPut> {
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadTasks('consumer-1', this.fetchTaskBatch);
+      const tasks = await jobContext.groupReadTasks(jobRunId, this.fetchTaskBatch);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {
