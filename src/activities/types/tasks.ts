@@ -1,5 +1,4 @@
-import { JobContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
-import { RedisClientType } from "redis";
+import { JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface TaskPayload {
   id: string;
@@ -74,7 +73,8 @@ export interface ProcessFolderReadParams {
     commandId: string;
     excludePattern: string[];
     taskId;
-    jobContext: JobContext
+    jobContext: JobContext,
+    discoveryStats: TaskStats
 }
 
 export interface FileEntry {

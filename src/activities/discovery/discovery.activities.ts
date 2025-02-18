@@ -46,7 +46,7 @@ export class DiscoveryActivity {
       )) {
         counter++;
         const ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
-        const command = new Command(directory.path, ops, `cmd-${uuid4()}`);
+        const command = new Command(directory.path, ops, `${uuid4()}`);
         commandsBatch.push(command);
         if (commandsBatch && commandsBatch.length >= directoryBatchSize) {
           const task = new Task(
@@ -55,8 +55,9 @@ export class DiscoveryActivity {
             'SCAN',
             'PENDING',
             jobContext.jobConfig.workerIds[0],
-            '/',
+            jobContext.jobConfig.sourceFileServer.pathId,
             commandsBatch,
+            jobContext.jobConfig?.destinationFileServer?.pathId ?? null
           );
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;
@@ -71,8 +72,9 @@ export class DiscoveryActivity {
           'SCAN',
           'PENDING',
           jobContext.jobConfig.workerIds[0],
-          '/',
+          jobContext.jobConfig.sourceFileServer.pathId,
           commandsBatch,
+          jobContext.jobConfig?.destinationFileServer?.pathId ?? null
         );
         const id = await jobContext.appendToTaskList(task);
         jobContext.tasksInfo.lastId = id;

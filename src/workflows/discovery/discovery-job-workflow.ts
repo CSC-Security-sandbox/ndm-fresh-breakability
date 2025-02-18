@@ -34,16 +34,23 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
       let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {
         log(traceId, `No tasks found. Checking again to ensure no new tasks were just published...`);
-        // Immediately re-fetch tasks to ensure we didn’t miss newly published tasks
         await updateLastEntry(traceId)
           .then(() => log(traceId, `Discovery status updated to Completed`))
           .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
         return { message: 'Discovery Completed' };
       }
-
+      log(traceId, `task found, total -> ${tasks.length}`);
       for(const task of tasks) {
-        await scanActivity({data:task}, traceId)
-        await publishTaskActivity(traceId)
+        log(traceId, `Starting discovery for task -> ${task.id}`);
+        const scanResult = await scanActivity({ data: task }, traceId);
+        log(traceId, `Discovery completed for task -> ${task.id}`);
+        if(scanResult && scanResult.numDirs) {
+          log(traceId, `Publishing unscanned for task -> ${task.id}`);
+          await publishTaskActivity(traceId);
+          log(traceId, `Published unscanned for task -> ${task.id}`);
+        } else {
+          log(traceId, `No unscanned task found for task -> ${task.id}`);
+        }
       }
     }
   } catch (error) {
