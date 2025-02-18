@@ -3,23 +3,27 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToOne,
+  CreateDateColumn,
 } from "typeorm";
-import { Base } from "./base.entity";
 import { TaskEntity } from "./task.entity";
 
 @Entity({ name: "task_errors" })
-export class TaskErrorEntity extends Base {
+export class TaskErrorEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @OneToOne(() => TaskEntity, (task) => task.taskErrors, {
-    onDelete: "CASCADE",
-  })
-  task: TaskEntity;
-
-  @Column({ type: "varchar", length: 50 })
+  @Column({ type: 'uuid', nullable: false,  name: 'task_id'})
+  taskId: string;
+  
+  @Column({ type: "varchar", length: 50, name: 'error_code' })
   errorCode: string;
-
-  @Column({ type: "text" })
+  
+  @Column({ type: "text", name: 'error_message' })
   errorMessage: string;
+  
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @OneToOne(() => TaskEntity, (task) => task.taskErrors, { onDelete: "CASCADE" })
+  task: TaskEntity;
 }

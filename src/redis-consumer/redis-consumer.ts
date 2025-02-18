@@ -3,13 +3,13 @@ import {
   RedisUtils,
   JobContextFactory,
   Task,
-  FileInfo,
   DMError,
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { AppModule } from "src/app.module";
 import { InventoryService } from "src/inventory/inventory.service";
 import axios from "axios";
 import { RedisConsumerService } from "./redis-consumer.service";
+import { OperationStatus, TaskStatus } from "src/enum/queues.enum";
 
 const args = process.argv.slice(2);
 const [jobRunId, readerName, consumerType] = args;
@@ -19,6 +19,7 @@ export enum ConsumerType {
   directories = "directories",
   tasks = "tasks",
   updatedTask = "updatedTask",
+  errors = 'errors'
 }
 
 (async () => {
@@ -76,19 +77,18 @@ export enum ConsumerType {
       },
       directories: async (directory) => {},
       errors: async (error: DMError) => {
-        if (error.operation) {
-          await inventoryService.saveOperationError(error);
-        }
-        if (error.tasks) {
-          await inventoryService.saveTaskError(error);
-        }
+        if (error.tasks) await inventoryService.saveTaskError(error.tasks);
+        if (error.operation) await inventoryService.saveOperationError(error.operation);
       },
-      tasks: async (task: Task) => {
-        await inventoryService.saveTasks(task);
-      },
+      tasks: async (task: Task) => await inventoryService.saveTasks(task),
       taskstats: async (taskStat) => {},
       updatedTask: async (task: Task) => {
-      await inventoryService.saveTasks(task);
+        await inventoryService.updateTask(task.id, { status: task.status as TaskStatus });
+        if(task.commands.length) {
+          await task.commands.map(async (cmd: any) => {
+            await inventoryService.updateOperation(cmd.commandId, { status: cmd.status as OperationStatus })
+          })
+        }
       },
     };
     for await (const data of reader) {

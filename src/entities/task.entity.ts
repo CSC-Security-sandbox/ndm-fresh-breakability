@@ -3,6 +3,7 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMa
 import { OperationsEntity } from './operation.entity';
 import { TaskStatus, TaskType } from 'src/enum/queues.enum';
 import { TaskErrorEntity } from './task-error.entity';
+import { Base } from './base.entity';
 
 
 
@@ -10,8 +11,7 @@ import { TaskErrorEntity } from './task-error.entity';
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])
-
-export class TaskEntity  {
+export class TaskEntity extends Base{
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -31,12 +31,6 @@ export class TaskEntity  {
   @ApiProperty({ description: 'Id of the worker worked on the task' })
   @Column({ type: 'uuid', nullable: true,  name: 'worker_id' })
   workerId: string;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
 
   @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
   operations: OperationsEntity[]
