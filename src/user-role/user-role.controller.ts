@@ -42,7 +42,7 @@ export class UserRoleController {
     );
   }
 
-  @Auth(Permission.InviteUser)
+  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Post('/batch')
   @ApiOperation({
