@@ -160,11 +160,11 @@ cat /opt/datamigrator/vault/cluster-keys.json
 
 NOTE: All credentials are managed from vault. Replace the `IP_ADDRESS` with your Multipass IP:
 
-3. Login to vault UI - `https://IP_ADDRESS/ui/` and give the root token for login
+3. Login to vault UI - `https://IP_ADDRESS/ui/` and give the root token for login. All application secrets are stored in vault. Navigate to secrets after opening the vault ui.
 4. Keycloak UI - `https://IP_ADDRESS/ui/`
 5. NDM UI - `https://IP_ADDRESS/`
 6. Temporal UI - `https://IP_ADDRESS/temporal/ui/`
-7. Postgres connection - Use the multipass IP to connect to postgres database. Get the username, password from vault.
+7. Postgres connection - Use the multipass IP to connect to postgres database. Get the username, password from vault. Keys are - `POSTGRES_DMADMIN_USER` and `POSTGRES_DMADMIN_PASSWORD`.
 
 ## Application Upgrades
 
