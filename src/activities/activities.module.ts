@@ -8,12 +8,14 @@ import { DiscoveryActivity } from './discovery/discovery.activities';
 import { RedisService } from 'src/redis/redis.service';
 import { DiscoveryScanActivity } from './discovery/discovery-scan-activities';
 import { SetupActivityService } from './setup-worker/setup.activity.service';
+import { MigrationScanService } from './migrate/migrate.scan.service';
+import { MigrationTaskService } from './migrate/migrate.taskmanger.service';
 
 
 @Module({
   imports: [HttpModule, LoggerModule, ConfigModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService,MigrationScanService, MigrationTaskService],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService],
 })
 export class ActivitiesModule {}

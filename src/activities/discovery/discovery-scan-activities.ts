@@ -34,11 +34,11 @@ export class DiscoveryScanActivity {
           if (item.isDirectory) {
             const id = await jobContext.appendToDirList(item);
             jobContext.dirsInfo.lastId = id;
-            // jobContext.dirsInfo.numMessages++;
+            jobContext.dirsInfo.numMessages++;
           }
           const id = await jobContext.appendToFileList(item);
           jobContext.filesInfo.lastId = id;
-          // jobContext.filesInfo.numMessages++;
+          jobContext.filesInfo.numMessages++;
         })
       );
       return result;

@@ -19,13 +19,13 @@ interface ScanWorkflowInput {
 }
 
 export const ScanWorkflow = async ({jobRunId} : ScanWorkflowInput) => {
-
+    console.log('Starting MigrateScan ', jobRunId)
     try {
         while (true) {
-            let { tasks } = await fetchTaskActivity({jobRunId});
-            if (!tasks || tasks.length === 0) {
-                return { message: 'Scan Completed' };
-            }
+            let { tasks } = await fetchTaskActivity({jobRunId}); 
+            console.log('tasks', tasks)
+            if (!tasks || tasks.length === 0) break;
+                // return { message: 'Scan Completed' };
     
             for(const task of tasks) {
                 const {isTaskCreated} = await scanActivity({task})
@@ -34,7 +34,7 @@ export const ScanWorkflow = async ({jobRunId} : ScanWorkflowInput) => {
             }
         }
     } catch (error) {
-        return { message: 'Scan Errored' };
+        return { message: `Scan Errored ${error}` };
     }
     return 'ok'
 }

@@ -1,9 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { uuid4 } from '@temporalio/workflow';
-import { Command, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, JobContext, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput } from './migrate.type';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
+import { Logger } from "src/logger/logger.service";
+
 
 @Injectable()
 export class MigrationTaskService {
@@ -23,7 +25,7 @@ export class MigrationTaskService {
 
   async publishScanTask({ jobRunId }: PublishScanTaskInput): Promise<PublishScanTaskOutput> {
     try {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
+      const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
      
       let commands:Command[] = [], ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
@@ -45,9 +47,9 @@ export class MigrationTaskService {
             'SCAN',
             'PENDING',
             'worker-1',
-            '/Users/calfus-kunalavghade/Desktop/node-fs/test1',
+            `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
             commands,
-            '/Users/calfus-kunalavghade/Desktop/node-fs/test2',
+            `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
             ''
           )
           const id = await jobContext.appendToTaskList(task);
@@ -64,9 +66,9 @@ export class MigrationTaskService {
           'SCAN',
           'PENDING',
           'worker-1',
-          '/Users/calfus-kunalavghade/Desktop/node-fs/test1',
+          `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
           commands,
-          '/Users/calfus-kunalavghade/Desktop/node-fs/test2',
+          `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
           ''
         )
         const id = await jobContext.appendToTaskList(task);

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
 import axios from 'axios';
+import { delay } from 'rxjs';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
@@ -25,7 +26,7 @@ export class SetupActivityService {
         username :  server.username, 
         password: server.password, 
         path: server.path, 
-        workingDirectory: server.password, 
+        workingDirectory: server.workingDirectory, 
         pathId: server.pathId, 
         jobRunId 
     });
@@ -38,7 +39,7 @@ export class SetupActivityService {
         username :  server.username, 
         password: server.password, 
         path: server.path, 
-        workingDirectory: server.password, 
+        workingDirectory: server.workingDirectory, 
         pathId: server.pathId, 
         jobRunId 
     });
@@ -49,8 +50,6 @@ export class SetupActivityService {
     console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     try {
         const context = await this.redisService.getJobContext(jobRunId);
-        console.log(`[${jobRunId}] - [${this.workerId}] Setting up worke12iey12iuy12iur`);
-        console.log(context)
         if (!context) {
             throw new Error(`Context not found for traceId ${jobRunId}`);
         }
@@ -65,7 +64,8 @@ export class SetupActivityService {
         if(context.jobConfig?.destinationFileServer) 
             await this.mountPath(context.jobConfig.destinationFileServer, protocol, jobRunId);
 
-        // await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
+        await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
+        await new Promise((resolve) => setTimeout( resolve, 3000));
         return { jobRunId, status: 'success', protocolType, workerId:this.workerId, message: `Worker ${this.workerId} successfully set up.` };
     } catch (error) {
         console.error(`[${jobRunId}] - Setup failed: ${error.message}`);

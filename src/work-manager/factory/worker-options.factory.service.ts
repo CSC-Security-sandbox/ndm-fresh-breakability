@@ -8,6 +8,8 @@ import { ValidateConnectionActivity } from "src/activities/validate-connection/v
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
 import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
+import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
+import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanger.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -16,7 +18,9 @@ export class WorkerOptionsService {
     private readonly validateConnectionService: ValidateConnectionActivity,
     private readonly discoveryActivities: DiscoveryActivity,
     private readonly discoveryScanActivity: DiscoveryScanActivity,
-    private readonly setupActivityService: SetupActivityService
+    private readonly setupActivityService: SetupActivityService,
+    private readonly migrationScanService: MigrationScanService,
+    private readonly migrationTaskService: MigrationTaskService
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -35,6 +39,9 @@ export class WorkerOptionsService {
             publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
             setup: this.setupActivityService.setup.bind(this.setupActivityService),
             cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+            scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
+            publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
+            fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -46,6 +53,9 @@ export class WorkerOptionsService {
           publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
           setup: this.setupActivityService.setup.bind(this.setupActivityService),
           cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+          scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
+          publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
+          fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
         });
       default:
         return undefined;

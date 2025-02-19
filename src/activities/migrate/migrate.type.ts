@@ -10,8 +10,8 @@ export interface ScanContentInput{
     jobContext: JobContext;
 }
 export interface ScanContentOutput{
-    files: string[],
-    directory: string[],
+    files:  number,
+    directory: number,
     isGeneratedTask: boolean;
 }
 

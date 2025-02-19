@@ -7,7 +7,7 @@ export enum CommandPattern{
     LIST_PATHS='listPath',
     CHECK_MOUNT_PATH='checkMountPath',
     UNMOUNT_PATH='unmountPath',
-    MOUNT_PATH='montPath',
+    MOUNT_PATH='mountPath',
     VERSION_DETAIL='versionDetails',
 }
 
@@ -74,8 +74,8 @@ export default registerAs(
             darwin: {
                 listPath: process.env.SMB_UNIX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_UNIX_MOUNT_PATH_CMD,
-                unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_DARWIN_VERSION_DETAIL_CMD
+                unmountPath:  process.env.SMB_UNIX_UNMOUNT_PATH_CMD,
+                versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD
             },
         }
     })
