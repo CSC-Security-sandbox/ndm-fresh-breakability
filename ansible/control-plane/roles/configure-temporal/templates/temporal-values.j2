@@ -21,7 +21,7 @@ server:
           user: "temporal"
           secretKey: "temporal-db-password"
           secretName: "temporal-credentials"
-          maxConns: 20
+          maxConns: 450
           maxConnLifetime: "1h"
       visibility:
         driver: "sql"
@@ -33,7 +33,7 @@ server:
           user: "temporal"
           secretKey: "temporal-db-password"
           secretName: "temporal-credentials"
-          maxConns: 20
+          maxConns: 450
           maxConnLifetime: "1h"
       
   frontend:
@@ -49,6 +49,7 @@ web:
     annotations:
       kubernetes.io/ingress.class: "public"
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     hosts:
       - "/temporal/ui(.*)"
   additionalEnv:

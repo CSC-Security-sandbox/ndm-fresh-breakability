@@ -76,6 +76,11 @@ env:
   - name: REDIS_PORT
     value: "6379"
 
+  - name: REPORT_SERVICE_URL
+    value: "http://reports-service-service:3000/api/v1/report"
+  - name: JOB_SERVICE_URL
+    value: "http://job-service-service:3000/api/v1/job-run"
+
 service:
   type: ClusterIP
   port: 3000

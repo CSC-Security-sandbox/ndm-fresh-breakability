@@ -1,3 +1,5 @@
+#reference: https://artifacthub.io/packages/helm/bitnami/redis?modal=values
+architecture: standalone
 auth:
   enabled: true
   password: "welcome"
@@ -13,6 +15,14 @@ master:
     selector:
         matchLabels:
             role: redis-data
+
+  resources:
+    requests:
+      cpu: "0.5"        # Request 0.5 CPU cores (guaranteed)
+      memory: "512Mi"   # Request 512MB RAM (guaranteed)
+    limits:
+      cpu: "1"          # Allow up to 1 CPU core
+      memory: "1Gi"     # Allow up to 1GB RAM
 
 volumePermissions:
   enabled: true

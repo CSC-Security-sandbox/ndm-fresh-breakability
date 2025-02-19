@@ -13,6 +13,21 @@ global:
 
 primary:
   persistence:
+  extendedConfiguration: |
+    max_connections = 1000
+    tcp_keepalives_idle = 180
+    tcp_keepalives_interval = 10
+    tcp_keepalives_count = 5
+    shared_buffers = 768MB
+    work_mem = 16MB
+    maintenance_work_mem = 256MB
+    max_parallel_workers_per_gather = 2
+    parallel_tuple_cost = 0.1
+    parallel_setup_cost = 500
+    wal_buffers = 8MB
+    checkpoint_completion_target = 0.9
+    max_wal_size = 1GB
+
     enabled: true
     storageClass: "local-storage-postgres"
     size: {{ postgres_data_volume_size }}
@@ -24,6 +39,14 @@ primary:
     scriptsConfigMap: postgres-init-config
     user: postgres
     password: {{ postgres_root_password }}
+
+  resources:
+    requests:
+      cpu: "1"         # Request 1 CPU core (guaranteed)
+      memory: "1Gi"    # Request 1GB RAM (guaranteed)
+    limits:
+      cpu: "1.5"       # Allow up to 1.5 CPU cores
+      memory: "2.5Gi"  # Allow up to 2.5GB RAM
 
 volumePermissions:
   enabled: true
