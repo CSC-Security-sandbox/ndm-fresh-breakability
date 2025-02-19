@@ -27,7 +27,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Redis client is not initialized');
     }
 
-    const serializedContext = jobContext?.serialize(); // Assuming `serialize()` exists
+    const serializedContext = jobContext.serialize(); // Assuming `serialize()` exists
     await this.redisClient.set(traceId, serializedContext);
     console.log(`[${traceId}] Job context saved to Redis.`);
   }

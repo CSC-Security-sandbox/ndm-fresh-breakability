@@ -73,7 +73,7 @@ export class MigrationTaskService {
         )
         const id = await jobContext.appendToTaskList(task);
         jobContext.tasksInfo.lastId = id;
-        await this.redisService.setJobContext(jobRunId, jobContext.serialize());
+        await this.redisService.setJobContext(jobRunId, jobContext);
       }
       return { jobRunId, status: 'success', message: 'Task published successfully' };
     } catch (error) {
