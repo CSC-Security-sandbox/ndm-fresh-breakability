@@ -6,7 +6,9 @@ metadata:
 data:
   admin_entry.sh: |
     #!/bin/bash
-    apk update
+    
+    set -e
+
     apk add --no-cache curl nodejs jq
     cat /vault/secrets/keycloak.env
 
