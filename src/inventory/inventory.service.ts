@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, UpdateResult } from 'typeorm';
 import { InventoryEntity } from '../entities/inventory.entity';
-import { CreateInventory, DiscoveryCompletedPayload, InventoryPayload, InventoryPayloadType } from './inventory.type';
+import { CreateInventory, DiscoveryCompletedPayload, InventoryPayload, InventoryPayloadType, FileType } from './inventory.type';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy, ClientProxyFactory, Transport } from '@nestjs/microservices';
 import { OperationStatus, OperationType, Pattern } from 'src/enum/queues.enum';
@@ -11,7 +11,7 @@ import { OperationsEntity } from 'src/entities/operation.entity';
 import { randomUUID } from 'crypto';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
+import { OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
 
 @Injectable()
 export class InventoryService {
@@ -132,13 +132,15 @@ export class InventoryService {
       throw new Error('Error while saving task records to the database');
     }
   }
-  async saveOperationError(data: any) {
+  async saveOperationError(data: OperationError) {
     try {
-      const { operationId, errorCode, errorMessage } = data;
+      const { operationId, errorCode, errorMessage, errorFiles } = data;
       const operationError: OperationErrorEntity = this.operationErrorRepo.create({
         errorCode: errorCode,
         errorMessage: errorMessage,
         operationId,
+        fileName: errorFiles.fileName,
+        filePath: errorFiles.filePath,
         createdAt: new Date()
       });
       await this.operationErrorRepo.save(operationError);

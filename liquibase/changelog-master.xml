@@ -19,4 +19,8 @@
       <sqlFile path="liquibase/20250217_01_create_task_error_table.sql"/>
    </changeSet>
 
+    <changeSet id="7005" author="dineshs">
+      <sqlFile path="liquibase/20250219_01_alter_operations_error_table.sql"/>
+   </changeSet>
+
 </databaseChangeLog>
