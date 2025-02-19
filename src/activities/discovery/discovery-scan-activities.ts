@@ -1,24 +1,23 @@
+import { Logger } from './../../logger/logger.service';
 import { DMError, JobContext, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 // local imports
-import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams } from '../types/tasks';
+import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from './enums';
+import { json } from 'stream/consumers';
 
-async function log(traceId: string, message: string) {
-  console.log(`[${traceId}] ${message}`);
-}
 @Injectable()
 export class DiscoveryScanActivity {
   constructor(
+    private readonly logger: Logger,
     private readonly redisService: RedisService,
-  ) {
-  }
+  ) {}
 
   async scanActivity(payload: DiscoveryPayload, traceId: string): Promise<TaskStats> {
-    log(traceId, `Starting discovery`);
+    this.logger.log(`[${traceId}] Starting Discovery Scan Activity`);
     const jobContext: JobContext = await this.redisService.getJobContext(traceId);
     payload.data.status = TaskStatus.Running
     payload.data.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
@@ -27,58 +26,24 @@ export class DiscoveryScanActivity {
     await this.redisService.setJobContext(traceId, jobContext);
     const discoveryStats = new TaskStats('SCAN');
     const result = await this.discovery(payload, jobContext, discoveryStats);
+    this.logger.log(`[${traceId}] Discovery Scan Activity Completed.`);
     return result;
-  }
-
-  private async processInventory(inventory, jobContext: JobContext, taskId, discoveryStats: TaskStats): Promise<any> {
-    try {
-      log(jobContext.jobRunId, `Processing ${inventory.length} files`);
-      const result = await Promise.all(
-        inventory.map(async (item) => {
-          if (item.isDirectory) {
-            try {
-              const id = await jobContext.appendToDirList(item);
-              jobContext.dirsInfo.lastId = id;
-              jobContext.dirsInfo.numMessages++;
-              log(jobContext.jobRunId, `*************** Appending to dir list ***************`);
-            } catch (error) {
-              const errorCode = this.getErrorCode(error, 'TASK');
-              await this.processErrors(new DMError({ taskId: item.taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
-            }
-          }
-          try {
-            const id = await jobContext.appendToFileList(item);
-            jobContext.filesInfo.lastId = id;
-            jobContext.filesInfo.numMessages++;
-            log(jobContext.jobRunId, `*************** Appending to file list ***************`);
-          } catch (error) {
-            const errorCode = this.getErrorCode(error, 'TASK');
-            await this.processErrors(new DMError({ taskId: item.taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
-          }
-        })
-      );
-      log(jobContext.jobRunId, `Processed ${inventory.length} files`);
-      return result;
-    } catch (error) {
-      const errorCode = this.getErrorCode(error, 'TASK');
-      await this.processErrors(new DMError({ taskId: taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
-    }
   }
 
   async discovery(data: DiscoveryPayload, jobContext: JobContext, discoveryStats: TaskStats, batchSize: number = 1000): Promise<TaskStats> {
     const inventoryData = [];
     if (!data) {
-      log(jobContext.jobRunId, `No commands found`);
+      this.logger.log(`[${jobContext.jobRunId}] No data found for discovery`);
       return;
     }
     const ids = { jobRunId: data.data.jobRunId, workerId: data.data.workerId, transactionId: '', taskId: data.data.id, traceId: data.data.jobRunId };
     try {
       await Promise.all(data.data.commands.map(async cmd => {
         try {
-          log(jobContext.jobRunId, `Processing command: ${JSON.stringify(cmd)}`);
+          this.logger.log(`[${jobContext.jobRunId}] Processing command: ${JSON.stringify(cmd)}`);
           const { fPath } = cmd;
           const files = await fs.promises.readdir(fPath);
-          log(jobContext.jobRunId, `Inventories Discovered: ${JSON.stringify(files)}`);
+          this.logger.log(`[${jobContext.jobRunId}] Inventories Discovered: ${JSON.stringify(files)}`);
           const { accumulatedResult } = await this.processFolderRead({
             files,
             chunkPath: fPath,
@@ -95,16 +60,16 @@ export class DiscoveryScanActivity {
           inventoryData.push(...accumulatedResult);
           if (inventoryData.length >= batchSize) {
             const batch = inventoryData.splice(0, batchSize);
-            await this.processInventory(batch, jobContext, ids.taskId, discoveryStats)
+            await this.processInventory({ inventory: batch, jobContext, taskId: ids.taskId, discoveryStats });
           }
           return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OperationStatus.COMPLETED } } };
         } catch (error) {
-          const errorCode = this.getErrorCode(error, 'TASK');
-          await this.processErrors(new DMError({ taskId: ids.taskId, errorCode, errorMessage: error.message }, null), jobContext, discoveryStats);
+          const errorCode = this.getErrorCode(error, 'OPERATION');
+          await this.processErrors(new DMError(null, { operationId: cmd.commandId, errorCode, errorMessage: error.message, errorFiles: { fileName: cmd.fPath, filePath: cmd.commandId } }), jobContext, discoveryStats);
           return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OperationStatus.ERROR } } };
         }
       }));
-      await this.processInventory(inventoryData, jobContext, ids.taskId, discoveryStats)
+      await this.processInventory({ inventory: inventoryData, jobContext, taskId: ids.taskId, discoveryStats });
       data.data.status = TaskStatus.Completed;
       data.data.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
       const taskId = await jobContext.appendToUpdatedTaskList(data.data);
@@ -126,7 +91,8 @@ export class DiscoveryScanActivity {
     excludePattern,
     taskId,
     jobContext,
-    discoveryStats
+    discoveryStats,
+    commandId
   }: ProcessFolderReadParams) {
     try {
       const accumulatedResult = [];
@@ -158,11 +124,12 @@ export class DiscoveryScanActivity {
             accessTime: new Date(lStat.atime).toISOString(),
             fileType: this.getFileType(lStat),
             depth: fullPath.split('/').length - 2,
+            commandId
           };
           accumulatedResult.push(entry);
           if (accumulatedResult.length >= batchSize) {
             const batch = accumulatedResult.splice(0, batchSize);
-            await this.processInventory(batch, jobContext, taskId, discoveryStats)
+            await this.processInventory({ inventory: batch, jobContext, taskId, discoveryStats });
           }
         } catch (operationError) {
           const errorCode = this.getErrorCode(operationError, 'OPERATION');
@@ -179,13 +146,53 @@ export class DiscoveryScanActivity {
       }
       return { accumulatedResult };
     } catch (error) {
+      const errorCode = this.getErrorCode(error, 'OPERATION');
+      await this.processErrors(new DMError(null, { operationId: commandId, errorCode: errorCode, errorMessage: error.message, errorFiles: { fileName: chunkPath, filePath: chunkPath } }), jobContext, discoveryStats);
+    }
+  }
+
+  private async processInventory({ inventory, jobContext, taskId, discoveryStats }: ProcessInventoryParams): Promise<any> {
+    try {
+      this.logger.log(`[${jobContext.jobRunId}] Processing ${inventory.length} inventory`);
+      let currentCommandId = '';
+      const result = await Promise.all(
+        inventory.map(async (item: any) => {
+          if (item.isDirectory) {
+            try {
+              currentCommandId = item.commandId;
+              delete item.commandId;
+              const id = await jobContext.appendToDirList(item);
+              jobContext.dirsInfo.lastId = id;
+              jobContext.dirsInfo.numMessages++;
+              this.logger.log(`[${jobContext.jobRunId}] *************** Appending to dir list ***************`);
+            } catch (error) {
+              const errorCode = this.getErrorCode(error, 'OPERATION');
+              await this.processErrors(new DMError(null, { operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
+            }
+          }
+          try {
+            currentCommandId = item.commandId;
+            delete item.commandId;
+            const id = await jobContext.appendToFileList(item);
+            jobContext.filesInfo.lastId = id;
+            jobContext.filesInfo.numMessages++;
+            this.logger.log(`[${jobContext.jobRunId}] *************** Appending to file list ***************`);
+          } catch (error) {
+            const errorCode = this.getErrorCode(error, 'OPERATION');
+            await this.processErrors(new DMError(null, { operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
+          }
+        })
+      );
+      this.logger.log(`[${jobContext.jobRunId}] Processed ${inventory.length} inventory data`);
+      return result;
+    } catch (error) {
       const errorCode = this.getErrorCode(error, 'TASK');
-      await this.processErrors(new DMError({ taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
+      await this.processErrors(new DMError({ taskId: taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
     }
   }
 
   async processErrors(error: DMError, jobContext: JobContext, discoveryStats: TaskStats) {
-    log(jobContext.jobRunId, `Publishing encountred error : ${error}`);
+    this.logger.error(`[${jobContext.jobRunId}] Error encountered: ${JSON.stringify(error)}`);
     discoveryStats.numErrors += 1;
     await jobContext.appendToErrorList(error);
   }

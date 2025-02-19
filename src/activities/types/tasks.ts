@@ -1,4 +1,4 @@
-import { JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
+import { FileInfo, JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface TaskPayload {
   id: string;
@@ -96,6 +96,7 @@ export interface FileEntry {
     accessTime: string;
     fileType: string;
     depth: number;
+    commandId: string;
 }
 export enum FileType {
     FILE = "FILE",
@@ -106,4 +107,11 @@ export enum FileType {
     CHARACTER_DEVICE = "CHARACTER_DEVICE",
     BLOCK_DEVICE = "BLOCK_DEVICE",
     UNKNOWN = "UNKNOWN"
+}
+
+export interface ProcessInventoryParams {
+  inventory: FileEntry[];
+  jobContext: JobContext;
+  taskId: string;
+  discoveryStats: TaskStats;
 }
