@@ -14,6 +14,7 @@
     - { path: "/opt/datamigrator/conf" }
     - { path: "/opt/datamigrator/logs" }
     - { path: "/var/log/datamigrator" }
+    - { path: "/mnt/datamigrator" }
 
 - name: 4.2. Copy binary file to remote server
   become: yes

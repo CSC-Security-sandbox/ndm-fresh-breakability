@@ -13,6 +13,13 @@ global:
 
 primary:
   persistence:
+    enabled: true
+    storageClass: "local-storage-postgres"
+    size: {{ postgres_data_volume_size }}
+    selector:
+        matchLabels:
+            role: postgres-primary-data
+
   extendedConfiguration: |
     max_connections = 1000
     tcp_keepalives_idle = 180
@@ -27,13 +34,6 @@ primary:
     wal_buffers = 8MB
     checkpoint_completion_target = 0.9
     max_wal_size = 1GB
-
-    enabled: true
-    storageClass: "local-storage-postgres"
-    size: {{ postgres_data_volume_size }}
-    selector:
-        matchLabels:
-            role: postgres-primary-data
               
   initdb:
     scriptsConfigMap: postgres-init-config

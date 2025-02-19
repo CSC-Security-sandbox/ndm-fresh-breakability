@@ -45,7 +45,7 @@ env:
   - name: SCHEMA 
     value: "datamigrator"
   - name: REPORT_DOWNLOAD_LOCATION
-    value: "/app"
+    value: "/reports"
 
   # - name: DB_USER # from secret
   #   value: ""
