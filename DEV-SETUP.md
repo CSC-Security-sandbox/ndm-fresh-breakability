@@ -8,8 +8,25 @@ Ensure the following tools are installed on your macOS system:
 
 1. **Docker Desktop**: [Install Docker Desktop](https://docs.docker.com/desktop/install/mac-install/)
 2. **Azure CLI**: [Install Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos)
-3. [Multipass](https://formulae.brew.sh/cask/multipass)
-4. [OpenLens](https://formulae.brew.sh/cask/openlens)
+3. **Multipass**: [Multipass](https://formulae.brew.sh/cask/multipass)
+
+Once you have setup multipass in local,
+Run this command and give `admin` as passphrase
+```
+multipass set local.passphrase
+```
+Then, run the below command and when prompted for passphrase, give `admin`
+```
+multipass auth
+```
+4. **OpenLens**: [OpenLens](https://formulae.brew.sh/cask/openlens)
+
+Once you have openlens installed, go to extensions and install `@alebcay/openlens-node-pod-menu` extension.
+
+5. **Ansible**: [Ansible](https://formulae.brew.sh/formula/ansible)
+6. **Helm**: [Helm](https://formulae.brew.sh/formula/helm)
+
+
 
 Ensure all code repositories are cloned in the workspace.
 
@@ -68,8 +85,14 @@ cd local-deployment/bin
 ```
 
 ### Installing Datamigrator Data Plane
+#### Before running the script download the binary form github
 
-When prompted, provide the full path to the binary on your local Mac:
+
+1. Download the binary from the worker repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
+2. Note the path of the binary and copy it.
+3. Run the script and when prompted, provide the full path to the binary on your local Mac:
+
+
 ```sh
 cd local-deployment/bin
 ./setup.sh data-plane
@@ -121,6 +144,27 @@ systemctl status datamigrator-worker.service
 tail -20f /opt/datamigrator/logs/datamigrator-worker.log
 ```
 9. Navigate to DM UI to see if the worker is registered or not.
+
+### Application Access
+
+1. Fetch the control plane multipass IP
+```sh
+multipass list | grep datamigrator-cp | awk '{print $3}'
+```
+2. Fetch the vault root token
+```sh
+multipass shell datamigrator-cp
+sudo su - datamigrator
+cat /opt/datamigrator/vault/cluster-keys.json
+```
+
+NOTE: All credentials are managed from vault. Replace the `IP_ADDRESS` with your Multipass IP:
+
+3. Login to vault UI - `https://IP_ADDRESS/ui/` and give the root token for login
+4. Keycloak UI - `https://IP_ADDRESS/ui/`
+5. NDM UI - `https://IP_ADDRESS/`
+6. Temporal UI - `https://IP_ADDRESS/temporal/ui/`
+7. Postgres connection - Use the multipass IP to connect to postgres database. Get the username, password from vault.
 
 ## Application Upgrades
 

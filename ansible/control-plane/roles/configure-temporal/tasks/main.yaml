@@ -95,7 +95,8 @@
       become_user: "{{ vm_username }}"
       shell: |
         kubectl wait --namespace="temporal" --for=condition=Ready pod \
-        --selector='!job-name' --field-selector=status.phase!=Succeeded
+        --selector='!job-name' --field-selector=status.phase!=Succeeded --timeout=120s && \
+        kubectl wait --namespace="temporal" --for=condition=complete job --all --timeout=120s
       register: kubectl_get_pods
       retries: 10
       delay: 20
