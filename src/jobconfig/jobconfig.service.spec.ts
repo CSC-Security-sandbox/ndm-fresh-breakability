@@ -11,6 +11,7 @@ import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 const mockJobEntity = {
   id: 'uuid1',
@@ -64,6 +65,18 @@ describe('JobConfigService', () => {
           },
         },
         {
+          provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
           provide: getRepositoryToken(JobOptionsEntity),
           useValue: {
             findOne: jest.fn(),
@@ -89,7 +102,7 @@ describe('JobConfigService', () => {
               getRawMany: jest.fn(),
             })),
           },
-        }
+        },
       ],
     }).compile();
 
