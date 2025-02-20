@@ -46,11 +46,11 @@ service_cidr: "10.152.183.0/24"
 pod_network_cidr: "10.1.0.0/16"
 
 # Plugin configuration
-microk8s_dns_resolvers: 8.8.8.8,8.8.4.4
-registry_size: 30Gi
+# microk8s_dns_resolvers: 8.8.8.8,8.8.4.4
+# registry_size: 30Gi
 microk8s_plugins:
-  dns: "{{ microk8s_dns_resolvers }}"     # CoreDNS
-  host-access: false                       # Allow Pods connecting to Host services smoothly
+  dns: true                               # CoreDNS
+  host-access: false                      # Allow Pods connecting to Host services smoothly
   ingress: true                           # Ingress controller for external access
   metrics-server: true                    # K8s Metrics Server for API access to service metrics
   rbac: true                              # Role-Based Access Control for authorisation
@@ -61,7 +61,7 @@ microk8s_plugins:
   cilium: false                           # SDN, fast with full network policy
   fluentd: false                          # Elasticsearch-Fluentd-Kibana logging and monitoring
   gpu: false                              # Automatic enablement of Nvidia CUDA
-  helm: false                             # Helm 2 - the package manager for Kubernetes
+  helm: true                              # Helm 2 - the package manager for Kubernetes
   helm3: true                             # Helm 3 - Kubernetes package manager
   istio: false                            # Core Istio service mesh services
   jaeger: false                           # Kubernetes Jaeger operator with its simple config
