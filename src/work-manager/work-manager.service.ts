@@ -74,7 +74,7 @@ export class WorkManagerService {
         }
     }
     
-    @Cron(CronExpression.EVERY_SECOND)
+    @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
         if (this.loadingConfigs) return;
         this.loadingConfigs = true;

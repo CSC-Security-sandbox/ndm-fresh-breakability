@@ -7,7 +7,7 @@ async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
 }
 
-const {setup: setupWorkerActivity} = proxyActivities<typeof setupActivity>({startToCloseTimeout: '30s'})
+const {setup: setupWorkerActivity} = proxyActivities<typeof setupActivity>({startToCloseTimeout: '300s'})
 
 
 export const SetupMigratorWorkFlow = async (args: any) => {

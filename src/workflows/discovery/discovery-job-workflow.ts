@@ -14,7 +14,7 @@ const {
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
   publishLastEntry: updateLastEntry
-} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '300s' });
+} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options } = args;

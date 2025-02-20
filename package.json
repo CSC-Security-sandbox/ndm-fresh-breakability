@@ -28,12 +28,15 @@
       "node_modules/axios/**",
       "node_modules/sqlite3/**/*",
       "dist/**",
-      "logs/**"
+      "logs/**",
+      "node_modules/tslib/**",
+      "node_modules/@netapp-cloud-datamigrate/**"
     ],
     "targets": [
       "node18-linux-x64",
       "node18-macos-arm64",
-      "node18-win-x64"
+      "node18-win-x64",
+      "node18-linux-arm64"
     ],
     "outputPath": "pkg",
     "logLevel": "info"
