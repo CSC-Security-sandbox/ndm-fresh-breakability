@@ -129,3 +129,24 @@ export class RedisUpdatedTasksCollection
     );
   }
 }
+
+
+export class RedisMigrationTasksCollection
+  extends RedisStreamCollection<Task>
+  implements UpdatedTaskCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'migration-tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
