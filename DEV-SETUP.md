@@ -85,10 +85,10 @@ cd local-deployment/bin
 ```
 
 ### Installing Datamigrator Data Plane
-#### Before running the script download the binary form github
+#### Before running the script download the binary from github
 
 
-1. Download the binary from the worker repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
+1. Download the binary from the [worker](https://github.com/NetApp-Cloud-DataMigrate/worker/tags) repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
 2. Note the path of the binary and copy it.
 3. Run the script and when prompted, provide the full path to the binary on your local Mac:
 
