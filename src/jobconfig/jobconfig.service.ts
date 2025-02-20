@@ -260,10 +260,10 @@ export class JobConfigService {
       jobConfig: [{
         id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
         jobType: JobType.MIGRATE,
-        jobRunDetails: {
+        jobRunDetails: [{
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
           status: JobRunStatus.Completed
-        }
+        }]
       }]
     }]
   }
