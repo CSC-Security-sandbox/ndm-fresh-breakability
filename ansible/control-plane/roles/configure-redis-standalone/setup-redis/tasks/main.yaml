@@ -119,7 +119,7 @@
       shell: |
         kubectl wait --namespace="redis" --for=condition=Ready pod --all
       register: kubectl_get_pods
-      retries: 1
+      retries: 5
       delay: 25
       until: kubectl_get_pods.rc == 0
 
