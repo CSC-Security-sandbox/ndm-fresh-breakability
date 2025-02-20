@@ -63,7 +63,7 @@ export async function DiscoveryWorkflow({
     };
   }
 
-  const discoveryResponse: any = await Promise.all(['b653055c-4a5e-451b-a8ac-74b810f2db9b'].map(async (workerId) => {
+  const discoveryResponse: any = await Promise.all(payload.workers.map(async (workerId) => {
     while (true) {
       try {
         return await executeChild(DiscoveryJobWorkflow, {
