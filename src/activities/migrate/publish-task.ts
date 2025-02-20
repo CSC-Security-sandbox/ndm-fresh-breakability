@@ -30,7 +30,7 @@ export const publishSanTask = async ({jobRunId, jobContext, logger,clientConnect
             break;
           }
         
-          task.commands.push(new Command(dir.path, ops, `cmd-${uuid4()}`))
+          task.commands.push(new Command(dir.path, ops, `${uuid4()}`))
         }
           
         if(task.commands.length > 0) {
