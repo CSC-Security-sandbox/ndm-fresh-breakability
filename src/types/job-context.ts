@@ -79,7 +79,7 @@ export abstract class JobContext {
     return await this.taskStats.append(taskStats);
   }
 
-  async appendToMigrationTaskStats(task: Task): Promise<string> {
+  async appendToMigrationTask(task: Task): Promise<string> {
     return await this.migrateTask.append(task);
   }
 
