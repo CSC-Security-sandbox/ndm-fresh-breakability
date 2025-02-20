@@ -121,6 +121,8 @@ export enum WorkFlows{
 export enum ConsumerType{
     files='files',
     directories='directories',
-    tasks='tasks'
+    tasks='tasks',
+    updatedTask = "updatedTask",
+    errors = 'errors'
 }
 
