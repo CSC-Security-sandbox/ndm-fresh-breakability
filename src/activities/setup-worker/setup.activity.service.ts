@@ -65,7 +65,7 @@ export class SetupActivityService {
             await this.mountPath(context.jobConfig.destinationFileServer, protocol, jobRunId);
 
         await axios.post(`${this.workerConfigUrl}/update/configs`, { jobRunId, workerIds: [this.workerId] });
-        await new Promise((resolve) => setTimeout( resolve, 3000));
+        await new Promise((resolve) => setTimeout( resolve, 1000));
         return { jobRunId, status: 'success', protocolType, workerId:this.workerId, message: `Worker ${this.workerId} successfully set up.` };
     } catch (error) {
         console.error(`[${jobRunId}] - Setup failed: ${error.message}`);

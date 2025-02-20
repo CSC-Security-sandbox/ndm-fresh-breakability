@@ -9,4 +9,4 @@ export {DiscoveryWorkflow} from '../workflows/discovery/discovery-workflow'
 
 export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
 export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
-// export {MigrationWorkflow} from '../workflows/migration/initiator/migration-job-workflow'
+export {SyncWorkflow} from '../workflows/migration/core/sync.workflow'

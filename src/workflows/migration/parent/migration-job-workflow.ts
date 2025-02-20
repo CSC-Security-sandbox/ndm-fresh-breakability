@@ -1,5 +1,5 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
-import { CleanupWorkerWorkflow, SetupWorkerWorkflow } from "src/workflows/workflows";
+import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
 import { ScanWorkflow } from "../core/scan.workflow";
 
 async function log(traceId: string, message: string) {
@@ -57,6 +57,25 @@ export const MigrationWorkflow = async ({
   )
   console.log("scanResponse response" + JSON.stringify(scanResponse));
   result.push(scanResponse.flat())
+
+
+  const syncResponse = await Promise.all(
+    payload.workers.map((workerId) =>
+      executeChild(SyncWorkflow, {
+        args: [
+          { jobRunId:traceId },
+        ],
+        workflowId: `SyncWorkflow-${traceId}-${workerId}`,
+        taskQueue: `${workerId}-TaskQueue`,
+        // ...options,
+        cancellationType:
+          ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        parentClosePolicy: ParentClosePolicy.TERMINATE,
+      }),
+    )
+  )
+  console.log("SyncResponse response" + JSON.stringify(syncResponse));
+  result.push(syncResponse.flat())
 
   log(traceId, `Active workers: ${activeWorkerIds}`);
 

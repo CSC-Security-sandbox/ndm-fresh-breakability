@@ -8,3 +8,5 @@ export interface GetJobConnectionOutput{
     jobContext: JobContext
     connectionClient: any
 }
+
+

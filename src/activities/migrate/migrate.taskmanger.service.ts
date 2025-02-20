@@ -1,14 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { uuid4 } from '@temporalio/workflow';
-import { Command, JobContext, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
-import { FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput } from './migrate.type';
 import { ConfigService } from '@nestjs/config';
-import { RedisService } from 'src/redis/redis.service';
+import { Command, JobContext, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { uuid4 } from '@temporalio/workflow';
 import { Logger } from "src/logger/logger.service";
+import { RedisService } from 'src/redis/redis.service';
+import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput } from './migrate.type';
+import { buildTask } from '../utils/utils';
 
 
 @Injectable()
-export class MigrationTaskService {
+export class MigrationTaskService{
 
   readonly workerId: string;
   readonly fetchTaskBatch: number;
@@ -27,11 +28,8 @@ export class MigrationTaskService {
     try {
       const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
-     
       let commands:Command[] = [], ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
-
       let counter = 0;
-
       for await (const dir of jobContext.groupReadDirs(jobRunId, this.pushTaskDirSize)) {
         counter++;
         if (counter > this.pushTaskDirSize) {
@@ -41,36 +39,16 @@ export class MigrationTaskService {
         const command = new Command(dir.path, ops, `cmd-${uuid4()}`);
         commands.push(command);
         if (commands && commands.length >= this.pushTaskDirSize) {
-          const task = new Task(
-            uuid4(),
-            jobRunId,
-            'SCAN',
-            'PENDING',
-            'worker-1',
-            `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
-            commands,
-            `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
-            ''
-          )
+          const task = buildTask('SCAN', jobRunId, jobContext, commands);
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;
-          await this.redisService.setJobContext(jobRunId, jobContext.serialize());
+          await this.redisService.setJobContext(jobRunId, jobContext);
           commands = [];
         }
       }
       
       if (commands.length > 0) {
-        const task = new Task(
-          uuid4(),
-          jobRunId,
-          'SCAN',
-          'PENDING',
-          'worker-1',
-          `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
-          commands,
-          `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
-          ''
-        )
+        const task = buildTask('SCAN', jobRunId, jobContext, commands);
         const id = await jobContext.appendToTaskList(task);
         jobContext.tasksInfo.lastId = id;
         await this.redisService.setJobContext(jobRunId, jobContext);
@@ -92,6 +70,19 @@ export class MigrationTaskService {
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       const tasks = await jobContext.groupReadTasks(jobRunId, this.fetchTaskBatch);
+      for await (const task of tasks) output.tasks.push(task);
+      return output;
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to fetch the task: ${error}`);
+      return output;
+    }
+  }
+
+  async fetchMigrationTask({ jobRunId }: FetchMigrationTaskInput): Promise<FetchScanTaskOutPut> {
+    const output: FetchScanTaskOutPut = { tasks: [] };
+    try {
+      const jobContext = await this.redisService.getJobContext(jobRunId);
+      const tasks = await jobContext.groupReadMigrationTask(jobRunId, this.fetchTaskBatch/2);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {

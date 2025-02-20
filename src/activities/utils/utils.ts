@@ -1,9 +1,10 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { FileInfo, JobContext, JobContextFactory, RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 import { FileType } from "../type/task.type";
+import { uuid4 } from "@temporalio/workflow";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -97,3 +98,12 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         relativePath.split('/').length - 2,
       );
 }
+
+
+export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
+  uuid4(), jobRunId, taskType, 'PENDING', 'worker-1',
+  `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
+  commands,
+  `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
+  ''
+)

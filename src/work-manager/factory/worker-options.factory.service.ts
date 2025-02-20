@@ -10,6 +10,7 @@ import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-a
 import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanger.service";
+import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -20,7 +21,8 @@ export class WorkerOptionsService {
     private readonly discoveryScanActivity: DiscoveryScanActivity,
     private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
-    private readonly migrationTaskService: MigrationTaskService
+    private readonly migrationTaskService: MigrationTaskService,
+    private readonly migrationSyncService:MigrationSyncService
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -42,6 +44,8 @@ export class WorkerOptionsService {
             scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
             publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
             fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
+            fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -56,6 +60,8 @@ export class WorkerOptionsService {
           scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
           publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
           fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
+          fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       default:
         return undefined;
