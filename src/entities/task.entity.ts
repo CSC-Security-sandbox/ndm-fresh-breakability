@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { OperationsEntity } from './operation.entity';
 import { TaskStatus, TaskType } from 'src/enum/queues.enum';
+import { TaskErrorEntity } from './task-error.entity';
+import { Base } from './base.entity';
 
 
 
@@ -9,8 +11,7 @@ import { TaskStatus, TaskType } from 'src/enum/queues.enum';
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
 @Index('idx_task_type', ['taskType'])
-
-export class TaskEntity  {
+export class TaskEntity {
   @ApiProperty({ description: 'UUID of the job run' })
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -31,12 +32,9 @@ export class TaskEntity  {
   @Column({ type: 'uuid', nullable: true,  name: 'worker_id' })
   workerId: string;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-
-   @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
+  @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
   operations: OperationsEntity[]
+
+  @OneToOne(() => TaskErrorEntity, (taskError) => taskError.task, { onDelete: 'CASCADE' })
+  taskErrors: TaskErrorEntity;
 }

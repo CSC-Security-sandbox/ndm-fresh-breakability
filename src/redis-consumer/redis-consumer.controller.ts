@@ -25,6 +25,12 @@ export class RedisConsumerController {
     return response;
   }
 
+  @Post("delete/:jobRunId/:consumerType")
+  async delete(@Param("jobRunId") jobRunId: string, @Param("consumerType") consumerType: string) {
+   const response= await this.redisConsumerService.stopConsumer(jobRunId, consumerType);
+    return response;
+  }
+
   @Get('list')
   async listWorkers() {
     return this.redisConsumerService.listConsumers();

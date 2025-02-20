@@ -56,6 +56,19 @@ export class RedisConsumerService  {
     });
   }
 
+
+  deleteConsumer(jobRunId: string,
+    consumerType: string) {
+    return new Promise((resolve, reject) => {
+      exec(`pm2 delete ${jobRunId}-${consumerType}-consumer`, (error, stdout, stderr) => {
+        if (error) {
+          return reject({"message": `Error while stopping consumer`});
+        }
+        resolve({"message": `consumer stopped:`});
+      });
+    });
+  }
+
   listConsumers() {
     return new Promise((resolve, reject) => {
       exec(`pm2 list`, (error, stdout, stderr) => {

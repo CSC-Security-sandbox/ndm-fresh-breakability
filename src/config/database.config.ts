@@ -3,6 +3,8 @@ import { InventoryEntity } from '../entities/inventory.entity';
 import { DataSourceOptions } from 'typeorm';
 import { TaskEntity } from 'src/entities/task.entity';
 import { OperationsEntity } from 'src/entities/operation.entity';
+import { TaskErrorEntity } from 'src/entities/task-error.entity';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 
 export default registerAs(
   'typeorm',
@@ -21,7 +23,9 @@ export default registerAs(
     entities: [
       InventoryEntity,
       TaskEntity,
-      OperationsEntity  
+      OperationsEntity,
+      TaskErrorEntity,
+      OperationErrorEntity
     ],
     migrations: [],
   }),

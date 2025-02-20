@@ -1,15 +1,16 @@
 
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 import { OperationStatus, OperationType } from 'src/enum/queues.enum';
+import {  OperationErrorEntity } from './operation-error.entity';
 
 
 @Entity({ name: 'operations'})
 @Index('idx_operation_run_status', ['jobRunId', 'status'])
 @Index('idx_file_path_task', ['fPath', 'taskId'])
 @Index('idx_operation_type', ['operationType'])
-export class OperationsEntity extends Base {
+export class OperationsEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -52,5 +53,8 @@ export class OperationsEntity extends Base {
   @ManyToOne(() => TaskEntity, task => task.operations, { onDelete:'CASCADE'})
   @JoinColumn({ name: 'task_id' }) 
   task: TaskEntity;
+
+  @OneToOne(() => OperationErrorEntity, (operationErrors) => operationErrors.operation, { onDelete: 'CASCADE' })
+  operationErrors: OperationErrorEntity
 
 }

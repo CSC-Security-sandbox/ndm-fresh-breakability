@@ -1,0 +1,1 @@
+ALTER TABLE your_table_name ADD COLUMN file_name TEXT, ADD COLUMN file_path TEXT;
