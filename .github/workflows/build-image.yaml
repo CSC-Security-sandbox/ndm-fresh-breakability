@@ -47,5 +47,4 @@ jobs:
             -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest \
             --push .
         env:
-          GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
