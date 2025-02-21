@@ -51,8 +51,8 @@ export class JobConfigController {
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/precheck')
-  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<JobConfigPrecheckRes[]> {
-    return await this.jobConfigService.precheck(precheckData);
+  async precheck(@Body() precheckData: JobConfigPrecheck) { 
+     return  await this.jobConfigService.precheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
