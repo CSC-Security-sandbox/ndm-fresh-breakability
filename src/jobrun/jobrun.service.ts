@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ConsumerType, JobRunStatus, JobStatus, JobType, OperationStatus, Protocol, TaskStatus, WorkFlowType, WorkFlows } from "src/constants/enums";
+import { ConsumerType, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -33,9 +33,9 @@ import {
 } from '@netapp-cloud-datamigrate/jobs-lib';
 import { WorkManager } from "src/events/workmanager/workmanager.service";
 import { TaskEntity } from "src/entities/task.entity";
-import { operationsTypeToTaskType } from "src/utils/mapper";
 import { OperationsEntity } from "src/entities/operation.entity";
 import axios from 'axios';
+import { v4 as uuid4 } from 'uuid';
 
 @Injectable()
 export class JobRunService {
@@ -321,32 +321,31 @@ export class JobRunService {
       if(!redisClient.isOpen)await redisClient.connect();
       const jobContext = JobContextFactory.getProvider('redis', redisClient)
       .buildContext(jobRunId, jobConfig, JobRunStatus.Ready);
-       (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId,jobRunConfig));
+       (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId, jobRunConfig));
       redisClient.set(jobRunId, (await jobContext).serialize());
   }
 
   async createIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-    const payload ={
-      jobRunId: jobRunId,
-      status: JobRunStatus.Ready,
-      details: jobRunConfig,
-    }
-    const operation = await this.workerManagerService.createTaskForJobRun(payload);
-    const taskEntity : TaskEntity =  this.taskRepo.create({
-      jobRunId: jobRunId,
-      taskType: operationsTypeToTaskType(operation.operationType),
-      status: TaskStatus.Pending
-  });
-   const savedTask = await this.taskRepo.save(taskEntity)
-   await this.operationRepo.update({id: operation.id}, {taskId: taskEntity.id, status: OperationStatus.READY});
-   const task =  this.buildTaskPaylod(savedTask,jobRunConfig,operation);
-   return task;
+    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
+    const commands = new Command(`${mountBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
+    const task = new Task(
+      uuid4(),
+      jobRunId,
+      'SCAN',
+      'PENDING',
+      jobRunConfig.workers[0],
+      jobRunConfig.connection.sourceCredential.pathId,
+      [commands],
+      jobRunConfig.jobType === JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.pathId : '',
+      jobRunConfig.excludeFilePatterns,
+    )
+    return task;
   }
 
   buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
     const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
     const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
-      const commands = new Command(`${mountBasePath}/${sourcePath}`, {0: {cmd : taskEntity.taskType, status: 'Pending'}}, operations.id)
+      const commands = new Command(`${mountBasePath}/${sourcePath}`, {0: {cmd : taskEntity.taskType, status: 'PENDING'}}, operations.id)
       const task = new Task(
         taskEntity.id,
         taskEntity.jobRunId,
