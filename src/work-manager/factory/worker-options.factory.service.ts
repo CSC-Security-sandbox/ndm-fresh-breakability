@@ -35,6 +35,7 @@ export class WorkerOptionsService {
             publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
             setup: this.setupActivityService.setup.bind(this.setupActivityService),
             cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+            mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -46,6 +47,7 @@ export class WorkerOptionsService {
           publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
           setup: this.setupActivityService.setup.bind(this.setupActivityService),
           cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+          mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
         });
       default:
         return undefined;
