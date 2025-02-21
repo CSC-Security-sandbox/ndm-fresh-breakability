@@ -162,7 +162,7 @@ export class Task implements Serializable {
     this.sPath = sPath;
     this.tPath = tPath;
     this.sPathId = sPathId,
-    this.tPath = tPathId;
+    this.tPathId = tPathId;
     this.excludeFilePatterns = excludeFilePatterns;
     this.commands = commands;
   }
