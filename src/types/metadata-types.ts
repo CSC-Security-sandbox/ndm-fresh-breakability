@@ -135,7 +135,9 @@ export class Task implements Serializable {
   status: string;
   workerId: string;
   sPath: string;
-  tPath?: string;
+  sPathId: string;
+  tPath?: string | null;
+  tPathId?: string | null;
   excludeFilePatterns?: string;
   commands: Command[];
 
@@ -146,8 +148,10 @@ export class Task implements Serializable {
     status: string,
     workerId: string,
     sPath: string,
+    sPathId: string,
     commands: Command[],
     tPath?: string,
+    tPathId?: string,
     excludeFilePatterns?: string,
   ) {
     this.id = id;
@@ -157,6 +161,8 @@ export class Task implements Serializable {
     this.workerId = workerId;
     this.sPath = sPath;
     this.tPath = tPath;
+    this.sPathId = sPathId,
+    this.tPath = tPathId;
     this.excludeFilePatterns = excludeFilePatterns;
     this.commands = commands;
   }
