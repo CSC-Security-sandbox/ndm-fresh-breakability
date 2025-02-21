@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS jobrun (
 	iteration_number int4 NOT NULL,
 	job_config_id uuid NOT NULL,
 	job_options_id uuid NULL,
+	is_report_ready boolean DEFAULT false NOT NULL,
 	CONSTRAINT "PK_39c91b190948f08d1d392f404e6" PRIMARY KEY (id),
 	CONSTRAINT "FK_90c86a3ffe6d7381cdc8dcab5b1" FOREIGN KEY (job_config_id) REFERENCES jobconfig(id) ON DELETE CASCADE
 );
@@ -75,9 +76,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 	CONSTRAINT "PK_8d12ff38fcc62aaba2cab748772" PRIMARY KEY (id),
 	CONSTRAINT "FK_e1d40541e2ee780839fb3f95c4a" FOREIGN KEY (job_run_id) REFERENCES jobrun(id) ON DELETE CASCADE
 );
-CREATE INDEX idx_job_run_id ON tasks USING btree (job_run_id);
-CREATE INDEX idx_job_run_status ON tasks USING btree (job_run_id, status);
-CREATE INDEX idx_task_type ON tasks USING btree (task_type);
+CREATE INDEX IF NOT EXISTS idx_job_run_id ON tasks USING btree (job_run_id);
+CREATE INDEX IF NOT EXISTS idx_job_run_status ON tasks USING btree (job_run_id, status);
+CREATE INDEX IF NOT EXISTS idx_task_type ON tasks USING btree (task_type);
 
 CREATE TABLE IF NOT EXISTS operations (
 	created_at timestamp DEFAULT now() NOT NULL,
@@ -98,9 +99,9 @@ CREATE TABLE IF NOT EXISTS operations (
 	CONSTRAINT "PK_7b62d84d6f9912b975987165856" PRIMARY KEY (id),
 	CONSTRAINT "FK_7d416e8bb958cabd9256e9a8e5e" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
-CREATE INDEX idx_file_path_task ON operations USING btree (f_path, task_id);
-CREATE INDEX idx_operation_run_status ON operations USING btree (job_run_id, status);
-CREATE INDEX idx_operation_type ON operations USING btree (operation_type);
+CREATE INDEX IF NOT EXISTS idx_file_path_task ON operations USING btree (f_path, task_id);
+CREATE INDEX IF NOT EXISTS idx_operation_run_status ON operations USING btree (job_run_id, status);
+CREATE INDEX IF NOT EXISTS idx_operation_type ON operations USING btree (operation_type);
 
 CREATE TABLE IF NOT EXISTS request_track (
 	created_at timestamp DEFAULT now() NOT NULL,

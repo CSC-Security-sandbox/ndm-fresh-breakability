@@ -1,15 +1,13 @@
-import { JobStatus, JobType } from "src/constants/enums";
-
-
+import { JobConfigBulkMigrateResStatus, JobStatus, JobType } from "src/constants/enums";
 
 export interface InActivateJobConfigPayload {
     jobConfigId: string
 }
 
 export interface JobConfigBulkMigrateRes {
-    status: 'created' | 'failed';
     id: string;
     jobType: JobType;
+    status: JobConfigBulkMigrateResStatus;
     sourcePathId: string;
     targetPathId: string;
 }

@@ -1,17 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobConfigDto } from './dto/jobconfig.dto';
-import { JobConfigDiscoverBulk, JobConfigMigrateBulk } from './dto/jobdicoverybulk.dto';
+import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+import { JobConfigCutoverBulk } from './dto/jobdicoverybulk.dto';
 
 const mockJobEntity = {
   id: 'uuid1',
@@ -47,6 +50,7 @@ describe('JobConfigService', () => {
   let repo: Repository<JobConfigEntity>;
   let inventoryRepo: Repository<InventoryEntity>;
   let jobOptions: Repository<JobOptionsEntity>
+  let projectRepo: Repository<ProjectEntity>
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -103,12 +107,17 @@ describe('JobConfigService', () => {
             })),
           },
         },
+        {
+          provide: getRepositoryToken(ProjectEntity),
+          useClass: Repository,
+        },
       ],
     }).compile();
 
     service = module.get<JobConfigService>(JobConfigService);
     repo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
     inventoryRepo = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
+    projectRepo = module.get<Repository<ProjectEntity>>(getRepositoryToken(ProjectEntity));
   });
 
   it('should be defined', () => {
@@ -125,7 +134,7 @@ it('should handle empty sourcePathIds', async () => {
     firstRunAt: new Date(),
     createdBy: 'user123',
     sourcePathIds: ['qwsd']
-  };
+  } as any;
 
   const mockFind = jest.spyOn(repo, 'find').mockResolvedValue([]);
   const mockUpdate = jest.spyOn(repo, 'update').mockResolvedValue(undefined);
@@ -145,7 +154,7 @@ it('should default firstRunAt to current date when undefined', async () => {
     futureSchedule: null,
     firstRunAt: null,
     createdBy: 'user123',
-  };
+  } as any;
 
   const mockCreate = jest.spyOn(repo, 'create');
   jest.spyOn(repo, 'find').mockResolvedValue([]);
@@ -165,7 +174,7 @@ it('should handle database errors in find method', async () => {
     futureSchedule: null,
     firstRunAt: new Date(),
     createdBy: 'user123',
-  };
+  } as any;
 
   jest.spyOn(repo, 'find').mockRejectedValue(new Error('Database error'));
 
@@ -527,93 +536,79 @@ it('should handle database errors in find method', async () => {
     });
 });
 
-  describe('createBulkMigrate', () => {
-    it('should return success for bulk migrate', async () => {
-      const mokcResult = [
+describe('createBulkMigrate', () => {
+  it('should create bulk migrate successfully', async () => {
+    const bulkMigrate: BulkMigrateJobConfig = {
+      firstRunAt: new Date(),
+      migrateConfigs: [
         {
-          status: 'created',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.MIGRATE,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'
+          sourcePathId: 'source-path-1',
+          destinationPathId: ['dest-path-1'],
         },
-        {
-          status: 'failed',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
-          jobType: JobType.MIGRATE,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd'
-        }
-      ] as any;
-
-      const res = await service.createBulkMigrate({} as any);
-      expect(res).toEqual(mokcResult);
-      expect(res.length).toEqual(2);
-      expect(res[0].jobType).toEqual(JobType.MIGRATE);
-    })
-    it('should throw an HttpException when an error occurs', async () => {
-      const mockedError = new HttpException({
-        status: 'failed',
-        message: 'db error',
+      ],
+      options: {
+        excludeFilePatterns: '',
+        preserveAccessTime: true,
+        excludeOlderThan: null,
       },
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    )
-      jest.spyOn(service, 'createBulkMigrate').mockImplementation(async ( )=> {
-        throw mockedError
-      });
-      await expect(service.createBulkMigrate({} as any)).rejects.toThrow(mockedError);
-      try {
-        await service.createBulkMigrate({} as any);
-      } catch (error) {
-        expect(error).toBeInstanceOf(HttpException);
-      }
-    });
-  })
+      futureRunSchedule: '',
+      sidMapping: undefined,
+      gidMapping: undefined
+    };
 
-  describe('getCutoverDetailsByFileServerId', () => {
-    it('should resturn data for cutover details by fileserver id', async () => {
-      const mokcedRes = [{
-          protocol: Protocol.NFS,
-          sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
-          destinationFileServer: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationFileServerName: 'fileServer1' },
-          destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
-          jobConfig: [{
-            id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-            jobType: JobType.MIGRATE,
-            jobRunDetails: {
-              id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-              status: JobRunStatus.Completed
-            }
-          }]
-        }]
-      const result = await service.getCutoverDetailsByFileServerId('');
-      expect(result).toEqual(mokcedRes);
-    })
-  })
+    jest.spyOn(repo, 'find').mockResolvedValue([]);
+    jest.spyOn(repo, 'create').mockReturnValue({ id: '1', ...bulkMigrate } as any);
+    jest.spyOn(repo, 'save').mockResolvedValue([{ id: '1', jobType: JobType.MIGRATE }] as any);
+
+    const result = await service.createBulkMigrate(bulkMigrate);
+    expect(result).toEqual([{ id: '1', jobType: JobType.MIGRATE, status: JobConfigBulkMigrateResStatus.CREATED }]);
+  });
+
+  it('should update existing job configs if they exist', async () => {
+    const bulkMigrate: BulkMigrateJobConfig = {
+      firstRunAt: new Date(),
+      migrateConfigs: [
+        {
+          sourcePathId: 'source-path-1',
+          destinationPathId: ['dest-path-1'],
+        },
+      ],
+      options: {
+        excludeFilePatterns: '',
+        preserveAccessTime: true,
+        excludeOlderThan: null,
+      },
+      futureRunSchedule: '',
+      sidMapping: undefined,
+      gidMapping: undefined
+    };
+
+    const existingJobConfigs = [{ sourcePathId: 'source-path-1', targetPathId: 'dest-path-1' }];
+    jest.spyOn(repo, 'find').mockResolvedValue(existingJobConfigs as any);
+    jest.spyOn(repo, 'update').mockResolvedValue(undefined);
+    jest.spyOn(repo, 'save').mockResolvedValue([{ id: '1', jobType: JobType.MIGRATE }] as any);
+
+    await service.createBulkMigrate(bulkMigrate);
+    expect(repo.update).toHaveBeenCalled();
+  });
+});
 
   describe('createBulkCutover', () => {
-    it('should return success for bulk cutover', async () => {
-      const mokcResult = [
+    it('should create bulk cutover successfully', async () => {
+      const bulkCutover: any = {
+        migrateConfigs: []
+      };
+
+      const result = await service.createBulkCutover(bulkCutover);
+      expect(result).toEqual([
         {
           status: 'created',
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
           jobType: JobType.CutOver,
           sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc',
+          targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
         },
-        {
-          status: 'failed',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
-          jobType: JobType.CutOver,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd',
-        }
-      ] as any;
-
-      const res = await service.createBulkCutover({} as any);
-      expect(res).toEqual(mokcResult);
-      expect(res.length).toEqual(2);
-      expect(res[0].jobType).toEqual(JobType.CutOver);
+      ]);
     })
     it('should throw an HttpException when an error occurs', async () => {
       jest.spyOn(service, 'createBulkCutover').mockRejectedValue(new HttpException('DB error', HttpStatus.BAD_GATEWAY));
@@ -625,6 +620,32 @@ it('should handle database errors in find method', async () => {
       });
     });
   })
+
+  describe('getConfigsByProjectId', () => {
+    it('should return project configs', async () => {
+      const projectId = '550e8400-e29b-41d4-a716-446655440000';
+      const project = { id: projectId, projectName: 'Test Project', configs: [] };
+  
+      jest.spyOn(projectRepo, 'findOne').mockResolvedValue(project as any);
+  
+      const result = await service.getConfigsByProjectId(projectId);
+      expect(result).toEqual(project);
+    });
+  
+    it('should throw BadRequestException for invalid projectId', async () => {
+      const projectId = 'invalid-uuid';
+  
+      await expect(service.getConfigsByProjectId(projectId)).rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw NotFoundException if project not found', async () => {
+      const projectId = '550e8400-e29b-41d4-a716-446655440000';
+  
+      jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
+  
+      await expect(service.getConfigsByProjectId(projectId)).rejects.toThrow(NotFoundException);
+    });
+  });
 
   describe('precheck', () => {
     it('should return succes for precheck', async () => {

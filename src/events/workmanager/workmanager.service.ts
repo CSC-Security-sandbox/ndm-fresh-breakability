@@ -1,18 +1,22 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
+import * as parser from 'cron-parser'
+import { JobRunStatus, JobType, JobStatus, OperationStatus, OperationType, TaskStatus, TaskType } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
-import { SocketEvents } from "src/constants/status";
+import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { jobTypeToOperationType, operationsTypeToTaskType } from "src/utils/mapper";
 import { In, Not, Repository } from "typeorm";
 import { UnScannedRes } from "../events.type";
-import { buildScanPayload } from "./workmanager.mapper";
+import { buildScanPayload,buildMigrationPayload } from "./workmanager.mapper";
 import { MountedStatus, ScanCompletedPayload, TaskEventPayload, TaskPayload, WorkerJobRuns } from "./workmanager.types";
 import { ConfigService } from "@nestjs/config";
+import { VolumeEntity } from "src/entities/volume.entity";
+import { JobRunEntity } from "src/entities/jobrun.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
 
 
 @Injectable()
@@ -23,35 +27,60 @@ export class WorkManager{
         private operationsRepo: Repository<OperationsEntity>,
         @InjectRepository(TaskEntity)
         private taskRepo: Repository<TaskEntity>,
+        @InjectRepository(JobRunEntity)
+        private jobRunRepo: Repository<JobRunEntity>,
+        @InjectRepository(JobConfigEntity)
+        private jobConfigRepo: Repository<JobConfigEntity>,
         @InjectRepository(WorkerJobRunMap)
         private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+        @InjectRepository(VolumeEntity)
+        private volumeRepo: Repository<VolumeEntity>,
         private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
     ){}
     
     // --------------------------- Create init Operation --------------------------------//
-    @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
-    async createInitDiscovery(payload: TaskEventPayload){
+    // @OnEvent(EmitterEvents.CREATE_TASK, { async: true })
+    // async createInitDiscovery(payload: TaskEventPayload){
+    //     await this.createTaskForJobRun(payload)
+    // }
+
+    async createTaskForJobRun(payload:TaskEventPayload, taskId: string) {
         try{
+            const sourceVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.sourceCredential?.pathId}})
+            const targetVolume = await this.volumeRepo.findOne({where: {id: payload.details.connection.targetCredential?.pathId}})
+            if(!sourceVolume || !targetVolume) {
+                this.logger.error(`Volume not found for Source : ${payload.details.connection.sourceCredential?.pathId} | Target : ${payload.details.connection.targetCredential?.pathId}`)
+                return
+            }
             const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-            const path =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
-            this.logger.error(path)
-            const request =  buildScanPayload(path)
+            const sourcePath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.sourceCredential?.pathId}`
+            //const sourcePath =  `${mountBasePath}`
+            const targetPath =  `${mountBasePath}/${payload.jobRunId}/${payload.details.connection.targetCredential?.pathId}`
+            //const targetPath =  `${mountBasePath}/${payload.jobRunId}`
+            this.logger.log(`Source Path : ${sourcePath} | Target Path : ${targetPath}`)
+            const request =  payload.details.jobType===JobType.DISCOVER ? buildScanPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath)) : buildMigrationPayload(this.buildFilepath(sourcePath,sourceVolume?.volumePath),this.buildFilepath(targetPath,targetVolume?.volumePath))  
             const operation = this.operationsRepo.create({
+                taskId,
                 jobRunId: payload.jobRunId,
                 status: OperationStatus.READY,
-                fPath: path,
+                fPath: sourceVolume?.volumePath,
                 sPathId: payload.details.connection.sourceCredential?.pathId,
                 tPathId: payload.details.connection.targetCredential?.pathId,
                 retryCount: 0,
                 operationType: jobTypeToOperationType(payload.details.jobType),
                 request: request
             })
-            await this.operationsRepo.save(operation)
+           return await this.operationsRepo.save(operation)
        
         }catch(e){
             this.logger.error(e)
         }
+
+    }
+
+    buildFilepath = (path: string, volumePath: string) => { 
+        return `${path}/${volumePath}`
     }
 
     // ------------------------------- Update Worker Mount Status -----------------------------------//
@@ -222,7 +251,23 @@ export class WorkManager{
             jobRunId: task.jobRunId,
             sPathId: task.sPath,
             tPathId: task?.tPath
-        })
+        });
+
+        const jobRunDetail = await this.jobRunRepo.findOne({
+            where: { id: task.jobRunId },
+            relations: ['jobConfig'],
+        });
+
+        if (jobRunDetail?.jobConfig?.futureScheduleAt) {
+            await this.jobConfigRepo.update(
+                { id: jobRunDetail.jobConfig.id },
+                {
+                    firstRunAt: parser.parseExpression(jobRunDetail.jobConfig.futureScheduleAt).next().toDate(),
+                    scheduler: ScheduleStatus.SCHEDULING,
+                    status: JobStatus.Active,
+                }
+            );
+        }
         this.logger.debug(`=====================================================================================================\n                      Congratulation ${task.jobRunId} IS COMPLETED \n=====================================================================================================`)
         switch(task.taskType) {
             case TaskType.Scan:

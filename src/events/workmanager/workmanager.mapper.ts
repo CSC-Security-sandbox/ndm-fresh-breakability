@@ -1,9 +1,20 @@
 
-export const buildScanPayload = (path: string) => ({
+export const buildScanPayload = (path:string) => ({
     fPath: path,
     ops: {
         0 : {
             cmd : "SCAN_PATH"
+        }
+    }
+})
+
+// TODO : Need to make changes ine the payload structure
+export const buildMigrationPayload = (sourcePath: string, targetPath: string) => ({
+    fPath: sourcePath,
+    ops: {
+        0 : {
+            cmd : "MIGRATE_PATH",
+            targetPath
         }
     }
 })

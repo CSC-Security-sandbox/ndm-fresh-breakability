@@ -10,6 +10,9 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { Repository } from 'typeorm';
 import { WorkManager } from './workmanager.service';
 import { ConfigService } from '@nestjs/config';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { JobRunEntity } from '../../entities/jobrun.entity';
+import { JobConfigEntity } from '../../entities/jobconfig.entity';
 
 class MockRepository<T> extends Repository<T> {
     async save(e: any):Promise<any> {
@@ -31,9 +34,12 @@ describe('WorkManager', () => {
   let workManager: WorkManager;
   let operationsRepo: Repository<OperationsEntity>;
   let taskRepo: MockRepository<TaskEntity>;
+  let volumeRepo: MockRepository<VolumeEntity>;
   let workerJobRunMapRepo: MockRepository<WorkerJobRunMap>;
   let eventEmitter: EventEmitter2;
   let configService: ConfigService
+  let jobRunRepo: Repository<JobRunEntity>;
+  let jobConfigRepo: Repository<JobConfigEntity>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -51,6 +57,22 @@ describe('WorkManager', () => {
           provide: getRepositoryToken(WorkerJobRunMap),
           useClass: Repository,
         },
+        {
+          provide: getRepositoryToken(VolumeEntity),
+          useClass: Repository,
+        },
+        {
+          provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            update: jest.fn(),
+          },
+        },
         EventEmitter2,
         ConfigService
       ],
@@ -60,8 +82,11 @@ describe('WorkManager', () => {
     configService = module.get<ConfigService>(ConfigService);
     operationsRepo = module.get<Repository<OperationsEntity>>(getRepositoryToken(OperationsEntity));
     taskRepo = module.get<MockRepository<TaskEntity>>(getRepositoryToken(TaskEntity));
+    volumeRepo = module.get<MockRepository<VolumeEntity>>(getRepositoryToken(VolumeEntity));
     workerJobRunMapRepo = module.get<MockRepository<WorkerJobRunMap>>(getRepositoryToken(WorkerJobRunMap));
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
+    jobRunRepo = module.get<Repository<JobRunEntity>>(getRepositoryToken(JobRunEntity));
+    jobConfigRepo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
   });
 
   it('should be defined', () => {

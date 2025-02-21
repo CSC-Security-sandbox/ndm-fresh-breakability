@@ -5,11 +5,36 @@ import {
     IsArray,
     IsBoolean,
     IsDate,
+    IsObject,
     IsOptional,
     IsString,
     IsUUID,
     ValidateNested
 } from 'class-validator';
+
+
+
+export class WorkFlowOptions {
+  @ApiProperty({ description: 'Timeout for workflow execution', default: '60s', required: false })
+  @IsOptional()
+  @IsString()
+  workflowExecutionTimeout: string = '60s';
+
+  @ApiProperty({ description: 'Timeout for workflow task', default: '30s', required: false })
+  @IsOptional()
+  @IsString()
+  workflowTaskTimeout: string = '30s';
+
+  @ApiProperty({ description: 'Timeout for workflow run', default: '30s', required: false })
+  @IsOptional()
+  @IsString()
+  workflowRunTimeout: string = '30s';
+
+  @ApiProperty({ description: 'Delay before starting the workflow', default: '10s', required: false })
+  @IsOptional()
+  @IsString()
+  startDelay: string = '1s';
+}
 
 export class JobConfigDiscoverBulk {
   @ApiProperty({ description: 'Exclude files older than this date', required: false, })
@@ -43,7 +68,15 @@ export class JobConfigDiscoverBulk {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+
+  @ApiProperty({ type: WorkFlowOptions, description: 'Workflow options', required: false })
+  @IsObject()
+  @ValidateNested()
+  @Type(() => WorkFlowOptions)
+  @IsOptional()
+  options: WorkFlowOptions = new WorkFlowOptions();
 }
+
 
 export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Exclude files older than this date', required: false })

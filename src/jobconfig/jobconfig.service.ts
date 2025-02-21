@@ -1,12 +1,16 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger,BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In } from 'typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
+import { join } from 'path';
+import { validate as isUUID, v4 as uuidv4 } from 'uuid';
+import { Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck, MigrateConfig } from './dto/jobdicoverybulk.dto';
-import { JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { FlattenedCutoverConfig, InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -14,6 +18,8 @@ import { EmitterEvents } from 'src/constants/events';
 import { ScheduleStatus } from 'src/constants/status';
 import { nextDate } from 'src/utils/mapper';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Injectable()
 export class JobConfigService {
@@ -24,7 +30,9 @@ export class JobConfigService {
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(JobRunEntity)
-    private jobRunRepo: Repository<JobRunEntity>
+    private jobRunRepo: Repository<JobRunEntity>,
+    @InjectRepository(ProjectEntity)
+    private readonly projectRepo: Repository<ProjectEntity>,
   ) {}
 
   // ------------ Events ---------------- //
@@ -69,31 +77,70 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
-  async createBulkMigrate(bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
-    try {
-      return [
-        {
-          status: 'created',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.MIGRATE,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'
-        },
-        {
-          status: 'failed',
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d38',
-          jobType: JobType.MIGRATE,
-          sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-          targetPathId: 'fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfd'
+  async createBulkMigrate(bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
+    const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
+    const jobConfigs: Partial<JobConfigEntity>[] = [];
+
+    if (!bulkMigrate?.migrateConfigs) {
+      return [];
+    }
+
+    for (const config of bulkMigrate.migrateConfigs) {
+      if (!config?.destinationPathId) {
+        continue;
+      }
+
+      for (const destinationPath of config.destinationPathId) {
+        const existingJobConfigs = await this.jobConfigRepo.find({
+          where: { jobType: JobType.MIGRATE, sourcePathId: config?.sourcePathId, targetPathId: destinationPath },
+          select: { sourcePathId: true, targetPathId: true, scheduler: true }
+        });
+
+        const existingSet = new Set(existingJobConfigs.map(jobConfig => `${jobConfig?.sourcePathId}-${jobConfig?.targetPathId}`));
+
+        if (existingSet.has(`${config?.sourcePathId}-${destinationPath}`)) {
+          await this.jobConfigRepo.update(
+            {
+              jobType: JobType.MIGRATE,
+              sourcePathId: config?.sourcePathId,
+              targetPathId: destinationPath,
+              scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])
+            },
+            {
+              excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
+              preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              firstRunAt: firstRunAt,
+              scheduler: ScheduleStatus.SCHEDULING
+            }
+          );
+        } else {
+          jobConfigs.push(this.jobConfigRepo.create({
+            status: JobStatus.Active,
+            excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
+            jobType: JobType.MIGRATE,
+            preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+            sourcePathId: config?.sourcePathId,
+            targetPathId: destinationPath,
+            excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+            firstRunAt: firstRunAt,
+            scheduler: ScheduleStatus.SCHEDULING,
+            futureScheduleAt: bulkMigrate?.futureRunSchedule
+          }));
         }
-      ];
-    } catch (error) {
-      throw new HttpException({
-          status: 'failed',
-          message: error.message || 'An error occurred while creating bulk migrate job',
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      }
+    }
+
+    if (jobConfigs.length > 0) {
+      return (await this.jobConfigRepo.save(jobConfigs)).map(({ id, jobType, sourcePathId, targetPathId }) => ({
+        id,
+        jobType,
+        status: JobConfigBulkMigrateResStatus.CREATED,
+        sourcePathId,
+        targetPathId
+      }));
+    } else {
+      return [];
     }
   }
 
@@ -305,6 +352,7 @@ export class JobConfigService {
         .getRawOne();
       return {
         jobRunId: jobRun.id,
+        isReportReady: jobRun.isReportReady,
         status: jobRun.status,
         startTime: jobRun.startTime,
         endTime: jobRun.endTime, 
@@ -362,6 +410,41 @@ export class JobConfigService {
         }
       }]
     }]
+  }
+
+  async getConfigsByProjectId(projectId: string) {
+    if (!isUUID(projectId))
+      throw new BadRequestException('Invalid projectId');
+
+    const project = await this.projectRepo.findOne({
+      select: {
+        id: true,
+        projectName: true,
+        configs: {
+          id: true,
+          configName: true,
+          fileServers: {
+            id: true,
+            protocol: true,
+            volumes: {
+              id: true,
+              volumePath: true
+            }
+          }
+        }
+      },
+      where: { id: projectId },
+      relations: {
+        configs: {
+          fileServers: {
+            volumes: true
+          }
+        }
+      }
+    });
+
+    if (!project) throw new NotFoundException(`Project for id ${projectId} not found.`);
+    return project;
   }
 
   // ------------ Job Config All ---------------- //
@@ -431,6 +514,32 @@ export class JobConfigService {
       });
     });
     return payload
+  }
+
+  private templates = {
+    sid: 'sid_template.csv',
+    gid: 'gid_template.csv',
+    uid: 'uid_template.csv',
+  };
+
+  getTemplateFilename(type: TemplateType) {
+    return this.templates[type];
+  }
+
+  sendCsvFile(filename: string, res: Response) {
+    const filePath = join(process.cwd(), process.env.TEMPLATES_PATH, filename);
+    this.logger.log(`filePath ${filePath}`);
+    
+    if (!existsSync(filePath)) {
+      throw new NotFoundException(`CSV file ${filename} not found at ${filePath}`);
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'text/csv');
+
+    const fileStream = createReadStream(filePath);
+    
+    fileStream.pipe(res);
   }
 
   covertBytes(bytes: number): string {

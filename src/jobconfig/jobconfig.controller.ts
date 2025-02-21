@@ -1,11 +1,14 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+import { Response } from 'express';
+import { TemplateType } from 'src/constants/enums';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -18,6 +21,9 @@ export class JobConfigController {
   @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
+    if (!bulkDiscovery.sourcePathIds || bulkDiscovery.sourcePathIds.length === 0) {
+      throw new BadRequestException('Source path IDs cannot be empty.');
+    }
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
     return jobConfig;
   }
@@ -27,7 +33,7 @@ export class JobConfigController {
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-migrate')
-  async createBulkMigrate(@Body() bulkMigrate: JobConfigMigrateBulk): Promise<JobConfigBulkMigrateRes[]> {
+  async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
   }
 
@@ -74,6 +80,31 @@ export class JobConfigController {
   @Get('cutover/:fileServerId')
   async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
       return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
+  }
+
+  @Get("download-template/:type")
+  async downloadTemplate(
+    @Res() res: Response,
+    @Param('type') type: TemplateType
+  ) {
+    if (!type) {
+      throw new BadRequestException("Either sid, gid, or uid type is required");
+    }
+
+    if (!Object.values(TemplateType).includes(type)) {
+      throw new BadRequestException("Invalid type");
+    }
+
+    const filename = this.jobConfigService.getTemplateFilename(type);
+    this.jobConfigService.sendCsvFile(filename, res);
+  }
+
+  @ApiOperation({ summary: 'Get Configs and Volumes by project ID' })
+  @ApiResponse({ status: 200, description: 'Configuration Found' })
+  @ApiResponse({ status: 404, description: 'Configuration Not Found' })
+  @Get('project/:projectId')
+  async getConfigurationsByProjectId(@Param('projectId') projectId: string) {
+      return await this.jobConfigService.getConfigsByProjectId(projectId);
   }
 
   @ApiOperation({ summary: 'Update a job by ID' })

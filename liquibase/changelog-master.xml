@@ -7,4 +7,12 @@
       <sqlFile path="liquibase/20250124_01_create_all_jobs_existing_tables.sql"/>
    </changeSet>
 
+   <changeSet id="5002" author="akunal">
+      <sqlFile path="liquibase/20250210_01_jobrun_table_add_column.sql"/>
+   </changeSet>
+   <changeSet id="5003" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_alter_ops_add_extension_columns.sql"/>
+   </changeSet>
+
+
 </databaseChangeLog>
