@@ -307,10 +307,11 @@ export class JobConfigService {
 
       return savedJobs.map((job) => ({
         id: job.id,
+        firstRunAt: job.firstRunAt,
         jobType: job.jobType,
         sourcePathId: job.sourcePathId,
         targetPathId: job.targetPathId,
-        status: "created",
+        status: JobStatus.Active,
       }));
     } catch (error) {
       throw new HttpException(
@@ -338,7 +339,7 @@ export class JobConfigService {
       const pathIds = new Set<string>();
     try {
       const serverMappings = new Map();
-      for (const config of data.migrateConfigs) {
+      for (const config of data.precheckConfig) {
         const destinationPathIds = config.destinationPathId;
         pathIds.add(config.sourcePathId);
         destinationPathIds.forEach((id) => pathIds.add(id));
