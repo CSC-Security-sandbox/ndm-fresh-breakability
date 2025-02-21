@@ -28,7 +28,9 @@
       "node_modules/axios/**",
       "node_modules/sqlite3/**/*",
       "dist/**",
-      "logs/**"
+      "logs/**",
+      "node_modules/tslib/**",
+      "node_modules/@netapp-cloud-datamigrate/**"
     ],
     "targets": [
       "node18-linux-x64",

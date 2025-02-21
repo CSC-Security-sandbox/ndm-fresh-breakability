@@ -6,7 +6,7 @@ import {
 import { executeChild } from '@temporalio/workflow';
 import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
-import {DiscoveryJobWorkflow } from './discovery-job-workflow';
+import { DiscoveryJobWorkflow } from './discovery-job-workflow';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -24,12 +24,9 @@ export async function DiscoveryWorkflow({
   payload,
   options,
 }): Promise<any> {
-  log(
-    traceId,
-    `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`,
-  );
+  log(traceId, `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`);
 
-  let activeWorkerIds=[];
+  let activeWorkerIds = [];
   const responseArray = await Promise.all(
     payload.workers.map((workerId) =>
       executeChild(SetupWorkerWorkflow, {
@@ -47,16 +44,16 @@ export async function DiscoveryWorkflow({
       }),
     ),
   );
-  
+
   let result = responseArray.flat();
   result.map((r) => {
     log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
     if (r.status === 'success') {
       activeWorkerIds.push(r.workerId);
     }
-  });  
+  });
 
-  if(activeWorkerIds.length === 0){
+  if (activeWorkerIds.length === 0) {
     return {
       traceId: traceId,
       status: 'error',
@@ -64,37 +61,41 @@ export async function DiscoveryWorkflow({
     };
   }
 
-log(traceId, `Active workers: ${activeWorkerIds}`);
-const discoveryResponse:any = await Promise.all(
-     activeWorkerIds.map((workerId) =>
-      executeChild(DiscoveryJobWorkflow,{
-        args: [
-          {
-            traceId: traceId
-          },
-        ],
-        workflowId: `DiscoveryJobWorkflow-${traceId}`,
-        taskQueue: `${traceId}-TaskQueue`,
-        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-        parentClosePolicy: ParentClosePolicy.TERMINATE,
-      })
-    )
-  ).then((response) => {  
+  const discoveryResponse: any = await Promise.all(payload.workers.map(async (workerId) => {
+    while (true) {
+      try {
+        return await executeChild(DiscoveryJobWorkflow, {
+          args: [{ traceId }],
+          workflowId: `DiscoveryJobWorkflow-${traceId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        });
+      } catch (err) {
+        if (err.name === 'ContinueAsNew') {
+          console.log(`Child workflow continued as new: ${err.workflowId}`);
+          continue; // Loop again to wait for the continued execution
+        }
+        throw err;
+      }
+    }
+  })).then((response) => {
     log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(response)}`);
     return {
       traceId: traceId,
       status: 'sucess',
       message: `Discovery Successfully  completed for ${traceId}`,
     };
-   
-  }).catch((error) => { 
+
+  }).catch((error) => {
     log(traceId, `DiscoveryWorkflow error: ${error}`);
     return {
       traceId: traceId,
       status: 'error',
       message: `Failed to do discovery for  ${traceId} : ${error}`,
     };
-  });
+  });;
+
   console.log("disoovery response" + JSON.stringify(discoveryResponse));
   let discoveryResult = discoveryResponse;
   result.push(discoveryResult);
@@ -124,10 +125,6 @@ const discoveryResponse:any = await Promise.all(
     );
   }
 
-  log(
-    traceId,
-    `DiscoveryWorkflow response: ${JSON.stringify(result)}`,
-  );
-  return result;
-    
+  log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(result)}`);
+  return discoveryResponse;
 }
