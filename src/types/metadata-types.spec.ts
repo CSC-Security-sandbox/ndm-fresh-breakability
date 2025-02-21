@@ -26,7 +26,7 @@ describe('Metadata Types', () => {
   });
 
   it('should create and serialize Task', () => {
-    const task = new Task('task1', 'jobRunId', 'Scan', 'running', 'worker1', '/source', [ new Command('cmd1', { 0: new CommandOperation() }, 'cmd-001') ]);
+    const task = new Task('task1', 'jobRunId', 'Scan', 'running', 'worker1', '/source', 'sPathId', [ new Command('cmd1', { 0: new CommandOperation() }, 'cmd-001') ]);
     const serialized = task.serialize();
     const deserialized: Task = Task.deserialize(serialized);
     expect(deserialized.id).toBe('task1');
