@@ -105,7 +105,7 @@ export class InventoryService {
   }
   async saveTasks(data: any) {
     try {
-      const { jobRunId, taskType, status, sPath, tPath, commands, workerId, id } = data;
+      const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
       const taskId = id ?? randomUUID();
       const task: TaskEntity = this.taskRepo.create({
         id: taskId,
@@ -119,8 +119,8 @@ export class InventoryService {
         id: command.commandId,
         taskId: task.id,
         jobRunId,
-        sPathId: sPath,
-        tPathId: null,
+        sPathId: sPathId,
+        tPathId: tPathId,
         status: OperationStatus.IN_PROCESS,
         operationType: taskType,
         request: command,
