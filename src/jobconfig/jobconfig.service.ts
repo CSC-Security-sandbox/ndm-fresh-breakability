@@ -176,6 +176,7 @@ export class JobConfigService {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              skipFile: bulkMigrate?.options?.skipFile,
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
             }

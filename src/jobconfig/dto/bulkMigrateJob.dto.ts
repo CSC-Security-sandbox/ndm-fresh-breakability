@@ -72,6 +72,10 @@ export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
+
+  @ApiProperty({ description: 'Skip Files time duration', example: '1h' })
+  @IsString()
+  skipFile: string
 }
 
 export class MigrateConfig {
