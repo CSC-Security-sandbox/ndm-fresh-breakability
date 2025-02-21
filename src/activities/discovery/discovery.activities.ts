@@ -18,6 +18,10 @@ export class DiscoveryActivity {
     this.workerId = this.configService.get('worker.workerId');
   }
   
+  async getWorkerId(): Promise<string> {
+    return this.workerId;
+  }
+
   async fetchTasks(traceId: string): Promise<any> {
     try {
       const batchSize = 50;

@@ -7,7 +7,6 @@ import * as fs from 'fs';
 import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from './enums';
-import { json } from 'stream/consumers';
 
 @Injectable()
 export class DiscoveryScanActivity {

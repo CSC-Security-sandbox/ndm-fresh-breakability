@@ -22,7 +22,9 @@ export class WorkerOptionsService {
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
     switch (config.configName) {
       case WorkFlowType.PARENT_WORKFLOW:
-        return new WorkFlowOptions(id, workerId, connection, 'ParentWorkflow-TaskQueue', config);
+        return new WorkFlowOptions(id, workerId, connection, 'ParentWorkflow-TaskQueue', config, {
+          getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
+        });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
             listPath: this.listPathActivityService.listPath.bind(this.listPathActivityService),

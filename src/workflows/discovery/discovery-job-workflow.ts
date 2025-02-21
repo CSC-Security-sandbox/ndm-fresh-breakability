@@ -26,11 +26,17 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
       iteration++;
       let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {
-        log(traceId, `No tasks found. sending last entry`);
-        await updateLastEntry(traceId)
-        .then(() => log(traceId, `Discovery status updated to Completed`))
-        .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
-        return { message: 'Discovery Completed' };
+        // retry after 5 seconds if no tasks found
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        tasks = await fetchTaskActivity(traceId);
+        if(!tasks || tasks.length === 0) {
+
+          log(traceId, `No tasks found. sending last entry`);
+          await updateLastEntry(traceId)
+          .then(() => log(traceId, `Discovery status updated to Completed`))
+          .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
+          return { message: 'Discovery Completed' };
+        } continue;
       }
       log(traceId, `task found, total -> ${tasks.length}`);
       for(const task of tasks) {
