@@ -22,7 +22,7 @@ export interface JobConfigBulkCutoverRes {
   status: JobStatus;
   firstRunAt: Date;
   sourcePathId: string;
-  targetPathId: string[];
+  targetPathId: string;
 }
 export type FlattenedCutoverConfig = {
     sourcePathId: string;
