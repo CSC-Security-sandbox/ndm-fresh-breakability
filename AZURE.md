@@ -30,9 +30,11 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
     - **Username**: Enter `ubuntu`.
     - **SSH Public Key**: Paste your SSH public key or create a new one.
 - **Disks**: leave the settings as it is.
+- **Delete disk on VM delete**: Select this option
 - **Virtual Network (VNet)**: datamigrate-dev-vnet
 - **Public IP**: Set to "None" to avoid assigning a public IP.
 - **Delete NIC when VM is deleted**: Select this option
+
 
 
 ### 5. Review and Create
@@ -40,6 +42,7 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 
 ## Steps to Connect to Your VM
 
+### Access Control Plane VM
 ### 1. Exporting Environment Variables
 
 - Replace the placeholder values with actual values:
