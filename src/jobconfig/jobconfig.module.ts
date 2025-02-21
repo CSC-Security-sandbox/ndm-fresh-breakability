@@ -6,6 +6,7 @@ import { JobConfigService } from './jobconfig.service';
 
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobIdMappingEntity } from '../entities/jobmapping.entity';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
@@ -16,7 +17,7 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity]),
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]

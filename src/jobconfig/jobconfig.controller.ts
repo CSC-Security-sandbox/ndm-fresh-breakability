@@ -30,6 +30,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new migrate job' })
   @ApiResponse({ status: 201, description: 'Migrate job has been successfully created.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-migrate')
   async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
@@ -37,6 +39,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new cutover job' })
   @ApiResponse({ status: 201, description: 'Cutover job has been successfully created.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-cutover')
   async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     return await this.jobConfigService.createBulkCutover(bulkCutover);
@@ -44,6 +48,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'precheck for migration job' })
   @ApiResponse({ status: 200, description: 'Precheck is passed' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/precheck')
   async precheck(@Body() precheckData: JobConfigPrecheck) { 
      return  await this.jobConfigService.precheck(precheckData);

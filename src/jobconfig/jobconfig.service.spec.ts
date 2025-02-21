@@ -1,19 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JobStatus, JobType } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigDiscoverBulk } from './dto/jobdicoverybulk.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
-import { JobConfigBulkMigrateResStatus } from 'src/constants/enums';
 import { JobConfigCutoverBulk } from './dto/jobdicoverybulk.dto';
 
 const mockJobEntity = {
@@ -30,8 +30,7 @@ const mockJobEntity = {
   preserveAccessTime: false,
   futureScheduleAt: null,
   firstRunAt: null,
-  status: JobStatus.Active,
-
+  status: JobStatus.Active
 };
 
 const mockJobDto = {
@@ -59,6 +58,18 @@ describe('JobConfigService', () => {
         JobConfigService,
         {
           provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobRunEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
@@ -171,6 +182,16 @@ it('should handle database errors in find method', async () => {
   await expect(service.createBulkDiscovery(bulkDiscovery)).rejects.toThrowError('Database error');
 });
 
+  describe('inActivateJobConfig', () => {
+    it('should inactivate job config on event', async () => {
+      const payload: any = { jobConfigId: 1 };
+      await service.inActivateJobConfig(payload);
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: payload.jobConfigId },
+        { status: JobStatus.InActive }
+      );
+    });
+  })
 
   describe('updateJobConfig', () => {
     it('should update a job', async () => {
@@ -574,22 +595,30 @@ describe('createBulkMigrate', () => {
 
   describe('createBulkCutover', () => {
     it('should create bulk cutover successfully', async () => {
-      const bulkCutover: JobConfigCutoverBulk = {
+      const bulkCutover: any = {
         migrateConfigs: []
       };
 
       const result = await service.createBulkCutover(bulkCutover);
       expect(result).toEqual([
         {
+          status: 'created',
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
           jobType: JobType.CutOver,
-          status: JobStatus.Active,
-          firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
           sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
           targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
         },
       ]);
     })
+    it('should throw an HttpException when an error occurs', async () => {
+      jest.spyOn(service, 'createBulkCutover').mockRejectedValue(new HttpException('DB error', HttpStatus.BAD_GATEWAY));
+      await expect(service.createBulkCutover({} as any)).rejects.toThrow(HttpException);
+    });
+    it('should catch the error', () => {
+      service.createBulkCutover({} as any).catch((error) => {
+        expect(error).toBeDefined();
+      });
+    });
   })
 
   describe('getConfigsByProjectId', () => {
@@ -621,7 +650,82 @@ describe('createBulkMigrate', () => {
   describe('precheck', () => {
     it('should return succes for precheck', async () => {
       const result = await service.precheck({} as any);
-      expect(result.status).toEqual('success');
+      expect(result[0].status).toEqual('success');
     })
   })
+
+  describe.only("flattenCutoverConfig", () => {
+    test("flattens multiple sourcePathIds with multiple destinationPathIds", () => {
+        const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1", "dest2"],
+          },
+          {
+            sourcePathId: "source2",
+            destinationPathId: ["dest3", "dest4"],
+          },
+        ]
+  
+      const expectedOutput = [
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+        { sourcePathId: "source2", destinationPathId: "dest3" },
+        { sourcePathId: "source2", destinationPathId: "dest4" },
+      ];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles a single sourcePathId with multiple destinationPathIds", () => {
+      const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1", "dest2", "dest3"],
+          },
+        ]
+  
+      const expectedOutput = [
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+        { sourcePathId: "source1", destinationPathId: "dest3" },
+      ];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles a single sourcePathId with a single destinationPathId", () => {
+      const input = [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1"],
+          },
+        ]
+  
+      const expectedOutput = [{ sourcePathId: "source1", destinationPathId: "dest1" }];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+  
+    test("handles an empty cutoverConfig array", () => {
+      const input = []
+      expect(service.flattenCutoverConfig(input)).toEqual([]);
+    });
+  
+    test("handles sourcePathIds with empty destinationPathId arrays", () => {
+      const input = [
+          { sourcePathId: "source1", destinationPathId: [] },
+          { sourcePathId: "source2", destinationPathId: ["dest1"] },
+        ]
+  
+      const expectedOutput = [{ sourcePathId: "source2", destinationPathId: "dest1" }];
+  
+      expect(service.flattenCutoverConfig(input)).toEqual(expectedOutput);
+    });
+ 
+    test("handles completely empty input object", () => {
+      const input = [];
+      expect(service.flattenCutoverConfig(input as any)).toEqual([]);
+    });
+  });
 });

@@ -1,7 +1,7 @@
 import {
-  BadRequestException,
+  HttpException, HttpStatus,
   Injectable,
-  Logger,
+  Logger,BadRequestException,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -10,7 +10,7 @@ import { Response } from "express";
 import { createReadStream, existsSync, stat } from "fs";
 import { join } from "path";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
-import { FindManyOptions, Repository } from "typeorm";
+import { Repository } from "typeorm";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import { JobConfigDto } from "./dto/jobconfig.dto";
 import { JobListingDTO } from "./dto/joblisting.dto";
@@ -18,7 +18,7 @@ import {
   JobConfigCutoverBulk,
   JobConfigDiscoverBulk,
   JobConfigMigrateBulk,
-  JobConfigPrecheck,
+  JobConfigPrecheck, MigrateConfig,
 } from "./dto/jobdicoverybulk.dto";
 import {
   JobConfigBulkMigrateResStatus,
@@ -30,7 +30,7 @@ import {
   WorkFlows,
 } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
-import {
+import { FlattenedCutoverConfig,
   InActivateJobConfigPayload,
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateRes,
@@ -40,6 +40,7 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus } from "src/constants/status";
 import { nextDate } from "src/utils/mapper";
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
@@ -58,6 +59,8 @@ export class JobConfigService {
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(JobRunEntity)
+    private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(ProjectEntity)
     private readonly projectRepo: Repository<ProjectEntity>,
     @InjectRepository(VolumeEntity)
@@ -218,16 +221,117 @@ export class JobConfigService {
   async createBulkCutover(
     bulkCutover: JobConfigCutoverBulk
   ): Promise<JobConfigBulkCutoverRes[]> {
-    return [
-      {
-        id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-        jobType: JobType.CutOver,
-        status: JobStatus.Active,
-        firstRunAt: new Date("2025-01-25T12:00:00+00:00"),
-        sourcePathId: "e98cb64f-57d5-40b7-b7fe-1c4fda581b6d",
-        targetPathId: ["fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc"],
-      },
-    ];
+    try {
+      const allCutoverConfigs = this.flattenCutoverConfig(
+        bulkCutover.cutoverConfig
+      );
+      const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
+      const jobRunStatuses = await this.jobRunRepo.find({
+        where: { jobConfigId: In(jobConfigs.map((j) => j.id)) },
+        order: { endTime: "DESC" }, 
+      });
+
+      const latestJobStatusMap = new Map<
+        string,
+        { status: JobRunStatus; endTime: Date }
+      >();
+
+      jobRunStatuses.forEach((jobRun) => {
+        if (!latestJobStatusMap.has(jobRun.jobConfigId)) {
+          latestJobStatusMap.set(jobRun.jobConfigId, {
+            status: jobRun.status,
+            endTime: jobRun.endTime,
+          });
+        }
+      });
+
+      const completedMigrations = jobConfigs.filter(
+        (config) =>
+          config.jobType === JobType.MIGRATE &&
+          latestJobStatusMap.has(config.id) &&
+          latestJobStatusMap.get(config.id)!.status === JobRunStatus.Completed
+      );
+
+      const jobConfigMap = new Map<string, JobConfigEntity>();
+      completedMigrations.forEach((config) => {
+        jobConfigMap.set(config.id, config);
+      });
+
+      const newCutoverJobs: JobConfigEntity[] = [];
+
+      for (const { sourcePathId, destinationPathId } of allCutoverConfigs) {
+        for (const config of jobConfigMap.values()) {
+          if (
+            config.sourcePathId === sourcePathId &&
+            config.targetPathId === destinationPathId
+          ) {
+            const existingCutover = await this.jobConfigRepo.findOne({
+              where: {
+                jobType: JobType.CutOver,
+                sourcePathId,
+                targetPathId: destinationPathId,
+              },
+            });
+
+            if (!existingCutover) {
+              newCutoverJobs.push(
+                this.jobConfigRepo.create({
+                  jobType: JobType.CutOver,
+                  sourcePathId,
+                  targetPathId: destinationPathId,
+                  excludeFilePatterns: config.excludeFilePatterns,
+                  scheduler: config.scheduler,
+                  futureScheduleAt: config.futureScheduleAt,
+                  status: config.status,
+                  preserveAccessTime: config.preserveAccessTime,
+                  firstRunAt: config.firstRunAt,
+                })
+              );
+            }
+          }
+        }
+      }
+
+      const savedJobs = await this.jobConfigRepo.save(newCutoverJobs);
+
+      if (savedJobs.length === 0) {
+        throw new HttpException(
+          {
+            status: "failed",
+            message:
+              "No completed migration found for the given source path ID or its already exists",
+          },
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return savedJobs.map((job) => ({
+        id: job.id,
+        jobType: job.jobType,
+        sourcePathId: job.sourcePathId,
+        targetPathId: job.targetPathId,
+        status: "created",
+      }));
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: "failed",
+          message:
+            error.message ||
+            "An error occurred while creating bulk cutover job",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  flattenCutoverConfig(config: MigrateConfig[]): FlattenedCutoverConfig[] {
+    return config.flatMap(({ sourcePathId, destinationPathId }) =>
+      destinationPathId.map((destId) => ({
+        sourcePathId,
+        destinationPathId: destId,
+      }))
+    );
   }
 
   async precheck(data: JobConfigPrecheck) {
@@ -657,7 +761,7 @@ export class JobConfigService {
     } else {
       return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
-  }
+    }
   hasCommonWorkers(data: any): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {
@@ -738,5 +842,24 @@ export class JobConfigService {
       });
     }
     return payload;
+  }  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
+    if (conditions.length === 0) return [];
+    const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
+    conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
+      const sourceParam = `sourcePathId_${index}`;
+      const targetParam = `destinationPathId_${index}`;
+      if (index === 0) {
+        queryBuilder.where(
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam}) AND jobConfig.jobType = 'MIGRATE'`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
+        );
+      } else {
+        queryBuilder.orWhere(
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam})`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
+        );
+      }
+    });
+    return await queryBuilder.getMany();
   }
 }

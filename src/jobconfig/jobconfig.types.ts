@@ -24,6 +24,10 @@ export interface JobConfigBulkCutoverRes {
   sourcePathId: string;
   targetPathId: string[];
 }
+export type FlattenedCutoverConfig = {
+    sourcePathId: string;
+    destinationPathId: string;
+};
 
 export interface JobConfigPrecheckRes {
   status: string;

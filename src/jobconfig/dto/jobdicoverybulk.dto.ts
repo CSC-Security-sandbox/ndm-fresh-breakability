@@ -157,26 +157,26 @@ export class JobConfigMigrateBulk {
 
 export class JobConfigCutoverBulk {
   @ApiProperty({ 
-    description: 'Details of all the bulk migrate configs', 
+    description: 'Details of all the bulk cutover configs', 
     isArray: true, 
     type: MigrateConfig 
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  migrateConfigs: MigrateConfig[]
+  cutoverConfig: MigrateConfig[]
 }
 
 export class JobConfigPrecheck {
   @ApiProperty({ 
-    description: 'Details of all the bulk migrate configs', 
+    description: 'Details of all the precheck configs', 
     isArray: true, 
     type: MigrateConfig 
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  migrateConfigs: MigrateConfig[]
+  precheckConfig: MigrateConfig[]
 
   @ApiProperty({ description: 'Track Id for track the request', example: '122333-20000- 999',required: true}) 
   @IsUUID() 
