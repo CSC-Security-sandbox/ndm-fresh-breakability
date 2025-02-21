@@ -14,5 +14,8 @@
       <sqlFile path="liquibase/20250217_01_alter_ops_add_extension_columns.sql"/>
    </changeSet>
 
+<changeSet id="5004" author="anarvekar">
+      <sqlFile path="liquibase/20250221_01_alter_job_config_add_skip_file_column.sql"/>
+   </changeSet>
 
 </databaseChangeLog>

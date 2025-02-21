@@ -62,4 +62,7 @@ export class JobConfigEntity extends Base {
 
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;
+
+  @Column({ name: 'skip_file', type: 'text', nullable: true })
+  skipFile: string;
 }
