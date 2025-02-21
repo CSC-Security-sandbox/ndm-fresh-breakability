@@ -180,8 +180,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
 
@@ -349,8 +351,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
       jest.spyOn(jobContext.tasksInfo, 'read').mockReturnValue((async function* () { yield task; })());
@@ -370,8 +374,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
       jest.spyOn(jobContext.tasksInfo, 'groupRead').mockReturnValue((async function* () { yield task; })());
