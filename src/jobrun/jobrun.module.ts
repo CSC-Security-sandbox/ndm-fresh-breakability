@@ -17,13 +17,14 @@ import { OperationsEntity } from 'src/entities/operation.entity';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerModule } from 'src/workers/workers.module';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity]),
         WorkerModule
     ],
     providers: [JobRunService, JobConfigService,WorkflowService,WorkManager,WorkflowService],

@@ -115,7 +115,8 @@ export enum WorkFlowType {
 }
 
 export enum WorkFlows{
-    DISCOVERY = 'DiscoveryWorkflow'
+    DISCOVERY = 'DiscoveryWorkflow',
+    PRECHECK='PreCheckValidationWorkflow',
 }
 
 export enum ConsumerType{

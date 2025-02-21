@@ -14,6 +14,7 @@ import { TaskEntity } from "../entities/task.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -27,6 +28,6 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         synchronize: false,
         dropSchema: false,
         logging: false,
-        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity],
+        entities: [WorkerEntity, RequestTrackEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity],
         migrations: []
 }))

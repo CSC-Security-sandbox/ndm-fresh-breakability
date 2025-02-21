@@ -9,7 +9,8 @@ import {
     IsOptional,
     IsString,
     IsUUID,
-    ValidateNested
+    ValidateNested,
+    isUUID
 } from 'class-validator';
 
 
@@ -105,6 +106,10 @@ export class MigrateConfig {
   @ArrayUnique()
   @IsUUID('all', { each: true }) 
   destinationPathId: string[];
+
+  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @IsBoolean()
+  preserveAccessTime: boolean;
 }
 
 export class JobConfigMigrateBulk {
@@ -173,7 +178,7 @@ export class JobConfigPrecheck {
   @Type(() => MigrateConfig)
   migrateConfigs: MigrateConfig[]
 
-  @ApiProperty({ description: 'Preserve access time flag', example: false})
-  @IsBoolean()
-  preserveAccessTime: boolean;
+  @ApiProperty({ description: 'Track Id for track the request', example: '122333-20000- 999',required: true}) 
+  @IsUUID() 
+  trackId: string;
 }
