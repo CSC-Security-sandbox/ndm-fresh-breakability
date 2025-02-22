@@ -107,9 +107,6 @@ export class MigrateConfig {
   @IsUUID('all', { each: true }) 
   destinationPathId: string[];
 
-  // @ApiProperty({ description: 'Preserve access time flag', example: false})
-  // @IsBoolean()
-  // preserveAccessTime: boolean;
 }
 
 export class JobConfigMigrateBulk {
@@ -182,11 +179,4 @@ export class JobConfigPrecheck {
   @IsBoolean()
   preserveAccessTime: boolean;
 
-  // @ApiProperty({
-  //   description: "Track Id for track the request",
-  //   example: "122333-20000- 999",
-  //   required: true,
-  // })
-  // @IsUUID()
-  // trackId: string;
 }
