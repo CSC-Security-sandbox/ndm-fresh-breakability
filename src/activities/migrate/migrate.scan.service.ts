@@ -55,7 +55,9 @@ export class MigrationScanService {
 
                 if (sourceStat.isDirectory()) {
                     syncContentOutput.directory++;
-                    await jobContext.appendToDirList(fileInfo);
+                    const id = await jobContext.appendToDirList(fileInfo);
+                    jobContext.dirsInfo.lastId = id;
+                    jobContext.dirsInfo.numMessages++;
                     syncContentOutput.isGeneratedTask = true;
                 } else if (!targetContent.has(item)) {
                     syncContentOutput.files++;

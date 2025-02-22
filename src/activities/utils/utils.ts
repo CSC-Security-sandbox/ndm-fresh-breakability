@@ -103,7 +103,9 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
 export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, 'PENDING', 'worker-1',
   `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
+  jobContext.jobConfig.sourceFileServer.pathId,
   commands,
   `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
+  jobContext.jobConfig.destinationFileServer.pathId,
   ''
 )

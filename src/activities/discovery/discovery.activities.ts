@@ -56,7 +56,9 @@ export class DiscoveryActivity {
             'PENDING',
             jobContext.jobConfig.workerIds[0],
             jobContext.jobConfig.sourceFileServer.pathId,
+            jobContext.jobConfig.sourceFileServer.pathId,
             commandsBatch,
+            jobContext.jobConfig?.destinationFileServer?.pathId ?? null,
             jobContext.jobConfig?.destinationFileServer?.pathId ?? null
           );
           const id = await jobContext.appendToTaskList(task);
@@ -74,8 +76,10 @@ export class DiscoveryActivity {
           'SCAN',
           'PENDING',
           jobContext.jobConfig.workerIds[0],
+          jobContext.jobConfig.sourceFileServer.path,
           jobContext.jobConfig.sourceFileServer.pathId,
           commandsBatch,
+          jobContext.jobConfig?.destinationFileServer?.path ?? null,
           jobContext.jobConfig?.destinationFileServer?.pathId ?? null
         );
         const id = await jobContext.appendToTaskList(task);
