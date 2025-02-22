@@ -15,8 +15,8 @@ import { validate as isUUID } from 'uuid';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
-
-
+import { JobType } from 'src/entities/jobconfig.entity';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class ConfigurationService {
@@ -138,6 +138,128 @@ export class ConfigurationService {
      
         if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
         return config
+    }
+
+    async getCutoverDetailsByConfigId(configId: string) {
+        if (!isUUID(configId))
+            throw new BadRequestException('Invalid configId')
+        const config = await this.configEntity.findOne({
+            select: {
+                id: true,
+                configName: true,
+                configType: true,
+                fileServers: {
+                    id: true,
+                    host: true,
+                    serverType: true,
+                    protocol: true,
+                    volumes: {
+                        id: true,
+                        volumePath: true,
+                        jobConfig: {
+                            id: true,
+                            jobType: true,
+                            sourcePathId: true,
+                            targetPathId: true,
+                            jobRunDetails: {
+                                id: true,
+                                status: true
+                            }
+                        }
+                    }
+                }
+            },
+            where: { id: configId },
+            relations: {
+                fileServers: {
+                    volumes: {
+                        jobConfig: {
+                            jobRunDetails: true
+                        }
+                    }
+
+                }
+            }
+        });
+
+        if (!config) throw new NotFoundException(`Config for id ${configId} not found.`);
+
+        const response = [];
+
+        for (const fileServer of config.fileServers) {
+            for (const volume of fileServer.volumes) {
+                const validJobConfigs = volume.jobConfig
+                    .filter(jobConfig =>
+                        jobConfig.jobType === JobType.Migrate &&
+                        jobConfig.jobRunDetails.some(jobRun => jobRun.status === JobRunStatus.Completed)
+                    )
+
+                if (validJobConfigs.length > 0) {
+                    response.push({
+                        protocol: fileServer.protocol,
+                        sourcePath: {},
+                        destinationFileServer: {},
+                        destinationPath: {},
+                        jobConfig: validJobConfigs,
+                    });
+                }
+            }
+        }
+
+        for (const obj of response) {
+            for (const jobConfig of obj.jobConfig) {
+                const sourceData = await this.volumeDetails(jobConfig.sourcePathId, 'source');
+                const targetData = await this.volumeDetails(jobConfig.targetPathId, 'target');
+                obj.sourcePath = { id: sourceData.id, sourcePathName: sourceData.volumePath };
+                obj.destinationPath = { id: targetData.id, destinationPathName: targetData.volumePath };
+                obj.destinationFileServer = { id: targetData.configId, destinationFileServerName: targetData.configName };
+                obj.jobConfig = obj.jobConfig.map(config => ({
+                    id: config.id,
+                    jobType: config.jobType,
+                    jobRunDetails: config.jobRunDetails
+                }));
+            }
+        }
+
+        return response;
+    }
+
+    async volumeDetails(volumeId: string, fileServer: string): Promise<{
+        id: string;
+        volumePath: string;
+        configId?: string;
+        configName?: string;
+    }> {
+        if (fileServer === 'source') {
+            const volume = await this.volumes.findOne({ where: { id: volumeId }, select: ['id', 'volumePath'] });
+            return {
+                id: volume?.id || '',
+                volumePath: volume?.volumePath || ''
+            };
+        }
+
+        const volumeWithConfig = await this.volumes.findOne({
+            where: { id: volumeId },
+            relations: ['fileServer', 'fileServer.config'],
+            select: {
+                id: true,
+                volumePath: true,
+                fileServer: {
+                    id: true,
+                    config: {
+                        id: true,
+                        configName: true,
+                    }
+                }
+            }
+        });
+
+        return {
+            id: volumeWithConfig?.id || '',
+            volumePath: volumeWithConfig?.volumePath || '',
+            configId: volumeWithConfig?.fileServer?.config?.id,
+            configName: volumeWithConfig?.fileServer?.config?.configName
+        };
     }
 
     async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
