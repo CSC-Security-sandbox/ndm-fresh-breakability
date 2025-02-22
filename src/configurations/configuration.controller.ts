@@ -50,9 +50,11 @@ export class ConfigurationController{
         return await this.configurationService.getConfigById(id)
     }
    
-    @ApiOperation({ summary: 'Get Cutover details' })
+    @ApiOperation({ summary: 'Get Cutover details by configId' })
     @ApiResponse({ status: 200, description: 'Cutover details Found' })
-    @ApiResponse({ status: 404, description: 'Cutover details Not Found' })
+    @ApiNotFoundResponse({ status: 404, description: 'Cutover details Not Found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ViewConfig)
     @Get('cutover/:configId')
     async getCutoverDetailsByConfigId(@Param('configId') configId: string) {
         return await this.configurationService.getCutoverDetailsByConfigId(configId);
