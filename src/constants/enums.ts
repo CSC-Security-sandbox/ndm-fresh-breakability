@@ -117,6 +117,7 @@ export enum WorkFlowType {
 export enum WorkFlows{
     DISCOVERY = 'DiscoveryWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
+    MIGRATE = 'MigrationWorkflow'
 }
 
 export enum ConsumerType{
