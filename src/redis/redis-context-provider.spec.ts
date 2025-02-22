@@ -52,10 +52,11 @@ describe('RedisJobContextProvider', () => {
       const mockJobContext = {
         init: jest.fn(),
       } as unknown as jest.Mocked<RedisJobContext>;
+      const jobState: any = {};
 
       (RedisJobContext as jest.Mock).mockImplementation(() => mockJobContext);
 
-      const result = await jobContextProvider.buildContext(jobRunId, jobConfig, jobStatus);
+      const result = await jobContextProvider.buildContext(jobRunId, jobConfig, jobStatus, jobState);
 
       expect(logger.info).toHaveBeenCalledWith(`Building job context for job run id: ${jobRunId}`);
       expect(mockJobContext.init).toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import { JobConfig } from './job-config';
+import { JobState } from './job-state';
 import { DMError, FileInfo, TaskStats, Task } from './metadata-types';
 import {
   FileCollection,
@@ -14,6 +15,7 @@ import {
 export abstract class JobContext {
   jobRunId: string;
   jobConfig: JobConfig;
+  jobState: JobState;
   jobRunStatus: string;
   errorsInfo: ErrorCollection;
   filesInfo: FileCollection;
@@ -24,12 +26,14 @@ export abstract class JobContext {
   updatedTaskInfo :UpdatedTaskCollection
   protected stats: Map<string, number>;
 
-  constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
+  constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string, jobState?: JobState) {
     this.jobRunId = jobRunId;
     if (jobConfig)
       this.jobConfig = jobConfig;
     if (jobRunStatus)
       this.jobRunStatus = jobRunStatus;
+    if (jobState)
+      this.jobState = jobState;
     this.stats = new Map<string, number>();
   }
 
@@ -53,6 +57,15 @@ export abstract class JobContext {
 
   getStat(statName: string): number {
     return this.stats.get(statName) || 0;
+  }
+
+  getJobState(): JobState {
+    return this.jobState;
+  }
+
+  setJobState(jobState): JobState {
+    this.jobState = jobState;
+    return jobState;
   }
 
   getJobRunId(): string {
@@ -155,6 +168,7 @@ export abstract class JobContext {
     const info = {
       jobRunId: this.jobRunId,
       jobConfig: this.jobConfig,
+      jobState: this.jobState,
       filesInfo: this.filesInfo
         ? {
             numMessages: this.filesInfo.numMessages,
