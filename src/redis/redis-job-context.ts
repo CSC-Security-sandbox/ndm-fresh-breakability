@@ -6,6 +6,7 @@ import {
   RedisDirectoryCollection,
   RedisErrorCollection,
   RedisFileCollection,
+  RedisMigrationTasksCollection,
   RedisTaskCollection,
   RedisTaskStatsCollection,
 } from './redis-collections';
@@ -29,6 +30,7 @@ export class RedisJobContext extends JobContext {
     this.filesInfo = new RedisFileCollection(jobRunId, 0, '0-0', redisClient);
     this.dirsInfo = new RedisDirectoryCollection(jobRunId,0,'0-0',redisClient,);
     this.tasksInfo = new RedisTaskCollection(jobRunId, 0, '0-0', redisClient);
+    this.migrateTask = new RedisMigrationTasksCollection(jobRunId, 0, '0-0', redisClient);
     this.taskStats = new RedisTaskStatsCollection(jobRunId, 0, '0-0', redisClient);
     this.errorsInfo = new RedisErrorCollection(jobRunId, 0, '0-0', redisClient);
     this.updatedTaskInfo = new RedisTaskCollection(jobRunId, 0, '0-0', redisClient);
@@ -48,6 +50,7 @@ export class RedisJobContext extends JobContext {
       this.errorsInfo,
       this.tasksInfo,
       this.taskStats,
+      this.migrateTask,
       this.updatedTaskInfo
     ]) {
         this.logger.info(`Initializing collection: ${collection.streamKey}`);

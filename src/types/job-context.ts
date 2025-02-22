@@ -8,6 +8,8 @@ import {
   TaskCollection,
   TaskStatsCollection,
   UpdatedTaskCollection,
+  MigrationTaskCollection,
+
 } from './stream-collection';
 
 export abstract class JobContext {
@@ -19,6 +21,7 @@ export abstract class JobContext {
   filesInfo: FileCollection;
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
+  migrateTask: MigrationTaskCollection;
   tasksInfo: TaskCollection;
   updatedTaskInfo :UpdatedTaskCollection
   protected stats: Map<string, number>;
@@ -89,6 +92,10 @@ export abstract class JobContext {
     return await this.taskStats.append(taskStats);
   }
 
+  async appendToMigrationTask(task: Task): Promise<string> {
+    return await this.migrateTask.append(task);
+  }
+
   async appendToTaskList(task: Task): Promise<string> {
     return await this.tasksInfo.append(task);
   }
@@ -131,6 +138,14 @@ export abstract class JobContext {
 
   async *groupReadTaskStats(readerName: string,batchSize:number): AsyncGenerator<TaskStats> {
     yield* this.taskStats.groupRead(readerName,batchSize);
+  }
+
+  async *groupReadMigrationTask(readerName: string,batchSize:number): AsyncGenerator<Task> {
+    yield* this.migrateTask.groupRead(readerName,batchSize);
+  }
+
+  async *readMigrationTask(readerName: string): AsyncGenerator<Task> {
+    yield* this.migrateTask.read(readerName);
   }
 
   async *readErrors(readerName: string): AsyncGenerator<DMError> {
@@ -176,6 +191,12 @@ export abstract class JobContext {
         ? {
             numMessages: this.tasksInfo.numMessages,
             lastId: this.tasksInfo.lastId,
+          }
+        : { numMessages: 0, lastId: '0-0' },
+      migrateTask: this.migrateTask
+        ? {
+            numMessages: this.migrateTask.numMessages,
+            lastId: this.migrateTask.lastId,
           }
         : { numMessages: 0, lastId: '0-0' },
       taskStats: this.taskStats

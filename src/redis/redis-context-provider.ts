@@ -4,7 +4,7 @@ import { JobContextProvider } from '../job-context-provider';
 import { RedisClientType } from 'redis';
 import { RedisJobContext } from './redis-job-context';
 import { Logger } from '../utils/logging';
-import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
+import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
 import { JobState } from '../types/job-state';
 
 export class RedisJobContextProvider implements JobContextProvider {
@@ -46,6 +46,7 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     dirsInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
                                                     tasksInfo: { numMessages: 0, lastId: '0-0' },
+                                                    migrateTask: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' },
                                                     updatedTaskInfo: { numMessages: 0, lastId: '0-0' } };
     this.logger.debug('>> Deserialized:', info);
@@ -59,6 +60,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
     jobContext.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
+    jobContext.migrateTask = new RedisMigrationTasksCollection(jobRunId, info.migrateTask.numMessages, info.migrateTask.lastId, this.redisClient);
     return jobContext;
   }
 }

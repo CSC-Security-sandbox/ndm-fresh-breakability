@@ -59,6 +59,19 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
     };
 
+    this.migrateTask =  {
+      jobRunId: 'job1',
+      streamKey: 'stream1',
+      numMessages: 0,
+      lastId: '0-0',
+      init: jest.fn(),
+      cleanup: jest.fn(),
+      close: jest.fn(),
+      append: jest.fn(),
+      read: jest.fn(),
+      groupRead: jest.fn(),
+    };
+
     this.taskStats =  {
       jobRunId: 'job1',
       streamKey: 'stream1',
@@ -167,8 +180,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
 
@@ -200,6 +215,7 @@ describe('JobContext Class', () => {
         dirsInfo: { numMessages: 0, lastId: '0-0' },
         errorsInfo: { numMessages: 0, lastId: '0-0' },
         tasksInfo: { numMessages: 0, lastId: '0-0' },
+        migrateTask: { numMessages: 0, lastId: '0-0' },
         taskStats: { numMessages: 0, lastId: '0-0' },
         updatedTaskInfo: { numMessages: 0, lastId: '0-0' },
       }));
@@ -335,8 +351,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
       jest.spyOn(jobContext.tasksInfo, 'read').mockReturnValue((async function* () { yield task; })());
@@ -356,8 +374,10 @@ describe('JobContext Class', () => {
         'status',
         'workerId',
         'sPath',
+        'sPathId',
         [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
         'tPath',
+        'tPathId',
         'excludeFilePatterns',
       )        
       jest.spyOn(jobContext.tasksInfo, 'groupRead').mockReturnValue((async function* () { yield task; })());
