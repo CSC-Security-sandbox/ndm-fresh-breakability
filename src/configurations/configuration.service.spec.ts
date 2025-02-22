@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigurationService } from './configuration.service';
 import { ConfigDTO } from './dto/config.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
+import { JobType } from 'src/entities/jobconfig.entity';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
 
 
 // Mock data for entities
@@ -40,7 +42,8 @@ const mockFileServerRepository = {
 const mockVolumeRepository = {
   create: jest.fn(),
   save: jest.fn(),
-  update: jest.fn()
+  update: jest.fn(),
+  findOne: jest.fn()
 };
 
 const mockWorkerRepository = {
@@ -885,5 +888,276 @@ describe('ConfigurationService', () => {
       expect(result).toEqual({ workflowId: 'workflow-123' });
     })
   })
+
+  describe('getCutoverDetailsByConfigId', () => {
+    it('should throw BadRequestException for invalid UUID', async () => {
+      await expect(service.getCutoverDetailsByConfigId('invalid-uuid'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if config not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+      
+      await expect(service.getCutoverDetailsByConfigId(uuidv4()))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should return empty array when no valid job configs found', async () => {
+      const mockConfig = {
+        id: uuidv4(),
+        configName: 'Test Config',
+        configType: 'test',
+        fileServers: [{
+          id: 'fs-1',
+          host: 'test.com',
+          serverType: 'test',
+          protocol: 'NFS',
+          volumes: [{
+            id: 'vol-1',
+            volumePath: '/test',
+            jobConfig: [{
+              id: 'job-1',
+              jobType: 'scan', // Not a migrate job
+              sourcePathId: 'source-1',
+              targetPathId: 'target-1',
+              jobRunDetails: [{
+                id: 'run-1',
+                status: 'completed'
+              }]
+            }]
+          }]
+        }]
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      
+      const result = await service.getCutoverDetailsByConfigId(mockConfig.id);
+      expect(result).toEqual([]);
+    });
+
+    it('should return cutover details for completed migrate jobs', async () => {
+      const mockConfig = {
+        id: uuidv4(),
+        configName: 'Test Config',
+        configType: 'test',
+        fileServers: [{
+          id: 'fs-1',
+          host: 'test.com',
+          serverType: 'test',
+          protocol: 'NFS',
+          volumes: [{
+            id: 'vol-1',
+            volumePath: '/test',
+            jobConfig: [{
+              id: 'job-1',
+              jobType: JobType.Migrate,
+              sourcePathId: 'source-1',
+              targetPathId: 'target-1',
+              jobRunDetails: [{
+                id: 'run-1',
+                status: JobRunStatus.Completed
+              }]
+            }]
+          }]
+        }]
+      };
+
+      const mockSourceVolume = {
+        id: 'source-1',
+        volumePath: '/source/path'
+      };
+
+      const mockTargetVolume = {
+        id: 'target-1',
+        volumePath: '/target/path',
+        fileServer: {
+          id: 'fs-2',
+          config: {
+            id: 'config-2',
+            configName: 'Target Config'
+          }
+        }
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.findOne
+        .mockImplementation((query) => {
+          if (query.where.id === 'source-1') return mockSourceVolume;
+          if (query.where.id === 'target-1') return mockTargetVolume;
+          return null;
+        });
+
+      const result = await service.getCutoverDetailsByConfigId(mockConfig.id);
+
+      expect(result).toEqual([{
+        protocol: 'NFS',
+        sourcePath: {
+          id: 'source-1',
+          sourcePathName: '/source/path'
+        },
+        destinationPath: {
+          id: 'target-1',
+          destinationPathName: '/target/path'
+        },
+        destinationFileServer: {
+          id: 'config-2',
+          destinationFileServerName: 'Target Config'
+        },
+        jobConfig: [{
+          id: 'job-1',
+          jobType: JobType.Migrate,
+          jobRunDetails: [{
+            id: 'run-1',
+            status: JobRunStatus.Completed
+          }]
+        }]
+      }]);
+    });
+
+    it('should handle multiple file servers and volumes', async () => {
+      const mockConfig = {
+        id: uuidv4(),
+        configName: 'Test Config',
+        configType: 'test',
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [{
+              jobConfig: [{
+                id: 'job-1',
+                jobType: JobType.Migrate,
+                sourcePathId: 'source-1',
+                targetPathId: 'target-1',
+                jobRunDetails: [{ status: JobRunStatus.Completed }]
+              }]
+            }]
+          },
+          {
+            id: 'fs-2',
+            protocol: 'SMB',
+            volumes: [{
+              jobConfig: [{
+                id: 'job-2',
+                jobType: JobType.Migrate,
+                sourcePathId: 'source-2',
+                targetPathId: 'target-2',
+                jobRunDetails: [{ status: JobRunStatus.Completed }]
+              }]
+            }]
+          }
+        ]
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.findOne.mockImplementation(() => ({
+        id: 'test-id',
+        volumePath: '/test/path',
+        fileServer: {
+          config: {
+            id: 'config-id',
+            configName: 'Test Config'
+          }
+        }
+      }));
+
+      const result = await service.getCutoverDetailsByConfigId(mockConfig.id);
+      expect(result.length).toBe(2);
+      expect(result[0].protocol).toBe('NFS');
+      expect(result[1].protocol).toBe('SMB');
+    });
+  });
+
+  describe('volumeDetails', () => {
+    it('should return source volume details', async () => {
+      const mockVolume = {
+        id: 'vol-1',
+        volumePath: '/test/path'
+      };
+
+      mockVolumeRepository.findOne.mockResolvedValue(mockVolume);
+
+      const result = await service.volumeDetails('vol-1', 'source');
+
+      expect(result).toEqual({
+        id: 'vol-1',
+        volumePath: '/test/path'
+      });
+      expect(mockVolumeRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'vol-1' },
+        select: ['id', 'volumePath']
+      });
+    });
+
+    it('should return target volume details with config', async () => {
+      const mockVolume = {
+        id: 'vol-1',
+        volumePath: '/test/path',
+        fileServer: {
+          id: 'fs-1',
+          config: {
+            id: 'config-1',
+            configName: 'Test Config'
+          }
+        }
+      };
+
+      mockVolumeRepository.findOne.mockResolvedValue(mockVolume);
+
+      const result = await service.volumeDetails('vol-1', 'target');
+
+      expect(result).toEqual({
+        id: 'vol-1',
+        volumePath: '/test/path',
+        configId: 'config-1',
+        configName: 'Test Config'
+      });
+    });
+
+    it('should handle null volume for source', async () => {
+      mockVolumeRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.volumeDetails('non-existent', 'source');
+
+      expect(result).toEqual({
+        id: '',
+        volumePath: ''
+      });
+    });
+
+    it('should handle null volume for target', async () => {
+      mockVolumeRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.volumeDetails('non-existent', 'target');
+
+      expect(result).toEqual({
+        id: '',
+        volumePath: '',
+        configId: undefined,
+        configName: undefined
+      });
+    });
+
+    it('should handle missing fileServer or config in target volume', async () => {
+      const mockVolume = {
+        id: 'vol-1',
+        volumePath: '/test/path',
+        fileServer: null
+      };
+
+      mockVolumeRepository.findOne.mockResolvedValue(mockVolume);
+
+      const result = await service.volumeDetails('vol-1', 'target');
+
+      expect(result).toEqual({
+        id: 'vol-1',
+        volumePath: '/test/path',
+        configId: undefined,
+        configName: undefined
+      });
+    });
+  });
 
 });

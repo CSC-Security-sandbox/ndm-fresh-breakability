@@ -9,6 +9,7 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigService } from '@nestjs/config';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Not, IsNull } from 'typeorm';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -30,6 +31,8 @@ describe('WorkManagerService', () => {
 
     jobRunEntityMock = {
       update: jest.fn(),
+      find: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
 
     loggerFactoryMock = {
@@ -64,159 +67,122 @@ describe('WorkManagerService', () => {
     loggerInstance = loggerFactoryMock.create!(WorkManagerService.name);
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('getConfiguration', () => {
+    const workerId = 'worker-1';
+    const ip = '127.0.0.1';
+    const projectId = 'project-1';
+
     it('should return existing worker configuration if found', async () => {
-      const mockWorkerMetaConfig = {
-        metaConfig: [{ key: 'worker_config' }],
+      const existingWorker = {
+        workerId,
+        metaConfig: [
+          {
+            configName: WorkFlowType.PARENT_WORKFLOW,
+            dynamicTaskQueue: false,
+            taskQueueId: null,
+            workerId,
+          },
+        ],
       };
 
-      const mockJobRunConfig = [
-        { jobrunmetaconfig: { key: 'job_run_config' } },
-      ];
+      const jobRunConfigs = [{
+        metaConfig: [{
+          configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
+          dynamicTaskQueue: true,
+          taskQueueId: 'job-1',
+          workerId,
+        }],
+      }];
 
-      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(
-        mockWorkerMetaConfig,
-      );
+      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(existingWorker);
+      (jobRunEntityMock.find as jest.Mock).mockResolvedValue(jobRunConfigs);
 
-      const mockQueryBuilder = {
-        leftJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(mockJobRunConfig),
-      };
-
-      jobRunEntityMock.createQueryBuilder = jest
-        .fn()
-        .mockReturnValue(mockQueryBuilder);
-
-      (jobRunEntityMock.createQueryBuilder as jest.Mock).mockReturnValue(
-        mockQueryBuilder,
-      );
-
-      const workerId = '123';
-      const projectId = 'projectId';
-      const result = await service.getConfiguration(workerId, '', projectId);
+      const result = await service.getConfiguration(workerId, ip, projectId);
 
       expect(result).toEqual([
-        { key: 'worker_config' },
-        { key: 'job_run_config' },
+        ...existingWorker.metaConfig,
+        ...jobRunConfigs[0].metaConfig,
       ]);
       expect(workerEntityMock.findOne).toHaveBeenCalledWith({
-        where: { workerId: workerId },
+        where: { workerId },
       });
-      expect(mockQueryBuilder.leftJoin).toHaveBeenCalled();
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'mapping.workerId = :id',
-        { id: workerId },
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'jobrun.status <> :status',
-        { status: JobRunStatus.Completed },
-      );
+      expect(jobRunEntityMock.find).toHaveBeenCalledWith({
+        where: {
+          status: Not(JobRunStatus.Completed),
+          workerMap: {
+            workerId,
+          },
+          metaConfig: Not(IsNull()),
+        },
+        relations: {
+          workerMap: true,
+        },
+        select: {
+          workerMap: false,
+          metaConfig: true,
+        },
+      });
     });
 
-    it('should return existing worker configuration if found', async () => {
-      const mockWorkerMetaConfig = {
-        metaConfig: [{ key: 'worker_config' }],
-      };
-
-      const mockJobRunConfig = [];
-
-      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(
-        mockWorkerMetaConfig,
-      );
-
-      const mockQueryBuilder = {
-        leftJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(mockJobRunConfig),
-      };
-
-      jobRunEntityMock.createQueryBuilder = jest
-        .fn()
-        .mockReturnValue(mockQueryBuilder);
-
-      const workerId = '123';
-      const projectId = 'projectId';
-      const result = await service.getConfiguration(workerId, '', projectId);
-
-      expect(result).toBeDefined();
-      expect(result).toEqual([{ key: 'worker_config' }]);
-      expect(workerEntityMock.findOne).toHaveBeenCalledWith({
-        where: { workerId: workerId },
-      });
-      expect(mockQueryBuilder.leftJoin).toHaveBeenCalled();
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'mapping.workerId = :id',
-        { id: workerId },
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'jobrun.status <> :status',
-        { status: JobRunStatus.Completed },
-      );
-    });
-
-    it('should create a new worker if not found and return its configuration', async () => {
-
-      const queryBuilderStub = {
-        leftJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(null),
-      };
-      (workerEntityMock.createQueryBuilder as jest.Mock).mockReturnValue(queryBuilderStub);
-
-      const workerId = '123';
-      const ip = '127.0.0.1';
-      const projectId = 'projectId';
-
+    it('should create and return new worker configuration if not found', async () => {
+      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(null);
+      
       const newWorker = {
         workerId,
         ipAddress: ip,
-        metaConfig: service.createWorkerConfiguration(workerId),
+        metaConfig: [
+          {
+            configName: WorkFlowType.PARENT_WORKFLOW,
+            dynamicTaskQueue: false,
+            taskQueueId: null,
+            workerId,
+          },
+          {
+            configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
+            dynamicTaskQueue: true,
+            taskQueueId: workerId,
+            workerId,
+          },
+        ],
         status: WorkerStatus.Online,
         workerName: workerId,
         createdBy: workerId,
         projectId,
-        workerNumber: 10
+        workerNumber: 1,
       };
 
       (workerEntityMock.create as jest.Mock).mockReturnValue(newWorker);
       (workerEntityMock.save as jest.Mock).mockResolvedValue(newWorker);
-      (workerEntityMock.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
       const result = await service.getConfiguration(workerId, ip, projectId);
+
       expect(result).toEqual(newWorker.metaConfig);
       expect(workerEntityMock.create).toHaveBeenCalledWith({
         workerId,
         ipAddress: ip,
-        metaConfig: service.createWorkerConfiguration(workerId),
+        metaConfig: expect.any(Array),
         status: WorkerStatus.Online,
         workerName: workerId,
         createdBy: workerId,
         projectId,
       });
-      expect(workerEntityMock.save).toHaveBeenCalledWith(newWorker);
+      expect(workerEntityMock.save).toHaveBeenCalled();
       expect(workerEntityMock.update).toHaveBeenCalledWith(
-        { workerId: newWorker.workerId },
+        { workerId },
         { workerName: `Worker-${newWorker.workerNumber}` },
       );
     });
 
-    it('should log an error and throw when an error occurs', async () => {
-      (workerEntityMock.createQueryBuilder as jest.Mock).mockImplementation(() => {
-        throw new Error('DB error');
-      });
-
-      const workerId = '123';
-      const ip = '127.0.0.1';
-      const projectId = 'projectId';
+    it('should handle errors gracefully', async () => {
+      (workerEntityMock.findOne as jest.Mock).mockRejectedValue(new Error('Database error'));
 
       await expect(service.getConfiguration(workerId, ip, projectId))
-        .rejects.toThrow('Error while fetching worker configuration');
+        .rejects
+        .toThrow('Error while fetching worker configuration');
     });
   });
 
