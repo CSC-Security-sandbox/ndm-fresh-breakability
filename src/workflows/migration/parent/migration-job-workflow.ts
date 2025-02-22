@@ -134,21 +134,21 @@ export const MigrationWorkflow = async ({
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 
-  // if (activeWorkerIds.length > 0) {
-  //   const cleanupResponses = await Promise.all(
-  //     activeWorkerIds.map((workerId) =>
-  //       executeChild(CleanupWorkerWorkflow, {
-  //         args: [{ jobRunId: traceId }],
-  //         workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
-  //         taskQueue: `${workerId}-TaskQueue`,
-  //         ...options,
-  //         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-  //         parentClosePolicy: ParentClosePolicy.TERMINATE,
-  //       })
-  //     )
-  //   );
-  //   cleanupResponses.flat().forEach((r) => result.push(r));
-  // }
+  if (activeWorkerIds.length > 0) {
+    const cleanupResponses = await Promise.all(
+      activeWorkerIds.map((workerId) =>
+        executeChild(CleanupWorkerWorkflow, {
+          args: [{ jobRunId: traceId }],
+          workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          ...options,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        })
+      )
+    );
+    cleanupResponses.flat().forEach((r) => result.push(r));
+  }
 
   await log(traceId, `MigrationWorkflow response: ${JSON.stringify(result)}`);
   return result;
