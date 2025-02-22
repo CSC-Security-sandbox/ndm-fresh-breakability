@@ -336,6 +336,7 @@ export class JobConfigService {
   }
 
   async precheck(data: JobConfigPrecheck) {
+    const trackId:string=crypto.randomUUID();
       const pathIds = new Set<string>();
     try {
       const serverMappings = new Map();
@@ -381,7 +382,7 @@ export class JobConfigService {
 
         const sourcePathEntry = {
           pathId: config.sourcePathId,
-          preserveAccessTime: config.preserveAccessTime,
+          preserveAccessTime: data.preserveAccessTime,
           workingDirectory : sourceFileServer.workingDirectory?.workingDirectory,
           workingDirectoryPathId: sourceFileServer.workingDirectory?.pathId,
           mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
@@ -439,13 +440,16 @@ export class JobConfigService {
         sourceEntry.sourcePaths.push(sourcePathEntry);
       }
       const finalResult = Array.from(serverMappings.values());
-      this.logger.debug(`[${data.trackId}] Precheck payload: ${JSON.stringify(finalResult)}`);
+
+      this.logger.debug(
+        `[${trackId}] Precheck payload: ${JSON.stringify(finalResult)}`
+      );
       const startPrecheckWorkPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.PRECHECK + "-" + data.trackId,
+        workflowId: WorkFlows.PRECHECK + "-" + trackId,
         taskQueue: "ParentWorkflow-TaskQueue",
         args: [
           {
-            traceId: data.trackId,
+            traceId: trackId,
             payload: finalResult,
             options: new Options()
           },
@@ -454,7 +458,7 @@ export class JobConfigService {
          const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK, startPrecheckWorkPayload);
          return { workflowId: workflow.workflowId };
     } catch (error) {
-        this.logger.error(`${data.trackId}] Failed to perform the precheck: ${error}`);
+        this.logger.error(`${trackId}] Failed to perform the precheck: ${error}`);
         return {
           status: "error",
           erros: ["PRECHECK_FAILED"],
