@@ -340,7 +340,7 @@ export class JobConfigService {
       const pathIds = new Set<string>();
     try {
       const serverMappings = new Map();
-      for (const config of data.precheckConfig) {
+      for (const config of data.migrateConfigs) {
         const destinationPathIds = config.destinationPathId;
         pathIds.add(config.sourcePathId);
         destinationPathIds.forEach((id) => pathIds.add(id));

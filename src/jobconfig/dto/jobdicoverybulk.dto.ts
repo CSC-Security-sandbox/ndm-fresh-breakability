@@ -176,7 +176,7 @@ export class JobConfigPrecheck {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  precheckConfig: MigrateConfig[];
+  migrateConfigs: MigrateConfig[];
 
   @ApiProperty({ description: "Preserve access time flag", example: false })
   @IsBoolean()
