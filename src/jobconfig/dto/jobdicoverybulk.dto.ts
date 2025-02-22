@@ -107,9 +107,6 @@ export class MigrateConfig {
   @IsUUID('all', { each: true }) 
   destinationPathId: string[];
 
-  @ApiProperty({ description: 'Preserve access time flag', example: false})
-  @IsBoolean()
-  preserveAccessTime: boolean;
 }
 
 export class JobConfigMigrateBulk {
@@ -168,17 +165,18 @@ export class JobConfigCutoverBulk {
 }
 
 export class JobConfigPrecheck {
-  @ApiProperty({ 
-    description: 'Details of all the precheck configs', 
-    isArray: true, 
-    type: MigrateConfig 
+  @ApiProperty({
+    description: "Details of all the precheck configs",
+    isArray: true,
+    type: MigrateConfig,
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  precheckConfig: MigrateConfig[]
+  migrateConfigs: MigrateConfig[];
 
-  @ApiProperty({ description: 'Track Id for track the request', example: '122333-20000- 999',required: true}) 
-  @IsUUID() 
-  trackId: string;
+  @ApiProperty({ description: "Preserve access time flag", example: false })
+  @IsBoolean()
+  preserveAccessTime: boolean;
+
 }

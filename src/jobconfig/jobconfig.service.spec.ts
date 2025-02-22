@@ -550,6 +550,7 @@ describe('createBulkMigrate', () => {
         excludeFilePatterns: '',
         preserveAccessTime: true,
         excludeOlderThan: null,
+        skipFile: ''
       },
       futureRunSchedule: '',
       sidMapping: undefined,
@@ -577,6 +578,7 @@ describe('createBulkMigrate', () => {
         excludeFilePatterns: '',
         preserveAccessTime: true,
         excludeOlderThan: null,
+        skipFile: ''
       },
       futureRunSchedule: '',
       sidMapping: undefined,
