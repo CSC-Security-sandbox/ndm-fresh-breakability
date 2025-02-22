@@ -6,6 +6,8 @@ export {SetupWorkerWorkflow} from '../workflows/setup/setup-worker-workflow'
 export {CleanupWorkerWorkflow} from '../workflows/setup/cleanup-worker-workflow'
 export {DiscoveryJobWorkflow} from '../workflows/discovery/discovery-job-workflow'
 export {DiscoveryWorkflow} from '../workflows/discovery/discovery-workflow'
+export {PreCheckValidationWorkflow} from '../workflows/pre-check/pre-check.workflow'
+export {PreCheckMountAndWritePermissionValidation} from './pre-check/pre-check-mount-validation-workflow'
 
 // export {MigrationWorkflow} from '../workflows/migration/core/migrate.workflow'
 // export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
