@@ -36,6 +36,8 @@ import { TaskEntity } from "src/entities/task.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
+import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
+import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
 
 @Injectable()
 export class JobRunService {
@@ -319,8 +321,9 @@ export class JobRunService {
       )
       const redisClient = await RedisUtils.getClient();
       if(!redisClient.isOpen)await redisClient.connect();
+      const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
       const jobContext = JobContextFactory.getProvider('redis', redisClient)
-      .buildContext(jobRunId, jobConfig, JobRunStatus.Ready);
+      .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
        (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId, jobRunConfig));
       redisClient.set(jobRunId, (await jobContext).serialize());
   }
