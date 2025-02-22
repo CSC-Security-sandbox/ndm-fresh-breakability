@@ -21,7 +21,6 @@ export const SyncWorkflow = async ({jobRunId} : {jobRunId: string}) => {
     console.log('Starting SyncWorkflow ', jobRunId)
     let iteration = 0;
     try {
-        await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
         while (true) {
             let { tasks } = await fetchMigrationTaskActivity({jobRunId}); 
             if (!tasks || tasks.length === 0)  {

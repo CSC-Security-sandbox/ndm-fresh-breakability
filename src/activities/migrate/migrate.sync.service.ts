@@ -5,8 +5,9 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { Logger } from "src/logger/logger.service";
 import { RedisService } from 'src/redis/redis.service';
-import { OperationStatus } from '../discovery/enums';
+import { OperationStatus, TaskStatus } from '../discovery/enums';
 import { SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 
 @Injectable()
 export class MigrationSyncService {
@@ -104,28 +105,37 @@ export class MigrationSyncService {
 
   async syncTask({ task }: SyncTaskInput): Promise<SyncTaskOutput> {
     let isError = false;
-    // const jobContext = await this.redisService.getJobContext(task.jobRunId);
+
+    const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
+    task.status = TaskStatus.Running
+    task.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
+    let id = await jobContext.appendToUpdatedTaskList(task);
+    jobContext.updatedTaskInfo.lastId = id;
+    await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     for (const command of task.commands) {
       const scanInput: SyncOperationInput = {
         sourcePath: `${task.sPath}${command.fPath}`,
         targetPath: `${task.tPath}${command.fPath}`,
-        ops: command.ops
+        ops: command.ops,
+        // jobRunId: task.jobRunId,
       };
 
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
       
       if (syncOperationOp.Status === OperationStatus.ERROR) {
         isError = true;
-        task.status = 'COMPLETED-WITH-ERROR';
+        task.status = TaskStatus.Errored;
       } else {
         this.logger.debug(`Migrated ${command.fPath} successfully`);
       }
     }
 
-    // Updating job context
-    // jobContext.appendToUpdatedTaskList(task);
-    // await this.redisService.setJobContext(task.jobRunId, jobContext);
+    task.status = TaskStatus.Completed
+    task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
+    id = await jobContext.appendToUpdatedTaskList(task);
+    jobContext.updatedTaskInfo.lastId = id;
+    await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     return { status: isError ? 'ERROR' : 'COMPLETE' };
   }

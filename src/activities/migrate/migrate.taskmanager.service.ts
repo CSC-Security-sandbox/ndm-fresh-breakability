@@ -31,14 +31,8 @@ export class MigrationTaskService{
       const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
       let commands:Command[] = [], ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
-      let counter = 0;
-      for await (const dir of jobContext.groupReadDirs(jobRunId, this.pushTaskDirSize)) {
-        counter++;
-        if (counter > this.pushTaskDirSize) {
-          this.logger.debug(`Breaking the loop of publish task for jobRunId: ${jobRunId}`);
-          break;
-        }
-        const command = new Command(dir.path, ops, `cmd-${uuid4()}`);
+      for await (const dir of jobContext.groupReadDirs(`${jobRunId}-worker`, this.pushTaskDirSize)) {
+        const command = new Command(dir.path, ops, uuid4());
         commands.push(command);
         if (commands && commands.length >= this.pushTaskDirSize) {
           const task = buildTask('SCAN', jobRunId, jobContext, commands);
@@ -71,7 +65,7 @@ export class MigrationTaskService{
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadTasks(jobRunId, this.fetchTaskBatch);
+      const tasks = await jobContext.groupReadTasks('consumer-1', this.fetchTaskBatch);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {
@@ -84,7 +78,7 @@ export class MigrationTaskService{
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadMigrationTask(jobRunId, this.fetchTaskBatch/2);
+      const tasks = await jobContext.groupReadMigrationTask('consumer-1', this.fetchTaskBatch);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {
