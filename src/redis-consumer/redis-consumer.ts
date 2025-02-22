@@ -46,7 +46,7 @@ export enum ConsumerType {
       errors: jobContext.groupReadErrors(readerName, 500),
       tasks: jobContext.readTasks(readerName),
       taskstats: jobContext.groupReadTaskStats(readerName, 500),
-      migrationTask:  jobContext.groupReadMigrationTask(readerName, 500),
+      migrationTask:  jobContext.readMigrationTask(readerName),
       updatedTask: jobContext.readUpdatedTaskInfo(readerName),
     };
 
