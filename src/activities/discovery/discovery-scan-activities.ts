@@ -1,5 +1,5 @@
 import { Logger } from './../../logger/logger.service';
-import { DMError, JobContext, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
+import { DMError, JobContext, JobStatus, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from './enums';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -18,6 +19,7 @@ export class DiscoveryScanActivity {
   async scanActivity(payload: DiscoveryPayload, traceId: string): Promise<TaskStats> {
     this.logger.log(`[${traceId}] Starting Discovery Scan Activity`);
     const jobContext: JobContext = await this.redisService.getJobContext(traceId);
+    const jobState: JobState = await jobContext.getJobState();
     payload.data.status = TaskStatus.Running
     payload.data.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
     const id = await jobContext.appendToUpdatedTaskList(payload.data);
@@ -25,6 +27,9 @@ export class DiscoveryScanActivity {
     await this.redisService.setJobContext(traceId, jobContext);
     const discoveryStats = new TaskStats('SCAN');
     const result = await this.discovery(payload, jobContext, discoveryStats);
+    const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
+    jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status as JobStatus);
+    await this.redisService.setJobContext(traceId, jobContext);
     this.logger.log(`[${traceId}] Discovery Scan Activity Completed.`);
     return result;
   }

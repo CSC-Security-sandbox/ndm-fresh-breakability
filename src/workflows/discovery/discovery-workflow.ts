@@ -7,13 +7,13 @@ import { executeChild } from '@temporalio/workflow';
 import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { DiscoveryJobWorkflow } from './discovery-job-workflow';
+import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-
-
+const { getWorkerId, setJobState, getJobState } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5m' });
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
  * @param traceId Unique identifier to trace the request
@@ -27,8 +27,9 @@ export async function DiscoveryWorkflow({
   options,
 }): Promise<any> {
   log(traceId, `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`);
-
-  let activeWorkerIds = [];
+  const workerId = await getWorkerId();
+  log(traceId, `DiscoveryWorkflow workerId: ${workerId}`);
+  let activeWorkerIds = [workerId];
   const responseArray = await Promise.all(
     payload.workers.map((workerId) =>
       executeChild(SetupWorkerWorkflow, {
@@ -48,12 +49,12 @@ export async function DiscoveryWorkflow({
   );
 
   let result = responseArray.flat();
-  result.map((r) => {
-    log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-    if (r.status === 'success') {
-      activeWorkerIds.push(r.workerId);
-    }
-  });
+  // result.map((r) => {
+  //   log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
+  //   if (r.status === 'success') {
+  //     activeWorkerIds.push(r.workerId);
+  //   }
+  // });
 
   if (activeWorkerIds.length === 0) {
     return {
@@ -63,11 +64,19 @@ export async function DiscoveryWorkflow({
     };
   }
 
-  const discoveryResponse: any = await Promise.all(['b653055c-4a5e-451b-a8ac-74b810f2db9b'].map(async (workerId) => {
+  const discoveryResponse: any = await Promise.all(payload.workers.map(async (workerId) => {
+    const jobState = await getJobState(traceId);
+    const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
+    const newJobState = { 
+      ...jobState,
+      workers: uniqueWorkers,
+      status: 'RUNNING',
+    } as any;
+    await setJobState(traceId, newJobState);
     while (true) {
       try {
         return await executeChild(DiscoveryJobWorkflow, {
-          args: [{ traceId }],
+          args: [{ traceId, workerId }],
           workflowId: `DiscoveryJobWorkflow-${traceId}`,
           taskQueue: `${workerId}-TaskQueue`,
           cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

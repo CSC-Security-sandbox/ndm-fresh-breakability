@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'src/logger/logger.service';
 import { ConfigService } from '@nestjs/config';
-import { Command, FileInfo, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, FileInfo, JobStatus, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 import { uuid4 } from '@temporalio/workflow';
 import { WorkersConfig } from 'src/config/app.config';
 import axios from 'axios';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 @Injectable()
 export class DiscoveryActivity {
@@ -42,7 +43,8 @@ export class DiscoveryActivity {
     try {
       const jobContext = await this.redisService.getJobContext(traceId);
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
-      const directoryBatchSize = 500;
+      const jobState = await this.getJobState(traceId);
+      const directoryBatchSize = 1;
       let commandsBatch: Command[] = [];
       for await (const directory of jobContext.groupReadDirs(
         'consumer-1',
@@ -65,8 +67,14 @@ export class DiscoveryActivity {
           );
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;
+          const newJobState = {
+            ...jobState,
+            tasks_total: jobState.tasks_total + 1,
+            status: jobState.status,
+          }
+          jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status);
           await this.redisService.setJobContext(traceId, jobContext);
-          this.logger.log(`[${traceId}] Task published.`)
+          this.logger.log(`[${traceId}] Task published.`);
           commandsBatch = [];
         }
       }
@@ -85,6 +93,11 @@ export class DiscoveryActivity {
         const id = await jobContext.appendToTaskList(task);
         this.logger.log(`[${traceId}] Task published.`)
         jobContext.tasksInfo.lastId = id;
+        const newJobState = {
+          ...jobState,
+          tasks_total: jobState.tasks_total + 1,
+        }
+        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status);
         await this.redisService.setJobContext(traceId, jobContext);
         this.logger.log(`[${traceId}] Task published successfully.`)
       }
@@ -126,6 +139,25 @@ export class DiscoveryActivity {
       return { message: 'Error while marking the job as completed : ' + traceId };
     }
   }
+
+  async getJobState(traceId: string): Promise<any> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    return await jobContext.getJobState();
+  }
+
+  async setJobState(traceId: string, jobState: JobState): Promise<any> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    const newjobState = new JobState(
+      jobState.workers, 
+      jobState.tasks_completed, 
+      jobState.tasks_total, 
+      jobState.workers_agreed, 
+      jobState.status as JobStatus
+    );
+    jobContext.jobState = newjobState;
+    await this.redisService.setJobContext(traceId, jobContext);
+  }
+
 }
 const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
 

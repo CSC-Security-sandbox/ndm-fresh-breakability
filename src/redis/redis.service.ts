@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RedisUtils, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -30,6 +31,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const serializedContext = jobContext.serialize();
     await this.redisClient.set(traceId, serializedContext);
     console.log(`[${traceId}] Job context saved to Redis.`);
+  }
+
+  async getJobState(traceId: string): Promise<any> {
+    try {
+      const jobContext = await this.getJobContext(traceId);
+      return await jobContext.getJobState();
+    } catch (error) {
+      return { message: 'Error while getting the job state : ' + traceId };
+    }
+  }
+
+  async setJobState(traceId: string, jobState: JobState): Promise<any> {
+    try {
+      const jobContext = await this.getJobContext(traceId);
+      await jobContext.setJobState(jobState);
+      const newJobState = await jobContext.getJobState();
+      return newJobState;
+    } catch (error) {
+      return { message: 'Error while updating the job state : ' + traceId };
+    }
   }
 
   async onModuleDestroy() {
