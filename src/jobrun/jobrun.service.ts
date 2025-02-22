@@ -124,7 +124,8 @@ export class JobRunService {
         firstRunAt: LessThan(currentTime)
       },
     })
-    jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
+    for(const job of jobs)
+      await this.createJobRun(job.id, currentTime)
     return jobs;
   }
 
@@ -227,11 +228,8 @@ export class JobRunService {
       options: options,
     });
     const jobRun = await this.jobRunRepo.save(jobRunRecord);
-    await this.initiateWorkflow(jobRun.id, details.jobType,details)
-    
-    // make JobConfig Active
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-
+    await this.initiateWorkflow(jobRun.id, details.jobType,details)
     return jobRun
   }
 
@@ -330,7 +328,7 @@ export class JobRunService {
   }
 
   async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
+    const mountBasePath = jobRunConfig.jobType === JobType.DISCOVER ? this.configService.get<string>('app.paths.mountBasePath') : '';
     const commands = new Command(`${mountBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
     const task = new Task(
       uuid4(),
@@ -346,26 +344,6 @@ export class JobRunService {
       jobRunConfig.excludeFilePatterns,
     )
     return task;
-  }
-
-  buildTaskPayload =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
-    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-    const rootPath = jobRunConfig.jobType === JobType.DISCOVER ?  `${mountBasePath}/${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` : '';
-      const commands = new Command(rootPath, {0: {cmd : taskEntity.taskType, status: 'PENDING'}}, operations.id)
-      const task = new Task(
-        taskEntity.id,
-        taskEntity.jobRunId,
-        taskEntity.taskType,
-        taskEntity.status,
-        jobRunConfig.workers[0],
-        `${jobRunConfig.connection.sourceCredential.workingDirectory}/${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`,
-        jobRunConfig.connection.sourceCredential.pathId,
-        [commands],
-        jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${taskEntity.jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
-        jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? jobRunConfig.connection.targetCredential.pathId: '',
-        jobRunConfig.excludeFilePatterns,
-      )
-      return task;
   }
 
   async startMigrateWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {

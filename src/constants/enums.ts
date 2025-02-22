@@ -125,6 +125,7 @@ export enum ConsumerType{
     directories='directories',
     tasks='tasks',
     updatedTask = "updatedTask",
-    errors = 'errors'
+    errors = 'errors',
+    migrationTask='migrationTask'
 }
 
