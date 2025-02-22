@@ -64,7 +64,6 @@ export interface SyncTaskOutput {
 export interface SyncOperationInput {
     sourcePath: string;
     targetPath: string;
-    // jobRunId:string;
     ops: Record<number, CommandOperation>
 }
 

@@ -78,9 +78,9 @@ export function getFileType(stats: fs.Stats): FileType {
     }
   }
 
-export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string): Promise<FileInfo>  => {
+export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
-    return new FileInfo(
+    const obj = new FileInfo(
         name,
         relativePath,
         relativePath,
@@ -97,6 +97,16 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         getFileType(lStat),
         relativePath.split('/').length - 2,
       );
+    return {
+      ...obj,
+      uid: lStat.uid.toString(),
+      gid: lStat.gid.toString(),
+      fileSize: lStat.size,
+      blocks: lStat.blocks,
+      modifiedTime: new Date(lStat.mtime).toISOString(),
+      birthTime: new Date(lStat.birthtime).toISOString(),
+      accessTime: new Date(lStat.atime).toISOString(),
+    }
 }
 
 

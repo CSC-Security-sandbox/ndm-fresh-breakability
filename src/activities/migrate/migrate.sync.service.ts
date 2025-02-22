@@ -7,7 +7,8 @@ import { Logger } from "src/logger/logger.service";
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from '../discovery/enums';
 import { SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
-import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileInfo, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { getFileInfo, removePrefix } from '../utils/utils';
 
 @Injectable()
 export class MigrationSyncService {
@@ -99,7 +100,6 @@ export class MigrationSyncService {
     if (ops[1]?.status === OperationStatus.READY) {
       this.logger.log('Stamping meta data');
     }
-
     return { ops, Status: OperationStatus.COMPLETED };
   }
 
@@ -109,8 +109,8 @@ export class MigrationSyncService {
     const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
     task.status = TaskStatus.Running
     task.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
-    let id = await jobContext.appendToUpdatedTaskList(task);
-    jobContext.updatedTaskInfo.lastId = id;
+    let id = await jobContext.appendToMigrationTask(task);
+    jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     for (const command of task.commands) {
@@ -118,15 +118,20 @@ export class MigrationSyncService {
         sourcePath: `${task.sPath}${command.fPath}`,
         targetPath: `${task.tPath}${command.fPath}`,
         ops: command.ops,
-        // jobRunId: task.jobRunId,
       };
 
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-      
       if (syncOperationOp.Status === OperationStatus.ERROR) {
         isError = true;
         task.status = TaskStatus.Errored;
-      } else {
+      } 
+      else {
+        const fileInfo: FileInfo = await getFileInfo(command.fPath, `${task.sPath}${command.fPath}`, command.fPath);
+        this.logger.log(`File Info: ${JSON.stringify(fileInfo)}`);
+        const id = await jobContext.appendToFileList(fileInfo);
+        jobContext.filesInfo.lastId = id;
+        jobContext.filesInfo.numMessages++;
+        await this.redisService.setJobContext(task.jobRunId, jobContext);
         this.logger.debug(`Migrated ${command.fPath} successfully`);
       }
     }
@@ -134,7 +139,7 @@ export class MigrationSyncService {
     task.status = TaskStatus.Completed
     task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
     id = await jobContext.appendToUpdatedTaskList(task);
-    jobContext.updatedTaskInfo.lastId = id;
+    jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     return { status: isError ? 'ERROR' : 'COMPLETE' };
