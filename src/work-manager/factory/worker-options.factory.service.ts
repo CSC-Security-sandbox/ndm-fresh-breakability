@@ -9,7 +9,7 @@ import { DiscoveryActivity } from "src/activities/discovery/discovery.activities
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
 import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
-import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanger.service";
+import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 
 @Injectable()
@@ -45,6 +45,8 @@ export class WorkerOptionsService {
             publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
             fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
             fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+            updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+            updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
@@ -61,6 +63,8 @@ export class WorkerOptionsService {
           publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
           fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
           fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+          updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+          updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
           syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       default:

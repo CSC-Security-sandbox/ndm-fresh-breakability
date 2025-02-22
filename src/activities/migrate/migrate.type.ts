@@ -1,6 +1,6 @@
 import { CommandOperation, JobContext, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Logger } from "src/logger/logger.service";
-import { OperationStatus } from "../discovery/enums";
+import { JobRunStatus, OperationStatus } from "../discovery/enums";
 
 export interface ScanContentInput{
     jobRunId: string;
@@ -70,4 +70,13 @@ export interface SyncOperationInput {
 export interface SyncOperationOutput {
     Status: OperationStatus;
     ops: Record<number, CommandOperation>
+}
+
+export interface UpdateStatusInput{
+    jobRunId: string;
+    status: JobRunStatus
+}
+
+export interface UpdateStatusOutput{
+    message: string;
 }

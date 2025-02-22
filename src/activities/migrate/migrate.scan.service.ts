@@ -10,9 +10,11 @@ import { buildTask, getChecksum, getFileInfo, removePrefix, shouldExclude } from
 import { OPS_CMD, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { OperationStatus } from "../discovery/enums";
 
+
 @Injectable()
 export class MigrationScanService {
     readonly workerId: string;
+    readonly workerJobServiceUrl: string
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -39,7 +41,9 @@ export class MigrationScanService {
         try {
             const sourceContent = new Set<string>(this.getDirectoryContents(sourcePath));
             const targetContent = new Set<string>(this.getDirectoryContents(targetPath));
-
+            
+            this.logger.log(`SDATA: ${JSON.stringify(sourceContent)}`)
+            this.logger.log(`TDATA: ${JSON.stringify(targetContent)}`)
            
             for (const item of sourceContent) {
                 const sourceContentPath = path.join(sourcePath, item);
@@ -55,9 +59,7 @@ export class MigrationScanService {
 
                 if (sourceStat.isDirectory()) {
                     syncContentOutput.directory++;
-                    const id = await jobContext.appendToDirList(fileInfo);
-                    jobContext.dirsInfo.lastId = id;
-                    jobContext.dirsInfo.numMessages++;
+                    await jobContext.appendToDirList(fileInfo);
                     syncContentOutput.isGeneratedTask = true;
                 } else if (!targetContent.has(item)) {
                     syncContentOutput.files++;
@@ -89,6 +91,7 @@ export class MigrationScanService {
 
     async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
         const scanPath: ScanPathOutput = { isTaskCreated: false };
+        this.logger.log('Starting scanning')
         for (const cmd of task.commands) {
             const jobContext = await this.redisService.getJobContext(task.jobRunId);
             const scanInput: ScanContentInput = {
@@ -101,6 +104,7 @@ export class MigrationScanService {
             };
 
             const result = await this.scanContent(scanInput);
+            this.logger.log(`ReSult of scanContent: ${JSON.stringify(result)}`);
             if (result.isGeneratedTask) {
                 scanPath.isTaskCreated = true;
             }

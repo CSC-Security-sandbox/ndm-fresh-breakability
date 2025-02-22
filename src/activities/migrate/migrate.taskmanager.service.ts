@@ -4,9 +4,9 @@ import { Command, JobContext, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import { Logger } from "src/logger/logger.service";
 import { RedisService } from 'src/redis/redis.service';
-import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput } from './migrate.type';
-import { buildTask } from '../utils/utils';
-
+import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
+import { buildTask, generateDummyFileEntry } from '../utils/utils';
+import axios from 'axios';
 
 @Injectable()
 export class MigrationTaskService{
@@ -14,6 +14,7 @@ export class MigrationTaskService{
   readonly workerId: string;
   readonly fetchTaskBatch: number;
   readonly pushTaskDirSize: number;
+  readonly workerJobServiceUrl: string;
   
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -21,6 +22,7 @@ export class MigrationTaskService{
       private readonly redisService: RedisService,
   ) {
       this.workerId = this.configService.get('worker.workerId');
+      this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
       this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
   }
 
@@ -90,4 +92,34 @@ export class MigrationTaskService{
       return output;
     }
   }
+
+  async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
+    try {
+      const workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
+      this.logger.log(`[${jobRunId}] Updating status to URL ${workerJobServiceUrl}`);
+      this.logger.log(`[${jobRunId}] Updating status to ${status}`);
+      await axios.patch(`${workerJobServiceUrl}/${jobRunId}/${status}`);
+      this.logger.log(`[${jobRunId}] status updated to ${status}`);
+      return { message: 'Job status updated as completed for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
+      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+    }
+  }
+
+  async updateLastEntry(traceId: string): Promise<any> {
+    try {
+      this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
+      const jobContext = await this.redisService.getJobContext(traceId);
+      const id = await jobContext.appendToFileList(generateDummyFileEntry);
+      jobContext.errorsInfo.lastId = id;
+      this.redisService.setJobContext(traceId, jobContext);
+      this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
+      return { message: 'Job completed for job id: ' + traceId };
+    } catch (error) {
+      this.logger.error(`[${traceId}] Error while marking the job as completed : ${error}`);
+      return { message: 'Error while marking the job as completed : ' + traceId };
+    }
+  }
+
 }

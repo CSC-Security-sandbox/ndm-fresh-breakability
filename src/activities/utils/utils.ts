@@ -101,7 +101,7 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
 
 
 export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
-  uuid4(), jobRunId, taskType, 'PENDING', 'worker-1',
+  uuid4(), jobRunId, taskType, 'PENDING', jobContext.jobConfig.workerIds[0],
   `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
   jobContext.jobConfig.sourceFileServer.pathId,
   commands,
@@ -109,3 +109,5 @@ export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobCon
   jobContext.jobConfig.destinationFileServer.pathId,
   ''
 )
+
+export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);

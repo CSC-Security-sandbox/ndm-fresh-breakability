@@ -9,7 +9,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { DiscoveryScanActivity } from './discovery/discovery-scan-activities';
 import { SetupActivityService } from './setup-worker/setup.activity.service';
 import { MigrationScanService } from './migrate/migrate.scan.service';
-import { MigrationTaskService } from './migrate/migrate.taskmanger.service';
+import { MigrationTaskService } from './migrate/migrate.taskmanager.service';
 import { MigrationSyncService } from './migrate/migrate.sync.service';
 
 
