@@ -1,3 +1,4 @@
+import { JobState } from '../types/job-state';
 import { JobContext } from '../types/job-context';
 import { JobConfig } from '../types/job-config';
 import { RedisClientType } from 'redis';
@@ -19,8 +20,9 @@ export class RedisJobContext extends JobContext {
     redisClient: RedisClientType,
     jobConfig?: JobConfig,
     jobRunStatus?: string,
+    jobState?: JobState,
   ) {
-    super(jobRunId, jobConfig, jobRunStatus);
+    super(jobRunId, jobConfig, jobRunStatus, jobState);
     this.redisClient = redisClient;
     this.logger = Logger.getLogger(jobRunId);
 

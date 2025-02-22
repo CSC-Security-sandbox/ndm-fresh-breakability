@@ -1,13 +1,14 @@
 import { JobContextProvider } from './job-context-provider';
 import { JobContext } from './types/job-context';
 import { JobConfig } from './types/job-config';
-import { JobType } from './types/enums';
+import { JobStatus, JobType } from './types/enums';
 import { FileServerDetails } from './types/file-server';
 import { NFS } from './types/protocols';
+import { JobState } from './types/job-state';
 
 class MockJobContext extends JobContext {
-    constructor(jobRunId: string, jobConfig: JobConfig, jobRunStatus: string) {
-      super(jobRunId, jobConfig, jobRunStatus);
+    constructor(jobRunId: string, jobConfig: JobConfig, jobRunStatus: string, jobState: JobState) {
+      super(jobRunId, jobConfig, jobRunStatus, jobState);
     }
 
     async init(): Promise<void> {
@@ -28,11 +29,14 @@ class MockJobContextProvider implements JobContextProvider {
   async buildContext(
     jobRunId: string,
     jobConfig: JobConfig,
-    jobRunStatus: string,    
+    jobRunStatus: string,  
+    jobState: JobState,  
   ): Promise<JobContext> {
     const context: JobContext = new MockJobContext(jobRunId,
       jobConfig,
-      jobRunStatus);
+      jobRunStatus,
+      jobState
+    );
 
     this.contexts.set(jobRunId, context);
     return context;
@@ -53,6 +57,13 @@ describe('JobContextProvider', () => {
   it('should build and retrieve job context', async () => {
     const jobRunId = 'test-run-id';
     const jobStatus = 'running';
+    const jobState: any = {
+      workers: ['1'],
+      status: JobStatus.Running,
+      tasks_completed: 1,
+      tasks_total: 2,
+      workers_agreed: []
+    }
     const jobConfig = new JobConfig(
         jobRunId    ,
         JobType.DISCOVERY,
@@ -65,7 +76,7 @@ describe('JobContextProvider', () => {
         '/source',
       );
 
-    const context = await provider.buildContext(jobRunId, jobConfig, jobStatus);
+    const context = await provider.buildContext(jobRunId, jobConfig, jobStatus, jobState);
     expect(context).toEqual({
       jobRunId,
       jobConfig,
