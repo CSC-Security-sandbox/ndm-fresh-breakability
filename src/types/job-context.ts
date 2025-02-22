@@ -131,6 +131,10 @@ export abstract class JobContext {
     yield* this.migrateTask.groupRead(readerName,batchSize);
   }
 
+  async *readMigrationTask(readerName: string,batchSize:number): AsyncGenerator<Task> {
+    yield* this.migrateTask.groupRead(readerName,batchSize);
+  }
+
   async *readErrors(readerName: string): AsyncGenerator<DMError> {
     yield* this.errorsInfo.read(readerName);
   }
