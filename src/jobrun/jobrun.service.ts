@@ -256,7 +256,7 @@ export class JobRunService {
     this.logger.log(`Starting ${jobType} workflow for jobRunId: ${jobRunId} , with workflowId: ${jobRunWorkflow?.workflowId}`);
   }
 
-  async starDiscoveryWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
+  async starDiscoveryWorkFlow(jobRunId: string, jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
    //TODDO : fetch it from config??
     const options = {
       workflowExecutionTimeout: '60s',
@@ -274,6 +274,25 @@ export class JobRunService {
   const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
   await this.startStreamConsumer(jobRunId)
   return {workflowId : workflow.workflowId}
+  }
+
+
+  async resumeDiscoveryWorkFlow(jobRunId: string, jobRunConfig:JobRunConfig): Promise<{workflowId: string}> {
+    const options = {
+      workflowExecutionTimeout: '60s',
+      workflowTaskTimeout: '30s',
+      workflowRunTimeout: '30s',
+      startDelay: '1s'
+    }
+    const startWorkFlowPayload: StartWorkFlowPayload = {
+      workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
+      taskQueue: 'ParentWorkflow-TaskQueue',
+      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
+      options:options
+    }
+   const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+   await this.startStreamConsumer(jobRunId)
+   return {workflowId : workflow.workflowId}
   }
 
   startStreamConsumer = async (jobRunId:string) => {
@@ -403,6 +422,16 @@ export class JobRunService {
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
     await this.jobRunRepo.update({id: In(jobRuns)}, {status: JobRunStatus.Paused})
+    const redisClient = await RedisUtils.getClient();
+    if(!redisClient.isOpen)await redisClient.connect();
+    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+    for(const jobRunId of jobRuns) {
+      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      jobContext.jobState.status = JobContextStatus.Paused;
+      const serializedContext = jobContext.serialize();
+      await redisClient.set(jobRunId, serializedContext);
+      await redisClient.set(jobRunId, jobContext.serialize());
+    }
     return {details: 'Operation Completed Successfully'}
   }
 
@@ -416,16 +445,17 @@ export class JobRunService {
       worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
-    await this.jobRunRepo.update(
-      {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped}
-      )
-    worker.forEach((jobRuns, workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
-        workerId: workerId,
-        socketEvents: SocketEvents.STOP_TASK,
-        payload: { jobRuns }
-      })
-    )
+    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
+    const redisClient = await RedisUtils.getClient();
+    if(!redisClient.isOpen)await redisClient.connect();
+    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+    for(const jobRunId of jobRuns) {
+      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      jobContext.jobState.status = JobContextStatus.Stopped;
+      const serializedContext = jobContext.serialize();
+      await redisClient.set(jobRunId, serializedContext);
+      await redisClient.set(jobRunId, jobContext.serialize());
+    }
     return {details: 'Operation Completed Successfully'}
   }
 
@@ -435,17 +465,32 @@ export class JobRunService {
       where: {jobRunId: In(jobRuns)}, select: {workerId: true}
     })
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: true})
-    const workerSet = new Set<string>(mappings.map(it=>it.workerId))
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
-    workerSet.forEach((workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
-        workerId: workerId,
-        socketEvents: SocketEvents.WAKE_UP,
-        payload: { jobRuns }
-      })
-    )
+    const redisClient = await RedisUtils.getClient();
+    if(!redisClient.isOpen)await redisClient.connect();
+    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+    for(const jobRunId of jobRuns) {
+      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      jobContext.jobState.status = JobContextStatus.Pending;
+      jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
+      const serializedContext = jobContext.serialize();
+      await redisClient.set(jobRunId, serializedContext);
+      await redisClient.set(jobRunId, jobContext.serialize());
+      await this.resumeJobRun(jobRunId);
+    }
     return {details: 'Operation Completed Successfully'}
+  }
+
+  async resumeJobRun(jobRunId: string) {
+    const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
+    if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
+    const details:JobRunConfig = await this.getJobConfig(jobRun.jobConfigId);
+    if(details.workers.length === 0) {
+      this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
+      return
+    }
+    await this.resumeDiscoveryWorkFlow(jobRunId, details)
   }
 
   //  ------------------- get JobRun Details ------------------ //
