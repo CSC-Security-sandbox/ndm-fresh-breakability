@@ -11,7 +11,7 @@ import { OperationsEntity } from 'src/entities/operation.entity';
 import { randomUUID } from 'crypto';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
+import { OperationError, Task, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
 
 @Injectable()
 export class InventoryService {
