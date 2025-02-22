@@ -109,7 +109,7 @@ export class MigrationSyncService {
     const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
     task.status = TaskStatus.Running
     task.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
-    let id = await jobContext.appendToMigrationTask(task);
+    let id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
