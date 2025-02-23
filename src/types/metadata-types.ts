@@ -99,9 +99,14 @@ export class TaskStats implements Serializable {
   }
 }
 
+
+
 export class CommandOperation {
   cmd: string;
   status: string;
+  error?: string;
+  errorCode?: string;
+  metadata?: Record<string, string>
 }
 
 export class Command implements Serializable {
