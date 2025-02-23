@@ -1,15 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { WorkersConfig } from 'src/config/app.config';
-import {
-  RedisUtils,
-  JobContextFactory,
-} from '@netapp-cloud-datamigrate/jobs-lib';
 import axios from 'axios';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
-import * as path from 'path';
 import * as fs from 'fs';
 
 @Injectable()

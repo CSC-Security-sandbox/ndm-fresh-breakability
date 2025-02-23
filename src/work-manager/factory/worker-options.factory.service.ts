@@ -8,6 +8,7 @@ import { ValidateConnectionActivity } from "src/activities/validate-connection/v
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
 import { SetupActivityService } from "src/activities/setup-worker/setup.activity";
+import { RedisService } from "src/redis/redis.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -22,7 +23,11 @@ export class WorkerOptionsService {
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
     switch (config.configName) {
       case WorkFlowType.PARENT_WORKFLOW:
-        return new WorkFlowOptions(id, workerId, connection, 'ParentWorkflow-TaskQueue', config);
+        return new WorkFlowOptions(id, workerId, connection, 'ParentWorkflow-TaskQueue', config, {
+          getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
+          getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
+          setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+        });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
             listPath: this.listPathActivityService.listPath.bind(this.listPathActivityService),
@@ -36,6 +41,8 @@ export class WorkerOptionsService {
             setup: this.setupActivityService.setup.bind(this.setupActivityService),
             cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
             mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
+            getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
+            setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
