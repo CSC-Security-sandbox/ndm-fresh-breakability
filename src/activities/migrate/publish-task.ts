@@ -11,6 +11,7 @@ export const publishSanTask = async ({jobRunId, jobContext, logger,clientConnect
             'PENDING',
             'worker-1',
             '/Users/calfus-kunalavghade/Desktop/node-fs/test1',
+            '',
             [],
             '/Users/calfus-kunalavghade/Desktop/node-fs/test2',
             ''
