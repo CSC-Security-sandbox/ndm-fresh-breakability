@@ -2,11 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
 import axios from 'axios';
-import { delay } from 'rxjs';
+import * as fs from 'fs';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
-import * as fs from 'fs';
 @Injectable()
 export class SetupActivityService {
 

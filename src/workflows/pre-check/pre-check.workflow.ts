@@ -6,7 +6,6 @@ import {
 import { ValidateWorkerConnectionWorkflow } from '../validate-connection/validate-worker-connection.workflow';
 import { WorkFlows } from 'src/work-manager/work-manager.types';
 import { PreCheckMountAndWritePermissionValidation } from './pre-check-mount-validation-workflow';
-import { stat } from 'fs';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);

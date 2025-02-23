@@ -121,3 +121,59 @@ export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobCon
 )
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+
+export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
+  if (error.code) {
+    switch (error.code) {
+      case 'ENOENT':
+        // File or directory does not exist [edge case]
+        return context === 'TASK' ? 'TASK_FILE_NOT_FOUND' : 'OP_FILE_NOT_FOUND';
+      case 'EACCES':
+        // Permission denied
+        return context === 'TASK' ? 'TASK_PERMISSION_DENIED' : 'OP_PERMISSION_DENIED';
+      case 'EMFILE':
+        // Too many open files [rare edge case]
+        return context === 'TASK' ? 'TASK_TOO_MANY_OPEN_FILES' : 'OP_TOO_MANY_OPEN_FILES';
+      case 'ENOTDIR':
+        // Expected directory but found file [rare edge case]
+        return context === 'TASK' ? 'TASK_NOT_A_DIRECTORY' : 'OP_NOT_A_DIRECTORY';
+      case 'EISDIR':
+        // Expected file but found directory [rare edge case]
+        return context === 'TASK' ? 'TASK_IS_A_DIRECTORY' : 'OP_IS_A_DIRECTORY';
+      case 'ENOSPC':
+        // No space left on device
+        return context === 'TASK' ? 'TASK_NO_SPACE_LEFT' : 'OP_NO_SPACE_LEFT';
+      case 'EROFS':
+        // Read-only filesystem
+        return context === 'TASK' ? 'TASK_READ_ONLY_FILESYSTEM' : 'OP_READ_ONLY_FILESYSTEM';
+      case 'EBUSY':
+        // Resource busy (file in use) [rare edge case]
+        return context === 'TASK' ? 'TASK_RESOURCE_BUSY' : 'OP_RESOURCE_BUSY';
+      case 'ELOOP':
+        // Too many symbolic links
+        return context === 'TASK' ? 'TASK_TOO_MANY_SYMLINKS' : 'OP_TOO_MANY_SYMLINKS';
+      case 'ECONNRESET':
+        // Connection reset by peer
+        return context === 'TASK' ? 'TASK_CONNECTION_RESET' : 'OP_CONNECTION_RESET';
+      case 'ETIMEDOUT':
+        // Operation timed out
+        return context === 'TASK' ? 'TASK_OPERATION_TIMED_OUT' : 'OP_OPERATION_TIMED_OUT';
+      case 'ENETDOWN':
+        // Network is down
+        return context === 'TASK' ? 'TASK_NETWORK_DOWN' : 'OP_NETWORK_DOWN';
+      case 'ECONNREFUSED':
+        // Connection refused
+        return context === 'TASK' ? 'TASK_CONNECTION_REFUSED' : 'OP_CONNECTION_REFUSED';
+      case 'EPIPE':
+        // Broken pipe
+        return context === 'TASK' ? 'TASK_BROKEN_PIPE' : 'OP_BROKEN_PIPE';
+      case 'ENAMETOOLONG':
+        // Filename too long
+        return context === 'TASK' ? 'TASK_FILENAME_TOO_LONG' : 'OP_FILENAME_TOO_LONG';
+      default:
+        // Unknown error
+        return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
+    }
+  }
+  return context === 'TASK' ? 'TASK_GENERAL_FAILURE' : 'OP_GENERAL_FAILURE';
+}

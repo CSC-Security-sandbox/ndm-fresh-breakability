@@ -22,7 +22,7 @@ export class MigrationScanService {
         this.workerId = this.configService.get<string>('worker.workerId');
     }
 
-    async  getDirectoryContents(directoryPath: string): Promise<string[]> {
+    async getDirectoryContents(directoryPath: string): Promise<string[]> {
         this.logger.log(`Path Not Found : ${directoryPath}`);
         if (!fs.existsSync(directoryPath)) {
             return [];
