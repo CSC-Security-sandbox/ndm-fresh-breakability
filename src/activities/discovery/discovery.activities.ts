@@ -61,6 +61,7 @@ export class DiscoveryActivity {
             'SCAN',
             'PENDING',
             jobContext.jobConfig.workerIds[0],
+            jobContext.jobConfig.sourceFileServer.path,
             jobContext.jobConfig.sourceFileServer.pathId,
             commandsBatch,
             jobContext.jobConfig?.destinationFileServer?.pathId ?? null
@@ -86,6 +87,7 @@ export class DiscoveryActivity {
           'SCAN',
           'PENDING',
           jobContext.jobConfig.workerIds[0],
+          jobContext.jobConfig.sourceFileServer.path,
           jobContext.jobConfig.sourceFileServer.pathId,
           commandsBatch,
           jobContext.jobConfig?.destinationFileServer?.pathId ?? null
