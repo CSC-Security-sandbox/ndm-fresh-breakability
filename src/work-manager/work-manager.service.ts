@@ -56,6 +56,7 @@ export class WorkManagerService {
         if (this.accessToken && now < this.expiresAt) 
             return this.accessToken;
         try {
+            // this.logger.log(`${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`)
             const response = await lastValueFrom(
                 this.httpService.post(
                     `${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`,
@@ -79,11 +80,11 @@ export class WorkManagerService {
         if (this.loadingConfigs) return;
         this.loadingConfigs = true;
         try {
-          //  const accessToken = await this.getAccessToken();
-            //if (!accessToken) throw new Error('Access token is null');
+           const accessToken = await this.getAccessToken();
+            if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
-                this.httpService.get(`${this.workerConfigUrl}config`, {
-                  //  headers: { Authorization: `Bearer ${accessToken}` },
+                this.httpService.get(`${this.workerConfigUrl}/config`, {
+                   headers: { Authorization: `Bearer ${accessToken}` },
                 }).pipe(
                     retry({
                         count: 3,

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, FileInfo, JobContext } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, FileInfo, JobContext, MetaData } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
@@ -23,7 +23,6 @@ export class MigrationScanService {
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
-        this.logger.log(`Path Not Found : ${directoryPath}`);
         if (!fs.existsSync(directoryPath)) {
             return [];
         }
@@ -124,12 +123,22 @@ export class MigrationScanService {
     }
 
     buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
-        if (!dFile || sFile.size !== dFile.size || sFile.mtime !== dFile.mtime) {
+        if (!dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())) {
+            const metadata: MetaData =  { 
+                size: sFile.size,
+                mtime: sFile.mtime,
+                mode: sFile.mode,
+                uid: sFile.uid,
+                gid: sFile.gid,
+                atime: sFile.atime,
+                ctime: sFile.ctime,
+                birthtime: sFile.birthtime,
+            } 
             return new Command(
                 fPath,
                 {
                     0: { cmd: OPS_CMD.COPY_CONTENT, status: OperationStatus.READY },
-                    1: { cmd: OPS_CMD.STAMP_META, status: OperationStatus.READY }
+                    1: { cmd: OPS_CMD.STAMP_META, status: OperationStatus.READY, metadata}
                 },
                 uuid4()
             );

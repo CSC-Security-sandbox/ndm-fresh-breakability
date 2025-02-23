@@ -4,11 +4,12 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { FileInfo, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileInfo, JobContext, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from '../discovery/enums';
-import { getFileInfo } from '../utils/utils';
+import { formatDate, getFileInfo } from '../utils/utils';
 import { SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+import { execSync } from 'child_process';
 
 @Injectable()
 export class MigrationSyncService {
@@ -80,10 +81,36 @@ export class MigrationSyncService {
     if (checksum !== targetChecksum) {
       throw new Error(`Checksum mismatch for file ${destinationFile}. Checksum: ${checksum} != ${targetChecksum}`);
     }
-  
     return checksum;
   }
   
+
+  stampMetaData(filePath: string, metadata: MetaData) {
+    if(metadata?.mode) {
+      try {
+        fs.chmodSync(filePath, metadata.mode);
+      } catch(error) {
+        this.logger.error(`Error setting file mode: ${error.message}`);
+      }
+    }
+    if(metadata?.birthtime){
+      try {
+        const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${filePath}`;
+        execSync(birthtimeCommand);
+      } catch(error) {
+        this.logger.error(`Error setting file timestamps: ${error.message}`);
+      }
+    }
+    if(metadata.mtime && metadata.atime) {
+      try {
+        fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
+      } catch(error) {
+        this.logger.error(`Error setting file timestamps: ${error.message}`);
+      }
+    }
+  }
+  
+
 
   async syncOperation({ sourcePath, targetPath, ops }: SyncOperationInput): Promise<SyncOperationOutput> {
     if (ops[0].status === OperationStatus.READY) {
@@ -96,9 +123,8 @@ export class MigrationSyncService {
         return { ops, Status: OperationStatus.ERROR };
       }
     }
-
     if (ops[1]?.status === OperationStatus.READY) {
-      this.logger.log('Stamping meta data');
+      this.stampMetaData(targetPath, ops[1].metadata)
     }
     return { ops, Status: OperationStatus.COMPLETED };
   }
@@ -127,7 +153,6 @@ export class MigrationSyncService {
       } 
       else {
         const fileInfo: FileInfo = await getFileInfo(command.fPath, `${task.sPath}${command.fPath}`, command.fPath);
-        this.logger.log(`File Info: ${JSON.stringify(fileInfo)}`);
         const id = await jobContext.appendToFileList(fileInfo);
         jobContext.filesInfo.lastId = id;
         jobContext.filesInfo.numMessages++;
