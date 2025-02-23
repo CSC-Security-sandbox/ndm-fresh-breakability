@@ -2,7 +2,6 @@ import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workf
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import { DiscoveryScanActivity } from 'src/activities/discovery/discovery-scan-activities';
 
-
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
@@ -13,24 +12,39 @@ const {
   fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
-  publishLastEntry: updateLastEntry
+  publishLastEntry: updateLastEntry,
+  getJobState,
+  setJobState,
 } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
-  const { traceId, options } = args;
+  const { traceId, options, workerId } = args;
   log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(options)}`);
   let iteration = 0;
   try {
     await updateDiscoveryStatus(traceId, 'RUNNING');
     while (true) {
       iteration++;
+      const jobState = await getJobState(traceId);
+      if(jobState.status !== 'RUNNING') {
+        return { message: `Job status changed to ${jobState.status}` };
+      }
       let tasks = await fetchTaskActivity(traceId);
       if (!tasks || tasks.length === 0) {
-        log(traceId, `No tasks found. sending last entry`);
-        await updateLastEntry(traceId)
-        .then(() => log(traceId, `Discovery status updated to Completed`))
-        .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
-        return { message: 'Discovery Completed' };
+        const jobState = await getJobState(traceId);
+        const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
+        const newJobState = { ...jobState, workers_agreed: uniqueAgreedWorkers };
+        await setJobState(traceId, newJobState);
+        const isJobCompleted = newJobState.workers_agreed.length === newJobState.workers.length && newJobState.tasks_completed >= newJobState.tasks_total;
+        if (isJobCompleted) {
+          log(traceId, `No tasks found. sending last entry`);
+          await updateLastEntry(traceId);
+          await updateDiscoveryStatus(traceId, 'COMPLETED');
+          await setJobState(traceId, { ...newJobState, status: 'COMPLETED' });
+          const finalJobState = await getJobState(traceId);
+          log(traceId, `Discovery completed with finalJobState: ${JSON.stringify(finalJobState)}`);
+          return { message: 'Discovery completed' };
+        } continue;
       }
       log(traceId, `task found, total -> ${tasks.length}`);
       for(const task of tasks) {

@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ValidateConnectionActivity } from './validate-connection/validate-connection.service';
 import { ListPathActivity } from './list-path/list-path.service';
 import { LoggerModule } from 'src/logger/logger.module';
@@ -16,7 +16,7 @@ import { MigrationSyncService } from './migrate/migrate.sync.service';
 @Module({
   imports: [HttpModule, LoggerModule, ConfigModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService,MigrationScanService, MigrationTaskService, MigrationSyncService],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, Logger],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService],
 })
 export class ActivitiesModule {}

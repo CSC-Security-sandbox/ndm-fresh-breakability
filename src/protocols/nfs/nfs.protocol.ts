@@ -150,7 +150,7 @@ export class NFSProtocol extends Protocol {
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    this.logger.info(`[${traceId}] Mount result: ${mountResult.message}`);  
-
+    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
+    return mountResult;
   }
 }
