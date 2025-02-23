@@ -31,7 +31,7 @@ export async function DiscoveryWorkflow({
   log(traceId, `DiscoveryWorkflow workerId: ${workerId}`);
   let activeWorkerIds = [workerId];
   const responseArray = await Promise.all(
-    payload.workers.map((workerId) =>
+    activeWorkerIds.map((workerId) =>
       executeChild(SetupWorkerWorkflow, {
         args: [
           {
@@ -49,13 +49,7 @@ export async function DiscoveryWorkflow({
   );
 
   let result = responseArray.flat();
-  // result.map((r) => {
-  //   log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-  //   if (r.status === 'success') {
-  //     activeWorkerIds.push(r.workerId);
-  //   }
-  // });
-
+  
   if (activeWorkerIds.length === 0) {
     return {
       traceId: traceId,

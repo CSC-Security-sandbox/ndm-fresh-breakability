@@ -25,7 +25,7 @@ export class DiscoveryActivity {
 
   async fetchTasks(traceId: string): Promise<any> {
     try {
-      const batchSize = 50;
+      const batchSize = 10;
       const jobContext = await this.redisService.getJobContext(traceId);
       const tasks = await jobContext.groupReadTasks('consumer-1', batchSize);
       const streamMessages = [];
@@ -44,7 +44,7 @@ export class DiscoveryActivity {
       const jobContext = await this.redisService.getJobContext(traceId);
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
       const jobState = await this.getJobState(traceId);
-      const directoryBatchSize = 1;
+      const directoryBatchSize = 500;
       let commandsBatch: Command[] = [];
       for await (const directory of jobContext.groupReadDirs(
         'consumer-1',
