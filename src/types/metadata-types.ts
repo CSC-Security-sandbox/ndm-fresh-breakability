@@ -101,12 +101,23 @@ export class TaskStats implements Serializable {
 
 
 
+export class MetaData{
+  size: number;
+  mtime: Date;
+  atime: Date;
+  ctime: Date;
+  birthtime: Date;
+  mode: number;
+  uid: number;
+  gid: number;
+}
+
 export class CommandOperation {
   cmd: string;
   status: string;
   error?: string;
   errorCode?: string;
-  metadata?: Record<string, string>
+  metadata?: MetaData
 }
 
 export class Command implements Serializable {
