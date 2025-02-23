@@ -82,7 +82,7 @@ export class WorkManagerService {
            const accessToken = await this.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
-                this.httpService.get(`${this.workerConfigUrl}config`, {
+                this.httpService.get(`${this.workerConfigUrl}/config`, {
                   headers: { Authorization: `Bearer ${accessToken}` },
                 }).pipe(
                     retry({
