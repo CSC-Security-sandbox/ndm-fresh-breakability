@@ -40,6 +40,7 @@ export class WorkerOptionsService {
             publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
             setup: this.setupActivityService.setup.bind(this.setupActivityService),
             cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+            mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
             getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
             setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
         });
@@ -53,6 +54,7 @@ export class WorkerOptionsService {
           publishLastEntry: this.discoveryActivities.publishLastEntry.bind(this.discoveryActivities),
           setup: this.setupActivityService.setup.bind(this.setupActivityService),
           cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
+          mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
         });
       default:
         return undefined;
