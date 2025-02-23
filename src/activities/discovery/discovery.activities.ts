@@ -1,12 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { Logger } from 'src/logger/logger.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, FileInfo, JobStatus, Task } from '@netapp-cloud-datamigrate/jobs-lib';
-import { RedisService } from 'src/redis/redis.service';
-import { uuid4 } from '@temporalio/workflow';
-import { WorkersConfig } from 'src/config/app.config';
-import axios from 'axios';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { uuid4 } from '@temporalio/workflow';
+import axios from 'axios';
+import { WorkersConfig } from 'src/config/app.config';
+import { RedisService } from 'src/redis/redis.service';
 
 @Injectable()
 export class DiscoveryActivity {
@@ -62,7 +61,6 @@ export class DiscoveryActivity {
             'PENDING',
             jobContext.jobConfig.workerIds[0],
             jobContext.jobConfig.sourceFileServer.path,
-            jobContext.jobConfig.sourceFileServer.pathId,
             jobContext.jobConfig.sourceFileServer.pathId,
             commandsBatch,
             jobContext.jobConfig?.destinationFileServer?.pathId ?? null,

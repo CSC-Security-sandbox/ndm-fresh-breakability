@@ -1,13 +1,13 @@
-import { Logger } from './../../logger/logger.service';
+
 import { DMError, JobContext, JobStatus, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 // local imports
 import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
-import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from './enums';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { RedisService } from 'src/redis/redis.service';
 
 @Injectable()
 export class DiscoveryScanActivity {

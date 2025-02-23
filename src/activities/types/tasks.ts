@@ -1,40 +1,9 @@
 import { FileInfo, JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
 
-export interface TaskPayload {
-  id: string;
-  jobRunId: string;
-  taskType: string;
-  status: string;
-  workerId: string;
-  sPath: string;
-  tPath: string;
-  excludeFilePatterns: string;
-  commands: ScanCommands[];
-}
-
-export interface ScanCommands {
-  fPath: string;
-  ops: {
-    0: {
-      [x: string]: string;
-      cmd: string;
-    };
-  };
-  commandId?: string;
-  status?: string;
-}
-
 export interface DiscoveryPayload {
   data?: Task;
 }
 
-export interface WorkerMessage {
-  data: TaskResponse;
-  type: MessageType;
-  inventory?: any[];
-  unscanned?: any[];
-  operations: any;
-}
 export enum MessageType {
   ScanResult = 'SCAN_RESULT',
   PullTask = 'PUL_TASK',
@@ -43,26 +12,7 @@ export enum MessageType {
   ProcessInventory = 'PROCESS_INVENTORY',
   CompleteOperation = 'COMPLETE_OPERATION',
 }
-export interface TaskResponse {
-  id: string;
-  jobRunId: string;
-  taskType: string;
-  status: string;
-  workerId: string;
-  sPath: string;
-  tPath: string;
-  commands: ScanCommandsResponse[];
-}
-export interface ScanCommandsResponse {
-  fPath: string;
-  ops: {
-    0: {
-      cmd: string;
-      status: string;
-      data: any;
-    };
-  };
-}
+
 export interface ProcessFolderReadParams {
     files: string[];
     chunkPath: string;
@@ -115,3 +65,4 @@ export interface ProcessInventoryParams {
   taskId: string;
   discoveryStats: TaskStats;
 }
+

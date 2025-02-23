@@ -1,10 +1,9 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Command, FileInfo, JobContext } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { Logger } from "src/logger/logger.service";
 import { RedisService } from "src/redis/redis.service";
 import { OperationStatus, TaskStatus } from "../discovery/enums";
 import { buildTask, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
@@ -29,7 +28,6 @@ export class MigrationScanService {
             return [];
         }
         try {
-            // const items = fs.readdirSync(directoryPath, { withFileTypes: true });
             return  await fs.promises.readdir(directoryPath);
         } catch (error) {
             this.logger.error(`Error reading directory '${directoryPath}': ${error.message}`);

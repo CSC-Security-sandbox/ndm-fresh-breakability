@@ -3,8 +3,8 @@ import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
-import { FileType } from "../type/task.type";
 import { uuid4 } from "@temporalio/workflow";
+import { FileType } from "../types/tasks";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {

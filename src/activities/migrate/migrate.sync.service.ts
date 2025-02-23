@@ -1,14 +1,14 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from "fs"; 
-import * as path from "path";
 import * as crypto from "crypto";
-import { Logger } from "src/logger/logger.service";
+import * as fs from "fs";
+import * as path from "path";
+
+import { FileInfo, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from '../discovery/enums';
+import { getFileInfo } from '../utils/utils';
 import { SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
-import { FileInfo, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
-import { getFileInfo, removePrefix } from '../utils/utils';
 
 @Injectable()
 export class MigrationSyncService {
@@ -91,7 +91,7 @@ export class MigrationSyncService {
         const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
         ops[0] = { ...ops[0], status: OperationStatus.COMPLETED, checksum } as any;
       } catch (error) {
-        ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message }as any;
+        ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
         this.logger.error(`Error in SyncOperation: ${error.message}`);
         return { ops, Status: OperationStatus.ERROR };
       }

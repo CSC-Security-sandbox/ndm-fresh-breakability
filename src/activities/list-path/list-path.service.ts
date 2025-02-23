@@ -1,8 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { WorkersConfig } from 'src/config/app.config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from 'src/protocols/protocol/protocol';
-import { Logger } from 'src/logger/logger.service';
+
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -16,7 +16,7 @@ export class ListPathActivity {
   }
 
   async listPath(traceId: string, protocolType: string, payload: any): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
     );
 

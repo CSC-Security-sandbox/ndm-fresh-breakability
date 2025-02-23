@@ -1,6 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from 'src/logger/logger.service';
+
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 
@@ -16,7 +16,7 @@ export class ValidateConnectionActivity {
   }
 
   async validate(traceId: string, protocolType: string, payload: any, feature: any): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Validating connection for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
     );
     const response = {
@@ -38,7 +38,7 @@ export class ValidateConnectionActivity {
       if (feature.enableVersionFetch) {
         response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
       }
-      this.logger.info(`[${traceId}] Paths: ${response.paths}`);
+      this.logger.log(`[${traceId}] Paths: ${response.paths}`);
       return response;
     } catch (error) {
       return {

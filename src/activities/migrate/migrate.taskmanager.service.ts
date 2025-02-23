@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, JobContext, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
-import { Logger } from "src/logger/logger.service";
 import { RedisService } from 'src/redis/redis.service';
 import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
