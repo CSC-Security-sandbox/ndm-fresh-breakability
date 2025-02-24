@@ -120,7 +120,7 @@ export class InventoryService {
         taskId: task.id,
         jobRunId,
         sPathId: sPathId,
-        tPathId: tPathId,
+        tPathId: tPathId ? (tPathId.length > 0 ? tPathId : null) : null,
         status: OperationStatus.IN_PROCESS,
         operationType: taskType,
         request: command,
