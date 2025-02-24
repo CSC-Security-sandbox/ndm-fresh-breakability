@@ -328,7 +328,7 @@ export class JobRunService {
     };
     sourcefileServerDetails= createFileServerDetails(sourceCredential);
 
-    if (jobType === JobType.MIGRATE) 
+    if (jobType !== JobType.DISCOVER) 
       targetfileServerDetails= createFileServerDetails(targetCredential);
 
       const jobConfig = new JobConfig(
@@ -359,11 +359,11 @@ export class JobRunService {
       'SCAN',
       'PENDING',
       jobRunConfig.workers[0],
-      jobRunConfig.connection.sourceCredential.path,
+      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
       jobRunConfig.connection.sourceCredential.pathId,
       [commands],
-      jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
-      jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? jobRunConfig.connection.targetCredential.pathId: '',
+      jobRunConfig.jobType!==JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
+      jobRunConfig.jobType!==JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
       jobRunConfig.excludeFilePatterns,
     )
     return task;
