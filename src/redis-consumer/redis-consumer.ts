@@ -46,6 +46,7 @@ export enum ConsumerType {
       errors: jobContext.groupReadErrors(readerName, 500),
       tasks: jobContext.readTasks(readerName),
       taskstats: jobContext.groupReadTaskStats(readerName, 500),
+      migrationTask:  jobContext.readMigrationTask(readerName),
       updatedTask: jobContext.readUpdatedTaskInfo(readerName),
     };
 
@@ -81,6 +82,7 @@ export enum ConsumerType {
         if (error.operation) await inventoryService.saveOperationError(error.operation);
       },
       tasks: async (task: Task) => await inventoryService.saveTasks(task),
+      migrationTask: async (task: Task) => await inventoryService.saveTasks(task),
       taskstats: async (taskStat) => {},
       updatedTask: async (task: Task) => {
         await inventoryService.updateTask(task.id, { status: task.status as TaskStatus });

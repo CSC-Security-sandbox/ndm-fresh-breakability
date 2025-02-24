@@ -11,7 +11,7 @@ import { OperationsEntity } from 'src/entities/operation.entity';
 import { randomUUID } from 'crypto';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
+import { OperationError, Task, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
 
 @Injectable()
 export class InventoryService {
@@ -105,7 +105,7 @@ export class InventoryService {
   }
   async saveTasks(data: any) {
     try {
-      const { jobRunId, taskType, status, sPath, tPath, commands, workerId, id } = data;
+      const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
       const taskId = id ?? randomUUID();
       const task: TaskEntity = this.taskRepo.create({
         id: taskId,
@@ -119,8 +119,8 @@ export class InventoryService {
         id: command.commandId,
         taskId: task.id,
         jobRunId,
-        sPathId: sPath,
-        tPathId: null,
+        sPathId: sPathId,
+        tPathId: tPathId ? (tPathId.length > 0 ? tPathId : null) : null,
         status: OperationStatus.IN_PROCESS,
         operationType: taskType,
         request: command,
