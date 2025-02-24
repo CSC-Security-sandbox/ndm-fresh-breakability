@@ -37,11 +37,13 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 - Leave other options as it is.
 
 
+
 ### 5. Review and Create
 - Review all the settings and click "Review + Create" to deploy the VM.
 
 ## Steps to Connect to Your VM
 
+### Access Control Plane VM
 ### 1. Exporting Environment Variables
 
 - Replace the placeholder values with actual values:
