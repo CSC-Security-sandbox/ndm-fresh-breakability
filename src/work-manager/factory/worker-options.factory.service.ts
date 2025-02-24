@@ -7,7 +7,10 @@ import { NativeConnection } from "@temporalio/worker";
 import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
-import { SetupActivityService } from "src/activities/setup-worker/setup.activity";
+import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
+import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
+import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
+import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 import { RedisService } from "src/redis/redis.service";
 
 @Injectable()
@@ -17,7 +20,10 @@ export class WorkerOptionsService {
     private readonly validateConnectionService: ValidateConnectionActivity,
     private readonly discoveryActivities: DiscoveryActivity,
     private readonly discoveryScanActivity: DiscoveryScanActivity,
-    private readonly setupActivityService: SetupActivityService
+    private readonly setupActivityService: SetupActivityService,
+    private readonly migrationScanService: MigrationScanService,
+    private readonly migrationTaskService: MigrationTaskService,
+    private readonly migrationSyncService:MigrationSyncService
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -43,6 +49,13 @@ export class WorkerOptionsService {
             mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
             getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
             setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+            scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
+            publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
+            fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
+            fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+            updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+            updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
+            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -55,6 +68,13 @@ export class WorkerOptionsService {
           setup: this.setupActivityService.setup.bind(this.setupActivityService),
           cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
           mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
+          scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
+          publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
+          fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
+          fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
+          updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+          updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
+          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });
       default:
         return undefined;

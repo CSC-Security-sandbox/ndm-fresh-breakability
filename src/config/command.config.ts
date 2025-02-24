@@ -7,6 +7,7 @@ export enum CommandPattern{
     LIST_PATHS='listPath',
     CHECK_MOUNT_PATH='checkMountPath',
     UNMOUNT_PATH='unmountPath',
+    MOUNT_PATH='mountPath',
     VERSION_DETAIL='versionDetails',
 }
 
@@ -37,35 +38,43 @@ export default registerAs(
         nfs: {
             win: {
                 listPath: process.env.NFS_WIN_LIST_PATH_CMD,
-                versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD
+                versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
+                mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
+                unmountPath:  process.env.NFS_WIN_UNMOUNT_PATH_CMD,
             },
             linux: {
                 listPath: process.env.NFS_LINUX_LIST_PATH_CMD,
                 mountPath:  process.env.NFS_LINUX_MOUNT_PATH_CMD,
                 checkMountPath: process.env.NFS_LINUX_CHECK_MOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD
+                versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
+                unmountPath:  process.env.NFS_LINUX_UNMOUNT_PATH_CMD,
             },
             darwin: {
                 listPath: process.env.NFS_UNIX_LIST_PATH_CMD,
                 mountPath:  process.env.NFS_UNIX_MOUNT_PATH_CMD,
                 checkMountPath: process.env.NFS_UNIX_CHECK_MOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD
+                versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
+                unmountPath:  process.env.NFS_UNIX_UNMOUNT_PATH_CMD,
             },
         },
         smb: {
             win: {
                 validateCred: process.env.SMB_WIN_VALIDATE_CRED_CMD,
                 listPath: process.env.SMB_WIN_LIST_PATH_CMD,
-                versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD
+                mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
+                versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
+                unmountPath:  process.env.SMB_WIN_UNMOUNT_PATH_CMD,
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD
+                versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
+                unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
             },
             darwin: {
                 listPath: process.env.SMB_UNIX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_UNIX_MOUNT_PATH_CMD,
+                unmountPath:  process.env.SMB_UNIX_UNMOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD
             },
         }

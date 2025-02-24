@@ -1,6 +1,5 @@
 import { proxyActivities } from '@temporalio/workflow';
-import { SetupActivityService } from 'src/activities/setup-worker/setup.activity';
-import { json } from 'stream/consumers';
+import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
 
 const { mountAndCheckWritePermission: mountAndCheckWritePermissionActivity } =
   proxyActivities<SetupActivityService>({ startToCloseTimeout: '3000s' });

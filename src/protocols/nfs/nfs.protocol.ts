@@ -7,7 +7,7 @@ import * as net from 'net';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
-import { WorkersConfig } from 'src/config/app.config';
+// import { WorkersConfig } from 'src/config/app.config';
 
 export class NFSProtocol extends Protocol {
 
@@ -92,7 +92,7 @@ export class NFSProtocol extends Protocol {
       traceId,
       ProtocolTypes.NFS,
       payload,
-      WorkersConfig.get('nfsUnmountCommand'),
+      this.getCommandPattern(CommandPattern.UNMOUNT_PATH),
       'NFS Unmount',
     );
 
@@ -141,12 +141,12 @@ export class NFSProtocol extends Protocol {
         }
       }
     }
-    
+
     const mountResult =  await  this.executeCommand(
       traceId,
       ProtocolTypes.NFS,
       payload,
-      WorkersConfig.get('nfsMountCommand'),
+      this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));

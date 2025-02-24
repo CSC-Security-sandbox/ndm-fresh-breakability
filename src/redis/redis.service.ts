@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { RedisUtils, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { RedisUtils, JobContextFactory, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 @Injectable()
@@ -28,7 +28,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Redis client is not initialized');
     }
 
-    const serializedContext = jobContext.serialize();
+    const serializedContext = jobContext.serialize(); // Assuming `serialize()` exists
     await this.redisClient.set(traceId, serializedContext);
     console.log(`[${traceId}] Job context saved to Redis.`);
   }
