@@ -99,7 +99,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(workers|jobs|job-run|bulk-discovery|tasks|bulk-migrate|bulk-cutover)/*"
+  trailingPath: "(workers|jobs|job-run|bulk-discovery|tasks|bulk-migrate|bulk-cutover|jobs-docs)/*"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

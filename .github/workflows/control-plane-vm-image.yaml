@@ -39,16 +39,19 @@ jobs:
     - name: Packer Init
       run: |
         echo "Initializing Packer..."
+        cd app-deployment/packer/control-plane
         packer init -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
 
     - name: Validate Packer Template
       run: |
         echo "Validating Packer template..."
+        cd app-deployment/packer/control-plane
         packer validate -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
 
     - name: Build Azure Image with Packer
       run: |
         echo "Building Azure Image with Packer..."
+        cd app-deployment/packer/control-plane
         packer build -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl | tee packer-output.log
 
     - name: Capture Azure Image Details

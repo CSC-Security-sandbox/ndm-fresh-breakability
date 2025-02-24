@@ -35,7 +35,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(inventory|publish)/*"
+  trailingPath: "(inventory|publish|file-docs)/*"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

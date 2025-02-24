@@ -88,7 +88,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(redis-consumer)/*"
+  trailingPath: "(redis-consumer|db-writer-docs)/*"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

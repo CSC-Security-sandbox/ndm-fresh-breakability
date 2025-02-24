@@ -19,12 +19,12 @@ retry() {
 
     while [ $attempt -le $retries ]; do
         log "Attempt $attempt: $command"
-        timeout $timeout bash -c "$command"
+        timeout "$timeout" bash -c "$command"
         if [ $? -eq 0 ]; then
             return 0
         fi
         log "Command failed, retrying in $delay seconds..."
-        sleep $delay
+        sleep "$delay"
         attempt=$((attempt + 1))
     done
     log "Command failed after $retries attempts: $command"
@@ -217,8 +217,8 @@ main() {
     restart_datamigrator_deployments
     
     setup_metallb
+    retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"
     log "MicroK8s cloud init setup completed successfully"
-    systemctl disable boot-microk8s.service
 }
 
 main

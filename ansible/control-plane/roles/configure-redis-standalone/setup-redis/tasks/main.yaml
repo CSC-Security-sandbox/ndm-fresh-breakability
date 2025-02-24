@@ -140,7 +140,7 @@
       shell: |
         for pod in $(kubectl get pods -n redis -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
-          kubectl logs -n redis --tail=20 $pod
+          kubectl logs -n redis --tail=20 $pod --all-containers=true
           echo "----------------------------------------"
         done
       register: pod_logs

@@ -45,8 +45,15 @@
   become: yes
   command: systemctl daemon-reload
 
-- name: Enable the microk8s boot service
+- name: Disable the boot-microk8s.service from starting on boot
   become: yes
-  systemd:
+  ansible.builtin.systemd_service:
     name: boot-microk8s.service
-    enabled: yes
+    enabled: false
+    state: stopped
+
+# - name: Enable the microk8s boot service
+#   become: yes
+#   systemd:
+#     name: boot-microk8s.service
+#     enabled: yes

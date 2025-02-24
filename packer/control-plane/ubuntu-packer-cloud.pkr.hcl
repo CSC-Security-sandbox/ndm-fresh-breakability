@@ -104,6 +104,7 @@ variable "azure_ubuntu_release_version" {
 # "###################################"
 # "#    Azure source for packer      #"
 # "###################################"
+# az vm image list --location eastus --publisher Canonical --offer ubuntu-24_04-lts --sku server --all --output table
 
 source "azure-arm" "azure_ubuntu" {
   client_id       = var.azure_client_id
@@ -137,7 +138,7 @@ source "azure-arm" "azure_ubuntu" {
 
 
   azure_tags = {
-    "StackName" = "${var.project_name}-control-plane-ami-${local.formatted_timestamp}"
+    "StackName" = "${var.project_name}-control-plane-image-${local.formatted_timestamp}"
     "CreatedBy" = "Packer"
     "Project"   = var.project_name
     "Cloud"     = "Azure"
@@ -152,14 +153,14 @@ build {
     playbook_file       = "../../ansible/control-plane/playbooks/master-playbook.yaml"
     inventory_directory = "../../ansible/control-plane/config"
     user                = "packer"
-    extra_arguments     = ["-v"]
+   #extra_arguments     = ["-v"]
   }
 
 provisioner "shell" {
   execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
   inline = [
-    "shred -u /root/.ssh/authorized_keys /home/packer/.ssh/authorized_keys || true",
-    "echo 'Authorized keys are shredded'",
+    # "shred -u /root/.ssh/authorized_keys /home/packer/.ssh/authorized_keys || true",
+    # "echo 'Authorized keys are shredded'",
     "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"
   ]
   inline_shebang = "/bin/sh -x"

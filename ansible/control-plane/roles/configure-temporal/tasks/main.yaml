@@ -108,7 +108,7 @@
       shell: |
         for pod in $(kubectl get pods -n temporal -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
-          kubectl logs -n temporal $pod
+          kubectl logs -n temporal $pod --all-containers=true
           echo "----------------------------------------"
         done
       register: pod_logs
