@@ -40,13 +40,24 @@ primary:
     user: postgres
     password: {{ postgres_root_password }}
 
+{% if local_cluster is defined %}
   resources:
     requests:
-      cpu: "1"         # Request 1 CPU core (guaranteed)
-      memory: "1Gi"    # Request 1GB RAM (guaranteed)
+      cpu: "0.5"
+      memory: "786Mi"
     limits:
-      cpu: "1.5"       # Allow up to 1.5 CPU cores
-      memory: "2.5Gi"  # Allow up to 2.5GB RAM
+      cpu: "1.2"
+      memory: "1.7Gi"
+{% else %}
+  resources:
+    requests:
+      cpu: "0.7"
+      memory: "786Mi"
+    limits:
+      cpu: "1.5"
+      memory: "2.5Gi"
+{% endif %}
+
 
 volumePermissions:
   enabled: true

@@ -16,13 +16,27 @@ admin-service:
   liquibase:
     image:
       tag: {{ admin_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
-  
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
+
 config-service:
   image:
     tag: {{ config_service_tag | default(common_tag) | default("latest") }}
   liquibase:
     image:
       tag: {{ config_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
 
 db-writer:
   image:
@@ -30,6 +44,13 @@ db-writer:
   liquibase:
     image:
       tag: {{ db_writer_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
 
 jobs-service:
   image:
@@ -37,10 +58,24 @@ jobs-service:
   liquibase:
     image:
       tag: {{ jobs_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
 
 file-service:
   image:
     tag: {{ file_service_tag | default(common_tag) | default("latest") }}
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
 
 reports-service:
   image:
@@ -48,8 +83,21 @@ reports-service:
   liquibase:
     image:
       tag: {{ reports_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
-  
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}
+
 data-migrate-ui:
   image:
     tag: {{ data_migrate_ui_tag | default(common_tag) | default("latest") }}
-
+{% if local_cluster is not defined %}
+  addResourceLimits: true
+  memoryRequest: "512Mi"
+  cpuRequest: "200m"
+  memoryLimit: "768Mi"
+  cpuLimit: "500m"
+{% endif %}

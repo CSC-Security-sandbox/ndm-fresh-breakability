@@ -69,9 +69,6 @@ env:
     value: "/job-service"
   - name: MOUNT_BASE_PATH
     value: "/mnt/datamigrator"
-
-  - name: DB_SCHEMA
-    value: "datamigrator"
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
   - name: REDIS_HOST

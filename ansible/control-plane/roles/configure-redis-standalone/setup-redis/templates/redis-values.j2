@@ -15,14 +15,23 @@ master:
     selector:
         matchLabels:
             role: redis-data
-
+{% if local_cluster is defined %}
   resources:
     requests:
-      cpu: "0.5"        # Request 0.5 CPU cores (guaranteed)
-      memory: "512Mi"   # Request 512MB RAM (guaranteed)
+      cpu: "0.3"
+      memory: "512Mi"
     limits:
-      cpu: "1"          # Allow up to 1 CPU core
-      memory: "1Gi"     # Allow up to 1GB RAM
+      cpu: "1"
+      memory: "1Gi"
+{% else %}
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "786Mi"
+    limits:
+      cpu: "1.2"
+      memory: "1.5Gi"
+{% endif %}
 
 volumePermissions:
   enabled: true
