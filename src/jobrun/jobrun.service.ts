@@ -126,7 +126,8 @@ export class JobRunService {
         firstRunAt: LessThan(currentTime)
       },
     })
-    jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
+    for(const job of jobs)
+      await this.createJobRun(job.id, currentTime)
     return jobs;
   }
 
@@ -229,35 +230,36 @@ export class JobRunService {
       options: options,
     });
     const jobRun = await this.jobRunRepo.save(jobRunRecord);
-    await this.intiateWorkflow(jobRun.id, details.jobType,details)
-    
-    // make JobConfig Active
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-  
-  //  await this.sendMountMessage(details, jobRun.id)
-
-    this.eventEmitter.emit(EmitterEvents.CREATE_TASK, {
-      jobRunId: jobRun.id,
-      status: jobRun.status,
-      details: details
-    });
-
+    await this.initiateWorkflow(jobRun.id, details.jobType,details)
     return jobRun
   }
 
 
-  async intiateWorkflow(jobRunId: string, jobType: JobType,jobRunConfig: JobRunConfig) {
-    const jobWorkflowMap = {
-      [JobType.MIGRATE]: () => this.startMigrateWorkFlow(),
-      [JobType.DISCOVER]: () => this.starDiscoveryWorkFlow(jobRunId,jobRunConfig,jobType),
-    };    
-    const jobRunWorkflow = await jobWorkflowMap[jobType]?.();
-    await this.jobRunRepo.update({id: jobRunId}, {workFlowId: jobRunWorkflow?.workflowId});
-    this.logger.log(`Starting ${jobType} workflow for jobRunId: ${jobRunId} , with workflowId: ${jobRunWorkflow?.workflowId}`);
+  async initiateWorkflow(jobRunId: string, jobType: JobType, jobRunConfig: JobRunConfig) {
+    let jobRunWorkflow;
+  
+    switch (jobType) {  
+      case JobType.DISCOVER:
+        jobRunWorkflow = await this.starDiscoveryWorkFlow(jobRunId, jobRunConfig, jobType);
+        break;
+  
+      default:
+        jobRunWorkflow = await this.startMigrateWorkFlow(jobRunId, jobRunConfig, jobType);
+        return;
+    }
+    if (jobRunWorkflow) {
+      await this.jobRunRepo.update(
+        { id: jobRunId },
+        { workFlowId: jobRunWorkflow.workflowId }
+      );
+      this.logger.log(
+        `Starting ${jobType} workflow for jobRunId: ${jobRunId}, with workflowId: ${jobRunWorkflow.workflowId}`
+      );
+    }
   }
 
-  async starDiscoveryWorkFlow(jobRunId: string, jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
-   //TODDO : fetch it from config??
+  async starDiscoveryWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
     const options = {
       workflowExecutionTimeout: '60s',
       workflowTaskTimeout: '30s',
@@ -271,9 +273,9 @@ export class JobRunService {
       args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
       options:options
     }
-  const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
-  await this.startStreamConsumer(jobRunId)
-  return {workflowId : workflow.workflowId}
+    const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+    await this.startStreamConsumer(jobRunId)
+    return {workflowId : workflow.workflowId}
   }
 
 
@@ -303,12 +305,12 @@ export class JobRunService {
         readerName: `${consumerType}-reader`,
         consumerType: consumerType,
       };
-   try {
-      const response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, payload);
-      this.logger.log(`Started consumer for ${consumerType}:`, response.data);
-    } catch (error) {
-      this.logger.error(`Failed to start consumer for ${consumerType}:`, error.message);
-    }
+      try {
+        const response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, payload);
+        this.logger.log(`Started consumer for ${consumerType}:`, response.data);
+      } catch (error) {
+        this.logger.error(`Failed to start consumer for ${consumerType}:`, error.message);
+      }
     }
   }
 
@@ -343,14 +345,14 @@ export class JobRunService {
       const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
       const jobContext = JobContextFactory.getProvider('redis', redisClient)
       .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-       (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId, jobRunConfig));
+       (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
       redisClient.set(jobRunId, (await jobContext).serialize());
   }
 
-  async createIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-    const sourceBasePath = `${mountBasePath}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
-    const commands = new Command(`${sourceBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
+  async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
+
+    const sourceBasePath =  jobRunConfig.jobType === JobType.DISCOVER ? `${this.configService.get<string>('app.paths.mountBasePath')}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`: '';
+    const commands = new Command(sourceBasePath, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
     const task = new Task(
       uuid4(),
       jobRunId,
@@ -360,40 +362,30 @@ export class JobRunService {
       jobRunConfig.connection.sourceCredential.path,
       jobRunConfig.connection.sourceCredential.pathId,
       [commands],
-      jobRunConfig.jobType === JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.pathId : '',
+      jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
+      jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? jobRunConfig.connection.targetCredential.pathId: '',
       jobRunConfig.excludeFilePatterns,
     )
     return task;
   }
 
-  buildTaskPaylod =(taskEntity: TaskEntity, jobRunConfig: JobRunConfig,operations:OperationsEntity): Task => {
-    const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-    const sourcePath = `${taskEntity.jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
-      const commands = new Command(`${mountBasePath}/${sourcePath}`, {0: {cmd : taskEntity.taskType, status: 'PENDING'}}, operations.id)
-      const task = new Task(
-        taskEntity.id,
-        taskEntity.jobRunId,
-        taskEntity.taskType,
-        taskEntity.status,
-        jobRunConfig.workers[0], //TODO: need to change it
-        jobRunConfig.connection.sourceCredential.path,
-        jobRunConfig.connection.sourceCredential.path,
-        [commands],
-        jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
-        jobRunConfig.excludeFilePatterns,
-      )
-      return task;
-  }
-  buildFilepath = (path: string, volumePath: string) => { 
-    if(path.startsWith('/')){
-      return `${path}${volumePath}`
+  async startMigrateWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
+    const options = {
+      workflowExecutionTimeout: '60s',
+      workflowTaskTimeout: '30s',
+      workflowRunTimeout: '30s',
+      startDelay: '1s'
     }
-    return `${path}/${volumePath}`
-}
-
-  async startMigrateWorkFlow(): Promise<{workflowId: string}> {
-      //TODO: Implement the migration workflow
-    return {workflowId: 'migrate-workflow-id'}
+    await this.buildJobContext(jobRunId,jobRunConfig,jobType);
+    const startWorkFlowPayload: StartWorkFlowPayload = {
+      workflowId: WorkFlows.MIGRATE + '-' + jobRunId,
+      taskQueue: 'ParentWorkflow-TaskQueue',
+      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
+      options:options
+    }
+  const workflow = await this.workFlowService.startWorkflow(WorkFlows.MIGRATE, startWorkFlowPayload)
+  await this.startStreamConsumer(jobRunId)
+  return {workflowId : workflow.workflowId}
   }
   
   //  ------------------- sendMountMessage ------------------ //

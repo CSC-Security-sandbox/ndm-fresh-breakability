@@ -117,6 +117,7 @@ export enum WorkFlowType {
 export enum WorkFlows{
     DISCOVERY = 'DiscoveryWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
+    MIGRATE = 'MigrationWorkflow'
 }
 
 export enum ConsumerType{
@@ -124,6 +125,7 @@ export enum ConsumerType{
     directories='directories',
     tasks='tasks',
     updatedTask = "updatedTask",
-    errors = 'errors'
+    errors = 'errors',
+    migrationTask='migrationTask'
 }
 
