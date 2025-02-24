@@ -47,7 +47,7 @@ async function bootstrap() {
   .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document,{
+  SwaggerModule.setup('reports-docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
   app.enableShutdownHooks();
