@@ -356,6 +356,7 @@ export class JobRunService {
       'SCAN',
       'PENDING',
       jobRunConfig.workers[0],
+      jobRunConfig.connection.sourceCredential.path,
       jobRunConfig.connection.sourceCredential.pathId,
       [commands],
       jobRunConfig.jobType === JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.pathId : '',
@@ -374,6 +375,7 @@ export class JobRunService {
         taskEntity.taskType,
         taskEntity.status,
         jobRunConfig.workers[0], //TODO: need to change it
+        jobRunConfig.connection.sourceCredential.path,
         jobRunConfig.connection.sourceCredential.path,
         [commands],
         jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver  ? jobRunConfig.connection.targetCredential.path : '',
@@ -473,8 +475,6 @@ export class JobRunService {
       const jobContext = await redisContextProvider.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Pending;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      const serializedContext = jobContext.serialize();
-      await redisClient.set(jobRunId, serializedContext);
       await redisClient.set(jobRunId, jobContext.serialize());
       await this.resumeJobRun(jobRunId);
     }
