@@ -328,7 +328,7 @@ export class JobRunService {
     };
     sourcefileServerDetails= createFileServerDetails(sourceCredential);
 
-    if (jobType !== JobType.MIGRATE) 
+    if (jobType !== JobType.DISCOVER) 
       targetfileServerDetails= createFileServerDetails(targetCredential);
 
       const jobConfig = new JobConfig(
