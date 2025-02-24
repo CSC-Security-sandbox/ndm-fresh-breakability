@@ -23,17 +23,18 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 ### 4. Configure VM Settings
 - **Subscription**: MigrationAsAService-dev
 - **Resource Group**: datamigrate-acr-resource-group
+- **VM name**: Use your name as prefix for any VM you create.
 - **Image**: Choose the custom Packer-created image for control plane or worker as required.
 - **Size**: Select size based on the image you are deploying. For control plane, select a larger image.
-- **License type**: Other
 - **Administrator Account**:
     - **Username**: Enter `ubuntu`.
     - **SSH Public Key**: Paste your SSH public key or create a new one.
-- **Disks**: leave the settings as it is.
-- **Delete disk on VM delete**: Select this option
+- **License type**: Other
+- **Disks**: Select delete OS disk with VM.
 - **Virtual Network (VNet)**: datamigrate-dev-vnet
 - **Public IP**: Set to "None" to avoid assigning a public IP.
 - **Delete NIC when VM is deleted**: Select this option
+- Leave other options as it is.
 
 
 
@@ -59,7 +60,7 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
     az login --service-principal --username "${AZ_USERNAME}" --password "${AZ_PASSWORD}" --tenant "${AZ_TENANT}"
     ```
 - Open Azure bastion tunnel. 
-- Get the VM name from azure > select VM > JSON view > resource ID
+- Get the VM name from Azure > Select VM > JSON view > Resource ID
     ```sh
     az network bastion tunnel --resource-group datamigrate-acr-resource-group --target-resource-id $vmname --resource-port 22 --port 3022 --name datamigrate-dev-vnet-bastion &
     ```
@@ -74,11 +75,16 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
     ```sh
     sudo su - datamigrator
     ```
-### 4. Wait for Application to Boot Up
-- After logging in, wait for the application to boot up. This may take a few minutes.
-- Check the status of boot service and logs using the following comamands:
+### 4.  Check service status
+- Check the status of boot service and logs using the following comamands. The service will be in disabled state at this point.
     ```sh
     sudo systemctl status boot-microk8s.service
+    ```
+### 5.  Start the boot service & boot Up the application
+- After logging in, start the application boot up. This may take a few minutes.
+- Start the boot service and check logs using the following comamands.
+    ```sh
+    sudo systemctl start boot-microk8s.service &
     tail -10f /var/log/datamigrator/microk8s-boot.log
     ```
 
@@ -102,7 +108,7 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
     --tenant "${AZ_TENANT}"
     ```
 - Open Azure bastion tunnel. 
-- Get the VM name from azure > select VM > JSON view > resource ID for data-plane server
+- Get the VM name from Azure > Select VM > JSON view > Resource ID for data-plane server
     ```sh
     az network bastion tunnel --resource-group datamigrate-acr-resource-group --target-resource-id $vmname --resource-port 22 --port 4022 --name datamigrate-dev-vnet-bastion &
     ```
