@@ -141,8 +141,26 @@ export class ConfigurationService {
     }
 
     async getCutoverDetailsByConfigId(configId: string) {
-        if (!isUUID(configId))
-            throw new BadRequestException('Invalid configId')
+        if (!isUUID(configId)) {
+            throw new BadRequestException('Invalid configId');
+        }
+    
+        try {
+            const config = await this.fetchConfigWithRelations(configId);
+            const validJobConfigs = this.extractValidJobConfigs(config);
+    
+            if (validJobConfigs.length === 0) return [];
+    
+            const volumeMap = await this.getVolumeDetailsMap(validJobConfigs);
+    
+            return this.constructResponse(validJobConfigs, volumeMap);
+        } catch (error) {
+            console.error('Error fetching cutover details:', error.message);
+            throw new InternalServerErrorException('An error occurred while processing the request.');
+        }
+    }
+    
+    private async fetchConfigWithRelations(configId: string) {
         const config = await this.configEntity.findOne({
             select: {
                 id: true,
@@ -160,11 +178,7 @@ export class ConfigurationService {
                             id: true,
                             jobType: true,
                             sourcePathId: true,
-                            targetPathId: true,
-                            jobRunDetails: {
-                                id: true,
-                                status: true
-                            }
+                            targetPathId: true
                         }
                     }
                 }
@@ -177,69 +191,53 @@ export class ConfigurationService {
                             jobRunDetails: true
                         }
                     }
-
                 }
             }
         });
-
-        if (!config) throw new NotFoundException(`Config for id ${configId} not found.`);
-
-        const response = [];
-
-        for (const fileServer of config.fileServers) {
-            for (const volume of fileServer.volumes) {
-                const validJobConfigs = volume.jobConfig
+    
+        if (!config) {
+            throw new NotFoundException(`Config for id ${configId} not found.`);
+        }
+    
+        return config;
+    }
+    
+    private extractValidJobConfigs(config: ConfigEntity) {
+        return config.fileServers.flatMap(fileServer =>
+            fileServer.volumes.flatMap(volume =>
+                volume.jobConfig
                     .filter(jobConfig =>
                         jobConfig.jobType === JobType.Migrate &&
                         jobConfig.jobRunDetails.some(jobRun => jobRun.status === JobRunStatus.Completed)
                     )
-
-                if (validJobConfigs.length > 0) {
-                    response.push({
+                    .map(job => ({
                         protocol: fileServer.protocol,
-                        sourcePath: {},
-                        destinationFileServer: {},
-                        destinationPath: {},
-                        jobConfig: validJobConfigs,
-                    });
-                }
-            }
-        }
-
-        for (const obj of response) {
-            for (const jobConfig of obj.jobConfig) {
-                const sourceData = await this.volumeDetails(jobConfig.sourcePathId, 'source');
-                const targetData = await this.volumeDetails(jobConfig.targetPathId, 'target');
-                obj.sourcePath = { id: sourceData.id, sourcePathName: sourceData.volumePath };
-                obj.destinationPath = { id: targetData.id, destinationPathName: targetData.volumePath };
-                obj.destinationFileServer = { id: targetData.configId, destinationFileServerName: targetData.configName };
-                obj.jobConfig = obj.jobConfig.map(config => ({
-                    id: config.id,
-                    jobType: config.jobType,
-                    jobRunDetails: config.jobRunDetails
-                }));
-            }
-        }
-
-        return response;
+                        sourcePathId: job.sourcePathId,
+                        targetPathId: job.targetPathId,
+                        jobConfig: {
+                            id: job.id,
+                            jobType: job.jobType,
+                            jobRunDetails: job.jobRunDetails.map(runDetail => ({
+                                id: runDetail.id,
+                                status: runDetail.status
+                            }))
+                        }
+                    }))
+            )
+        );
     }
-
-    async volumeDetails(volumeId: string, fileServer: string): Promise<{
-        id: string;
-        volumePath: string;
-        configId?: string;
-        configName?: string;
-    }> {
-        if (fileServer === 'source') {
-            const volume = await this.volumes.findOne({ where: { id: volumeId }, select: ['id', 'volumePath'] });
-            return {
-                id: volume?.id || '',
-                volumePath: volume?.volumePath || ''
-            };
+    
+    private async getVolumeDetailsMap(validJobConfigs: any[]) {
+        const volumeIds = [
+            ...new Set(validJobConfigs.flatMap(job => [job.sourcePathId, job.targetPathId]))
+        ].filter(Boolean);
+    
+        if (volumeIds.length === 0) {
+            throw new NotFoundException('No valid volumes found for the given config.');
         }
-
-        const volumeWithConfig = await this.volumes.findOne({
-            where: { id: volumeId },
+    
+        const volumeDetails = await this.volumes.find({
+            where: { id: In(volumeIds) },
             relations: ['fileServer', 'fileServer.config'],
             select: {
                 id: true,
@@ -248,20 +246,50 @@ export class ConfigurationService {
                     id: true,
                     config: {
                         id: true,
-                        configName: true,
+                        configName: true
                     }
                 }
             }
         });
-
-        return {
-            id: volumeWithConfig?.id || '',
-            volumePath: volumeWithConfig?.volumePath || '',
-            configId: volumeWithConfig?.fileServer?.config?.id,
-            configName: volumeWithConfig?.fileServer?.config?.configName
-        };
+    
+        if (!volumeDetails.length) {
+            throw new NotFoundException('Volume details not found.');
+        }
+    
+        return new Map(volumeDetails.map(volume => [
+            volume.id,
+            {
+                id: volume.id,
+                sourcePathName: volume.volumePath,
+                destinationPathName: volume.volumePath,
+                configId: volume.fileServer?.config?.id || '',
+                configName: volume.fileServer?.config?.configName || ''
+            }
+        ]));
     }
-
+    
+    private constructResponse(validJobConfigs: any[], volumeMap: Map<string, any>) {
+        return validJobConfigs.map(job => ({
+            protocol: job.protocol,
+            sourcePath: volumeMap.get(job.sourcePathId) ? {
+                id: volumeMap.get(job.sourcePathId)?.id,
+                sourcePathName: volumeMap.get(job.sourcePathId)?.sourcePathName
+            } : { id: '', sourcePathName: '' },
+    
+            destinationFileServer: volumeMap.get(job.targetPathId) ? {
+                id: volumeMap.get(job.targetPathId)?.configId,
+                destinationFileServerName: volumeMap.get(job.targetPathId)?.configName
+            } : {},
+    
+            destinationPath: volumeMap.get(job.targetPathId) ? {
+                id: volumeMap.get(job.targetPathId)?.id,
+                destinationPathName: volumeMap.get(job.targetPathId)?.destinationPathName
+            } : { id: '', destinationPathName: '' },
+    
+            jobConfig: [job.jobConfig]
+        }));
+    }
+    
     async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
         const credentials:Credentials[] = []
         try {
