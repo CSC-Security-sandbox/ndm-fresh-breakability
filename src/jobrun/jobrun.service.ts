@@ -349,7 +349,8 @@ export class JobRunService {
 
   async createIntialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
     const mountBasePath = this.configService.get<string>('app.paths.mountBasePath');
-    const commands = new Command(`${mountBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
+    const sourceBasePath = `${mountBasePath}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`;
+    const commands = new Command(`${sourceBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
     const task = new Task(
       uuid4(),
       jobRunId,
