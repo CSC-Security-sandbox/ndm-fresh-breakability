@@ -345,7 +345,7 @@ export class JobRunService {
       const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
       const jobContext = JobContextFactory.getProvider('redis', redisClient)
       .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-       (await jobContext).appendToTaskList(await this.createIntialTask(jobRunId, jobRunConfig));
+       (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
       redisClient.set(jobRunId, (await jobContext).serialize());
   }
 
