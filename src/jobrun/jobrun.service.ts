@@ -430,7 +430,6 @@ export class JobRunService {
       jobContext.jobState.status = JobContextStatus.Paused;
       const serializedContext = jobContext.serialize();
       await redisClient.set(jobRunId, serializedContext);
-      await redisClient.set(jobRunId, jobContext.serialize());
     }
     return {details: 'Operation Completed Successfully'}
   }
