@@ -21,7 +21,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('/api/v1/api-docs', app, document, {jsonDocumentUrl:"/swagger/json"});
+  SwaggerModule.setup('/api/v1/admin-docs', app, document, {jsonDocumentUrl:"/swagger/json"});
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
   await app.listen(3000);
