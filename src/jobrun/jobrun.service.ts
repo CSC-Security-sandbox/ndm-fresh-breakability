@@ -336,8 +336,8 @@ export class JobRunService {
         jobType,
         sourcefileServerDetails,
         jobRunConfig.connection.sourceCredential.path,
-        jobType === JobType.MIGRATE ? targetfileServerDetails : undefined,
-        jobType === JobType.MIGRATE ? jobRunConfig.connection.targetCredential.path : undefined,
+        jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
+        jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
         jobRunConfig.workers
       )
       const redisClient = await RedisUtils.getClient();
