@@ -350,15 +350,16 @@ export class JobRunService {
   }
 
   async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-    const mountBasePath = jobRunConfig.jobType === JobType.DISCOVER ? this.configService.get<string>('app.paths.mountBasePath') : '';
-    const commands = new Command(`${mountBasePath}`, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
+
+    const sourceBasePath =  jobRunConfig.jobType === JobType.DISCOVER ? `${this.configService.get<string>('app.paths.mountBasePath')}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`: '';
+    const commands = new Command(sourceBasePath, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
     const task = new Task(
       uuid4(),
       jobRunId,
       'SCAN',
       'PENDING',
       jobRunConfig.workers[0],
-      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`,
+      jobRunConfig.connection.sourceCredential.path,
       jobRunConfig.connection.sourceCredential.pathId,
       [commands],
       jobRunConfig.jobType===JobType.MIGRATE || jobRunConfig.jobType===JobType.CutOver ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
@@ -424,7 +425,6 @@ export class JobRunService {
       jobContext.jobState.status = JobContextStatus.Paused;
       const serializedContext = jobContext.serialize();
       await redisClient.set(jobRunId, serializedContext);
-      await redisClient.set(jobRunId, jobContext.serialize());
     }
     return {details: 'Operation Completed Successfully'}
   }
@@ -468,8 +468,6 @@ export class JobRunService {
       const jobContext = await redisContextProvider.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Pending;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      const serializedContext = jobContext.serialize();
-      await redisClient.set(jobRunId, serializedContext);
       await redisClient.set(jobRunId, jobContext.serialize());
       await this.resumeJobRun(jobRunId);
     }
