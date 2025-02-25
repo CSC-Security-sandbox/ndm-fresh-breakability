@@ -743,12 +743,13 @@ export class JobRunService {
         } catch (e) {
           throw new Error(`Invalid cron expression in futureScheduleAt: ${e.message}`);
         }
+      } else {
+        await this.jobConfigRepo.update(
+          { id: jobRunDetails.jobConfigId },
+          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+        );
       }
-      this.jobConfigRepo.update(
-        { id: jobRunDetails.jobConfigId },
-        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-      );
-      return this.jobRunRepo.update(
+      await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date() }
       );
