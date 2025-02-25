@@ -8,7 +8,7 @@ import { FileInfo, JobContext, MetaData } from '@netapp-cloud-datamigrate/jobs-l
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from '../discovery/enums';
 import { formatDate, getFileInfo } from '../utils/utils';
-import { SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+import { OPS_CMD, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 
 @Injectable()
@@ -83,7 +83,13 @@ export class MigrationSyncService {
     }
     return checksum;
   }
-  
+
+
+  async ensureDirectoryExists(directoryPath: string) {
+    if (!fs.existsSync(directoryPath)) {
+      fs.mkdirSync(directoryPath, { recursive: true });
+    }
+  }
 
   stampMetaData(filePath: string, metadata: MetaData) {
     if(metadata?.mode) {
@@ -110,17 +116,29 @@ export class MigrationSyncService {
     }
   }
   
-
-
   async syncOperation({ sourcePath, targetPath, ops }: SyncOperationInput): Promise<SyncOperationOutput> {
     if (ops[0].status === OperationStatus.READY) {
-      try {
-        const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
-        ops[0] = { ...ops[0], status: OperationStatus.COMPLETED, checksum } as any;
-      } catch (error) {
-        ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
-        this.logger.error(`Error in SyncOperation: ${error.message}`);
-        return { ops, Status: OperationStatus.ERROR };
+      if(ops[0].cmd === OPS_CMD.COPY_CONTENT) {
+        try {
+          this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
+          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
+          ops[0] = { ...ops[0], status: OperationStatus.COMPLETED, checksum } as any;
+        } catch (error) {
+          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          this.logger.error(`Error in SyncOperation File: ${error.message}`);
+          return { ops, Status: OperationStatus.ERROR };
+        }
+      }
+      if(ops[0].cmd === OPS_CMD.COPY_DIR) {
+        try {
+          this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
+          await this.ensureDirectoryExists(targetPath);
+          ops[0] = { ...ops[0], status: OperationStatus.COMPLETED };
+        } catch (error) {
+          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
+          return { ops, Status: OperationStatus.ERROR };
+        }
       }
     }
     if (ops[1]?.status === OperationStatus.READY) {
@@ -166,7 +184,6 @@ export class MigrationSyncService {
     id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
-
     return { status: isError ? 'ERROR' : 'COMPLETE' };
   }
 }
