@@ -38,7 +38,6 @@ import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-import { isUUID } from "class-validator";
 
 @Injectable()
 export class JobRunService {
@@ -415,10 +414,6 @@ export class JobRunService {
   }
 
   async cutoverApprove(jobRunId: string) {
-    if (!isUUID(jobRunId)) {
-      throw new BadRequestException(CutoverErrors.INVALID_JOB_RUN_ID);
-    }
-
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       relations: ['jobConfig'],
