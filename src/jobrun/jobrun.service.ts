@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ConsumerType, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
+import { ConsumerType, CutoverErrors, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -38,6 +38,7 @@ import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
+import { isUUID } from "class-validator";
 
 @Injectable()
 export class JobRunService {
@@ -411,6 +412,35 @@ export class JobRunService {
       default:
         throw new BadRequestException('Invalid Action Type')
     }
+  }
+
+  async cutoverApprove(jobRunId: string) {
+    if (!isUUID(jobRunId)) {
+      throw new BadRequestException(CutoverErrors.INVALID_JOB_RUN_ID);
+    }
+
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ['jobConfig'],
+    });
+
+    if (!jobRun) {
+      throw new NotFoundException(CutoverErrors.JOB_RUN_NOT_FOUND);
+    }
+
+    if (jobRun.jobConfig.jobType !== JobType.CutOver) {
+      throw new BadRequestException(CutoverErrors.INVALID_JOB_TYPE);
+    }
+
+    if (jobRun.status !== JobRunStatus.Blocked) {
+      throw new BadRequestException(CutoverErrors.INVALID_JOB_STATUS);
+    }
+
+    jobRun.status = JobRunStatus.Completed;
+
+    await this.jobRunRepo.save(jobRun);
+
+    return 'Cutover job approved successfully';
   }
 
   //  ------------------- JobRun actions PAUSE ------------------ //

@@ -48,6 +48,13 @@ export class JobRunController {
     return this.jobRunService.actions(jobRunActions)
   }
 
+  @ApiOperation({ summary: 'Approve cutover by jon run ID' })
+  @ApiResponse({ status: 200, description: 'The cutover job approved successfully.' })
+  @Put('/cutover/approve')
+  async cutoverApprove(@Body() jobRunId: string) {
+    return this.jobRunService.cutoverApprove(jobRunId);
+  }
+
   @ApiOperation({ summary: 'Creates excesive job run based on job config' })
   @ApiResponse({ status: 200, description: 'The job run created completed successfully .' })
   @Post('/ad-hoc')
