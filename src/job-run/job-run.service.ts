@@ -129,6 +129,11 @@ export class JobRunService {
         
         if(jobRun.jobConfig.jobType===JobType.Discover)
           response['discovery'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.Migrate) 
+          response['migrate'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.CutOver) 
+          response['cutOver'] = jobRunStatus
+
 
         const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
             .createQueryBuilder('t')
