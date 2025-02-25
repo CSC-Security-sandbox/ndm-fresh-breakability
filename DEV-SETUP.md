@@ -236,3 +236,56 @@ Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are ch
     ```sh
     tail -20f /opt/datamigrator/logs/datamigrator-worker.log
     ```
+
+## Commands reference
+
+### kubectl commands reference
+
+- To get the pods in `datamigrator` namespace
+  ```sh
+  kubectl get pods -n datamigrator
+  ```
+- To get the logs for a pod in `datamigrator` namespace
+  ```sh
+  kubectl logs <podname> -n datamigrator
+  ```
+- To describe a pod in `datamigrator` namespace
+  ```sh
+  kubectl describe <podname> -n datamigrator
+  ```
+- To get all namespaces
+  ```sh
+  kubectl get ns
+  ```
+- To get the pods in any namespace
+  ```sh
+  kubectl get pods -n <NAMESPACE>
+  ```
+
+### Unseal vault
+
+- If you encounter an issue where vault is sealed, follow these steps to unseal vault.
+- Replace VAULT_UNSEAL_KEY with your key
+  ```sh
+  sudo su - datamigrator
+  jq -r ".unseal_keys_b64[]" /opt/datamigrator/vault/cluster-keys.json
+  kubectl exec vault-0 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  kubectl exec vault-1 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  kubectl exec vault-2 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  ```
+
+### Debug worker service
+
+- SSH into the worker VM
+
+    ```sh
+    multipass shell datamigrator-worker
+    ```
+- Verify the status of the worker:
+    ```sh
+    systemctl status datamigrator-worker.service
+    ```
+- Check the logs using the following command:
+    ```sh
+    tail -20f /opt/datamigrator/logs/datamigrator-worker.log
+    ```
