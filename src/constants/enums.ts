@@ -63,7 +63,8 @@ export enum JobRunStatus {
     Stopped = 'STOPPED',
     Completed = 'COMPLETED',
     Failed = 'FAILED',
-    Errored = 'ERRORED'
+    Errored = 'ERRORED',
+    Blocked = 'BLOCKED'
 }
 
 export enum TaskType {
@@ -129,3 +130,6 @@ export enum ConsumerType{
     migrationTask='migrationTask'
 }
 
+export enum CutoverErrors {
+    VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND'
+}

@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { JobRunDetailsDTO } from './dto/jobrun.dto';
-import { JobRunActionsReq } from './dto/jobrunactions.dto';
+import { ApproveData, JobRunActionsReq } from './dto/jobrunactions.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunService } from './jobrun.service';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
@@ -46,6 +46,13 @@ export class JobRunController {
   @Put('/action')
   async actions(@Body() jobRunActions: JobRunActionsReq) {
     return this.jobRunService.actions(jobRunActions)
+  }
+
+  @ApiOperation({ summary: 'Approve cutover by jon run ID' })
+  @ApiResponse({ status: 200, description: 'The cutover job approved successfully.' })
+  @Put('/cutover/approve')
+  async cutoverApprove(@Body() approveData: ApproveData) {
+    return this.jobRunService.cutoverApprove(approveData?.jobRunId);
   }
 
   @ApiOperation({ summary: 'Creates excesive job run based on job config' })
