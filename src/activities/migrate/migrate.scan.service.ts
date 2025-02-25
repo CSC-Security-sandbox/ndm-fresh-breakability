@@ -60,6 +60,10 @@ export class MigrationScanService {
                     jobContext.dirsInfo.lastId = id;
                     jobContext.dirsInfo.numMessages++;
                     syncContentOutput.isGeneratedTask = true;
+                    if(!targetContent.has(item)) {
+                        const command = this.buildCommand(sourceStat, fileInfo.path);
+                        if (command) commands.push(command);
+                    }
                 } else if (!targetContent.has(item)) {
                     syncContentOutput.files++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
@@ -137,7 +141,7 @@ export class MigrationScanService {
             return new Command(
                 fPath,
                 {
-                    0: { cmd: OPS_CMD.COPY_CONTENT, status: OperationStatus.READY },
+                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OperationStatus.READY },
                     1: { cmd: OPS_CMD.STAMP_META, status: OperationStatus.READY, metadata}
                 },
                 uuid4()
