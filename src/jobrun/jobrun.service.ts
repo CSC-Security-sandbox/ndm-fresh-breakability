@@ -415,27 +415,22 @@ export class JobRunService {
 
   async cutoverApprove(jobRunId: string) {
     const jobRun = await this.jobRunRepo.findOne({
-      where: { id: jobRunId },
+      where: {
+        id: jobRunId,
+        status: JobRunStatus.Blocked,
+        jobConfig: { jobType: JobType.CutOver }
+      },
       relations: ['jobConfig'],
     });
 
     if (!jobRun) {
-      throw new NotFoundException(CutoverErrors.JOB_RUN_NOT_FOUND);
-    }
-
-    if (jobRun.jobConfig.jobType !== JobType.CutOver) {
-      throw new BadRequestException(CutoverErrors.INVALID_JOB_TYPE);
-    }
-
-    if (jobRun.status !== JobRunStatus.Blocked) {
-      throw new BadRequestException(CutoverErrors.INVALID_JOB_STATUS);
+      throw new NotFoundException(CutoverErrors.VALID_JOB_RUN_NOT_FOUND);
     }
 
     jobRun.status = JobRunStatus.Completed;
-
     await this.jobRunRepo.save(jobRun);
 
-    return 'Cutover job approved successfully';
+    return { details: 'Cutover job approved successfully' };
   }
 
   //  ------------------- JobRun actions PAUSE ------------------ //

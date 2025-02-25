@@ -131,7 +131,5 @@ export enum ConsumerType{
 }
 
 export enum CutoverErrors {
-    JOB_RUN_NOT_FOUND = 'JOB_RUN_NOT_FOUND',
-    INVALID_JOB_TYPE = 'INVALID_JOB_TYPE',
-    INVALID_JOB_STATUS = 'INVALID_JOB_STATUS'
+    VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND'
 }
