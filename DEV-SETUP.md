@@ -265,6 +265,11 @@ Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are ch
 ### Unseal vault
 
 - If you encounter an issue where vault is sealed, follow these steps to unseal vault.
+- SSH into the control plane VM
+
+    ```sh
+    multipass shell datamigrator-cp
+    ```
 - Replace VAULT_UNSEAL_KEY with your key
   ```sh
   sudo su - datamigrator
@@ -289,3 +294,35 @@ Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are ch
     ```sh
     tail -20f /opt/datamigrator/logs/datamigrator-worker.log
     ```
+
+### Restart microk8s
+
+- If you face RAM usage issues, you can restart microk8s
+- SSH into the control plane VM
+
+    ```sh
+    multipass shell datamigrator-cp
+    ```
+- SSH into the control plane VM
+
+    ```sh
+    sudo su - datamigrator
+    microk8s status
+    microk8s stop
+    microk8s start
+    ```
+-  Get the pods in `all` namespaces
+
+    ```sh
+    kubectl get pods -A
+    ```
+
+- Unseal the vault
+- Replace VAULT_UNSEAL_KEY with your key
+  ```sh
+  sudo su - datamigrator
+  jq -r ".unseal_keys_b64[]" /opt/datamigrator/vault/cluster-keys.json
+  kubectl exec vault-0 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  kubectl exec vault-1 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  kubectl exec vault-2 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  ```

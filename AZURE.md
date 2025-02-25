@@ -14,10 +14,13 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 
 ### 1. Navigate to Azure UI
 - Go to the [Azure Portal](https://portal.azure.com/).
+- Login to Azure HCL account.
+- **Subscription name**: MigrationAsAService-dev
 
 ### 2. Get Custom Images
 - Ensure you have the custom Packer-created images available in your Azure subscription. These images should be listed under your Images section.
 - Take images of worker and control plane in images service of azure.
+- The image name format is `datamigrator-worker-DATE-TIMESTAMP` & `datamigrator-control-plane-DATE-TIMESTAMP`
 
 ### 3. Create a VM
 - In the Azure Portal, select the image you want to create VM from.
@@ -215,7 +218,7 @@ By following these steps, you should be able to successfully create, connect, an
 
 NOTE: All credentials are managed from vault. Replace the `IP_ADDRESS` with your Control plane VM IP.
 
-1. Fetch the vault root token. Use your local laptops terminal. Make sure SSH tunnel is opened by running the scripts mentioned above.
+1. Fetch the vault root token. Use your local laptops terminal. Make sure SSH tunnel is opened by running the scripts mentioned above. SSH into the control plane server after opening SSH tunnel.
     ```sh
     ssh -i <SSH-KEY> ubuntu@localhost -p 3022
     sudo su - datamigrator
@@ -268,6 +271,7 @@ By following these steps, you should be able to successfully create and connect 
 ### 4. Unseal vault
 
 - If you encounter an issue where vault is sealed, follow these steps to unseal vault.
+- SSH into the control plane server after opening SSH tunnel.
 - Replace VAULT_UNSEAL_KEY with your key
   ```sh
   sudo su - datamigrator
