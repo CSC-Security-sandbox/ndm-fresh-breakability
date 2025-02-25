@@ -38,7 +38,7 @@ import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-
+import * as parser from 'cron-parser';
 @Injectable()
 export class JobRunService {
  
@@ -730,11 +730,26 @@ export class JobRunService {
     });
     if (!jobRunDetails) throw new Error(`Job run with id ${jobRunId} not found`);
     if(status !== JobRunStatus.Running) {
-      this.jobConfigRepo.update(
-        { id: jobRunDetails.jobConfigId },
-        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-      );
-      return this.jobRunRepo.update(
+      const jobConfig = await this.jobConfigRepo.findOne({
+        where: { id: jobRunDetails.jobConfigId },
+      });
+      if (jobConfig && jobConfig.futureScheduleAt) {
+        try {
+          const date = parser.parseExpression(jobConfig.futureScheduleAt).next().toDate();
+          await this.jobConfigRepo.update(
+            { id: jobConfig.id },
+            { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING }
+          );
+        } catch (e) {
+          throw new Error(`Invalid cron expression in futureScheduleAt: ${e.message}`);
+        }
+      } else {
+        await this.jobConfigRepo.update(
+          { id: jobRunDetails.jobConfigId },
+          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+        );
+      }
+      await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date() }
       );

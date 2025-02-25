@@ -280,7 +280,7 @@ export class JobConfigService {
                   sourcePathId,
                   targetPathId: destinationPathId,
                   excludeFilePatterns: config.excludeFilePatterns,
-                  scheduler: config.scheduler,
+                  scheduler: ScheduleStatus.SCHEDULING,
                   futureScheduleAt: config.futureScheduleAt,
                   status: config.status,
                   preserveAccessTime: config.preserveAccessTime,
