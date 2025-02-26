@@ -27,46 +27,52 @@ export async function DiscoveryWorkflow({
   options,
 }): Promise<any> {
   log(traceId, `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`);
-  const workerId = await getWorkerId();
-  log(traceId, `DiscoveryWorkflow workerId: ${workerId}`);
-  let activeWorkerIds = [workerId];
+  // const workerId = await getWorkerId();
+  // log(traceId, `DiscoveryWorkflow workerId: ${workerId}`);
+  const activeWorkerIds = [];
   const responseArray = await Promise.all(
-    activeWorkerIds.map((workerId) =>
-      executeChild(SetupWorkerWorkflow, {
-        args: [
-          {
-            jobRunId: traceId,
-          },
-        ],
-        workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
-        taskQueue: `${workerId}-TaskQueue`,
-        ...options,
-        cancellationType:
-          ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-        parentClosePolicy: ParentClosePolicy.TERMINATE,
-      }),
-    ),
+    payload.workers.map(async (workerId) => {
+      try {
+        log(traceId, `Starting SetupWorkerWorkflow for workerId: ${workerId}`);
+        return await executeChild(SetupWorkerWorkflow, {
+          args: [ { jobRunId: traceId } ],
+          workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          ...options,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        });
+      } catch (error) {
+        log(traceId, `Error in SetupWorkerWorkflow: ${error}`);
+        throw error;
+      }
+    })
   );
+  log(traceId, `DiscoveryWorkflow responseArray: ${JSON.stringify(responseArray)}`);
 
   let result = responseArray.flat();
-  
-  if (activeWorkerIds.length === 0) {
+  result.map((r) => {
+    log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
+    if (r.status === 'success') {
+      activeWorkerIds.push(r.workerId);
+    }
+  });  
+  if(!activeWorkerIds.length) {
+    log(traceId, `No active workers found`);
     return {
       traceId: traceId,
       status: 'error',
-      message: `No active workers found for ${traceId} Discovery Cannot be Initiated`,
-    };
+      message: `No active workers found for ${traceId}`,
+    }
   }
-
-  const discoveryResponse: any = await Promise.all(payload.workers.map(async (workerId) => {
+  log(traceId, `DiscoveryWorkflow activeWorkerIds: ${JSON.stringify(activeWorkerIds)}`);
+  
+  const discoveryResponse: any = await Promise.all(activeWorkerIds.map(async (workerId) => {
     const jobState = await getJobState(traceId);
     const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
-    const newJobState = { 
-      ...jobState,
-      workers: uniqueWorkers,
-      status: 'RUNNING',
-    } as any;
+    const newJobState = { ...jobState, workers: uniqueWorkers, status: 'RUNNING' } as any;
     await setJobState(traceId, newJobState);
+    log(traceId, `Starting DiscoveryJobWorkflow for workerId: ${workerId}`);
     while (true) {
       try {
         return await executeChild(DiscoveryJobWorkflow, {
@@ -102,34 +108,28 @@ export async function DiscoveryWorkflow({
   });;
 
   console.log("disoovery response" + JSON.stringify(discoveryResponse));
-  let discoveryResult = discoveryResponse;
-  result.push(discoveryResult);
+  result.push(discoveryResponse);
 
-
-  if (activeWorkerIds.length > 0) {
-    const cleanupResponse = await Promise.all(
-      activeWorkerIds.map((workerId) =>
-        executeChild(CleanupWorkerWorkflow, {
-          args: [
-            {
-              jobRunId: traceId,
-            },
-          ],
-          workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
+  const cleanupResponse = await Promise.all(
+    activeWorkerIds.map(async (workerId) => {
+      log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
+      try {
+        return await executeChild(CleanupWorkerWorkflow, {
+          args: [{ jobRunId: traceId }],
+          workflowId: `CleanupWorkerWorkflow-${traceId}`,
           taskQueue: `${workerId}-TaskQueue`,
           ...options,
-          cancellationType:
-            ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
           parentClosePolicy: ParentClosePolicy.TERMINATE,
-        }),
-      ),
-    );
+        });
+      } catch (error) {
+        log(traceId, `Error in CleanupWorkerWorkflow: ${error}`);
+        throw error;
+      }
+    }),
+  );
 
-    cleanupResponse.flat().map((r) =>
-      result.push(r),
-    );
-  }
-
+  cleanupResponse.flat().map((r) => result.push(r));
   log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(result)}`);
   return discoveryResponse;
 }
