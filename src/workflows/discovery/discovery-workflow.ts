@@ -29,6 +29,7 @@ export async function DiscoveryWorkflow({
   log(traceId, `Starting Discovery Workflow Hello: ${JSON.stringify(options)}`);
   // const workerId = await getWorkerId();
   // log(traceId, `DiscoveryWorkflow workerId: ${workerId}`);
+  const activeWorkerIds = [];
   const responseArray = await Promise.all(
     payload.workers.map(async (workerId) => {
       try {
@@ -50,8 +51,23 @@ export async function DiscoveryWorkflow({
   log(traceId, `DiscoveryWorkflow responseArray: ${JSON.stringify(responseArray)}`);
 
   let result = responseArray.flat();
+  result.map((r) => {
+    log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
+    if (r.status === 'success') {
+      activeWorkerIds.push(r.workerId);
+    }
+  });  
+  if(!activeWorkerIds.length) {
+    log(traceId, `No active workers found`);
+    return {
+      traceId: traceId,
+      status: 'error',
+      message: `No active workers found for ${traceId}`,
+    }
+  }
+  log(traceId, `DiscoveryWorkflow activeWorkerIds: ${JSON.stringify(activeWorkerIds)}`);
   
-  const discoveryResponse: any = await Promise.all(payload.workers.map(async (workerId) => {
+  const discoveryResponse: any = await Promise.all(activeWorkerIds.map(async (workerId) => {
     const jobState = await getJobState(traceId);
     const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
     const newJobState = { ...jobState, workers: uniqueWorkers, status: 'RUNNING' } as any;
@@ -95,7 +111,7 @@ export async function DiscoveryWorkflow({
   result.push(discoveryResponse);
 
   const cleanupResponse = await Promise.all(
-    payload.workers.map(async (workerId) => {
+    activeWorkerIds.map(async (workerId) => {
       log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
       try {
         return await executeChild(CleanupWorkerWorkflow, {
