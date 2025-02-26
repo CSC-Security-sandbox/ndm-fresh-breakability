@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -182,3 +182,15 @@ export const formatDate = (date: Date): string => {
   const pad = (n: number) => (n < 10 ? `0${n}` : n);
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
 };
+
+export const dmError = (type: 'TASK' | 'OPERATION', correlationId: string, error: Error, file? : {name:  string, path: string}) => {
+  const errorCode = getErrorCode(error, type)
+  switch (type) {
+    case 'OPERATION':
+      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path } })
+    case 'TASK': 
+      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path } })
+    default: 
+      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path } })
+  }
+}

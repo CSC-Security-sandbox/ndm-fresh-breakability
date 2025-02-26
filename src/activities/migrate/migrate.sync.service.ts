@@ -4,10 +4,10 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { FileInfo, JobContext, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, FileInfo, JobContext, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 import { OperationStatus, TaskStatus } from '../discovery/enums';
-import { formatDate, getFileInfo } from '../utils/utils';
+import { dmError, formatDate, getFileInfo } from '../utils/utils';
 import { OPS_CMD, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 
@@ -85,17 +85,19 @@ export class MigrationSyncService {
   }
 
 
-  async ensureDirectoryExists(directoryPath: string) {
+  ensureDirectoryExists(directoryPath: string) {
     if (!fs.existsSync(directoryPath)) {
       fs.mkdirSync(directoryPath, { recursive: true });
     }
   }
 
-  stampMetaData(filePath: string, metadata: MetaData) {
+  async stampMetaData(filePath: string, metadata: MetaData, jobContext: JobContext, command: Command) {
     if(metadata?.mode) {
       try {
         fs.chmodSync(filePath, metadata.mode);
       } catch(error) {
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        await jobContext.appendToErrorList(dmErr);
         this.logger.error(`Error setting file mode: ${error.message}`);
       }
     }
@@ -105,6 +107,8 @@ export class MigrationSyncService {
         execSync(birthtimeCommand);
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        await jobContext.appendToErrorList(dmErr);
       }
     }
     if(metadata.mtime && metadata.atime) {
@@ -112,11 +116,13 @@ export class MigrationSyncService {
         fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        await jobContext.appendToErrorList(dmErr);
       }
     }
   }
   
-  async syncOperation({ sourcePath, targetPath, ops }: SyncOperationInput): Promise<SyncOperationOutput> {
+  async syncOperation({ sourcePath, targetPath, ops, jobContext, command}: SyncOperationInput): Promise<SyncOperationOutput> {
     if (ops[0].status === OperationStatus.READY) {
       if(ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
@@ -124,7 +130,9 @@ export class MigrationSyncService {
           const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
           ops[0] = { ...ops[0], status: OperationStatus.COMPLETED, checksum } as any;
         } catch (error) {
-          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } ;
+          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation File: ${error.message}`);
           return { ops, Status: OperationStatus.ERROR };
         }
@@ -135,14 +143,17 @@ export class MigrationSyncService {
           await this.ensureDirectoryExists(targetPath);
           ops[0] = { ...ops[0], status: OperationStatus.COMPLETED };
         } catch (error) {
-          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message };
+          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
           return { ops, Status: OperationStatus.ERROR };
         }
       }
     }
     if (ops[1]?.status === OperationStatus.READY) {
-      this.stampMetaData(targetPath, ops[1].metadata)
+      await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
+      ops[1]?.status = OperationStatus.COMPLETED
     }
     return { ops, Status: OperationStatus.COMPLETED };
   }
@@ -157,30 +168,31 @@ export class MigrationSyncService {
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-    for (const command of task.commands) {
+    for (let i = 0;  i < task.commands.length; i++) {
       const scanInput: SyncOperationInput = {
-        sourcePath: `${task.sPath}${command.fPath}`,
-        targetPath: `${task.tPath}${command.fPath}`,
-        ops: command.ops,
+        sourcePath: `${task.sPath}${task.commands[i].fPath}`,
+        targetPath: `${task.tPath}${task.commands[i].fPath}`,
+        ops: task.commands[i].ops,
+        command: task.commands[i],
+        jobContext
       };
 
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-      if (syncOperationOp.Status === OperationStatus.ERROR) {
-        isError = true;
-        task.status = TaskStatus.Errored;
-      } 
+      task.commands[i].ops = syncOperationOp.ops;
+      if (syncOperationOp.Status === OperationStatus.ERROR) 
+        isError = true, task.commands[i].status = OperationStatus.ERROR;
       else {
-        const fileInfo: FileInfo = await getFileInfo(command.fPath, `${task.sPath}${command.fPath}`, command.fPath);
+        const fileInfo: FileInfo = await getFileInfo(task.commands[i].fPath, `${task.sPath}${task.commands[i].fPath}`, task.commands[i].fPath);
         const id = await jobContext.appendToFileList(fileInfo);
         jobContext.filesInfo.lastId = id;
         jobContext.filesInfo.numMessages++;
+        task.commands[i].status = OperationStatus.COMPLETED
         await this.redisService.setJobContext(task.jobRunId, jobContext);
-        this.logger.debug(`Migrated ${command.fPath} successfully`);
+        this.logger.debug(`Migrated ${task.commands[i].fPath} successfully`);
       }
     }
 
-    task.status = TaskStatus.Completed
-    task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
+    task.status = isError ? TaskStatus.Errored : TaskStatus.Completed;
     id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);

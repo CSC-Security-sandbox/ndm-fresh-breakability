@@ -1,4 +1,4 @@
-import { CommandOperation, JobContext, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, CommandOperation, JobContext, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Logger } from "src/logger/logger.service";
 import { JobRunStatus, OperationStatus } from "../discovery/enums";
 
@@ -8,12 +8,14 @@ export interface ScanContentInput{
     targetPath: string;
     sourcePrefix: string;
     excludePatterns: string[];
+    command : Command;
     jobContext: JobContext;
 }
 export interface ScanContentOutput{
     files:  number,
     directory: number,
     isGeneratedTask: boolean;
+    isErrored: boolean
 }
 
 export interface FetchScanTaskInput {
@@ -65,7 +67,9 @@ export interface SyncTaskOutput {
 export interface SyncOperationInput {
     sourcePath: string;
     targetPath: string;
-    ops: Record<number, CommandOperation>
+    ops: Record<number, CommandOperation>;
+    jobContext: JobContext;
+    command: Command;
 }
 
 export interface SyncOperationOutput {

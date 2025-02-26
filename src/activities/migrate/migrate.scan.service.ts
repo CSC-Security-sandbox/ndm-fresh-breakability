@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 import { OperationStatus, TaskStatus } from "../discovery/enums";
-import { buildTask, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
+import { buildTask, dmError, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
 import { OPS_CMD, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 
 @Injectable()
@@ -23,26 +23,36 @@ export class MigrationScanService {
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
-        if (!fs.existsSync(directoryPath)) {
+        if (!fs.existsSync(directoryPath)) 
             return [];
-        }
-        try {
-            return  await fs.promises.readdir(directoryPath);
-        } catch (error) {
-            this.logger.error(`Error reading directory '${directoryPath}': ${error.message}`);
-            return [];
-        }
+        return  await fs.promises.readdir(directoryPath);
     }
 
-    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath }: ScanContentInput): Promise<ScanContentOutput> {
-        const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false };
-        let commands: Command[] = [];
-        try {
-            const sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
-            const targetContent = new Set<string>(await this.getDirectoryContents(targetPath));
+    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command }: ScanContentInput): Promise<ScanContentOutput> {
+        const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false, isErrored: false };
+        let commands: Command[] = [], sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
 
- 
-            for (const item of sourceContent) {
+        try {
+            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
+        }catch(error) {
+            const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: sourcePath});
+            await jobContext.appendToErrorList(dmErr);
+            syncContentOutput.isErrored = true;
+            return syncContentOutput;
+        }
+
+        try {
+            targetContent = new Set<string>(await this.getDirectoryContents(targetPath));           
+        }
+        catch(error) {
+            const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+            await jobContext.appendToErrorList(dmErr);
+            syncContentOutput.isErrored = true;
+            return syncContentOutput;
+        }
+
+        for (const item of sourceContent) {
+            try {
                 const sourceContentPath = path.join(sourcePath, item);
                 if (!fs.existsSync(sourceContentPath)) continue;
 
@@ -76,19 +86,18 @@ export class MigrationScanService {
                         if (command) commands.push(command);
                     }
                 }
+            }catch(error) {
+                const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: sourcePath});
+                await jobContext.appendToErrorList(dmErr);
+                syncContentOutput.isErrored = true;
             }
-        } catch (error) {
-            jobContext.errorsInfo?.init();
-            this.logger.error(`Error in scanContent: ${error.message}`);
-        } finally {
-            if (commands.length > 0) {
-                const task = buildTask('MIGRATE', jobRunId, jobContext, commands);
-                const id = await jobContext.appendToMigrationTask(task);
-                jobContext.migrateTask.lastId = id;
-            }
-            commands = [];
-            await this.redisService.setJobContext(jobRunId, jobContext);
         }
+        if (commands.length > 0) {
+            const task = buildTask('MIGRATE', jobRunId, jobContext, commands);
+            const id = await jobContext.appendToMigrationTask(task);
+            jobContext.migrateTask.lastId = id;
+        }
+        commands = [];
         return syncContentOutput;
     }
 
@@ -101,27 +110,29 @@ export class MigrationScanService {
         jobContext.updatedTaskInfo.lastId = id;
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-        for (const cmd of task.commands) {
+        let isError = false;
+        for (let i = 0;  i < task.commands.length; i++) {
             const scanInput: ScanContentInput = {
                 excludePatterns: task.excludeFilePatterns ? task.excludeFilePatterns.split(",") : [],
-                sourcePath: `${task.sPath}${cmd.fPath}`,
+                sourcePath: `${task.sPath}${task.commands[i].fPath}`,
                 sourcePrefix: task.sPath,
-                targetPath: `${task.tPath}${cmd.fPath}`,
+                targetPath: `${task.tPath}${task.commands[i].fPath}`,
                 jobRunId: task.jobRunId,
+                command: task.commands[i],
                 jobContext
             };
-
             const result = await this.scanContent(scanInput);
             this.logger.log(`Result of scanContent: ${JSON.stringify(result)}`);
-            if (result.isGeneratedTask) {
+            if (result.isGeneratedTask) 
                 scanPath.isTaskCreated = true;
-            }
-        }
+            if (result.isErrored)
+                isError = true, task.commands[i].status = OperationStatus.ERROR;
+            else  task.commands[i].status = OperationStatus.COMPLETED
+        }      
 
-        task.status = TaskStatus.Completed;
-        task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
-        jobContext.updatedTaskInfo.lastId = id;
+        task.status = isError ? TaskStatus.Errored : TaskStatus.Completed;
         id = await jobContext.appendToUpdatedTaskList(task);
+        jobContext.updatedTaskInfo.lastId = id;
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         return scanPath;
     }
