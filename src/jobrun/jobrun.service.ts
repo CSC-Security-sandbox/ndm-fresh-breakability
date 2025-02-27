@@ -37,7 +37,7 @@ import { OperationsEntity } from "src/entities/operation.entity";
 import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
+import {  JobStatus as JobContextStatus, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
 
 @Injectable()
 export class JobRunService {
@@ -352,12 +352,12 @@ export class JobRunService {
   async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
 
     const sourceBasePath =  jobRunConfig.jobType === JobType.DISCOVER ? `${this.configService.get<string>('app.paths.mountBasePath')}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`: '';
-    const commands = new Command(sourceBasePath, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
+    const commands = new Command(sourceBasePath, {0: {cmd : OPS_CMD.COPY_DIR, status: OPS_STATUS.READY}}, uuid4())
     const task = new Task(
       uuid4(),
       jobRunId,
-      'SCAN',
-      'PENDING',
+      TaskType.SCAN,
+      TaskStatus.PENDING,
       jobRunConfig.workers[0],
       `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
       jobRunConfig.connection.sourceCredential.pathId,
