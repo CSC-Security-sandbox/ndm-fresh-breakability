@@ -1,17 +1,26 @@
+import "@netapp/bxp-design-system-react/dist/index.css";
+import { Route, Routes } from "react-router-dom";
 import "./App.css";
+import FileServer from "./pages/FileServer";
+import Home from "./pages/Home";
+import SpeedTest from "./pages/SpeedTest";
 
-function App() {
+import HomeLayout from "./components/layout/HomeLayout";
+import NotFound from "./components/404/PageNotFound";
+const App = () => {
   return (
-    <div className="bg-blue-500 text-white p-4">
-      <h1 className="text-2xl font-bold">Hello World</h1>
-      <p className="text-sm">This is a paragraph</p>
-      <button className="bg-red-500 text-white p-2 rounded-md">Click me</button>
-      <div className="bg-green-500 text-white p-2 rounded-md">
-        <h2 className="text-xl font-bold">Hello World</h2>
-        <p className="text-sm">This is a paragraph</p>
-      </div>
+    <div className="bg-main-background">
+      <Routes>
+        <Route path="/" element={<HomeLayout />}>
+          <Route path="/home" element={<Home />} />
+          <Route path="/speed-test" element={<SpeedTest />} />
+          <Route path="/workers" element={<SpeedTest />} />
+          <Route path="/contact" element={<FileServer />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
     </div>
   );
-}
+};
 
 export default App;

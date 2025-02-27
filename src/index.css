@@ -1,3 +1,14 @@
+@import "@netapp/bxp-design-system-react/dist/index.css";
+
 @import "tailwindcss";
 @import "tailwindcss/preflight";
 @import "tailwindcss/utilities";
+
+.filter-white-color {
+  filter: brightness(0) saturate(100%) invert(100%) sepia(0%) saturate(0%)
+    hue-rotate(93deg) brightness(103%) contrast(103%);
+}
+
+.content-container {
+  height: calc(100vh - 150px);
+}
