@@ -1,8 +1,8 @@
-import { ReactNode } from "react";
+import { FC, ReactNode } from "react";
 
 export interface BlueXpTabHeaderPropsType {
   tabLabel: ReactNode;
-  tabIcon: ReactNode;
+  tabIcon: FC;
   tabLinks: TabLinks[];
 }
 

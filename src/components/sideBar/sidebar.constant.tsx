@@ -1,11 +1,10 @@
-import { DocumentByolIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import {
   AppIcon,
+  CommunitiesIcon,
   StatisticsIcon,
   WorkspaceIcon,
 } from "@netapp/bxp-style/react-icons/General";
 import { GcpStorageIcon } from "@netapp/bxp-style/react-icons/Storage";
-import { CommunitiesIcon } from "@netapp/bxp-style/react-icons/General";
 import { Box } from "../container";
 
 export const MENU_ITEMS = [

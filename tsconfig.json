@@ -1,17 +1,21 @@
 {
-  "files": [],
-  "include": ["src"],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
+  "include": ["src", "src/types"],
   "compilerOptions": {
+    "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"],
       "components/*": ["./src/components/*"],
       "assets": ["./src/assets/*"],
       "lib": ["./src/lib/*"]
-    }
+    },
+    "target": "ESNext",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+    "strict": true,
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   }
 }
