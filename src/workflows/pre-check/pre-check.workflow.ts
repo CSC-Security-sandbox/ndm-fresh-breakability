@@ -22,67 +22,48 @@ export const PreCheckValidationWorkflow = async ({
     JSON.stringify(payload),
   );
   const result = new Map();
-  let sourcePathEntry = undefined
+  // let sourcePathEntry = undefined
   const [{ sourceServerCredentials, sourcePaths }] = payload;
   console.log('sourceServerCredentials', sourceServerCredentials);
   console.log('sourcePaths', sourcePaths);
   if (!sourceServerCredentials || !sourcePaths) {
     throw new Error('Invalid payload');
   }
-  for (const sourcePath of sourcePaths) {
-    for (const worker of sourcePath.commonWorkers) {
-      sourcePathEntry = result.get(sourcePath.pathId);
-      if (!sourcePathEntry) {
-        sourcePathEntry =
-        {
-          sourcePathId: sourcePath.pathId,
-          status: '',
-          destination: []
-        }
-      }
-      const sourceValidation = await executeChild(
-        ValidateWorkerConnectionWorkflow,
-        {
-          args: [
+
+  log(traceId, 'Validating source server connection...');
+  const sourceValidation = await executeChild(ValidateWorkerConnectionWorkflow, {
+    args: [
+      {
+        traceId,
+        fileServer: {
+          hostname: sourceServerCredentials.host,
+          protocols: [
             {
-              traceId,
-              fileServer: {
-                hostname: sourceServerCredentials.host,
-                protocols: [
-                  {
-                    type: sourceServerCredentials.protocol,
-                    password: sourceServerCredentials.password,
-                    userName: sourceServerCredentials.userName,
-                  },
-                ],
-              },
-              feature: { enablePreListPath: false, enableVersionFetch: false },
-              ...options,
+              type: sourceServerCredentials.protocol,
+              password: sourceServerCredentials.password,
+              userName: sourceServerCredentials.userName,
             },
           ],
-          workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}-${worker.workerId}-source`,
-          taskQueue: `${worker.workerId}-TaskQueue`,
-          cancellationType:
-            ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
         },
-      );
-      log(traceId, `Source validation completed for ${sourcePath.pathId}`);
-      log(
-        traceId,
-        `Source validation result: ${JSON.stringify(sourceValidation)}`,
-      );
-      if (sourceValidation.status === 'error') {
-        sourcePathEntry.status = 'failed';
-        sourcePathEntry.errors = ['SOURCE_SERVER_CONNECTION_FAILED'];
-        result.set(sourcePath.pathId, sourcePathEntry);
-      }else{
-        sourcePathEntry.status = 'success';
-        result.set(sourcePath.pathId, sourcePathEntry);
-      }
-    }
+        feature: { enablePreListPath: false, enableVersionFetch: false },
+        ...options,
+      },
+    ],
+    workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}-source`,
+    taskQueue: `source-TaskQueue`,
+    cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+    parentClosePolicy: ParentClosePolicy.TERMINATE,
+  });
 
-    log(traceId, `Source validation successful for ${sourcePath.pathId}`);
+  log(traceId, `Source validation successful for ${sourceValidation.pathId}`);
+
+  for (const sourcePath of sourcePaths) {
+    let sourcePathEntry = result.get(sourcePath.pathId) || {
+      sourcePathId: sourcePath.pathId,
+      status: '',
+      destination: [],
+    };
+
     for (const destination of sourcePath.destinations) {
       for (const worker of sourcePath.commonWorkers) {
         const destinationValidation = await executeChild(
@@ -202,41 +183,44 @@ export const PreCheckValidationWorkflow = async ({
                   password: destination.destinationServerCredentials.password,
                   userName: destination.destinationServerCredentials.userName,
                 },
-              pathId: destination.destinationPathId,
-              workingDirectory: destination.destinationServerCredentials?.workingDirectory,
-              workingDirectoryPathId: destination.destinationServerCredentials?.workingDirectoryPathId,
-              mountBasePath: destination.destinationServerCredentials.mountBasePath,
-              exportPathName: destination.destinationServerCredentials.exportPathName,
-              workingDirectoryExportPathName: destination.destinationServerCredentials?.workingDirectoryExportPathName,
-              type:'DESTINATION'
+                pathId: destination.destinationPathId,
+                workingDirectory: destination.destinationServerCredentials?.workingDirectory,
+                workingDirectoryPathId: destination.destinationServerCredentials?.workingDirectoryPathId,
+                mountBasePath: destination.destinationServerCredentials.mountBasePath,
+                exportPathName: destination.destinationServerCredentials.exportPathName,
+                workingDirectoryExportPathName: destination.destinationServerCredentials?.workingDirectoryExportPathName,
+                type: 'DESTINATION'
+              },
+              feature: { checkWritePermission: false },
             },
-            feature: { checkWritePermission: false},
-          },
-        ],
-        workflowId: `${WorkFlows.PRECHECK}-${traceId}-${worker.workerId}-destination-write-permission`,
-        taskQueue: `${worker.workerId}-TaskQueue`,
-        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-        parentClosePolicy: ParentClosePolicy.TERMINATE,
-      });
-      log(traceId, `Destination mount and write permission check completed for ${destination.destinationPathId}`);
-      log(traceId, `Destination mount and write permission check result: ${JSON.stringify(destinationMountAndPermissionCheck)}`);
-      if (destinationMountAndPermissionCheck.status === 'failed') {
-        sourcePathEntry.destination.push({
-          destinationPathId: destination.destinationPathId,
-          status: destinationMountAndPermissionCheck.status,
-          errors: destinationMountAndPermissionCheck.errors,
+          ],
+          workflowId: `${WorkFlows.PRECHECK}-${traceId}-${worker.workerId}-destination-write-permission`,
+          taskQueue: `${worker.workerId}-TaskQueue`,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
         });
-        result.set(sourcePath.pathId, sourcePathEntry);
-      }else{
-        sourcePathEntry.destination.push({
-          destinationPathId: destination.destinationPathId,
-          status: 'success',
-        });
+        
+        log(traceId, `Destination mount and write permission check completed for ${destination.destinationPathId}`);
+        log(traceId, `Destination mount and write permission check result: ${JSON.stringify(destinationMountAndPermissionCheck)}`);
+
+        if (destinationMountAndPermissionCheck.status === 'failed') {
+          sourcePathEntry.destination.push({
+            destinationPathId: destination.destinationPathId,
+            status: 'failed',
+            errors: destinationMountAndPermissionCheck.errors,
+          });
+        } else {
+          sourcePathEntry.destination.push({
+            destinationPathId: destination.destinationPathId,
+            status: 'success',
+          });
+        }
+
         result.set(sourcePath.pathId, sourcePathEntry);
       }
     }
-    }
   }
+
   const finalResult = Array.from(result.values()).flat();
   return finalResult;
 };
