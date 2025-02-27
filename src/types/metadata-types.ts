@@ -1,3 +1,4 @@
+import { CommandStatus, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "./enums";
 import { Serializable } from "./serializable";
 
 export class FileInfo implements Serializable {
@@ -113,8 +114,8 @@ export class MetaData{
 }
 
 export class CommandOperation {
-  cmd: string;
-  status: string;
+  cmd: OPS_CMD;
+  status: OPS_STATUS;
   error?: string;
   errorCode?: string;
   metadata?: MetaData
@@ -123,6 +124,7 @@ export class CommandOperation {
 export class Command implements Serializable {
   fPath: string;
   ops: Record<number, CommandOperation>;
+  status: CommandStatus;
   commandId: string;
 
   constructor(
@@ -147,8 +149,8 @@ export class Command implements Serializable {
 export class Task implements Serializable {
   id: string;
   jobRunId: string;
-  taskType: string;
-  status: string;
+  taskType: TaskType;
+  status: TaskStatus;
   workerId: string;
   sPath: string;
   sPathId: string;
@@ -160,8 +162,8 @@ export class Task implements Serializable {
   constructor(
     id: string,
     jobRunId: string,
-    taskType: string,
-    status: string,
+    taskType: TaskType,
+    status: TaskStatus,
     workerId: string,
     sPath: string,
     sPathId: string,

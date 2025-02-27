@@ -6,11 +6,51 @@ export enum JobType {
   SPEED_TEST = 'speed_test',
 }
 
+
+export enum OPS_CMD {
+  COPY_CONTENT = 'cc',
+  STAMP_META  = 'sm',
+  COPY_DIR = 'cd'
+}
+
+export enum OPS_STATUS {
+  READY = 'READY',
+  IN_PROCESS = 'IN_PROCESS',
+  ERROR = 'ERROR',
+  COMPLETED = 'COMPLETED'
+}
+
+
+export enum CommandStatus {
+  READY='READY',
+  IN_PROCESS='IN_PROCESS',
+  ERROR ='ERROR',
+  COMPLETED = 'COMPLETED'
+}
+
+export enum TaskStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  ERRORED = 'ERRORED',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum TaskType {
+  SCAN = 'SCAN',
+  MIGRATE = 'MIGRATE',
+}
+
+
 export enum JobStatus {
+  Ready = 'READY',
   Pending = 'PENDING',
   Running = 'RUNNING',
-  Success = 'SUCCESS',
-  Failed = 'FAILED',
   Paused = 'PAUSED',
-  Stopped = 'STOPPED'
+  Stopped = 'STOPPED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Errored = 'ERRORED'
 }
+
+
+
