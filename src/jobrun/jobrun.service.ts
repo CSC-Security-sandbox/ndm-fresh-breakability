@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ConsumerType, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
+import { ConsumerType, CutoverErrors, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
 import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus, SocketEvents } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -38,7 +38,7 @@ import axios from 'axios';
 import { v4 as uuid4 } from 'uuid';
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import {  JobStatus as JobContextStatus, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-
+import * as parser from 'cron-parser';
 @Injectable()
 export class JobRunService {
  
@@ -413,6 +413,26 @@ export class JobRunService {
     }
   }
 
+  async cutoverApprove(jobRunId: string) {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: {
+        id: jobRunId,
+        status: JobRunStatus.Blocked,
+        jobConfig: { jobType: JobType.CutOver }
+      },
+      relations: ['jobConfig'],
+    });
+
+    if (!jobRun) {
+      throw new NotFoundException(CutoverErrors.VALID_JOB_RUN_NOT_FOUND);
+    }
+
+    jobRun.status = JobRunStatus.Completed;
+    await this.jobRunRepo.save(jobRun);
+
+    return { details: 'Cutover job approved successfully' };
+  }
+
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
@@ -730,11 +750,26 @@ export class JobRunService {
     });
     if (!jobRunDetails) throw new Error(`Job run with id ${jobRunId} not found`);
     if(status !== JobRunStatus.Running) {
-      this.jobConfigRepo.update(
-        { id: jobRunDetails.jobConfigId },
-        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-      );
-      return this.jobRunRepo.update(
+      const jobConfig = await this.jobConfigRepo.findOne({
+        where: { id: jobRunDetails.jobConfigId },
+      });
+      if (jobConfig && jobConfig.futureScheduleAt) {
+        try {
+          const date = parser.parseExpression(jobConfig.futureScheduleAt).next().toDate();
+          await this.jobConfigRepo.update(
+            { id: jobConfig.id },
+            { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING }
+          );
+        } catch (e) {
+          throw new Error(`Invalid cron expression in futureScheduleAt: ${e.message}`);
+        }
+      } else {
+        await this.jobConfigRepo.update(
+          { id: jobRunDetails.jobConfigId },
+          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+        );
+      }
+      await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date() }
       );
