@@ -3,6 +3,7 @@ import { JobConfig } from './job-config';
 import { FileInfo, DMError, TaskStats, Task, Command, ErroredFile } from './metadata-types';
 import { FileServerDetails } from './file-server';
 import { NFS } from './protocols';
+import { OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from './enums';
 
 class TestJobContext extends JobContext {
   constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
@@ -176,12 +177,12 @@ describe('JobContext Class', () => {
       const task: Task = new Task(
         'taskId',
         'jobRunId',
-        'taskType',
-        'status',
+        TaskType.SCAN,
+        TaskStatus.PENDING,
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
@@ -347,12 +348,12 @@ describe('JobContext Class', () => {
       const task: Task = new Task(
         'taskId',
         'jobRunId',
-        'taskType',
-        'status',
+        TaskType.SCAN,
+        TaskStatus.PENDING,
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
@@ -370,12 +371,12 @@ describe('JobContext Class', () => {
       const task: Task = new Task(
         'taskId',
         'jobRunId',
-        'taskType',
-        'status',
+        TaskType.SCAN,
+        TaskStatus.PENDING,
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: 'cmd', status: 'status' } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
