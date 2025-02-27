@@ -5,6 +5,7 @@ import { RedisClientType } from 'redis';
 import { RedisJobContext } from './redis-job-context';
 import { Logger } from '../utils/logging';
 import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
+import { JobState } from '../types/job-state';
 
 export class RedisJobContextProvider implements JobContextProvider {
   private logger: Logger;
@@ -17,6 +18,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobRunId: string,
     jobConfig: JobConfig,
     jobStatus: string,
+    jobState: JobState,
   ): Promise<JobContext> {
     this.logger.info(`Building job context for job run id: ${jobRunId}`);
     const jobContext = new RedisJobContext(
@@ -24,6 +26,7 @@ export class RedisJobContextProvider implements JobContextProvider {
       this.redisClient,
       jobConfig,
       jobStatus,
+      jobState
     );
     await jobContext.init();
     return jobContext;
@@ -49,6 +52,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
+    jobContext.jobState = info.jobState;
     jobContext.jobRunId = info.jobRunId;
     jobContext.filesInfo = new RedisFileCollection(jobRunId, info.filesInfo.numMessages, info.filesInfo.lastId, this.redisClient);
     jobContext.dirsInfo = new RedisDirectoryCollection(jobRunId, info.dirsInfo.numMessages, info.dirsInfo.lastId, this.redisClient);
