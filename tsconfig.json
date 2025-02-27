@@ -2,12 +2,13 @@
   "include": ["src", "src/types"],
   "compilerOptions": {
     "outDir": "./dist",
-    "baseUrl": ".",
+    "baseUrl": "./src",
     "paths": {
       "src/*": ["./src/*"],
       "components/*": ["./src/components/*"],
       "assets": ["./src/assets/*"],
-      "lib": ["./src/lib/*"]
+      "lib": ["./src/lib/*"],
+      "@/*": ["./src/*"]
     },
     "target": "ESNext",
     "module": "ESNext",
@@ -16,6 +17,8 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "skipLibCheck": true
   }
 }

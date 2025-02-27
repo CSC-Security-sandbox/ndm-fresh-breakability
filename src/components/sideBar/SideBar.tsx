@@ -9,6 +9,7 @@ const SideBar = () => {
   const [activeMenuId, setActiveMenuId] = useState("1");
   const [collapseSidebar, setCollapseSidebar] = useState(true);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleNavigation = (menu: any, menuId: string) => {
     navigate(menu?.path);
     setActiveMenuId(menuId);
@@ -41,13 +42,14 @@ const SideBar = () => {
         collapsed={collapseSidebar}
         transitionDuration={700}
         backgroundColor="#ffff"
-        color="#0067C5"
+        color="#6F6F6F"
       >
         <Menu
           menuItemStyles={{
             button: ({ active }) => {
               return {
                 backgroundColor: active ? "#F4FBFF" : "",
+                color: active ? "#0067C5" : "#6F6F6F",
               };
             },
           }}
@@ -57,6 +59,7 @@ const SideBar = () => {
               <SubMenu key={index} label={item.label} icon={item.icon}>
                 {item.subMenu.map((subItem, subIndex) => (
                   <MenuItem
+                    color=""
                     key={subIndex}
                     icon={subItem.icon}
                     onClick={() => handleNavigation(subItem, item.id)}
