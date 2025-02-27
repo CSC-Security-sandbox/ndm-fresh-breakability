@@ -136,8 +136,8 @@ export const MigrationWorkflow = async ({
 
   if (activeWorkerIds.length > 0) {
     const cleanupResponses = await Promise.all(
-      activeWorkerIds.map((workerId) =>
-        executeChild(CleanupWorkerWorkflow, {
+      activeWorkerIds.map(async(workerId) => {
+        return await executeChild(CleanupWorkerWorkflow, {
           args: [{ jobRunId: traceId }],
           workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
           taskQueue: `${workerId}-TaskQueue`,
@@ -145,6 +145,7 @@ export const MigrationWorkflow = async ({
           cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
           parentClosePolicy: ParentClosePolicy.TERMINATE,
         })
+      }
       )
     );
     cleanupResponses.flat().forEach((r) => result.push(r));

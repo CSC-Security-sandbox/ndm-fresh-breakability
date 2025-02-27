@@ -1,11 +1,11 @@
 
-import { DMError, JobContext, JobStatus, TaskStats } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, DMError, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 // local imports
 import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
-import { OperationStatus, TaskStatus } from './enums';
+
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
 import { getErrorCode, getFilePermissions, getFileType, shouldExclude } from '../utils/utils';
@@ -21,8 +21,8 @@ export class DiscoveryScanActivity {
     this.logger.log(`[${traceId}] Starting Discovery Scan Activity`);
     const jobContext: JobContext = await this.redisService.getJobContext(traceId);
     const jobState: JobState = await jobContext.getJobState();
-    payload.data.status = TaskStatus.Running
-    payload.data.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
+    payload.data.status = TaskStatus.RUNNING
+    payload.data.commands.map((cmd: any) => cmd.status = CommandStatus.IN_PROCESS);
     const id = await jobContext.appendToUpdatedTaskList(payload.data);
     jobContext.updatedTaskInfo.lastId = id;
     await this.redisService.setJobContext(traceId, jobContext);
@@ -67,16 +67,16 @@ export class DiscoveryScanActivity {
             const batch = inventoryData.splice(0, batchSize);
             await this.processInventory({ inventory: batch, jobContext, taskId: ids.taskId, discoveryStats });
           }
-          return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OperationStatus.COMPLETED } } };
+          return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OPS_STATUS.COMPLETED } } };
         } catch (error) {
           const errorCode = getErrorCode(error, 'OPERATION');
           await this.processErrors(new DMError(null, { operationId: cmd.commandId, errorCode, errorMessage: error.message, errorFiles: { fileName: cmd.fPath, filePath: cmd.commandId } }), jobContext, discoveryStats);
-          return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OperationStatus.ERROR } } };
+          return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OPS_STATUS.COMPLETED } } };
         }
       }));
       await this.processInventory({ inventory: inventoryData, jobContext, taskId: ids.taskId, discoveryStats });
-      data.data.status = TaskStatus.Completed;
-      data.data.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
+      data.data.status = TaskStatus.COMPLETED;
+      data.data.commands.map((cmd: any) => cmd.status = CommandStatus.COMPLETED);
       const taskId = await jobContext.appendToUpdatedTaskList(data.data);
       jobContext.updatedTaskInfo.lastId = taskId;
       this.redisService.setJobContext(data.data.jobRunId, jobContext);

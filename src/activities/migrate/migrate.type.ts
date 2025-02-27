@@ -1,6 +1,6 @@
-import { Command, CommandOperation, JobContext, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { Logger } from "src/logger/logger.service";
-import { JobRunStatus, OperationStatus } from "../discovery/enums";
+import { Command, CommandOperation, CommandStatus, JobContext, JobStatus, OPS_STATUS, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobRunStatus } from "../discovery/enums";
+
 
 export interface ScanContentInput{
     jobRunId: string;
@@ -15,7 +15,7 @@ export interface ScanContentOutput{
     files:  number,
     directory: number,
     isGeneratedTask: boolean;
-    isErrored: boolean
+    error: string | undefined
 }
 
 export interface FetchScanTaskInput {
@@ -29,7 +29,10 @@ export interface ScanPathInput{
     task: Task;
 }
 export interface ScanPathOutput{
-    isTaskCreated: boolean
+    isTaskCreated: boolean;
+    errors: Set<string>;
+    success: number;
+    error: number
 }
 
 export interface PublishScanTaskInput{
@@ -61,7 +64,9 @@ export interface SyncTaskInput {
 }
 
 export interface SyncTaskOutput {
-    status: 'COMPLETE' | 'ERROR'
+    errors: Set<string>;
+    success: number;
+    error: number
 }
 
 export interface SyncOperationInput {
@@ -73,8 +78,9 @@ export interface SyncOperationInput {
 }
 
 export interface SyncOperationOutput {
-    Status: OperationStatus;
+    status: OPS_STATUS;
     ops: Record<number, CommandOperation>
+    errors: Set<string>
 }
 
 export interface UpdateStatusInput{
@@ -84,4 +90,8 @@ export interface UpdateStatusInput{
 
 export interface UpdateStatusOutput{
     message: string;
+}
+
+export interface StampMetaDataOutput{
+    errors: string[]
 }

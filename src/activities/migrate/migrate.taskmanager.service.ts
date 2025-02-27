@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, JobContext, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, JobContext, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import { RedisService } from 'src/redis/redis.service';
 import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
@@ -29,12 +29,12 @@ export class MigrationTaskService{
     try {
       const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
-      let commands:Command[] = [], ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
+      let commands:Command[] = [], ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
       for await (const dir of jobContext.groupReadDirs(`${jobRunId}-worker`, this.pushTaskDirSize)) {
         const command = new Command(dir.path, ops, uuid4());
         commands.push(command);
         if (commands && commands.length >= this.pushTaskDirSize) {
-          const task = buildTask('SCAN', jobRunId, jobContext, commands);
+          const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;
           await this.redisService.setJobContext(jobRunId, jobContext);
@@ -43,7 +43,7 @@ export class MigrationTaskService{
       }
       
       if (commands.length > 0) {
-        const task = buildTask('SCAN', jobRunId, jobContext, commands);
+        const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
         const id = await jobContext.appendToTaskList(task);
         jobContext.tasksInfo.lastId = id;
         await this.redisService.setJobContext(jobRunId, jobContext);
