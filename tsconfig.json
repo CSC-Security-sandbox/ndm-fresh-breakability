@@ -2,12 +2,17 @@
   "include": ["src", "src/types"],
   "compilerOptions": {
     "outDir": "./dist",
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"],
-      "components/*": ["./src/components/*"],
-      "assets": ["./src/assets/*"],
-      "lib": ["./src/lib/*"],
+      "@components/*": ["./src/components/*"],
+      "@assets/*": ["./src/assets/*"],
+      "@api/*": ["./src/api/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@types/*": ["./src/types/*"],
+      "@pages/*": ["./src/pages/*"],
+      "@store/*": ["./src/store/*"],
       "@/*": ["./src/*"]
     },
     "target": "ESNext",

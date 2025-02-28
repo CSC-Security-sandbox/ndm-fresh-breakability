@@ -1,6 +1,5 @@
 "use client";
 import { TabHeader, TabLinks } from "@netapp/bxp-design-system-react";
-import { nanoid } from "@reduxjs/toolkit";
 import { HEADER_WITH_PATHNAME } from "./TabHeaderWrapper.constant";
 import { Link } from "react-router-dom";
 
@@ -30,13 +29,13 @@ const TabHeaderWrapper = () => {
         <TabHeader
           Icon={blueXpTabHeaderProps?.tabIcon}
           label={blueXpTabHeaderProps?.tabLabel}
-          key={nanoid()}
+          key={Math.random()}
         >
           <TabLinks>
             {blueXpTabHeaderProps?.tabLinks?.map((tab) => {
               return (
                 <LinkWithActiveClass
-                  key={nanoid()}
+                  key={Math.random()}
                   path={tab?.path}
                   label={tab?.label}
                   isActive={pathname === tab?.path}
