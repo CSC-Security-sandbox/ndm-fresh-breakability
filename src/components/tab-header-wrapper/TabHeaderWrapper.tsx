@@ -1,4 +1,4 @@
-"use client";
+/* eslint-disable */
 import { TabHeader, TabLinks } from "@netapp/bxp-design-system-react";
 import { HEADER_WITH_PATHNAME } from "./TabHeaderWrapper.constant";
 import { Link } from "react-router-dom";

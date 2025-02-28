@@ -1,3 +1,4 @@
+/* eslint-disable */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * API Response - <api_name>ApiType e.g. userStatusApiType
@@ -282,8 +283,8 @@ export interface BlueXpTableStateType<T> {
   pagination: PaginationType;
 }
 export interface AssociatedUsersPropsType {
-  user: string;
-  role: string;
+  user?: string;
+  role?: string;
 }
 
 export interface AssociatedUsersOptionsType {
@@ -311,7 +312,7 @@ export interface CreateProjectPropsType extends CreateProjectHOCType {
   editSelectedProject: any;
 }
 
-export interface AssocateUsersPropsType {
+export interface AssociatedUsersPropsType {
   associatedUsers: AssociatedUsersOptionsType[];
   associateUserForm: BlueXpFormType<AssociatedUsersOptionsType>;
   userOptions: any[];

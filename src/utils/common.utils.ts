@@ -1,0 +1,68 @@
+import { JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
+
+export const getJobType = (type: JOBS_TYPE) => {
+  switch (type) {
+    case JOBS_TYPE["DISCOVERY"]:
+      return "Discovery";
+    case JOBS_TYPE["CUT_OVER"]:
+      return "Cutover";
+    case JOBS_TYPE["MIGRATE"]:
+      return "Migration";
+    default:
+      return type;
+  }
+};
+
+export const getJobStatusFormat = (status: JOB_CONFIG_STATUS_ENUM) => {
+  switch (status) {
+    case JOB_CONFIG_STATUS_ENUM.ACTIVE:
+      return "Active";
+    case JOB_CONFIG_STATUS_ENUM.INACTIVE:
+      return "Inactive";
+    default:
+      return status;
+  }
+};
+
+export const formatLength = (length: number | undefined) => {
+  if (length === undefined || length === 0) return "0";
+  return length < 10 ? `0${length}` : `${length}`;
+};
+
+// THIS WILL CONVERT  STRING INTO TITLE CASE (eg. Title Case)
+export const toTitleCase = (str: string = "") => {
+  return str?.replace(
+    /\w\S*/g,
+    (text) => text?.charAt(0)?.toUpperCase() + text?.substring(1)?.toLowerCase()
+  );
+};
+
+/**
+ * Find time differene in milliseconds between two date strings.
+ * @param {string} startDateTimeStr The start date.
+ * @param {string} endDateTimeStr The end date, if not sent it will pick current date.
+ * @return {number} Difference in milliseconds.
+ */
+export const calculateTimeDiff = (
+  startDateTimeStr: string,
+  endDateTimeStr?: string
+) => {
+  if (!startDateTimeStr) return 0;
+  const now: Date = new Date();
+  const startDateTime: Date = new Date(startDateTimeStr);
+  const endDateTime: Date = endDateTimeStr ? new Date(endDateTimeStr) : now;
+
+  const diffInMs = +endDateTime - +startDateTime;
+  return diffInMs;
+};
+
+/**
+ * Generate options for range, by passing size.
+ * @param {number} size Range size for generating options.
+ * @return Return label value object.
+ */
+export const generateOptionsWithRange = (size: number = 31) =>
+  Array.from(Array(size).keys()).map((num) => ({
+    label: (num + 1).toString(),
+    value: num + 1,
+  }));

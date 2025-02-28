@@ -1,8 +1,9 @@
+import { Button } from "@netapp/bxp-design-system-react";
 import React from "react";
 
 const Home = () => {
   return (
-    <div className="bg-yellow-200">
+    <div className="bg-header-netapp-bg">
       ---%{import.meta.env.VITE_TITLE}%--- ipsum, nisi consectetur? Sed quos
       voluptas libero quibusdam eaque labore laboriosam nisi unde doloremque
       delectus aperiam adipisci nesciunt commodi in fugit cupiditate

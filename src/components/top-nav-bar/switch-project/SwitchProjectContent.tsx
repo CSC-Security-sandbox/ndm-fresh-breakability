@@ -1,0 +1,149 @@
+/* eslint-disable */
+import Box from "@/components/container/Box";
+import { copyToClipboard } from "@/utils/copyToClipboard";
+import FormControl from "@mui/material/FormControl";
+import {
+  ActionMenu,
+  Button,
+  Layout,
+  RadioButton,
+  SearchWidget,
+  Text,
+  useForm,
+  WizardFooter,
+  WizardHeader,
+} from "@netapp/bxp-design-system-react";
+import { CopyIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
+import { nanoid } from "@reduxjs/toolkit";
+import { setProject } from "@store/reducer/appSlice";
+import { setDrawerClose } from "@store/reducer/commonComponentSlice";
+import React, { useState } from "react";
+import { useDispatch } from "react-redux";
+// TODO : FIX THIS
+// import { useRouter } from "nextjs-toploader/app";
+import {
+  setModalClose,
+  setModalProps,
+} from "@store/reducer/commonComponentSlice";
+import { FILE_SERVER_BULK_OPERATION_PATHS } from "./SwitchProject.constant";
+
+const DetailButton = ({ projectId }: { projectId: string }) => (
+  <ActionMenu
+    horizontalPlacement="end"
+    verticalPlacement="bottom"
+    Trigger="oval-hidden"
+  >
+    <ActionMenu.Button onClick={() => copyToClipboard(projectId)}>
+      <Text>Project ID: {projectId.substring(0, 16)}...</Text>
+      <CopyIcon />
+    </ActionMenu.Button>
+  </ActionMenu>
+);
+
+const SwitchProjectContent = ({ projectList, selectedProjectId }: any) => {
+  const [search, setSearch] = useState<string>("");
+  const dispatch = useDispatch();
+  const switchProjectForm = useForm({ selectedProjectId: selectedProjectId });
+  // const router = useRouter();
+  const currentPath = window.location.pathname;
+
+  const checkFileServerBulkOperationPaths = () => {
+    return FILE_SERVER_BULK_OPERATION_PATHS.some((path) =>
+      currentPath.includes(path)
+    );
+  };
+
+  const submitProject = () => {
+    const isPathIncluded = checkFileServerBulkOperationPaths();
+    if (isPathIncluded) {
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Switch Project Confirmation",
+          modalContent:
+            "Are you sure you want to switch projects? You may lose unsaved data.",
+          modalFooter: (
+            <>
+              <Button
+                color="secondary"
+                onClick={() => dispatch(setModalClose())}
+              >
+                Cancel
+              </Button>
+              <Button onClick={switchProject}>Proceed</Button>
+            </>
+          ),
+        })
+      );
+      return;
+    }
+    closeDrawer();
+  };
+
+  const switchProject = () => {
+    dispatch(setModalClose());
+    closeDrawer();
+  };
+
+  const closeDrawer = () => {
+    // router.push("/home");
+    dispatch(setProject(switchProjectForm.formState.selectedProjectId));
+    dispatch(setDrawerClose());
+  };
+
+  return (
+    <Layout.Page>
+      <WizardHeader label="Project" />
+      <Layout.Content
+        style={{ padding: 40, backgroundColor: "var(--light-bg)" }}
+      >
+        <SearchWidget
+          placeholder={`Search Projects`}
+          alwaysOpen
+          setFilter={(value: string) => {
+            setSearch(value);
+          }}
+        />
+        <FormControl className="w-full">
+          {projectList
+            ?.filter((item: any) =>
+              item["project_name"]
+                .toLowerCase()
+                .includes(search.toLowerCase().trim())
+            )
+            ?.map((item: any) => (
+              <Box
+                className="flex flex-row justify-between items-center py-3 border-b"
+                key={nanoid()}
+              >
+                <RadioButton
+                  form={switchProjectForm}
+                  name="selectedProjectId"
+                  value={item.id}
+                >
+                  {item?.["project_name"]}
+                </RadioButton>
+                <DetailButton projectId={item.id} />
+              </Box>
+            ))}
+        </FormControl>
+      </Layout.Content>
+      <WizardFooter>
+        <Box className="flex w-full justify-around px-8 pt-1">
+          <Button className="w-56" onClick={submitProject}>
+            Switch
+          </Button>
+          <Button
+            className="w-56"
+            color="secondary"
+            onClick={() => dispatch(setDrawerClose())}
+          >
+            Cancel
+          </Button>
+        </Box>
+      </WizardFooter>
+    </Layout.Page>
+  );
+};
+
+export default React.memo(SwitchProjectContent);

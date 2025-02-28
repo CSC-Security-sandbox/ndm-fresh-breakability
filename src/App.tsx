@@ -53,7 +53,7 @@ const App = () => {
     <div className="bg-main-background">
       <Routes>
         <Route path="/" element={<HomeLayout />}>
-          <Route path="/home" element={<Home />} />
+          <Route index path="/home" element={<Home />} />
           <Route path="/speed-test" element={<SpeedTest />} />
           <Route path="/workers" element={<SpeedTest />} />
           <Route path="/contact" element={<FileServer />} />

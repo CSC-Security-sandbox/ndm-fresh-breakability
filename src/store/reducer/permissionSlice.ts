@@ -1,4 +1,4 @@
-import { UserPermissionsApiType } from "@/app/type.interface";
+import { UserPermissionsApiType } from "@/types/app.type";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 const initialState = {
