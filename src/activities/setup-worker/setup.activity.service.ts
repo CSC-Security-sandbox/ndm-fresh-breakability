@@ -188,6 +188,8 @@ export class SetupActivityService {
         };
       }
     }
+    const delay = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
     this.logger.log(`[${traceId}] - Mounting path successful`, JSON.stringify(result));
     this.logger.log('Checking write permission');
     this.logger.log(`[${traceId}] - Checking write permission for ${exportPathName}`);
