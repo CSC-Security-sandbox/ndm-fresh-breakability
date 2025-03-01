@@ -13,8 +13,10 @@ import {
 import { useLogoutUserMutation } from "@api/userApi";
 import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
-
+import { useAuth } from "react-oidc-context";
 const UserDetailsContent = () => {
+  const auth = useAuth();
+
   //TODO: Copy the session data to redux and access from there.
   const sessionData = JSON.parse(
     sessionStorage.getItem(import.meta.env.VITE_PUBLIC_SESSION_KEY || "") ||
@@ -66,7 +68,7 @@ const UserDetailsContent = () => {
       </Layout.Content>
       <WizardFooter>
         <Button
-          onClick={logout}
+          onClick={() => auth.signoutSilent()}
           isSubmitting={isLoading}
           className="flex flex-col gap-1"
         >

@@ -19,13 +19,13 @@ createRoot(document.getElementById("root")!).render(
       <ThemeProvider theme="light" isRoot={true}>
         <Provider store={store}>
           <PersistGate persistor={_persistedStore}>
-            {/* <AuthenticationProvider>
-            <AuthGuard> */}
-            <Modal />
-            <SideDrawer />
-            <App />
-            {/* </AuthGuard>
-          </AuthenticationProvider> */}
+            <AuthenticationProvider>
+              <AuthGuard>
+                <Modal />
+                <SideDrawer />
+                <App />
+              </AuthGuard>
+            </AuthenticationProvider>
           </PersistGate>
         </Provider>
       </ThemeProvider>
