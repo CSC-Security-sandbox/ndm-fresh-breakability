@@ -4,7 +4,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
@@ -124,6 +124,12 @@ export class JobConfigController {
   @Delete(':id')
   async deleteJobConfig(@Param('id') id: string): Promise<{ message: string }> {
     return await this.jobConfigService.deleteJobConfig(id);
+  }
+
+  @ApiOperation({ summary: 'Precheck Validation' })
+  @Post('precheck/validate')
+  async checkCommonWorkersAndValidatePaths(@Body() precheckData: MigrateConfig[]) {
+    return await this.jobConfigService.precheckValidation(precheckData);
   }
 
 }
