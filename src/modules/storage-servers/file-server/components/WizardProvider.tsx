@@ -11,7 +11,7 @@ import {
 const WizardProvider = () => {
   console.log("first");
   return (
-    <Box className="w-full py-5 bg-red-300 h-[calc(100vh-5rem)] overflow-y-auto">
+    <Box className="w-full py-5 h-[calc(100vh-5rem)]">
       <Wizard
         stepsMap={STEPS_MAP}
         stepPaths={STEPS_PATHS}

@@ -9,7 +9,7 @@ const AppFooter = ({ footerContent }: BlueXpWizardFooterProps) => {
   return (
     <WizardFooter
       style={{}}
-      className="absolute bottom-0 z-50 flex justify-between overflow-hidden w-full"
+      className="absolute bottom-0 z-50 flex justify-between overflow-hidden w-[calc(100vw-5rem)]"
     >
       {footerContent}
     </WizardFooter>
