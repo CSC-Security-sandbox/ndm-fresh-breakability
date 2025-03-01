@@ -91,7 +91,7 @@ export class MigrationTaskService{
       const workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
       this.logger.log(`[${jobRunId}] Updating status to URL ${workerJobServiceUrl}`);
       this.logger.log(`[${jobRunId}] Updating status to ${status}`);
-      await axios.patch(`${workerJobServiceUrl}/${jobRunId}/${status}`);
+      await axios.patch(`${workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`);
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated as completed for job id: ' + jobRunId };
     } catch (error) {

@@ -10,12 +10,12 @@ export default registerAs(
     buildId: process.env.BUILD_ID || '1.0.0',
     workerConfigUrl:
       process.env.WORKER_CONFIG_URL ||
-      'http://localhost:3004/api/v1/work-manager/',
+      'http://localhost:3004',
     workerJobServiceUrl:
       process.env.WORKER_JOB_SERVICE_URL ||
-      'http://localhost:3001/api/v1/job-run',
+      'http://localhost:3008',
     platform: process.platform,
-    baseMountDir: process.env.BASE_MOUNT_DIR || '/Users/avadoot.narvekar/code_base/netapp/netapp_code_base/mount1',
+    baseMountDir: process.env.BASE_MOUNT_DIR || '/mnt/datamigrate',
     workerName: process.env.WORKER_NAME || 'worker',
     projectId: process.env.PROJECT_ID || 'cb6cbe71-676b-4fcc-913e-f30610c8b755',
     smbValidateCommand:

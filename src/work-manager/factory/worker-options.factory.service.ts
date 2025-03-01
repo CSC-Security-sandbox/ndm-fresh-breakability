@@ -12,6 +12,7 @@ import { MigrationScanService } from "src/activities/migrate/migrate.scan.servic
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 import { RedisService } from "src/redis/redis.service";
+import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -23,7 +24,8 @@ export class WorkerOptionsService {
     private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
-    private readonly migrationSyncService:MigrationSyncService
+    private readonly migrationSyncService:MigrationSyncService,
+    private readonly precheckActivity:PrecheckActivity
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -33,6 +35,7 @@ export class WorkerOptionsService {
           getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
           getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
           setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+          checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity)
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

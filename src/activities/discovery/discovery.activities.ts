@@ -119,7 +119,7 @@ export class DiscoveryActivity {
     try {
       const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
       this.logger.log(`[${traceId}] Updating discovery status to ${status}`);
-      await axios.patch(`${workerJobServiceUrl}/${traceId}/${status}`);
+      await axios.patch(`${workerJobServiceUrl}/api/v1/job-run/${traceId}/${status}`);
       this.logger.log(`[${traceId}] Discovery status updated to ${status}`);
       return { message: 'Discovery Job status updated as completed for job id: ' + traceId };
     } catch (error) {
