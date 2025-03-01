@@ -167,4 +167,91 @@ describe('JobRunService', () => {
       }));
     });
   });
+
+  describe('getJobStatsId - Inventory Summary Processing', () => {
+    const jobId = '12345';
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should correctly process inventory summary for directories and files', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.Discover,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+  
+      const mockInventorySummary = [
+        { isDirectory: true, counts: '10' }, // 10 directories
+        { isDirectory: false, counts: '50', totalFileSize: '500000' }, // 50 files, 500000 bytes
+      ];
+  
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockInventoryRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockInventorySummary),
+      });
+  
+      mockTaskRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      });
+  
+      const result = await service.getJobStatsId(jobId);
+  
+      expect(result.discovery.directories).toBe('10');
+      expect(result.discovery.fileCount).toBe('50');
+    });
+  
+    it('should handle case when there are no files or directories', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.Discover,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+  
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockInventoryRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      });
+  
+      mockTaskRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      });
+  
+      const result = await service.getJobStatsId(jobId);
+  
+      expect(result.discovery).toBeDefined();
+      expect(result.discovery.totalSize).toBe("0");
+    });
+  });
 });

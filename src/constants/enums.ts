@@ -70,6 +70,6 @@ export enum ReportType {
     JOB_RUN_STATS = 'JobRunStats',
     COC = 'COC',
     JOBS_RREPORT = 'JOBS_REPORT',
-    DISCOVERY = 'DISCOVERY'
+    DISCOVERY = 'DISCOVER'
 }
 
