@@ -20,7 +20,7 @@ import { setDrawerClose } from "@store/reducer/commonComponentSlice";
 import React, { useState } from "react";
 import { useDispatch } from "react-redux";
 // TODO : FIX THIS
-// import { useRouter } from "nextjs-toploader/app";
+// import { useNavigate } from "react-router-dom";
 import {
   setModalClose,
   setModalProps,
@@ -44,7 +44,7 @@ const SwitchProjectContent = ({ projectList, selectedProjectId }: any) => {
   const [search, setSearch] = useState<string>("");
   const dispatch = useDispatch();
   const switchProjectForm = useForm({ selectedProjectId: selectedProjectId });
-  // const router = useRouter();
+  // const navigate = useNavigate();
   const currentPath = window.location.pathname;
 
   const checkFileServerBulkOperationPaths = () => {
@@ -86,7 +86,7 @@ const SwitchProjectContent = ({ projectList, selectedProjectId }: any) => {
   };
 
   const closeDrawer = () => {
-    // router.push("/home");
+    // navigate("/home");
     dispatch(setProject(switchProjectForm.formState.selectedProjectId));
     dispatch(setDrawerClose());
   };

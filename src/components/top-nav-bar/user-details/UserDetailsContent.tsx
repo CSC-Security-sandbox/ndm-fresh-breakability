@@ -9,7 +9,7 @@ import {
   WizardHeader,
   WizardFooter,
 } from "@netapp/bxp-design-system-react";
-// import { useRouter } from "nextjs-toploader/app";
+// import { useNavigate } from "react-router-dom";
 import { useLogoutUserMutation } from "@api/userApi";
 import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -27,7 +27,7 @@ const UserDetailsContent = () => {
 
   const [logoutUser] = useLogoutUserMutation();
   const form = useForm({ email: sessionData?.profile?.email });
-  // const router = useRouter();
+  // const navigate = useNavigate();
 
   const logout = async () => {
     setIsLoading(true);

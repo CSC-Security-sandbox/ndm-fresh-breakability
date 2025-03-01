@@ -1,0 +1,38 @@
+import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
+import { Box } from "@mui/material";
+import { useContext } from "react";
+import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
+import { REVIEW_WARNING_MESSAGE } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
+import UserWarning from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/UserWarning";
+import ActionButtons from "./ActionButtons";
+
+const RunningJobRunTable = () => {
+  const {
+    BulkCutOverForm,
+    jobRunList,
+    jobRunListPathTableState,
+    setReviewStepSelectedIds,
+  } = useContext(BulkCutOverContext);
+
+  return (
+    <Box className="px-8 mt-3">
+      <ActionButtons />
+
+      <TableWrapperWithoutFilter
+        tableState={jobRunListPathTableState}
+        label="On Going Job Runs"
+        handleSelection={setReviewStepSelectedIds}
+      />
+
+      {jobRunList?.length > 0 && (
+        <UserWarning
+          form={BulkCutOverForm}
+          controlName="isReviewConformed"
+          warningMessage={REVIEW_WARNING_MESSAGE}
+        />
+      )}
+    </Box>
+  );
+};
+
+export default RunningJobRunTable;

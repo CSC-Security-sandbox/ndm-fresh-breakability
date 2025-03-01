@@ -13,7 +13,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import CreateUserForm from "./CreateUserForm";
 import PermissionAuth from "@/auth/PermissionAuth";
-import { USER_PERMISSION_TYPE_ENUM } from "@/auth/auth.constant";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";

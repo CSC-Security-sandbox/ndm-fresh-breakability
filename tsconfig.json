@@ -13,6 +13,8 @@
       "@types/*": ["./src/types/*"],
       "@pages/*": ["./src/pages/*"],
       "@store/*": ["./src/store/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@auth/*": ["./src/auth/*"],
       "@/*": ["./src/*"]
     },
     "target": "ESNext",

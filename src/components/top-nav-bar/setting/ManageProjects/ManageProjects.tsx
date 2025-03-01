@@ -9,7 +9,7 @@ import CreateProjectForm from "./CreateProject";
 import useAccountDetails from "@/hooks/useAccountDetails";
 import { useGetAllProjectsQuery } from "@api/projectApi";
 import { hasPermission } from "@/auth/auth.utils";
-import { USER_PERMISSION_TYPE_ENUM } from "@/auth/auth.constant";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
 
 const ManageProject = () => {

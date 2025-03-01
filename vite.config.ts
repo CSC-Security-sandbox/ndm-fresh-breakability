@@ -24,6 +24,8 @@ export default defineConfig({
       "@types": path.resolve(__dirname, "src/types"),
       "@hooks": path.resolve(__dirname, "src/hooks"),
       "@store": path.resolve(__dirname, "src/store"),
+      "@modules": path.resolve(__dirname, "src/modules"),
+      "@auth": path.resolve(__dirname, "src/auth"),
     },
   },
   server: {

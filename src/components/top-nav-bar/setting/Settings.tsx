@@ -1,5 +1,5 @@
 import PermissionAuth from "@/auth/PermissionAuth";
-import { USER_PERMISSION_TYPE_ENUM } from "@/auth/auth.constant";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { drawerFunctions } from "@components/side-drawer/SideDrawer.utils";
 import { Button } from "@netapp/bxp-design-system-react";
 import { SettingsIcon } from "@netapp/bxp-style/react-icons/Action";

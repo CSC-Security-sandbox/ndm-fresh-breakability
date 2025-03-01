@@ -1,6 +1,6 @@
 /* eslint-disable */
-import NameCellRenderer from "@components/custom-cell-renderer/NameCellRenderer";
-import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
+import NameCellRenderer from "@components/custom-cell-renderer//NameCellRenderer";
+import StatusCellRenderer from "@components/custom-cell-renderer//StatusCellRenderer";
 import { format } from "date-fns";
 import React from "react";
 
