@@ -10,21 +10,25 @@ import { _persistedStore, store } from "./store/store.ts";
 import AuthGuard from "./auth/AuthGuard.tsx";
 import AuthenticationProvider from "@/auth/AuthenticationProvider";
 import "@netapp/bxp-design-system-react/dist/index.css";
+import Modal from "@components/Modal/ModalWrapper";
+import SideDrawer from "@components/SideDrawer/SideDrawer";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Provider store={store}>
-      <PersistGate persistor={_persistedStore}>
-        <BrowserRouter>
-          <AuthenticationProvider>
-            <AuthGuard>
-              <ThemeProvider theme="light" isRoot={true}>
-                <App />
-              </ThemeProvider>
-            </AuthGuard>
-          </AuthenticationProvider>
-        </BrowserRouter>
-      </PersistGate>
-    </Provider>
+    <BrowserRouter>
+      <ThemeProvider theme="light" isRoot={true}>
+        <Provider store={store}>
+          <PersistGate persistor={_persistedStore}>
+            {/* <AuthenticationProvider>
+            <AuthGuard> */}
+            <Modal />
+            <SideDrawer />
+            <App />
+            {/* </AuthGuard>
+          </AuthenticationProvider> */}
+          </PersistGate>
+        </Provider>
+      </ThemeProvider>
+    </BrowserRouter>
   </StrictMode>
 );

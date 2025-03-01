@@ -33,14 +33,16 @@ export const usersApi = createApi({
   endpoints: (builder) => ({
     getAllUsers: builder.query({
       query: () => {
-        return `/users?limit=${process.env.NEXT_PUBLIC_API_LIMIT}`;
+        return `/users?limit=${import.meta.env.VITE_PUBLIC_API_LIMIT}`;
       },
       providesTags: ["ALL_USERS"],
     }),
 
     getAllUsersWithRoles: builder.query({
       query: () => {
-        return `/user-roles/grouping?limit=${process.env.NEXT_PUBLIC_API_LIMIT}`;
+        return `/user-roles/grouping?limit=${
+          import.meta.env.VITE_PUBLIC_API_LIMIT
+        }`;
       },
       providesTags: ["ALL_USERS"],
     }),
@@ -120,7 +122,9 @@ export const usersApi = createApi({
 
     logoutUser: builder.mutation({
       query: (body) => ({
-        url: `${process.env.NEXT_PUBLIC_KEYCLOAK_HOST}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/logout`,
+        url: `${import.meta.env.VITE_PUBLIC_KEYCLOAK_HOST}/realms/${
+          import.meta.env.VITE_PUBLIC_KEYCLOAK_REALM
+        }/protocol/openid-connect/logout`,
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -131,7 +135,9 @@ export const usersApi = createApi({
 
     refreshUserToken: builder.mutation({
       query: (body) => ({
-        url: `${process.env.NEXT_PUBLIC_KEYCLOAK_HOST}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+        url: `${import.meta.env.VITE_PUBLIC_KEYCLOAK_HOST}/realms/${
+          import.meta.env.VITE_PUBLIC_KEYCLOAK_REALM
+        }/protocol/openid-connect/token`,
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

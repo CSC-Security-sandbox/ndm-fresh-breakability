@@ -38,7 +38,6 @@
 
 import "@netapp/bxp-design-system-react/dist/index.css";
 import { Route, Routes } from "react-router-dom";
-import "./App.css";
 import FileServer from "./pages/FileServer";
 import Home from "./pages/Home";
 import SpeedTest from "./pages/SpeedTest";
@@ -50,7 +49,7 @@ import NotFound from "./components/404/PageNotFound";
 const App = () => {
   // const auth = useAuth();
   return (
-    <div className="bg-main-background">
+    <div className="">
       <Routes>
         <Route path="/" element={<HomeLayout />}>
           <Route index path="/home" element={<Home />} />

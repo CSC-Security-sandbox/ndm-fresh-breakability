@@ -1,4 +1,3 @@
-import { DataItemType } from "@/types/app.type";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 interface appSliceType {

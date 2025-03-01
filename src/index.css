@@ -1,8 +1,8 @@
 @import "@netapp/bxp-design-system-react/dist/index.css";
 
-@import "tailwindcss";
-@import "tailwindcss/preflight";
-@import "tailwindcss/utilities";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 .filter-white-color {
   filter: brightness(0) saturate(100%) invert(100%) sepia(0%) saturate(0%)
@@ -11,4 +11,8 @@
 
 .content-container {
   height: calc(100vh - 150px);
+}
+
+.test {
+  background-color: blue;
 }
