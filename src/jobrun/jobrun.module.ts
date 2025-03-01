@@ -11,7 +11,6 @@ import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { WorkManager } from 'src/events/workmanager/workmanager.service';
 import { TaskEntity } from 'src/entities/task.entity';
 import { OperationsEntity } from 'src/entities/operation.entity';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
@@ -28,7 +27,7 @@ import { JobRunInitService } from './jobrun.init.service';
         TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity]),
         WorkerModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkManager,WorkflowService, JobRunInitService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

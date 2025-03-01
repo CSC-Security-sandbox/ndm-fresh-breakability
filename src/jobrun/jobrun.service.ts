@@ -39,7 +39,7 @@ export class JobRunService {
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     private readonly configService: ConfigService,
-    private jobRunInitService: JobRunInitService
+    private  readonly jobRunInitService: JobRunInitService
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
@@ -77,7 +77,6 @@ export class JobRunService {
     return await this.jobRunInitService.createJobRun(jobConfig.id, new Date())
   }
    
-
  
   //  ------------------- JobRun actions ------------------ //
   async actions(jobRunActions: JobRunActionsReq) {
