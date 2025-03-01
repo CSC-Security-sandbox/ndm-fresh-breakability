@@ -1,7 +1,6 @@
 import "@netapp/bxp-design-system-react/dist/index.css";
 import { Route, Routes } from "react-router-dom";
 import FileServer from "./pages/FileServerPage";
-import Home from "./pages/Home";
 import HomeLayout from "./components/route-layout/HomeLayout";
 import NotFound from "./components/404/PageNotFound";
 import FileServerPage from "./pages/FileServerPage";
@@ -11,14 +10,15 @@ import FileServerOverViewPage from "@pages/FileServerOverViewPage";
 import BulkCutOverPage from "@pages/BulkCutOverPage";
 import BulkMigratePage from "@pages/BulkMigratePage";
 import BulkDiscoveryPage from "@pages/BulkDiscoveryPage";
+import HomePage from "./pages/HomePage";
 
 const App = () => {
   return (
     <div className="">
       <Routes>
         <Route path="/" element={<HomeLayout />}>
-          <Route index element={<Home />} />
-          <Route path="home" element={<Home />} />
+          <Route index element={<HomePage />} />
+          <Route path="home" element={<HomePage />} />
           <Route path="config/file-server" element={<FileServerPage />} />
           <Route
             path="config/new-file-server"

@@ -59,6 +59,7 @@ const WORKERS_HEADER_TAB: BlueXpTabHeaderPropsType = {
 
 export const HEADER_WITH_PATHNAME: HeaderType = {
   "/config/file-server": CONFIG_HEADER_TAB,
+  "/new-file-server": CONFIG_HEADER_TAB,
   "/job": JOB_HEADER_TAB,
   "/reports": REPORTS_HEADER_TAB,
   "/workers": WORKERS_HEADER_TAB,
