@@ -45,6 +45,10 @@ export class JobRunEntity extends Base {
   @JoinColumn({ name: "job_config_id" })
   jobConfig: JobConfigEntity;
 
+  @ApiProperty({ description: "COC report ready status" })
+  @Column({ name: "is_coc_report_ready", default: false, nullable: false })
+  isCocReportReady: boolean;
+
   @OneToMany(() => InventoryEntity, (inventory) => inventory.jobRuns, {
     cascade: true,
     eager: false,
