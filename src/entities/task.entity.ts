@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { OperationsEntity } from './operation.entity';
-import { TaskStatus, TaskType } from 'src/enum/queues.enum';
+
 import { TaskErrorEntity } from './task-error.entity';
-import { Base } from './base.entity';
+import { TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 
 
 

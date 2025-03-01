@@ -85,7 +85,7 @@ export enum ConsumerType {
       migrationTask: async (task: Task) => await inventoryService.saveTasks(task),
       taskstats: async (taskStat) => {},
       updatedTask: async (task: Task) => {
-        await inventoryService.updateTask(task.id, { status: task.status as TaskStatus });
+        await inventoryService.updateTask(task.id, { status: task.status });
         if(task.commands.length) {
           await task.commands.map(async (cmd: any) => {
             await inventoryService.updateOperation(cmd.commandId, { status: cmd.status as OperationStatus })
