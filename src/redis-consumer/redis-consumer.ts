@@ -68,6 +68,10 @@ export enum ConsumerType {
             `${reportServiceUrl}/inventory/generate-report`,
             payload
           );
+
+          // call the report service to generate coc report
+          await axios.get(`${reportServiceUrl}/job-run/coc-report/${jobRunId}`);
+          
           console.log(`[${jobRunId}] Discovery status updated to Completed`);
           Object.keys(ConsumerType).forEach(
             async (consumer) =>
