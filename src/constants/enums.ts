@@ -134,3 +134,9 @@ export enum ConsumerType{
 export enum CutoverErrors {
     VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND'
 }
+
+
+export enum CutOverStatus {
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED'
+}

@@ -3,12 +3,14 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
 import * as parser from 'cron-parser';
-import { CutoverErrors, JobRunStatus, JobStatus, JobType } from "src/constants/enums";
+import { CutOverStatus, JobRunStatus, JobStatus, JobType, WorkFlows } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { RedisService } from "src/redis/redis.service";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
 import { FindManyOptions, In, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
@@ -16,7 +18,7 @@ import {
   JobRunDto,
   JobRunsDTO
 } from "./dto/jobrun.dto";
-import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
+import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobRunConfig } from "./jobrun.types";
@@ -37,30 +39,32 @@ export class JobRunService {
     private inventoryRepo: Repository<InventoryEntity>,
     private readonly configService: ConfigService,
     private  readonly jobRunInitService: JobRunInitService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private workFlowService: WorkflowService,
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
 
-
-  async cutoverApprove(jobRunId: string) {
-    const jobRun = await this.jobRunRepo.findOne({
-      where: {
-        id: jobRunId,
-        status: JobRunStatus.Blocked,
-        jobConfig: { jobType: JobType.CUT_OVER }
-      },
-      relations: ['jobConfig'],
-    });
-
-    if (!jobRun) {
-      throw new NotFoundException(CutoverErrors.VALID_JOB_RUN_NOT_FOUND);
+  async cutOverApproval(jobRunId: string, status: CutOverStatus) {
+    if(status === CutOverStatus.REJECTED) {
+      const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations: {jobConfig: true}})
+      if(jobRun)
+        await this.jobConfigRepo.update({
+          sourcePathId:  jobRun.jobConfig.sourcePathId,
+          targetPathId:  jobRun.jobConfig.targetPathId,
+          jobType: JobType.MIGRATE
+        }, {status : JobStatus.Active})
     }
+    await this.jobRunRepo.update({id: jobRunId}, {status: JobRunStatus.Completed})
+  }
 
-    jobRun.status = JobRunStatus.Completed;
-    await this.jobRunRepo.save(jobRun);
-
-    return { details: 'Cutover job approved successfully' };
+  async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
+    const signal: SignalWorkFlowPayload = {
+      payload: approvalRequest.action,
+      signalName:  'approve',
+      workflowId: `${WorkFlows.CUT_OVER}-${approvalRequest.jobRunId}`
+    }
+    return await this.workFlowService.sendSignal(signal)
   }
 
   // ------------------ Ad-hoc Run -------------------- //
@@ -112,7 +116,9 @@ export class JobRunService {
       worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
+    const jobRunConfigs = await this.jobRunRepo.find({where: {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, select: {jobConfigId : true}})
     await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
+    await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
     for(const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Stopped;
