@@ -267,7 +267,7 @@ export class JobConfigService {
           ) {
             const existingCutover = await this.jobConfigRepo.findOne({
               where: {
-                jobType: JobType.CutOver,
+                jobType: JobType.CUT_OVER,
                 sourcePathId,
                 targetPathId: destinationPathId,
               },
@@ -276,7 +276,7 @@ export class JobConfigService {
             if (!existingCutover) {
               newCutoverJobs.push(
                 this.jobConfigRepo.create({
-                  jobType: JobType.CutOver,
+                  jobType: JobType.CUT_OVER,
                   sourcePathId,
                   targetPathId: destinationPathId,
                   excludeFilePatterns: config.excludeFilePatterns,

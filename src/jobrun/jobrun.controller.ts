@@ -8,17 +8,21 @@ import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunService } from './jobrun.service';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
 import { JobRunStatus } from 'src/constants/enums';
+import { JobRunInitService } from './jobrun.init.service';
 
 @ApiTags('jobs run')
 @Controller('job-run')
 export class JobRunController {
   private readonly logger = new Logger(JobRunController.name);
-  constructor(private readonly jobRunService: JobRunService) {}
+  constructor(
+    private readonly jobRunService: JobRunService,
+    private readonly jobRunInitService: JobRunInitService
+    ) {}
 
   // remove the schedule cron job
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron(){
-    await this.jobRunService.scheduleAJob()
+    await this.jobRunInitService.scheduleAJob()
   }
 
 
