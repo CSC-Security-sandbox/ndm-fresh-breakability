@@ -1,15 +1,15 @@
 import { defineConfig } from "vite";
-// import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), nodePolyfills()],
   build: {
     outDir: "dist",
   },
@@ -26,6 +26,8 @@ export default defineConfig({
       "@store": path.resolve(__dirname, "src/store"),
       "@modules": path.resolve(__dirname, "src/modules"),
       "@auth": path.resolve(__dirname, "src/auth"),
+      crypto: "crypto-browserify",
+      stream: "stream-browserify",
     },
   },
   server: {

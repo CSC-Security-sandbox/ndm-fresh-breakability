@@ -4,6 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        "content-bg": "#F3F3F3",
         "light-error-bg": "#FFF5F5",
         "header-netapp-bg": "#0067C5",
         "brand-hover-fill": "#48A6EC",

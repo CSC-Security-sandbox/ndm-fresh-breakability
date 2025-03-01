@@ -1,7 +1,6 @@
-import WizardProvider from "../components/WizardProvider";
 import CommonFileServerContextProvider from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
 import { withCreateFileServer } from "@modules/storage-servers/file-server//context/withCreateFileServer";
-import { Box } from "@components/container/index";
+import WizardProvider from "../components/WizardProvider";
 
 const CreateFileServerContextWrapper = withCreateFileServer(
   CommonFileServerContextProvider
@@ -9,11 +8,9 @@ const CreateFileServerContextWrapper = withCreateFileServer(
 
 const CreateNewFileServer = () => {
   return (
-    <Box>
-      <CreateFileServerContextWrapper>
-        <WizardProvider />
-      </CreateFileServerContextWrapper>
-    </Box>
+    <CreateFileServerContextWrapper>
+      <WizardProvider />
+    </CreateFileServerContextWrapper>
   );
 };
 

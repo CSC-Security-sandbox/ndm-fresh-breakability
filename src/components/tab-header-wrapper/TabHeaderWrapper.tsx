@@ -1,7 +1,8 @@
 /* eslint-disable */
+import React, { useMemo } from "react";
 import { TabHeader, TabLinks } from "@netapp/bxp-design-system-react";
 import { HEADER_WITH_PATHNAME } from "./TabHeaderWrapper.constant";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const LinkWithActiveClass = (props: any) => {
   const { path, label, activeClassName, className, isActive, key } = props;
@@ -17,11 +18,15 @@ const LinkWithActiveClass = (props: any) => {
 };
 
 const TabHeaderWrapper = () => {
-  const pathname: string = window.location.pathname;
-  const allKeys = Object.keys(HEADER_WITH_PATHNAME);
-  const currantPath: string =
-    allKeys.find((row) => pathname.includes(row)) || "";
-  const blueXpTabHeaderProps = HEADER_WITH_PATHNAME[currantPath || ""];
+  const location = useLocation();
+  const pathname = location.pathname;
+
+  const { currantPath, blueXpTabHeaderProps } = useMemo(() => {
+    const allKeys = Object.keys(HEADER_WITH_PATHNAME);
+    const currantPath = allKeys.find((row) => pathname.includes(row)) || "";
+    const blueXpTabHeaderProps = HEADER_WITH_PATHNAME[currantPath || ""];
+    return { currantPath, blueXpTabHeaderProps };
+  }, [pathname]);
 
   return (
     <>

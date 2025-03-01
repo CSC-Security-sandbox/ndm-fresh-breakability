@@ -6,11 +6,12 @@ import Footer from "./footer/Footer";
 import {
   STEPS_MAP,
   STEPS_PATHS,
-} from "@modules/storage-servers/file-server//file-server.constant";
+} from "@modules/storage-servers/file-server/file-server.constant";
 
 const WizardProvider = () => {
+  console.log("first");
   return (
-    <Box className="w-full py-5 h-[70vh]">
+    <Box className="w-full py-5 bg-red-300 h-[calc(100vh-5rem)] overflow-y-auto">
       <Wizard
         stepsMap={STEPS_MAP}
         stepPaths={STEPS_PATHS}

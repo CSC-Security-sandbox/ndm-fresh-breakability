@@ -4,7 +4,7 @@ import { Box } from "@components/container/index";
 import { ConfigListTypeApiType } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
-import { usePathname } from "next/navigation";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const JobsAction = ({
@@ -12,12 +12,13 @@ const JobsAction = ({
 }: {
   fileServerDetails: ConfigListTypeApiType;
 }) => {
-  // const navigate = useNavigate();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
   const isActive = fileServerDetails?.status === FILE_SERVER_STATUS.ACTIVE;
 
   const handleEdit = () => {
-    // navigate(`/config/file-server/edit/${fileServerDetails?.id}`);
+    navigate(`/config/file-server/edit/${fileServerDetails?.id}`);
   };
 
   return (
@@ -33,19 +34,19 @@ const JobsAction = ({
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
             disabled={!isActive}
-            // onClick={() => navigate(`${pathname}/bulk-discover`)}
+            onClick={() => navigate(`${pathname}/bulk-discover`)}
           >
             Bulk Discover
           </Button>
           <Button
             disabled={!isActive}
-            // onClick={() => navigate(`${pathname}/bulk-migrate`)}
+            onClick={() => navigate(`${pathname}/bulk-migrate`)}
           >
             Bulk Migrate
           </Button>
           <Button
             disabled={!isActive}
-            // onClick={() => navigate(`${pathname}/bulk-cutover`)}
+            onClick={() => navigate(`${pathname}/bulk-cutover`)}
           >
             Bulk Cutover
           </Button>

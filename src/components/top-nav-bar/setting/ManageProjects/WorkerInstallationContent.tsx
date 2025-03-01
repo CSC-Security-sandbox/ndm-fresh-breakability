@@ -18,9 +18,9 @@ const WorkerInstallationContent = ({
   isLoading,
   isError,
 }: {
-  controlPlaneIp: string;
-  workerId: string;
-  workerSecret: string;
+  controlPlaneIp?: string;
+  workerId?: string;
+  workerSecret?: string;
   isLoading?: boolean;
   isError?: boolean;
 }) => (

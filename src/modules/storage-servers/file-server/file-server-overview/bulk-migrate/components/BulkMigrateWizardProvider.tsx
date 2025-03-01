@@ -16,20 +16,18 @@ const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
 
 const BulkMigrateWizardProvider = () => {
   return (
-    <Box className="w-full py-5 h-[80vh]">
-      <BulkMigrateContextWrapper>
-        <Wizard
-          stepsMap={STEPS_MAP_BULK_MIGRATION}
-          stepPaths={STEPS_PATHS_BULK_MIGRATION}
-          initialState={{}}
-          initialStep="mapping"
-          initialPath="default"
-        >
-          <AppFooter footerContent={<BulkMigrateFooter />} />
-          <CustomStepLayout />
-        </Wizard>
-      </BulkMigrateContextWrapper>
-    </Box>
+    <BulkMigrateContextWrapper>
+      <Wizard
+        stepsMap={STEPS_MAP_BULK_MIGRATION}
+        stepPaths={STEPS_PATHS_BULK_MIGRATION}
+        initialState={{}}
+        initialStep="mapping"
+        initialPath="default"
+      >
+        <AppFooter footerContent={<BulkMigrateFooter />} />
+        <CustomStepLayout />
+      </Wizard>
+    </BulkMigrateContextWrapper>
   );
 };
 
