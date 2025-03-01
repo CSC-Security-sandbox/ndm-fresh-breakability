@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, FileInfo, JobStatus, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, FileInfo, JobStatus, OPS_CMD, OPS_STATUS, Task, TaskStats, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
@@ -49,7 +49,7 @@ export class DiscoveryActivity {
         'consumer-1',
         directoryBatchSize,
       )) {
-        const ops = { 0: { cmd: 'SCAN', status: 'PENDING' } };
+        const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
         const command = new Command(directory.path, ops, `${uuid4()}`);
         commandsBatch.push(command);
         this.logger.log(`[${traceId}] Task created for publishing.`)
@@ -57,8 +57,8 @@ export class DiscoveryActivity {
           const task = new Task(
             uuid4(),
             traceId,
-            'SCAN',
-            'PENDING',
+            TaskType.SCAN,
+            TaskStatus.PENDING,
             jobContext.jobConfig.workerIds[0],
             jobContext.jobConfig.sourceFileServer.path,
             jobContext.jobConfig.sourceFileServer.pathId,
@@ -84,8 +84,8 @@ export class DiscoveryActivity {
         const task = new Task(
           uuid4(),
           traceId,
-          'SCAN',
-          'PENDING',
+          TaskType.SCAN,
+          TaskStatus.PENDING,
           jobContext.jobConfig.workerIds[0],
           jobContext.jobConfig.sourceFileServer.path,
           jobContext.jobConfig.sourceFileServer.pathId,
