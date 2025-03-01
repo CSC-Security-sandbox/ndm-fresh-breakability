@@ -1,7 +1,7 @@
 "use client";
 import CustomStepLayout from "@modules/storage-servers/file-server//components/layout/CustomStepLayout";
 import { Box } from "@components/container/index";
-import FooterWrapper from "@/app/components/layout/FooterWrapper/FooterWrapper";
+import AppFooter from "@components/layout/app-footer/AppFooter";
 import { Wizard } from "@netapp/bxp-design-system-react";
 import {
   CUT_OVER_STEPS_MAP,
@@ -13,9 +13,9 @@ import { withBulkCutOver } from "./context/withBulkCutOver";
 
 const BulkCutOverContextWrapper = withBulkCutOver(BulkCutOverContextProvider);
 
-const WizardProvider = () => {
+const BulkCutOver = () => {
   return (
-    <Box className="w-full py-5 h-[70vh]">
+    <Box className="w-full py-5 h-[70vh] overflow-hidden">
       <BulkCutOverContextWrapper>
         <Box className="ml-12 font-semibold text-lg">Bulk Cutover</Box>
         <Wizard
@@ -26,11 +26,11 @@ const WizardProvider = () => {
           initialPath="default"
         >
           <CustomStepLayout />
-          <FooterWrapper footerContent={<BulkCutOverFooter />} />
+          <AppFooter footerContent={<BulkCutOverFooter />} />
         </Wizard>
       </BulkCutOverContextWrapper>
     </Box>
   );
 };
 
-export default WizardProvider;
+export default BulkCutOver;

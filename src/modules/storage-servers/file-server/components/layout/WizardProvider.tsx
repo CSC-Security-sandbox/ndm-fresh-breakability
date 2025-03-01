@@ -1,12 +1,12 @@
 import { Box } from "@components/container/index";
 import AppFooter from "@/components/layout/app-footer/AppFooter";
 import { Wizard } from "@netapp/bxp-design-system-react";
-import ServiceAndProtocol from "@modules/storage-servers/file-server//components/steps/ServerType/ServerType";
-import ValidateConnection from "@modules/storage-servers/file-server//components/steps/ValidateConnection/ValidateConnection";
-import JobConfig from "@modules/storage-servers/file-server//components/steps/JobConfig/JobConfig";
+import ServiceAndProtocol from "@modules/storage-servers/file-server/components/steps/ServerType/ServerType";
+import ValidateConnection from "@modules/storage-servers/file-server/components/steps/ValidateConnection/ValidateConnection";
+import JobConfig from "@modules/storage-servers/file-server/components/steps/JobConfig/JobConfig";
 import CustomStepLayout from "./CustomStepLayout";
-import Footer from "@modules/storage-servers/file-server//components/footer/Footer";
-import Credentials from "@modules/storage-servers/file-server//components/steps/Credentials/Credentials";
+import Footer from "@modules/storage-servers/file-server/components/footer/Footer";
+import Credentials from "@modules/storage-servers/file-server/components/steps/Credentials/Credentials";
 import { WizardProviderPropsType } from "../file-server.interface";
 
 const STEPS_MAP = {

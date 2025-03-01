@@ -1,4 +1,4 @@
-import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import { UploadIcon } from "@netapp/bxp-style/react-icons/Action";
 import Button from "@mui/material/Button";
 import { styled } from "@mui/material/styles";
 import ExcelJS from "exceljs";
@@ -141,7 +141,7 @@ const UploadMappingTableDetails = ({
       role={undefined}
       variant="contained"
       tabIndex={-1}
-      startIcon={<CloudUploadIcon />}
+      startIcon={<UploadIcon color="white" />}
     >
       Upload files
       <VisuallyHiddenInput

@@ -12,23 +12,26 @@ import AuthenticationProvider from "@/auth/AuthenticationProvider";
 import "@netapp/bxp-design-system-react/dist/index.css";
 import Modal from "@components/Modal/ModalWrapper";
 import SideDrawer from "@components/SideDrawer/SideDrawer";
+import { Box } from "@components/container/index.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <ThemeProvider theme="light" isRoot={true}>
-        <Provider store={store}>
-          <PersistGate persistor={_persistedStore}>
-            <AuthenticationProvider>
-              <AuthGuard>
-                <Modal />
-                <SideDrawer />
-                <App />
-              </AuthGuard>
-            </AuthenticationProvider>
-          </PersistGate>
-        </Provider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <Box className="!overflow-hidden h-screen">
+      <BrowserRouter>
+        <ThemeProvider theme="light" isRoot={true}>
+          <Provider store={store}>
+            <PersistGate persistor={_persistedStore}>
+              <AuthenticationProvider>
+                <AuthGuard>
+                  <Modal />
+                  <SideDrawer />
+                  <App />
+                </AuthGuard>
+              </AuthenticationProvider>
+            </PersistGate>
+          </Provider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </Box>
   </StrictMode>
 );

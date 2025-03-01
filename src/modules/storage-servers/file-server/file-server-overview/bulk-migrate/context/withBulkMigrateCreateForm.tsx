@@ -1,4 +1,3 @@
-"use client";
 import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
@@ -31,7 +30,7 @@ import {
   WEEK_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
-import { INITIAL_VALUE_EXCLUDE_PATH_PATERN } from "@/app/utils/constants";
+import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
 import { Button, useForm } from "@netapp/bxp-design-system-react";
 import { notify } from "@components/notification/NotificationWrapper";
 import {
@@ -164,7 +163,7 @@ export function withBulkMigrateCreateForm(
 
     const optionForm: BlueXpFormType<OptionsFormType> = useForm(
       {
-        exclude_file_patterns: INITIAL_VALUE_EXCLUDE_PATH_PATERN.replaceAll(
+        exclude_file_patterns: INITIAL_VALUE_EXCLUDE_PATH_PATTERN.replaceAll(
           ",",
           "\n"
         ),
