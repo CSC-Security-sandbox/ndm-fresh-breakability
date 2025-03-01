@@ -18,6 +18,7 @@ import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerModule } from 'src/workers/workers.module';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { JobRunInitService } from './jobrun.init.service';
+import { RedisModule } from 'src/redis/redis.module';
 
 
 @Module({
@@ -25,7 +26,8 @@ import { JobRunInitService } from './jobrun.init.service';
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity]),
-        WorkerModule
+        WorkerModule,
+        RedisModule
     ],
     providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService],
     controllers: [JobRunController]

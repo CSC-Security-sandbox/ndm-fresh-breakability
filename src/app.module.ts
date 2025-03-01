@@ -8,6 +8,7 @@ import { JobRunModule } from './jobrun/jobrun.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkerModule } from './workers/workers.module';
 import { WorkflowModule } from './workflow/workflow.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { WorkflowModule } from './workflow/workflow.module';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, WorkerModule, JobRunModule, TasksModule,WorkflowModule
+    JobConfigModule, WorkerModule, JobRunModule, TasksModule,WorkflowModule, RedisModule
   ],
   controllers: [],
   providers: [],

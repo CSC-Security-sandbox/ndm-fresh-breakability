@@ -1,10 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import {
-  JobContextFactory,
-  RedisUtils
-} from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
 import * as parser from 'cron-parser';
 import { CutoverErrors, JobRunStatus, JobStatus, JobType } from "src/constants/enums";
@@ -12,6 +8,7 @@ import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { RedisService } from "src/redis/redis.service";
 import { FindManyOptions, In, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
@@ -39,7 +36,8 @@ export class JobRunService {
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     private readonly configService: ConfigService,
-    private  readonly jobRunInitService: JobRunInitService
+    private  readonly jobRunInitService: JobRunInitService,
+    private readonly redisService: RedisService
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
@@ -92,20 +90,14 @@ export class JobRunService {
     }
   }
 
- 
-
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
     await this.jobRunRepo.update({id: In(jobRuns)}, {status: JobRunStatus.Paused})
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Paused;
-      const serializedContext = jobContext.serialize();
-      await redisClient.set(jobRunId, serializedContext);
+      await this.redisService.setJobContext(jobRunId, jobContext);
     }
     return {details: 'Operation Completed Successfully'}
   }
@@ -121,13 +113,10 @@ export class JobRunService {
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
     await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Stopped;
-      await redisClient.set(jobRunId, jobContext.serialize());
+      await this.redisService.setJobContext(jobRunId, jobContext);
     }
     return {details: 'Operation Completed Successfully'}
   }
@@ -140,14 +129,12 @@ export class JobRunService {
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: true})
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Pending;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      await redisClient.set(jobRunId, jobContext.serialize());
+      await this.redisService.setJobContext(jobRunId, jobContext);
       await this.resumeJobRun(jobRunId);
     }
     return {details: 'Operation Completed Successfully'}

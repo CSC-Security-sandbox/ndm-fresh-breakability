@@ -27,6 +27,7 @@ import { LessThan, Repository } from "typeorm";
 import { v4 as uuid4 } from 'uuid';
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
+import { RedisService } from "src/redis/redis.service";
 
 @Injectable()
 export class JobRunInitService { 
@@ -45,6 +46,7 @@ export class JobRunInitService {
     @Inject()
     private workFlowService: WorkflowService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
@@ -244,10 +246,10 @@ export class JobRunInitService {
           const redisClient = await RedisUtils.getClient();
           if(!redisClient.isOpen) await redisClient.connect();
           const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
-          const jobContext = JobContextFactory.getProvider('redis', redisClient)
+          const jobContext = JobContextFactory.getProvider('redis', this.redisService.getClient())
           .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
            (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
-          redisClient.set(jobRunId, (await jobContext).serialize());
+          this.redisService.setJobContext(jobRunId, await jobContext);
     }
 
     // ------------------ CreateInitialTask -------------------- //
