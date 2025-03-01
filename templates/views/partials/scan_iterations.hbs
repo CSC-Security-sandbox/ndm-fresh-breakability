@@ -1,5 +1,4 @@
   <h2>Iterations</h2>
-  <h3>Scan Details</h3>
   <table style="border:1px solid black;border-collapse: separate;border-spacing: 0;text-align:left;">
    <thead>
     <tr style="background-color:#dbdbdb;">
@@ -31,23 +30,23 @@
     {{#if scan_iterations.length}}
     {{#each scan_iterations}}
    <tbody>
-    <tr class="darker" style="background-color: #f0f0f0;">
-     <th style="padding: 3px 8px;">{{job_run_id}}</th>
-     <th style="padding: 3px 8px;">{{job_type}}</th>
-     <th style="padding: 3px 8px;">{{status}}</th>
+    <tr>
+     <td style="padding: 3px 8px;">{{job_run_id}}</td>
+     <td style="padding: 3px 8px;">{{job_type}}</td>
+     <td style="padding: 3px 8px;">{{status}}</td>
      <td class="datefmt" style="white-space:nowrap;padding: 3px 8px;">{{start_time}}</td>
      <td class="datefmt" style="white-space:nowrap;padding: 3px 8px;">&lt; {{s_duration}}</td>
      <td style="padding: 3px 8px;">{{s_files}}</td>
      <td style="padding: 3px 8px;">{{s_directories}}</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td class="$iteration.scan_source_errorsColor-odd" style="padding: 3px 8px;">{{s_errors}}</td>
-     <td class="datefmt" style="white-space:nowrap;padding: 3px 8px;">&lt;1 min</td>
-     <td style="padding: 3px 8px;">27,031</td>
-     <td style="padding: 3px 8px;">114</td>
-     <td style="padding: 3px 8px;">23</td>
-     <td style="padding: 3px 8px;">1.36 GiB</td>
-     <td class="$iteration.scan_destination_errorsColor-odd" style="padding: 3px 8px;">-</td>
+     <td style="padding: 3px 8px;">{{s_others}}</td>
+     <td style="padding: 3px 8px;">{{t_capacity}}</td>
+     <td style="padding: 3px 8px;">{{s_errors}}</td>
+     <td style="padding: 3px 8px;">&lt; {{t_duration}}</td>
+     <td style="padding: 3px 8px;">{{t_items}}</td>
+     <td style="padding: 3px 8px;">{{t_directories}}</td>
+     <td style="padding: 3px 8px;">{{t_others}}</td>
+     <td style="padding: 3px 8px;">{{t_capacity}}</td>
+     <td style="padding: 3px 8px;">{{t_errors}}</td>
     </tr>
     {{/each}}
     {{else}}
