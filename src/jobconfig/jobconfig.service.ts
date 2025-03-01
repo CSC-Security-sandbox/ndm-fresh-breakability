@@ -521,6 +521,7 @@ export class JobConfigService {
         return {
           jobRunId: jobRun.id,
           isReportReady: jobRun.isReportReady,
+          isCocReportReady: jobRun.isCocReportReady,
           status: jobRun.status,
           startTime: jobRun.startTime,
           endTime: jobRun.endTime,
