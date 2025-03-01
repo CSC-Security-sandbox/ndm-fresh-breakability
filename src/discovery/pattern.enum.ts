@@ -19,8 +19,8 @@ export enum ReportType {
     EXPORTS = "Exports",
     NUMBER_OF_EXPORTS = "Number of Exports",
 
-    SCAN_STATUS = "Scan Status",
-    SCAN_PROTOCOL = "Scan Protocol",
+    SCAN_STATUS = "Status",
+    SCAN_PROTOCOL = "Protocol",
     SCAN_TIME = "Scan Time",
     SCAN_ERRORS = "Scan Errors",
     SCANNED_CAPACITY = "Scanned Capacity",
@@ -155,7 +155,7 @@ export enum ReportType {
     LONGEST_FILE_PATHS = "Longest File Paths",
     LONGEST_DIRECTORY_PATHS = "Longest Directory Paths",
     BIGGEST_FILES = "Biggest Files",
-    BIGGEST_DIRECTORIES_WITH_COUNT = "Biggest Directories (with Count)",
-    BIGGEST_DIRECTORIES_WITH_CAPACITY = "Biggest Directories (with Capacity)",
+    BIGGEST_DIRECTORIES_WITH_COUNT = "Biggest Directory With Count",
+    BIGGEST_DIRECTORIES_WITH_CAPACITY = "Biggest Directory With Capacity",
     TOP_FILE_EXTENSIONS = "Top File Extensions (with file count and Capacity)",
 }
