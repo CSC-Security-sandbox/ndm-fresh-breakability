@@ -150,7 +150,7 @@ export enum ReportType {
     CAPACITY_FILE_SIZE_100_MiB_1_GiB = "Capacity with File Size: 100 MiB - 1 GiB",
     CAPACITY_FILE_SIZE_1_PLUS_GiB = "Capacity with File Size: 1+ GiB",
 
-    LONGEST_FILE_NAMES = "Longest File Names (5)",
+    LONGEST_FILE_NAMES = "Longest File Names",
     LONGEST_DIRECTORY_NAMES = "Longest Directory Names",
     LONGEST_FILE_PATHS = "Longest File Paths",
     LONGEST_DIRECTORY_PATHS = "Longest Directory Paths",
