@@ -73,6 +73,9 @@ export class MigrationSyncService {
       writeStream.on("finish", resolve);
       readStream.on("error", reject);
       writeStream.on("error", reject);
+      readStream.close()
+      writeStream.close()
+
     });
   
     const checksum = hash.digest("hex");

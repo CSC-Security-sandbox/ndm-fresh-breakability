@@ -95,3 +95,13 @@ export interface UpdateStatusOutput{
 export interface StampMetaDataOutput{
     errors: string[]
 }
+
+export interface UpdateCutOverStatusInput {
+    jobRunId: string;
+    status: CutOverStatus
+}
+
+export enum CutOverStatus {
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED'
+}

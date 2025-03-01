@@ -1,17 +1,16 @@
 import { Injectable } from "@nestjs/common";
-import { WorkFlowOptions } from "./worker-options.factory";
-import { WorkerConfiguration } from "../work-manager.types";
-import { ListPathActivity } from "src/activities/list-path/list-path.service";
-import { WorkFlowType } from "./worker-options.types";
 import { NativeConnection } from "@temporalio/worker";
-import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
-import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
-import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
+import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
+import { ListPathActivity } from "src/activities/list-path/list-path.service";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
-import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
-import { RedisService } from "src/redis/redis.service";
+import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
+import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
+import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
+import { WorkerConfiguration } from "../work-manager.types";
+import { WorkFlowOptions } from "./worker-options.factory";
+import { WorkFlowType } from "./worker-options.types";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -33,6 +32,8 @@ export class WorkerOptionsService {
           getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
           getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
           setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+          updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+          updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -54,6 +55,7 @@ export class WorkerOptionsService {
             fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
             fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
             updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+            updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
             updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
         });

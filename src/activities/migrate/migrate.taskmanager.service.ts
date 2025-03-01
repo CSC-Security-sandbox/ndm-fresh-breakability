@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Command, JobContext, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import { RedisService } from 'src/redis/redis.service';
-import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
+import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import axios from 'axios';
 
@@ -93,7 +93,7 @@ export class MigrationTaskService{
       this.logger.log(`[${jobRunId}] Updating status to ${status}`);
       await axios.patch(`${workerJobServiceUrl}/${jobRunId}/${status}`);
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
-      return { message: 'Job status updated as completed for job id: ' + jobRunId };
+      return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
       return { message: 'Error while updating the status of the job id : ' + jobRunId };
@@ -114,5 +114,21 @@ export class MigrationTaskService{
       return { message: 'Error while marking the job as completed : ' + traceId };
     }
   }
+
+
+  async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
+    try {
+      const workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
+      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${workerJobServiceUrl}`);
+      this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
+      await axios.put(`${workerJobServiceUrl}/cutover/${jobRunId}/${status}`);
+      this.logger.log(`[${jobRunId}] status updated to ${status}`);
+      return { message: 'Job status updated for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
+      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+    }
+  }
+
 
 }
