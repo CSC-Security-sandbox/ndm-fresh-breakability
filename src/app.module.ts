@@ -2,15 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import {AppConfigModule} from './config/config.module';
-import databaseConfig from './config/database.config';
-import { EventsModule } from './events/events.module';
+import { AppConfigModule } from './config/config.module';
 import { JobConfigModule } from './jobconfig/jobconfig.module';
-import { WorkerModule } from './workers/workers.module';
 import { JobRunModule } from './jobrun/jobrun.module';
 import { TasksModule } from './tasks/tasks.module';
+import { WorkerModule } from './workers/workers.module';
 import { WorkflowModule } from './workflow/workflow.module';
-import { WorkflowService } from './workflow/workflow.service';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -23,7 +21,7 @@ import { WorkflowService } from './workflow/workflow.service';
         configService.get('typeorm'),
       inject: [ConfigService],
     }),
-    JobConfigModule, EventsModule, WorkerModule, JobRunModule, TasksModule,WorkflowModule
+    JobConfigModule, WorkerModule, JobRunModule, TasksModule,WorkflowModule, RedisModule
   ],
   controllers: [],
   providers: [],

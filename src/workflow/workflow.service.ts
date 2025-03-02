@@ -2,8 +2,9 @@ import { Injectable, } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
-import { StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
+import { SignalWorkFlowPayload, StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { defaultDataConverter } from '@temporalio/common';
 
 @Injectable()
 export class WorkflowService {
@@ -58,5 +59,19 @@ export class WorkflowService {
         if(details.status.name ===  WorkflowExecutionStatus.COMPLETED) 
             return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result()} 
         return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: []}
+    }
+
+    async sendSignal(data: SignalWorkFlowPayload) {
+        const client = await this.getClient();
+
+        return await client.workflowService.signalWorkflowExecution({
+            namespace: 'default',
+            workflowExecution: { workflowId: data.workflowId },
+            signalName: data.signalName,
+            input: { 
+                payloads:  [defaultDataConverter.payloadConverter.toPayload(data.payload) ]
+            }
+        });
+        
     }
 }

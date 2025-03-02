@@ -39,7 +39,7 @@ export enum JobConfigBulkMigrateResStatus {
 export enum JobType {
     DISCOVER = 'DISCOVER',
     MIGRATE = 'MIGRATE',
-    CutOver = 'CUT_OVER',
+    CUT_OVER = 'CUT_OVER',
 }
 
 export enum JobIdMappingType {
@@ -118,7 +118,8 @@ export enum WorkFlowType {
 export enum WorkFlows{
     DISCOVERY = 'DiscoveryWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
-    MIGRATE = 'MigrationWorkflow'
+    MIGRATE = 'MigrationWorkflow',
+    CUT_OVER = 'CutOverWorkFlow',
 }
 
 export enum ConsumerType{
@@ -132,4 +133,10 @@ export enum ConsumerType{
 
 export enum CutoverErrors {
     VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND'
+}
+
+
+export enum CutOverStatus {
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED'
 }

@@ -1,25 +1,15 @@
 import {
+  BadRequestException,
   HttpException, HttpStatus,
   Injectable,
-  Logger,BadRequestException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In } from "typeorm";
 import { Response } from "express";
-import { createReadStream, existsSync, stat } from "fs";
+import { createReadStream, existsSync } from "fs";
 import { join } from "path";
-import { validate as isUUID, v4 as uuidv4 } from "uuid";
-import { Repository } from "typeorm";
-import { JobConfigEntity } from "../entities/jobconfig.entity";
-import { JobConfigDto } from "./dto/jobconfig.dto";
-import { JobListingDTO } from "./dto/joblisting.dto";
-import {
-  JobConfigCutoverBulk,
-  JobConfigDiscoverBulk,
-  JobConfigMigrateBulk,
-  JobConfigPrecheck, MigrateConfig,
-} from "./dto/jobdicoverybulk.dto";
 import {
   JobConfigBulkMigrateResStatus,
   JobRunStatus,
@@ -29,27 +19,31 @@ import {
   TemplateType,
   WorkFlows,
 } from "src/constants/enums";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { FlattenedCutoverConfig,
-  InActivateJobConfigPayload,
-  JobConfigBulkCutoverRes,
-  JobConfigBulkMigrateRes,
-  JobConfigPrecheckRes,
-} from "./jobconfig.types";
-import { OnEvent } from "@nestjs/event-emitter";
-import { EmitterEvents } from "src/constants/events";
 import { ScheduleStatus } from "src/constants/status";
-import { nextDate } from "src/utils/mapper";
+import { Options } from "src/constants/types";
+import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobRunEntity } from 'src/entities/jobrun.entity';
-import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
-import { FileServerEntity } from "src/entities/fileserver.entity";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
-import { str } from "@temporalio/common";
+import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { ConfigService } from "@nestjs/config";
-import { Options } from "src/constants/types";
+import { StartWorkFlowPayload } from "src/workflow/workflow.types";
+import { In, Repository } from "typeorm";
+import { validate as isUUID } from "uuid";
+import { JobConfigEntity } from "../entities/jobconfig.entity";
+import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
+import { JobConfigDto } from "./dto/jobconfig.dto";
+import {
+  JobConfigCutoverBulk,
+  JobConfigDiscoverBulk,
+  JobConfigPrecheck, MigrateConfig
+} from "./dto/jobdicoverybulk.dto";
+import { JobListingDTO } from "./dto/joblisting.dto";
+import {
+  FlattenedCutoverConfig,
+  JobConfigBulkCutoverRes,
+  JobConfigBulkMigrateRes
+} from "./jobconfig.types";
 
 @Injectable()
 export class JobConfigService {
@@ -68,15 +62,6 @@ export class JobConfigService {
     private readonly workFlowService: WorkflowService,
     private readonly configService: ConfigService
   ) {}
-
-  // ------------ Events ---------------- //
-  @OnEvent(EmitterEvents.IN_ACTIVE_JOB_CONFIG)
-  async inActivateJobConfig(payload: InActivateJobConfigPayload) {
-    await this.jobConfigRepo.update(
-      { id: payload.jobConfigId },
-      { status: JobStatus.InActive }
-    );
-  }
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(
@@ -267,7 +252,7 @@ export class JobConfigService {
           ) {
             const existingCutover = await this.jobConfigRepo.findOne({
               where: {
-                jobType: JobType.CutOver,
+                jobType: JobType.CUT_OVER,
                 sourcePathId,
                 targetPathId: destinationPathId,
               },
@@ -276,7 +261,7 @@ export class JobConfigService {
             if (!existingCutover) {
               newCutoverJobs.push(
                 this.jobConfigRepo.create({
-                  jobType: JobType.CutOver,
+                  jobType: JobType.CUT_OVER,
                   sourcePathId,
                   targetPathId: destinationPathId,
                   excludeFilePatterns: config.excludeFilePatterns,
