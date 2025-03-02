@@ -6,6 +6,7 @@ export enum WorkerStatus {
 export enum ConfigStatus {
     ACTIVE = 'ACTIVE',
     DRAFT = 'DRAFT',
+    ERRORED = 'ERRORED'
 }
 
 export enum Protocol{
@@ -43,5 +44,6 @@ export enum WorkFlowType {
 
 export enum WorkFlows{
     VALIDATE_CONNECTION = 'ValidateConnectionsWorkflow',
-    LIST_PATHS = 'ListPathsWorkflow'
+    LIST_PATHS = 'ListPathsWorkflow',
+    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow'
 }

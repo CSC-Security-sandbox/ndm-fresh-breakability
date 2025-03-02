@@ -13,6 +13,8 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { ConfigService } from '@nestjs/config';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 
 @Injectable()
 export class WorkManagerService {
@@ -24,6 +26,8 @@ export class WorkManagerService {
     private readonly workFlowService: WorkflowService,
     @InjectRepository(JobRunEntity)
     private readonly jobRunRepo: Repository<JobRunEntity>,
+    @InjectRepository(ConfigEntity)
+    private readonly configRepo: Repository<ConfigEntity>,
     private readonly configService: ConfigService,
   ) {
     this.logger = this.loggerFactory.create(WorkManagerService.name);
@@ -122,6 +126,11 @@ export class WorkManagerService {
       startWorkFlowPayload,
     );
     return { workflowId: workflow.workflowId };
+  }
+
+  async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
+    this.logger.log('Updating config status after validating export path and working directory');
+    await this.configRepo.update({ id: data.configId }, { status: data.status, errorMessage: data.errorMessage });
   }
 
   async getChildWorkFlowRes(id: string) {
