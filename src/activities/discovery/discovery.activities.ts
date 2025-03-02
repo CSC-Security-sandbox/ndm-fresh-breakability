@@ -10,12 +10,14 @@ import { RedisService } from 'src/redis/redis.service';
 @Injectable()
 export class DiscoveryActivity {
   readonly workerId: string;
+  readonly reportServiceUrl: string;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
   }
   
   async getWorkerId(): Promise<string> {
@@ -159,6 +161,21 @@ export class DiscoveryActivity {
     );
     jobContext.jobState = newjobState;
     await this.redisService.setJobContext(traceId, jobContext);
+  }
+
+
+  async generateDiscoveryReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}`);
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
+      const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
+      await axios.post( `${this.reportServiceUrl}/inventory/generate-report`, payload);
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
+      return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: ${error}`);
+      return { message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId };
+    }
   }
 
 }

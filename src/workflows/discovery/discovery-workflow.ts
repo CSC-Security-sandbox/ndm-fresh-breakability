@@ -8,10 +8,14 @@ import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { DiscoveryJobWorkflow } from './discovery-job-workflow';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
+import * as wf from '@temporalio/workflow';
+import { ReportingWorkflow } from '../reporting/reporting.workflow';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
+
+export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const { getWorkerId, setJobState, getJobState } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5m' });
 /**
@@ -129,6 +133,8 @@ export async function DiscoveryWorkflow({
       result.push(r),
     );
   }
+
+  await ReportingWorkflow(traceId, reportingSignal)
 
   log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(result)}`);
   return discoveryResponse;
