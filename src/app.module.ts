@@ -19,6 +19,10 @@ import { Permission } from './entities/permission.entity';
 import { RolePermission } from './entities/role-permission.entity';
 import { AuthModule } from './auth/auth.module';
 import { WorkerRegistrationModule } from './worker-registration/worker-registration.module';
+import { SettingModule } from './setting/setting.module';
+import { GlobalSettings } from './entities/global-setting.entity';
+import { EmailModule } from './email/email.module';
+
 
 @Module({
   imports: [
@@ -30,6 +34,7 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
       UserRole,
       Permission,
       RolePermission,
+      GlobalSettings,
     ]),
     AppConfigModule,
     AccountModule,
@@ -41,6 +46,8 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
     UserRoleModule,
     AuthModule,
     WorkerRegistrationModule,
+    SettingModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],
