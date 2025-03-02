@@ -181,7 +181,6 @@ export const WaitingForApproval = async (
   let isBlocked = true;
   let approval_status: CutOverStatus | undefined;
 
-  await updateStatusActivity({jobRunId: traceId,  status: JobRunStatus.BLOCKED})
 
   wf.setHandler(isBlockedQuery, () => isBlocked);
 
