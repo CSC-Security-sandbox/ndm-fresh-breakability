@@ -25,4 +25,5 @@ export const permissionApi = createApi({
   }),
 });
 
-export const { useGetUserPermissionsQuery } = permissionApi;
+export const { useGetUserPermissionsQuery, useLazyGetUserPermissionsQuery } =
+  permissionApi;

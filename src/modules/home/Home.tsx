@@ -48,6 +48,7 @@ const Home = () => {
   };
   return (
     <Box className="p-6">
+      {`This App is Running in ${import.meta.env.MODE.toUpperCase()} Mode`}
       <Box className="flex justify-end gap-2">
         <PermissionAuth
           permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}

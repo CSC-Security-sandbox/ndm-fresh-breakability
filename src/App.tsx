@@ -13,6 +13,7 @@ import BulkDiscoveryPage from "@pages/BulkDiscoveryPage";
 import HomePage from "./pages/HomePage";
 
 const App = () => {
+  console.log("App File Compiled");
   return (
     <div className="">
       <Routes>

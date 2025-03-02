@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "react-oidc-context";
 import { useDispatch } from "react-redux";
 import { setUserPermissions } from "@store/reducer/permissionSlice";
-import { useGetUserPermissionsQuery } from "@api/permissionApi";
+import { useLazyGetUserPermissionsQuery } from "@api/permissionApi";
 import useAccountDetails from "@hooks/useAccountDetails";
 import { useLazyGetAllProjectsQuery } from "@api/projectApi";
 import { setAllProjectList, setProject } from "@store/reducer/appSlice";
@@ -18,12 +18,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const { accountDetails } = useAccountDetails();
   const [isPageReady, setIsPageReady] = useState<boolean>(false);
   const [getAllProjects] = useLazyGetAllProjectsQuery();
-  const { data } = useGetUserPermissionsQuery<{ data: UserPermissionsApiType }>(
-    {},
-    {
-      skip: !auth.isAuthenticated,
-    }
-  );
+  const [getUserPermissionsApi] = useLazyGetUserPermissionsQuery();
   const refreshTimeoutRef = useRef<any>(null);
   const [refreshUserToken] = useRefreshUserTokenMutation({});
 
@@ -88,9 +83,15 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   }, [auth]);
 
   useEffect(() => {
-    if (auth.isAuthenticated && data) {
+    console.log("INSIDE getUserPermissionsApi EFFECT");
+    if (auth.isAuthenticated) {
+      console.log("INSIDE getUserPermissionsApi EFFECT IF STATEMENT");
+
       (async () => {
-        dispatch(setUserPermissions(data));
+        console.log("API GOT CALLED");
+        const resp = await getUserPermissionsApi("").unwrap();
+        console.log("getUserPermissionsApi -->", resp);
+        dispatch(setUserPermissions(resp));
         getAllProjects(accountDetails?.id)
           .unwrap()
           .then((resp) => {
@@ -108,7 +109,13 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
           });
       })();
     }
-  }, [auth.isAuthenticated, data, dispatch]);
+  }, [
+    auth.isAuthenticated,
+    dispatch,
+    getAllProjects,
+    getUserPermissionsApi,
+    accountDetails?.id,
+  ]);
 
   switch (auth.activeNavigator) {
     case "signinSilent":
@@ -130,7 +137,9 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     Cookies.set("refresh_token", auth.user?.refresh_token || "");
     return (
       <div className="h-screen flex justify-center items-center">
-        Authenticated, checking permissions....{String(isPageReady)}
+        Authenticated, checking permissions..isAuthenticated-
+        {String(auth.isAuthenticated).toUpperCase()}.. isPageReady-
+        {String(isPageReady).toUpperCase()}
       </div>
     );
   } else if (auth.isAuthenticated && isPageReady) {
