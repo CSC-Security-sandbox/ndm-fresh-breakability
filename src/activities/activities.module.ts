@@ -10,12 +10,13 @@ import { MigrationSyncService } from './migrate/migrate.sync.service';
 import { MigrationTaskService } from './migrate/migrate.taskmanager.service';
 import { SetupActivityService } from './setup-worker/setup.activity.service';
 import { ValidateConnectionActivity } from './validate-connection/validate-connection.service';
+import { ValidateWorkingDirectoryActivity } from './working-directory/working-directory.service';
 
 
 @Module({
   imports: [HttpModule, ConfigModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity],
 })
 export class ActivitiesModule {}

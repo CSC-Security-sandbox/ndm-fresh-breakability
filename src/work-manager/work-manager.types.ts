@@ -19,5 +19,6 @@ export enum WorkFlows{
     VALIDATE_CONNECTION = 'ValidateConnectionWorkflow',
     LIST_PATHS = 'ListPathsWorkflow',
     DISCOVERY = 'discoveryWorkflow',
-    PRECHECK='PreCheckValidationWorkflow'
+    PRECHECK='PreCheckValidationWorkflow',
+    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateExportPathAndWorkingDirectoryWorkflow'
 }

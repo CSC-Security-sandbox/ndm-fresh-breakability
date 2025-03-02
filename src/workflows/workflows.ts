@@ -8,6 +8,8 @@ export {DiscoveryJobWorkflow} from '../workflows/discovery/discovery-job-workflo
 export {DiscoveryWorkflow} from '../workflows/discovery/discovery-workflow'
 export {PreCheckValidationWorkflow} from '../workflows/pre-check/pre-check.workflow'
 export {PreCheckMountAndWritePermissionValidation} from './pre-check/pre-check-mount-validation-workflow'
+export {ValidateWorkingDirectoryWorkflow} from './working-directory/working-directory.workflow';
+export { ValidateWorkingDirectoryWorkerWorkflow } from './working-directory/working-directory-worker.workflow';
 
 export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
 export {CutOverWorkFlow, WaitingForApproval} from '../workflows/migration/parent/cutover-job-workflow'

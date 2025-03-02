@@ -44,6 +44,8 @@ export default registerAs(
       process.env.NFS_UNMOUNT_COMMAND || 'umount ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}',
     smbUnmountCommand:
       process.env.SMB_UNMOUNT_COMMAND || 'umount ${baseMountDir}/${jobRunId}',
+    baseDirectoryToValidateWorkingDirectory:
+      process.env.BASE_DIR_TO_VALIDATE_WORKING_DIRECTORY  
   }),
 );
 

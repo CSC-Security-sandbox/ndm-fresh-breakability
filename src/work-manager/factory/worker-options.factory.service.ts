@@ -11,6 +11,7 @@ import { ValidateConnectionActivity } from "src/activities/validate-connection/v
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
+import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -22,7 +23,8 @@ export class WorkerOptionsService {
     private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
-    private readonly migrationSyncService:MigrationSyncService
+    private readonly migrationSyncService:MigrationSyncService,
+    private readonly validateWorkingDirectoryActivity: ValidateWorkingDirectoryActivity
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -57,7 +59,10 @@ export class WorkerOptionsService {
             updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
             updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
-            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
+            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
+            validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
+            isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
+            updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
