@@ -124,14 +124,16 @@ export class SetupActivityService {
         protocol,
         jobRunId,
       );
+        await new Promise((resolve) => setTimeout( resolve, 1000));
 
-      // unmount destination path if exists
-      if (context.jobConfig?.destinationFileServer)
-        await this.unmountPath(
-          context.jobConfig.destinationFileServer,
-          protocol,
-          jobRunId,
-        );
+        // unmount destination path if exists
+        try{
+          if(context.jobConfig?.destinationFileServer) 
+              await this.unmountPath(context.jobConfig.destinationFileServer, protocol, jobRunId);
+        } catch(error) {
+          console.error(`[${jobRunId}] - Cleanup failed: ${error?.message}`);
+          return { jobRunId, status: 'error', workerId: this.workerId, message: `Cleanup failed: ${error?.message}` };
+        }
 
       return {
         jobRunId,

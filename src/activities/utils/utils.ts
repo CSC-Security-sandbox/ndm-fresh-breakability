@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -110,8 +110,8 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
 }
 
 
-export const buildTask = (taskType: 'SCAN' | 'MIGRATE', jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
-  uuid4(), jobRunId, taskType, 'PENDING', jobContext.jobConfig.workerIds[0],
+export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
+  uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
   `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
   jobContext.jobConfig.sourceFileServer.pathId,
   commands,
@@ -182,3 +182,24 @@ export const formatDate = (date: Date): string => {
   const pad = (n: number) => (n < 10 ? `0${n}` : n);
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
 };
+
+export const dmError = (type: 'TASK' | 'OPERATION', correlationId: string, error?: Error, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
+ 
+  switch (type) {
+    case 'OPERATION': {
+      const errorCode = getErrorCode(error, type);
+      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path } })
+    }
+    case 'TASK': {
+      const errorCode = customError?.errorCode ?  customError.errorCode.map(code => getErrorCode({code}, 'TASK')).join('\n') : ''
+      return new DMError({ taskId: correlationId, errorCode, errorMessage: customError.message })
+    }
+    default: {
+      const errorCode = getErrorCode(error, type);
+      return new DMError({ taskId: correlationId, errorCode, errorMessage: error.message })
+    }
+  }
+}
+
+
+

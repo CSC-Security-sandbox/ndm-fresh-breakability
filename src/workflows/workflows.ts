@@ -10,5 +10,6 @@ export {PreCheckValidationWorkflow} from '../workflows/pre-check/pre-check.workf
 export {PreCheckMountAndWritePermissionValidation} from './pre-check/pre-check-mount-validation-workflow'
 
 export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
+export {CutOverWorkFlow, WaitingForApproval} from '../workflows/migration/parent/cutover-job-workflow'
 export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
 export {SyncWorkflow} from '../workflows/migration/core/sync.workflow'

@@ -1,13 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, FileInfo, JobContext, MetaData } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, CommandStatus, FileInfo, JobContext, MetaData, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
-import { OperationStatus, TaskStatus } from "../discovery/enums";
-import { buildTask, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
-import { OPS_CMD, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
+
+import { buildTask, dmError, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
+import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
+import { error } from "console";
 
 @Injectable()
 export class MigrationScanService {
@@ -23,26 +24,36 @@ export class MigrationScanService {
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
-        if (!fs.existsSync(directoryPath)) {
+        if (!fs.existsSync(directoryPath)) 
             return [];
-        }
-        try {
-            return  await fs.promises.readdir(directoryPath);
-        } catch (error) {
-            this.logger.error(`Error reading directory '${directoryPath}': ${error.message}`);
-            return [];
-        }
+        return  await fs.promises.readdir(directoryPath);
     }
 
-    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath }: ScanContentInput): Promise<ScanContentOutput> {
-        const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false };
-        let commands: Command[] = [];
-        try {
-            const sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
-            const targetContent = new Set<string>(await this.getDirectoryContents(targetPath));
+    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command }: ScanContentInput): Promise<ScanContentOutput> {
+        const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false, error: undefined };
+        let commands: Command[] = [], sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
 
- 
-            for (const item of sourceContent) {
+        try {
+            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
+        }catch(error) {
+            const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: sourcePath});
+            await jobContext.appendToErrorList(dmErr);
+            syncContentOutput.error = error?.code || '';
+            return syncContentOutput;
+        }
+
+        try {
+            targetContent = new Set<string>(await this.getDirectoryContents(targetPath));           
+        }
+        catch(error) {
+            const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+            await jobContext.appendToErrorList(dmErr);
+            syncContentOutput.error = error?.code || '';
+            return syncContentOutput;
+        }
+
+        for (const item of sourceContent) {
+            try {
                 const sourceContentPath = path.join(sourcePath, item);
                 if (!fs.existsSync(sourceContentPath)) continue;
 
@@ -76,52 +87,60 @@ export class MigrationScanService {
                         if (command) commands.push(command);
                     }
                 }
+            }catch(error) {
+                const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: sourcePath});
+                await jobContext.appendToErrorList(dmErr);
+                syncContentOutput.error = error?.code || '';
             }
-        } catch (error) {
-            jobContext.errorsInfo?.init();
-            this.logger.error(`Error in scanContent: ${error.message}`);
-        } finally {
-            if (commands.length > 0) {
-                const task = buildTask('MIGRATE', jobRunId, jobContext, commands);
-                const id = await jobContext.appendToMigrationTask(task);
-                jobContext.migrateTask.lastId = id;
-            }
-            commands = [];
-            await this.redisService.setJobContext(jobRunId, jobContext);
         }
+        if (commands.length > 0) {
+            const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
+            const id = await jobContext.appendToMigrationTask(task);
+            jobContext.migrateTask.lastId = id;
+        }
+        commands = [];
         return syncContentOutput;
     }
 
     async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
-        const scanPath: ScanPathOutput = { isTaskCreated: false };
+        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0 };
         const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
-        task.status = TaskStatus.Running;
-        task.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
+        task.status = TaskStatus.RUNNING;
+        task.commands.map((cmd: Command) => cmd.status = CommandStatus.IN_PROCESS);
         let id = await jobContext.appendToUpdatedTaskList(task);
         jobContext.updatedTaskInfo.lastId = id;
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-        for (const cmd of task.commands) {
+        let isError = false;
+        for (let i = 0;  i < task.commands.length; i++) {
             const scanInput: ScanContentInput = {
                 excludePatterns: task.excludeFilePatterns ? task.excludeFilePatterns.split(",") : [],
-                sourcePath: `${task.sPath}${cmd.fPath}`,
+                sourcePath: `${task.sPath}${task.commands[i].fPath}`,
                 sourcePrefix: task.sPath,
-                targetPath: `${task.tPath}${cmd.fPath}`,
+                targetPath: `${task.tPath}${task.commands[i].fPath}`,
                 jobRunId: task.jobRunId,
+                command: task.commands[i],
                 jobContext
             };
-
             const result = await this.scanContent(scanInput);
             this.logger.log(`Result of scanContent: ${JSON.stringify(result)}`);
-            if (result.isGeneratedTask) {
+            if (result.isGeneratedTask) 
                 scanPath.isTaskCreated = true;
-            }
+            if (result.error) 
+                task.commands[i].status = CommandStatus.ERROR, scanPath.errors.add(result.error), scanPath.error++;
+            else  
+                scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
+        }      
+        task.status = scanPath.error > 0 ? TaskStatus.ERRORED : TaskStatus.COMPLETED;
+        if( scanPath.error > 0) {
+            const dmErr = dmError("TASK", task.id,  undefined, undefined, {
+                errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [], 
+                message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
+            });
+            await jobContext.appendToErrorList(dmErr);
         }
-
-        task.status = TaskStatus.Completed;
-        task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
-        jobContext.updatedTaskInfo.lastId = id;
         id = await jobContext.appendToUpdatedTaskList(task);
+        jobContext.updatedTaskInfo.lastId = id;
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         return scanPath;
     }
@@ -141,8 +160,8 @@ export class MigrationScanService {
             return new Command(
                 fPath,
                 {
-                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OperationStatus.READY },
-                    1: { cmd: OPS_CMD.STAMP_META, status: OperationStatus.READY, metadata}
+                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY },
+                    1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
                 },
                 uuid4()
             );

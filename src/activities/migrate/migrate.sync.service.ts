@@ -4,11 +4,11 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { FileInfo, JobContext, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
-import { OperationStatus, TaskStatus } from '../discovery/enums';
-import { formatDate, getFileInfo } from '../utils/utils';
-import { OPS_CMD, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+
+import { dmError, formatDate, getFileInfo } from '../utils/utils';
+import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 
 @Injectable()
@@ -73,6 +73,9 @@ export class MigrationSyncService {
       writeStream.on("finish", resolve);
       readStream.on("error", reject);
       writeStream.on("error", reject);
+      readStream.close()
+      writeStream.close()
+
     });
   
     const checksum = hash.digest("hex");
@@ -85,17 +88,21 @@ export class MigrationSyncService {
   }
 
 
-  async ensureDirectoryExists(directoryPath: string) {
+  ensureDirectoryExists(directoryPath: string) {
     if (!fs.existsSync(directoryPath)) {
       fs.mkdirSync(directoryPath, { recursive: true });
     }
   }
 
-  stampMetaData(filePath: string, metadata: MetaData) {
+  async stampMetaData(filePath: string, metadata: MetaData, jobContext: JobContext, command: Command):Promise<StampMetaDataOutput> {
+    const stampMetaDataOutput : StampMetaDataOutput = {errors: []}
     if(metadata?.mode) {
       try {
         fs.chmodSync(filePath, metadata.mode);
       } catch(error) {
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        await jobContext.appendToErrorList(dmErr);
+        stampMetaDataOutput.errors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
       }
     }
@@ -105,6 +112,9 @@ export class MigrationSyncService {
         execSync(birthtimeCommand);
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
       }
     }
     if(metadata.mtime && metadata.atime) {
@@ -112,78 +122,101 @@ export class MigrationSyncService {
         fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
+        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
       }
     }
+    return stampMetaDataOutput
   }
   
-  async syncOperation({ sourcePath, targetPath, ops }: SyncOperationInput): Promise<SyncOperationOutput> {
-    if (ops[0].status === OperationStatus.READY) {
-      if(ops[0].cmd === OPS_CMD.COPY_CONTENT) {
+  async syncOperation({ sourcePath, targetPath, ops, jobContext, command}: SyncOperationInput): Promise<SyncOperationOutput> {
+    const syncOperation: SyncOperationOutput = {errors : new Set<string>(),  ops, status: OPS_STATUS.COMPLETED }
+    if (syncOperation.ops[0].status === OPS_STATUS.READY) {
+      if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
           const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
-          ops[0] = { ...ops[0], status: OperationStatus.COMPLETED, checksum } as any;
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
-          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
+          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          await jobContext.appendToErrorList(dmErr);
+          syncOperation.errors.add(error.code)
           this.logger.error(`Error in SyncOperation File: ${error.message}`);
-          return { ops, Status: OperationStatus.ERROR };
+          return syncOperation
         }
       }
       if(ops[0].cmd === OPS_CMD.COPY_DIR) {
         try {
           this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
           await this.ensureDirectoryExists(targetPath);
-          ops[0] = { ...ops[0], status: OperationStatus.COMPLETED };
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
         } catch (error) {
-          ops[0] = { ...ops[0], status: OperationStatus.ERROR, error: error.message } as any;
+          ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
+          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
-          return { ops, Status: OperationStatus.ERROR };
+          return syncOperation
         }
       }
     }
-    if (ops[1]?.status === OperationStatus.READY) {
-      this.stampMetaData(targetPath, ops[1].metadata)
+    if (ops[1]?.status === OPS_STATUS.READY) {
+      const result = await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
+      ops[1].status = OPS_STATUS.COMPLETED
+      result.errors.forEach(error => syncOperation.errors.add(error))
     }
-    return { ops, Status: OperationStatus.COMPLETED };
+    return syncOperation ;
   }
 
   async syncTask({ task }: SyncTaskInput): Promise<SyncTaskOutput> {
-    let isError = false;
-
+    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0 };
     const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
-    task.status = TaskStatus.Running
-    task.commands.map((cmd: any) => cmd.status = OperationStatus.IN_PROCESS);
+    task.status = TaskStatus.RUNNING
+    task.commands.map((cmd: any) => cmd.status = OPS_STATUS.IN_PROCESS);
     let id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-    for (const command of task.commands) {
+    for (let i = 0;  i < task.commands.length; i++) {
       const scanInput: SyncOperationInput = {
-        sourcePath: `${task.sPath}${command.fPath}`,
-        targetPath: `${task.tPath}${command.fPath}`,
-        ops: command.ops,
+        sourcePath: `${task.sPath}${task.commands[i].fPath}`,
+        targetPath: `${task.tPath}${task.commands[i].fPath}`,
+        ops: task.commands[i].ops,
+        command: task.commands[i],
+        jobContext
       };
 
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-      if (syncOperationOp.Status === OperationStatus.ERROR) {
-        isError = true;
-        task.status = TaskStatus.Errored;
-      } 
+      task.commands[i].ops = syncOperationOp.ops;
+      if (syncOperationOp.errors.size > 0) {
+        task.commands[i].status = CommandStatus.ERROR;
+        syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
+        syncTask.error++;
+      }
       else {
-        const fileInfo: FileInfo = await getFileInfo(command.fPath, `${task.sPath}${command.fPath}`, command.fPath);
+        const fileInfo: FileInfo = await getFileInfo(task.commands[i].fPath, `${task.sPath}${task.commands[i].fPath}`, task.commands[i].fPath);
         const id = await jobContext.appendToFileList(fileInfo);
         jobContext.filesInfo.lastId = id;
         jobContext.filesInfo.numMessages++;
+        task.commands[i].status = CommandStatus.COMPLETED
+        syncTask.success++;
         await this.redisService.setJobContext(task.jobRunId, jobContext);
-        this.logger.debug(`Migrated ${command.fPath} successfully`);
+        this.logger.debug(`Migrated ${task.commands[i].fPath} successfully`);
       }
     }
 
-    task.status = TaskStatus.Completed
-    task.commands.map((cmd: any) => cmd.status = OperationStatus.COMPLETED);
+    task.status = syncTask.error > 0 ? TaskStatus.ERRORED : TaskStatus.COMPLETED;
+    if( syncTask.error > 0) {
+        const dmErr = dmError("TASK", task.id,  undefined, undefined, {
+            errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
+            message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
+        });
+        await jobContext.appendToErrorList(dmErr);
+    }
     id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
-    return { status: isError ? 'ERROR' : 'COMPLETE' };
+    return syncTask;
   }
 }
