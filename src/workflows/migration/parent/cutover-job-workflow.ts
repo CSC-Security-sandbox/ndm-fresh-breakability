@@ -1,8 +1,23 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
 import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
 import { ScanWorkflow } from "../core/scan.workflow";
+import * as wf from '@temporalio/workflow';
+import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
+import { JobRunStatus } from "src/activities/discovery/enums";
+import { CutOverStatus } from "src/activities/migrate/migrate.type";
 
-interface MigrationWorkflowInput {
+
+export const unblockSignal =  wf.defineSignal<[string]>('approve');
+export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');
+
+
+const {
+  updateStatus: updateStatusActivity,
+  updateCutOverStatus: updateCutOverStatusActivity
+} = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+
+
+interface CutOverWorkFlowInput {
   traceId: string;
   payload: {
     workers: string[];
@@ -14,11 +29,11 @@ async function log(traceId: string, message: string): Promise<void> {
   console.log(`[${traceId}] ${message}`);
 }
 
-export const MigrationWorkflow = async ({
+export const CutOverWorkFlow = async ({
   traceId,
   payload,
   options = {},
-}: MigrationWorkflowInput): Promise<any> => {
+}: CutOverWorkFlowInput): Promise<any> => {
   await log(traceId, `MigrationWorkflow: ${JSON.stringify(payload)}`);
 
   const activeWorkerIds: string[] = [];
@@ -112,8 +127,7 @@ export const MigrationWorkflow = async ({
         }
       }
     })
-  )
-    .then((response) => {
+  ).then((response) => {
       log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
       return {
         traceId,
@@ -134,9 +148,11 @@ export const MigrationWorkflow = async ({
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 
+  await WaitingForApproval(traceId, unblockSignal)
+
   if (activeWorkerIds.length > 0) {
     const cleanupResponses = await Promise.all(
-      activeWorkerIds.map((workerId) => executeChild(CleanupWorkerWorkflow, {
+      activeWorkerIds.map((workerId) =>  executeChild(CleanupWorkerWorkflow, {
           args: [{ jobRunId: traceId }],
           workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
           taskQueue: `${workerId}-TaskQueue`,
@@ -150,5 +166,46 @@ export const MigrationWorkflow = async ({
   }
 
   await log(traceId, `MigrationWorkflow response: ${JSON.stringify(result)}`);
+
   return result;
+};
+
+export const WaitingForApproval = async (
+  traceId: string,
+  approve_signal: wf.SignalDefinition<[string], string>
+): Promise<string> => {
+  let isBlocked = true;
+  let approval_status: CutOverStatus | undefined;
+
+  await updateStatusActivity({jobRunId: traceId,  status: JobRunStatus.BLOCKED})
+
+  wf.setHandler(isBlockedQuery, () => isBlocked);
+
+  wf.setHandler(approve_signal, (input: string) => {
+    console.error(input)
+    if((input == CutOverStatus.APPROVED) || (input == CutOverStatus.REJECTED) ) {
+      approval_status = input;
+      isBlocked = false;
+    }
+  });
+
+  wf.setHandler(isBlockedQuery, () => isBlocked);
+
+  wf.log.info('Waiting for approval...');
+
+  try {
+    await wf.condition(() => !isBlocked);
+    await updateCutOverStatusActivity({jobRunId: traceId,  status: approval_status })
+    wf.log.info(`Cutover approval received: ${approval_status}`);
+
+    console.error(`Cutover approval received: ${approval_status}`);
+
+  } catch (err) {
+    if (err instanceof wf.CancelledFailure) {
+      wf.log.info('Workflow cancelled');
+    }
+    throw err;
+  }
+
+  return approval_status ?? 'No approval received';
 };

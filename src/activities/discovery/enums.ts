@@ -7,6 +7,7 @@ export enum JobRunStatus {
     Stopped = 'STOPPED',
     Completed = 'COMPLETED',
     Failed = 'FAILED',
+    BLOCKED = 'BLOCKED',
     Errored = 'ERRORED'
 }
 
