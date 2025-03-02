@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { JobRunService } from './job-run.service';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -27,6 +27,7 @@ const mockReportsRepo = {
   findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
+  update: jest.fn(),
 };
 
 describe('JobRunService', () => {
@@ -57,10 +58,10 @@ describe('JobRunService', () => {
       const mockReport = { reportData: '{"test": "data"}' };
       mockReportsRepo.findOne.mockResolvedValue(mockReport);
 
-      const result = await service.jobRunReportByJobRunId(jobRunId);
+      const result = await service.jobRunReportByJobRunId(jobRunId, "");
 
       expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId },
+        where: { jobRunId , reportType:""},
         order: { createdAt: "DESC" },
         select: ["reportData"],
       });
@@ -68,26 +69,30 @@ describe('JobRunService', () => {
       expect(result).toEqual(mockReport.reportData);
     });
 
-    it("should return null when no report exists", async () => {
+    it("should return NotFoundException when no report exists", async () => {
       mockReportsRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.jobRunReportByJobRunId(jobRunId);
-
-      expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId },
-        order: { createdAt: "DESC" },
-        select: ["reportData"],
-      });
-
-      expect(result).toBeUndefined(); 
+      await expect(
+        service.jobRunReportByJobRunId(jobRunId, "DISCOVERY")
+      ).rejects.toThrow(
+        new NotFoundException("DISCOVERY - report is not generated yet")
+      );
     });
   });
+
 
   describe('getJobStatsId', () => {
     const jobId = '12345';
 
-    it('should return saved report if it exists', async () => {
-      const savedReport = { reportData: JSON.stringify({ test: 'data' }) };
+    it("should return saved report if it exists", async () => {
+      const jobId = "123";
+
+      const mockLatestReportStatus = { isReportReady: true };
+      mockJobRunRepo.findOne.mockResolvedValue(mockLatestReportStatus);
+
+      const savedReport = {
+        reportData: JSON.stringify({ test: "data", isReportReady: false }),
+      };
       mockReportsRepo.findOne.mockResolvedValue(savedReport);
 
       const result = await service.getJobStatsId(jobId);
@@ -96,7 +101,15 @@ describe('JobRunService', () => {
         where: { jobRunId: jobId, reportType: ReportType.JOB_RUN_STATS },
         select: { reportData: true },
       });
-      expect(result).toEqual(JSON.parse(savedReport.reportData));
+
+      expect(mockJobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobId },
+        select: ["isReportReady"],
+      });
+
+      expect(result.isReportReady).toEqual(
+        mockLatestReportStatus.isReportReady
+      );
     });
 
     it('should throw NotFoundException if job run does not exist', async () => {

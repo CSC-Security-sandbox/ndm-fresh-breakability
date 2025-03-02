@@ -1,6 +1,6 @@
--- DROP PROCEDURE generate_discovery_report(uuid);
+-- DROP PROCEDURE datamigrator.generate_discovery_report(uuid);
 
-CREATE OR REPLACE PROCEDURE generate_discovery_report(IN jobrunid uuid)
+CREATE OR REPLACE PROCEDURE datamigrator.generate_discovery_report(IN jobrunid uuid)
  LANGUAGE plpgsql
 AS $procedure$
 declare
@@ -10,7 +10,8 @@ temp_json JSONB;
 
 begin
 -- Create a temporary table to store the categorized file data
-    drop table if exists temp_categorized_files;
+set search_path='datamigrator';
+drop table if exists temp_categorized_files;
 
 create temp table temp_categorized_files as
     select
@@ -72,6 +73,7 @@ from
 
 aggregated_json := aggregated_json || temp_json;
 
+
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -119,6 +121,9 @@ from
 		modified_group) as modified_date_metrics;
 
 aggregated_json := aggregated_json || temp_json;
+   raise notice 'Aggregated Data: second %',
+aggregated_json;
+
 
 select
 	jsonb_agg(
@@ -168,7 +173,6 @@ from
 
 aggregated_json := aggregated_json || temp_json;
 
-
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -217,6 +221,7 @@ from
 
 aggregated_json := aggregated_json || temp_json;
 
+
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -264,6 +269,7 @@ from
 		created_group) as created_date_metrics;
 
 aggregated_json := aggregated_json || temp_json;
+
 
 select
 	jsonb_agg(
@@ -314,6 +320,7 @@ from
 aggregated_json := aggregated_json || temp_json;
 
 
+
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -362,6 +369,8 @@ from
 
 aggregated_json := aggregated_json || temp_json;
 
+
+
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -394,6 +403,8 @@ from
 
 aggregated_json := aggregated_json || temp_json;
 
+
+
 select
 	jsonb_agg(
             jsonb_build_object(
@@ -420,6 +431,8 @@ from
         	) as file_space_metrics;
 
 aggregated_json := aggregated_json || temp_json;
+
+
 
 select
 	jsonb_agg(
@@ -450,7 +463,7 @@ union all
 union all
 	select
 		'Symbolic Links',
-		SUM(case when file_type = 'symbolic_link' then 1 else 0 end)
+		SUM(case when UPPER(file_type) = 'SYMBOLIC_LINK' then 1 else 0 end)
 	from
 		temp_categorized_files
 union all
@@ -480,6 +493,8 @@ union all
 ) as stats;
 
 aggregated_json := aggregated_json || temp_json;
+
+
 
 select
 	jsonb_agg(
@@ -517,6 +532,8 @@ union all
 
 aggregated_json := aggregated_json || temp_json;
 
+
+
 SELECT
     jsonb_agg(
         jsonb_build_object(
@@ -546,6 +563,7 @@ FROM (
 ) AS job_run_stats;
 
 aggregated_json := aggregated_json || temp_json;
+
 
 SELECT
     jsonb_agg(
@@ -580,6 +598,8 @@ FROM (
 ) AS file_server_data;
 
 aggregated_json := aggregated_json || temp_json;
+
+
 
 -- Longest File Names
  select
@@ -806,16 +826,20 @@ union all
 
 aggregated_json := aggregated_json || temp_json;
 
+
 -- Log the aggregated data using RAISE NOTICE
     raise notice 'Aggregated Data: %',
 aggregated_json;
 
 
-
-insert into reports (report_data, report_type, job_run_id)
-values (aggregated_json, 'DISCOVERY', jobrunid)
-on CONFLICT (job_run_id, report_type)
-DO update set report_data = EXCLUDED.report_data;
+UPDATE reports 
+SET report_data = aggregated_json
+WHERE job_run_id = jobrunid AND report_type = 'DISCOVER';
+ 
+IF NOT FOUND THEN
+    INSERT INTO reports (job_run_id, report_type, report_data)
+    VALUES (jobrunid, 'DISCOVER', aggregated_json);
+END IF;
 
 update jobrun set is_report_ready = TRUE where id = jobrunid;
 

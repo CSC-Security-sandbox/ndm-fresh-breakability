@@ -11,4 +11,16 @@
       <sqlFile path="liquibase/20250131_01_procedure.sql" splitStatements="false"/>
    </changeSet>
 
+    <changeSet id="9003" author="aniketd">
+      <sqlFile path="liquibase/20250209_01_jobs_report_procedure.sql" splitStatements="false"/>
+   </changeSet>
+
+   <changeSet id="9004" author="shivam6">
+      <sqlFile path="liquibase/20250213_02_procedure.sql" splitStatements="false"/>
+   </changeSet>
+
+   <changeSet id="9005" author="shivam6">
+      <sqlFile path="liquibase/20250215_03_procedure.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>

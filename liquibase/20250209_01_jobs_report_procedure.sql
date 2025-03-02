@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE migrateadmin.jobs_report_data(IN job_run_id_param UUID)
+CREATE OR REPLACE PROCEDURE jobs_report_data(IN job_run_id_param UUID)
 LANGUAGE plpgsql
 AS $procedure$
 DECLARE
@@ -17,7 +17,7 @@ DECLARE
     todo_operations_data JSONB;
 BEGIN
     -- Ensure jobs_report table exists using dynamic SQL
-    EXECUTE 'CREATE TABLE IF NOT EXISTS migrateadmin.jobs_report (
+    EXECUTE 'CREATE TABLE IF NOT EXISTS jobs_report (
         id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
         job_run_id UUID NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -30,8 +30,8 @@ BEGIN
     -- Fetch jobconfig_id as UUID
     SELECT jc.id 
     INTO jobconfig_id
-    FROM migrateadmin.jobrun jr
-    JOIN migrateadmin.jobconfig jc ON jc.id = jr.job_config_id
+    FROM jobrun jr
+    JOIN jobconfig jc ON jc.id = jr.job_config_id
     WHERE jr.id = job_run_id_param;
 
     -- Fetch last job run details
@@ -48,7 +48,7 @@ BEGIN
         'state', last_jr.status
     )
     INTO last_job_run
-    FROM migrateadmin.jobrun last_jr
+    FROM jobrun last_jr
     WHERE last_jr.job_config_id = jobconfig_id
     ORDER BY last_jr.created_at DESC
     LIMIT 1;
@@ -59,7 +59,7 @@ BEGIN
             'path_id', v_source.id,
             'path', v_source.volume_path,
             'file_server', cc.config_name,
-            'items', (SELECT COUNT(*) FROM migrateadmin.inventory i WHERE i.job_run_id = jr.id AND i.volume_id = v_source.id),
+            'items', (SELECT COUNT(*) FROM inventory i WHERE i.job_run_id = jr.id AND i.volume_id = v_source.id),
             'capacity', '-',
             'protocol', fs.protocol,
             'protocol_version', fs.protocol_version,
@@ -81,12 +81,12 @@ BEGIN
         ))  -- Ensure last_run is always present
     ) 
     INTO summary_data
-    FROM migrateadmin.jobrun jr
-    LEFT JOIN migrateadmin.jobconfig jc ON jc.id = jr.job_config_id
-    LEFT JOIN migrateadmin.volume v_source ON v_source.id = jc.source_path_id
-    LEFT JOIN migrateadmin.volume v_target ON v_target.id = jc.target_path_id
-    LEFT JOIN migrateadmin.file_server fs ON v_source.file_server_id = fs.id
-    LEFT JOIN migrateadmin.config cc ON fs.config_id = cc.id
+    FROM jobrun jr
+    LEFT JOIN jobconfig jc ON jc.id = jr.job_config_id
+    LEFT JOIN volume v_source ON v_source.id = jc.source_path_id
+    LEFT JOIN volume v_target ON v_target.id = jc.target_path_id
+    LEFT JOIN file_server fs ON v_source.file_server_id = fs.id
+    LEFT JOIN config cc ON fs.config_id = cc.id
     WHERE jr.id = job_run_id_param;
 
     -- Fetch paths data
@@ -95,10 +95,10 @@ BEGIN
         'target', v_target.id
     ) 
     INTO paths
-    FROM migrateadmin.jobrun jr
-    LEFT JOIN migrateadmin.jobconfig jc ON jc.id = jr.job_config_id
-    LEFT JOIN migrateadmin.volume v_source ON v_source.id = jc.source_path_id
-    LEFT JOIN migrateadmin.volume v_target ON v_target.id = jc.target_path_id
+    FROM jobrun jr
+    LEFT JOIN jobconfig jc ON jc.id = jr.job_config_id
+    LEFT JOIN volume v_source ON v_source.id = jc.source_path_id
+    LEFT JOIN volume v_target ON v_target.id = jc.target_path_id
     WHERE jr.id = job_run_id_param;
 
     -- Fetch current job run details
@@ -119,10 +119,10 @@ BEGIN
             END) AS s_directories,
             COUNT(DISTINCT scan_iteration_operations.id) AS s_operations,
             COUNT(scan_iteration_operations.error_details) AS s_errors
-        FROM migrateadmin.jobconfig curr_jobconfig
-        LEFT JOIN migrateadmin.jobrun curr_job_run ON curr_job_run.job_config_id = curr_jobconfig.id
-        LEFT JOIN migrateadmin.inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = curr_job_run.id
-        LEFT JOIN migrateadmin.operations scan_iteration_operations ON scan_iteration_operations.job_run_id = curr_job_run.id
+        FROM jobconfig curr_jobconfig
+        LEFT JOIN jobrun curr_job_run ON curr_job_run.job_config_id = curr_jobconfig.id
+        LEFT JOIN inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = curr_job_run.id
+        LEFT JOIN operations scan_iteration_operations ON scan_iteration_operations.job_run_id = curr_job_run.id
         WHERE curr_jobconfig.id = jobconfig_id and curr_job_run.status = 'RUNNING'
         GROUP BY 
             curr_jobconfig.id, 
@@ -148,7 +148,7 @@ BEGIN
     WITH last_completed_job AS (
         -- Get the latest completed job run for the given jobconfig_id
         SELECT id, job_config_id, start_time, end_time
-        FROM migrateadmin.jobrun
+        FROM jobrun
         WHERE job_config_id = jobconfig_id
         AND status = 'COMPLETED'
         ORDER BY created_at DESC  -- Get the most recent one
@@ -171,10 +171,10 @@ BEGIN
             END) AS s_directories,
             COUNT(DISTINCT scan_iteration_operations.id) AS s_operations,
             COUNT(scan_iteration_operations.error_details) AS s_errors
-        FROM migrateadmin.jobconfig last_jobconfig
+        FROM jobconfig last_jobconfig
         LEFT JOIN last_completed_job last_job_run ON last_job_run.job_config_id = last_jobconfig.id
-        LEFT JOIN migrateadmin.inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = last_job_run.id
-        LEFT JOIN migrateadmin.operations scan_iteration_operations ON scan_iteration_operations.job_run_id = last_job_run.id
+        LEFT JOIN inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = last_job_run.id
+        LEFT JOIN operations scan_iteration_operations ON scan_iteration_operations.job_run_id = last_job_run.id
         WHERE last_jobconfig.id = jobconfig_id  -- Ensuring we filter for the specific jobconfig
         GROUP BY 
             last_jobconfig.id, 
@@ -204,18 +204,18 @@ BEGIN
     INTO last_errors
     FROM (
         SELECT last_job_run.id AS job_run_id
-        FROM migrateadmin.jobconfig last_jobconfig
-        LEFT JOIN migrateadmin.jobrun last_job_run ON last_job_run.job_config_id = last_jobconfig.id
+        FROM jobconfig last_jobconfig
+        LEFT JOIN jobrun last_job_run ON last_job_run.job_config_id = last_jobconfig.id
         WHERE last_jobconfig.id = jobconfig_id
         ORDER BY last_job_run.created_at DESC, last_job_run.iteration_number DESC
         LIMIT 1
     ) latest_job_run
-    LEFT JOIN migrateadmin.operations last_errors_operations ON latest_job_run.job_run_id = last_errors_operations.job_run_id;
+    LEFT JOIN operations last_errors_operations ON latest_job_run.job_run_id = last_errors_operations.job_run_id;
 
      -- Capture cutover jobs
     WITH cutover_job AS (
         SELECT id, job_config_id, start_time, end_time
-        FROM migrateadmin.jobrun
+        FROM jobrun
         WHERE job_config_id = jobconfig_id
         AND status = 'COMPLETED'
         ORDER BY created_at DESC  -- Get the most recent one
@@ -238,10 +238,10 @@ BEGIN
             END) AS s_directories,
             COUNT(DISTINCT scan_iteration_operations.id) AS s_operations,
             COUNT(scan_iteration_operations.error_details) AS s_errors
-        FROM migrateadmin.jobconfig cutover_jobconfig
+        FROM jobconfig cutover_jobconfig
         LEFT JOIN cutover_job cutover_job_run ON cutover_job_run.job_config_id = cutover_jobconfig.id
-        LEFT JOIN migrateadmin.inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = cutover_job_run.id
-        LEFT JOIN migrateadmin.operations scan_iteration_operations ON scan_iteration_operations.job_run_id = cutover_job_run.id
+        LEFT JOIN inventory scan_iteration_inventory ON scan_iteration_inventory.job_run_id = cutover_job_run.id
+        LEFT JOIN operations scan_iteration_operations ON scan_iteration_operations.job_run_id = cutover_job_run.id
         WHERE cutover_jobconfig.id = jobconfig_id and cutover_jobconfig.job_type = 'CUTOVER'
         GROUP BY 
             cutover_jobconfig.id, 
@@ -270,18 +270,18 @@ BEGIN
             'rows', jsonb_build_object(
                 'path', (
                     SELECT report_data
-                    FROM migrateadmin.reports
-                    LEFT JOIN migrateadmin.jobrun sop_jr ON sop_jr.job_config_id = coc_job_config.id
-                    WHERE migrateadmin.reports.job_run_id = sop_jr.id
-                    AND migrateadmin.reports.report_type = 'MIGRATION_COC'
-                    ORDER BY migrateadmin.reports.created_at, migrateadmin.reports.job_run_id
+                    FROM reports
+                    LEFT JOIN jobrun sop_jr ON sop_jr.job_config_id = coc_job_config.id
+                    WHERE reports.job_run_id = sop_jr.id
+                    AND reports.report_type = 'MIGRATION_COC'
+                    ORDER BY reports.created_at, reports.job_run_id
                     LIMIT 1
                 )
             )
         )
     ) INTO coc
-    FROM migrateadmin.jobconfig coc_job_config
-    LEFT JOIN migrateadmin.jobrun coc_job_run ON coc_job_run.job_config_id = coc_job_config.id
+    FROM jobconfig coc_job_config
+    LEFT JOIN jobrun coc_job_run ON coc_job_run.job_config_id = coc_job_config.id
     WHERE coc_job_config.id = jobconfig_id;
 
 
@@ -305,12 +305,12 @@ BEGIN
             END) AS s_directories,
             COUNT(DISTINCT scan_iteration_operations.id) AS s_operations,
             COUNT(scan_iteration_operations.error_details) AS s_errors
-        FROM migrateadmin.jobconfig scan_iteration_job_config
-        LEFT JOIN migrateadmin.jobrun scan_iteration_job_run 
+        FROM jobconfig scan_iteration_job_config
+        LEFT JOIN jobrun scan_iteration_job_run 
             ON scan_iteration_job_run.job_config_id = scan_iteration_job_config.id
-        LEFT JOIN migrateadmin.inventory scan_iteration_inventory 
+        LEFT JOIN inventory scan_iteration_inventory 
             ON scan_iteration_inventory.job_run_id = scan_iteration_job_run.id
-        LEFT JOIN migrateadmin.operations scan_iteration_operations 
+        LEFT JOIN operations scan_iteration_operations 
             ON scan_iteration_operations.job_run_id = scan_iteration_job_run.id
         WHERE scan_iteration_job_config.id = jobconfig_id
         GROUP BY 
@@ -349,10 +349,10 @@ BEGIN
                 THEN operation.id 
             END) AS completed_operations,
             COALESCE(EXTRACT(EPOCH FROM (op_job_run.end_time - op_job_run.start_time)), 0) AS completed_duration
-        FROM migrateadmin.jobconfig op_job_config
-        LEFT JOIN migrateadmin.jobrun op_job_run 
+        FROM jobconfig op_job_config
+        LEFT JOIN jobrun op_job_run 
             ON op_job_run.job_config_id = op_job_config.id
-        LEFT JOIN migrateadmin.operations operation 
+        LEFT JOIN operations operation 
             ON operation.job_run_id = op_job_run.id
         WHERE op_job_config.id = jobconfig_id
         GROUP BY 
@@ -377,7 +377,7 @@ BEGIN
 
 
     -- Insert report data
-    INSERT INTO migrateadmin.jobs_report (job_run_id, job_type, report_data, jobconfig_id, paths)
+    INSERT INTO jobs_report (job_run_id, job_type, report_data, jobconfig_id, paths)
     VALUES (job_run_id_param, job_type_const, jsonb_build_object(
         'summary', summary_data,
         'current_iteration', current_iteration,

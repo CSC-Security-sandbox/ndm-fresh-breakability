@@ -15,20 +15,20 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  app.connectMicroservice({
-    transport: Transport.RMQ,
-    options: {
-      urls: configService.get('app.rabbitmq.urls'),
-      queue: configService.get('app.rabbitmq.reportsQueue'),
-      noAck: false,
-      queueOptions: {
-        durable: configService.get('app.rabbitmq.durable'),
-        arguments: {
-          'x-queue-type': 'quorum',
-        },
-      },
-    },
-  });
+  // app.connectMicroservice({
+  //   transport: Transport.RMQ,
+  //   options: {
+  //     urls: configService.get('app.rabbitmq.urls'),
+  //     queue: configService.get('app.rabbitmq.reportsQueue'),
+  //     noAck: false,
+  //     queueOptions: {
+  //       durable: configService.get('app.rabbitmq.durable'),
+  //       arguments: {
+  //         'x-queue-type': 'quorum',
+  //       },
+  //     },
+  //   },
+  // });
 
   await app.startAllMicroservices()
 
@@ -47,7 +47,7 @@ async function bootstrap() {
   .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document,{
+  SwaggerModule.setup('reports-docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
   app.enableShutdownHooks();

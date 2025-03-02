@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -24,22 +24,34 @@ export class JobRunService {
         private reportsRepo: Repository<ReportsEntity>,
     ){}
 
-    async jobRunReportByJobRunId(id:string) {
-      const report = await this.reportsRepo.findOne(
-        {
-          where:{jobRunId:id},
-          order:{createdAt:'DESC'},
-          select:["reportData"]
-        }
-      )
+    async jobRunReportByJobRunId(jobRunId:string, reportType:string) {
+      const report = await this.reportsRepo.findOne({
+        where: { jobRunId: jobRunId , reportType: reportType},
+        order: { createdAt: "DESC" },
+        select: ["reportData"],
+      });
+      if(!report) throw new NotFoundException(`${reportType} - report is not generated yet`)
       if(report) return report.reportData
     }
 
     async getJobStatsId(id: string) {
-
+          const getLatestReportStatus = await this.jobRunRepo.findOne({
+            where: { id: id },
+            select: ['isReportReady'],
+          });
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
-        if(saved) 
-          return JSON.parse(saved.reportData)
+        if (saved) {
+          const parsedReport = JSON.parse(saved.reportData);
+          if (parsedReport.isReportReady !==  getLatestReportStatus.isReportReady) {
+            parsedReport.isReportReady = getLatestReportStatus.isReportReady;
+            saved.reportData = JSON.stringify(parsedReport);
+            await this.reportsRepo.update(
+              { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
+              { reportData: JSON.stringify(parsedReport) }
+            );
+          }
+          return parsedReport;
+        }
         
         const volumeSearch = {
           volumePath: true,
@@ -54,6 +66,7 @@ export class JobRunService {
           select: {
             id: true,
             startTime: true,
+            isReportReady:true,
             status: true,
             endTime: true,
             worker: {workerId: true},
@@ -116,6 +129,11 @@ export class JobRunService {
         
         if(jobRun.jobConfig.jobType===JobType.Discover)
           response['discovery'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.Migrate) 
+          response['migrate'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.CutOver) 
+          response['cutOver'] = jobRunStatus
+
 
         const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
             .createQueryBuilder('t')
