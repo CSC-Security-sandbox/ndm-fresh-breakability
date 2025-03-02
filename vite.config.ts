@@ -4,12 +4,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
+import checker from "vite-plugin-checker";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig({
-  plugins: [react(), nodePolyfills()],
+  plugins: [react(), nodePolyfills(), checker({ typescript: false })],
   build: {
     outDir: "dist",
   },

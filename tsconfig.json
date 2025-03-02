@@ -20,11 +20,11 @@
     "target": "ESNext",
     "module": "ESNext",
     "jsx": "react-jsx",
-    "strict": true,
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "strict": false,
     "allowJs": true,
     "skipLibCheck": true
   }

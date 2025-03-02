@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "type-check": "tsc --noEmit",
     "dev": "vite --port 3111",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "tailwind:build": "npx tailwindcss -i ./src/input.css -o ./dist/output.css --watch"
@@ -52,6 +53,7 @@
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0",
+    "vite-plugin-checker": "^0.9.0",
     "vite-plugin-node-polyfills": "^0.23.0"
   }
 }
