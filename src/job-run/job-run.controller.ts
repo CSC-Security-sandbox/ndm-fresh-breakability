@@ -42,4 +42,13 @@ export class JobRunController {
     const response = await this.jobRunService.getJobStatsId(id);
     return serializeJobRunDetailsResponse(response);
   }
+
+  @ApiOperation({ summary: "Get COC Report by JobRunId" })
+  @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
+  @ApiResponse({ status: 404, description: "COC report not found." })
+  @Get("coc-report/:jobRunId")
+  async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
+    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId);
+    return response;
+  }
 }

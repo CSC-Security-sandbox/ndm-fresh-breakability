@@ -22,5 +22,9 @@
    <changeSet id="9005" author="shivam6">
       <sqlFile path="liquibase/20250215_03_procedure.sql" splitStatements="false"/>
    </changeSet>
+  
+   <changeSet id="9006" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250301_alter_jobrun_table_add_is_coc_report_ready_column.sql" splitStatements="false"/>
+   </changeSet>
 
 </databaseChangeLog>

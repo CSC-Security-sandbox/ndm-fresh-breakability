@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { CsvService } from './../csv/csv_export.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -9,6 +10,7 @@ import { covertBytes } from 'src/utils/mapper';
 import { Repository } from 'typeorm';
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto } from './dto/job-rundetails.dto';
 import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
+import * as fs from 'fs';
 
 @Injectable()
 export class JobRunService {
@@ -22,6 +24,7 @@ export class JobRunService {
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(ReportsEntity)
         private reportsRepo: Repository<ReportsEntity>,
+        private csvService: CsvService
     ){}
 
     async jobRunReportByJobRunId(jobRunId:string, reportType:string) {
@@ -37,13 +40,21 @@ export class JobRunService {
     async getJobStatsId(id: string) {
           const getLatestReportStatus = await this.jobRunRepo.findOne({
             where: { id: id },
-            select: ['isReportReady'],
+            select: ['isReportReady', 'isCocReportReady'],
           });
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
         if (saved) {
           const parsedReport = JSON.parse(saved.reportData);
           if (parsedReport.isReportReady !==  getLatestReportStatus.isReportReady) {
             parsedReport.isReportReady = getLatestReportStatus.isReportReady;
+            saved.reportData = JSON.stringify(parsedReport);
+            await this.reportsRepo.update(
+              { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
+              { reportData: JSON.stringify(parsedReport) }
+            );
+          }
+          if (parsedReport.isCocReportReady !==  getLatestReportStatus.isCocReportReady) {
+            parsedReport.isCocReportReady = getLatestReportStatus.isCocReportReady;
             saved.reportData = JSON.stringify(parsedReport);
             await this.reportsRepo.update(
               { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
@@ -67,6 +78,7 @@ export class JobRunService {
             id: true,
             startTime: true,
             isReportReady:true,
+            isCocReportReady: true,
             status: true,
             endTime: true,
             worker: {workerId: true},
@@ -153,5 +165,21 @@ export class JobRunService {
         }
         return response; 
       }
-      
+
+  get getReportsDirectory(): string {
+    return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
+  }
+
+  async getCocReportByJobRunId(jobRunId: string) {
+    // check if this jonrunid is a migration job
+    const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
+    if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+    if(jobRun.jobConfig.jobType !== JobType.Migrate) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
+    const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
+    if (fs.existsSync(filePath)) return filePath;
+    await this.csvService.generateCsv(filePath, jobRunId);
+    // update the isCocReportReady flag in the jobrun table
+    await this.jobRunRepo.update({ id: jobRunId }, { isCocReportReady: true });
+    return filePath;
+  }
 }
