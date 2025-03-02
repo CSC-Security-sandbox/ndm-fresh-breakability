@@ -121,13 +121,13 @@ describe('DiscoveryService', () => {
       expect(fs.mkdirSync).not.toHaveBeenCalled();
     });
 
-    it('should handle case when no report data is found', async () => {
-      mockInventoryRepo.query.mockResolvedValue([]);
+    it('should throw an InternalServerErrorException if no report data is found', async () => {
+      mockInventoryRepo.query.mockResolvedValue(undefined);
       mockReportsRepo.find.mockResolvedValue([]);
-
-      const result = await service.createReportFile('job123', 'DISCOVERY');
-
-      expect(result).toEqual({ message: 'Report generated successfully' });
+  
+      await expect(service.createReportFile('job123', 'DISCOVERY')).rejects.toThrow(
+          new InternalServerErrorException('Failed to generate report for jobRunId: job123 and reportType: DISCOVERY')
+      );
       expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
   });
