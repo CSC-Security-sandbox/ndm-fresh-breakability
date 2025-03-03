@@ -1,44 +1,27 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ConsumerType, CutoverErrors, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
-import { EmitterEvents } from "src/constants/events";
-import { ScheduleStatus, SocketEvents } from "src/constants/status";
+import { JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
+import * as parser from 'cron-parser';
+import { CutOverStatus, JobRunStatus, JobStatus, JobType, WorkFlows } from "src/constants/enums";
+import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { FindManyOptions, In, LessThan, MoreThan, Raw, Repository } from "typeorm";
+import { RedisService } from "src/redis/redis.service";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
+import { FindManyOptions, In, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
   JobRunDetailsDTO,
   JobRunDto,
   JobRunsDTO
 } from "./dto/jobrun.dto";
-import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
+import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { JobRunConfig, UnMountNotificationPayload, UpdateJobRunMappingPayload } from "./jobrun.types";
-import { JobOptionsEntity } from "src/entities/joboptions.entity";
-import { ConfigService } from "@nestjs/config";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
-import { WorkflowService } from "src/workflow/workflow.service";
-import {
-  Command,
-  FileServerDetails,
-  JobConfig,
-  JobContextFactory,
-  NFS,
-  RedisUtils,
-  SMB,
-  Task,
-} from '@netapp-cloud-datamigrate/jobs-lib';
-import { WorkManager } from "src/events/workmanager/workmanager.service";
-import { TaskEntity } from "src/entities/task.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import axios from 'axios';
-import { v4 as uuid4 } from 'uuid';
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import {  JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-import * as parser from 'cron-parser';
+import { JobRunInitService } from "./jobrun.init.service";
+import { JobRunConfig } from "./jobrun.types";
 @Injectable()
 export class JobRunService {
  
@@ -54,54 +37,34 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
-    @InjectRepository(JobOptionsEntity)
-    private optionRepo: Repository<JobOptionsEntity>,
-    private readonly eventEmitter: EventEmitter2,
     private readonly configService: ConfigService,
-    @Inject()
+    private  readonly jobRunInitService: JobRunInitService,
+    private readonly redisService: RedisService,
     private workFlowService: WorkflowService,
-    @Inject()
-    private workerManagerService: WorkManager,
-    @InjectRepository(TaskEntity)
-    private taskRepo: Repository<TaskEntity>,
-    @InjectRepository(OperationsEntity)
-    private operationRepo: Repository<OperationsEntity>
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
 
-  @OnEvent(EmitterEvents.JOB_RUN_STATUS_UPDATE, { async: true })
-  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    switch(payload.status) {
-      case JobRunStatus.Completed: 
-        await this.jobRunRepo.update({id: payload.jobRunId}, {endTime: new Date(), status: JobRunStatus.Completed})
-        await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
-        await this.reScheduleJobConfigById(payload.jobRunId)
-        break;
-      default:
-        await this.jobRunRepo.update({id: payload.jobRunId}, { status: payload.status})
-        break
+  async cutOverApproval(jobRunId: string, status: CutOverStatus) {
+    if(status === CutOverStatus.REJECTED) {
+      const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations: {jobConfig: true}})
+      if(jobRun)
+        await this.jobConfigRepo.update({
+          sourcePathId:  jobRun.jobConfig.sourcePathId,
+          targetPathId:  jobRun.jobConfig.targetPathId,
+          jobType: JobType.MIGRATE
+        }, {status : JobStatus.Active})
     }
+    await this.jobRunRepo.update({id: jobRunId}, {status: JobRunStatus.Completed})
   }
 
-  @OnEvent(EmitterEvents.UPDATE_JOB_RUN_MAPPING, { async: true })
-  async updateJobRunMapping(payload: UpdateJobRunMappingPayload){
-    await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
-  }
-
-
-  @OnEvent(EmitterEvents.UNMOUNT_NOTIFICATION,  {async: true}) 
-  async unmountNotification(payload: UnMountNotificationPayload){
-    const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
-    for(const worker of workers) 
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
-        workerId: worker.workerId,
-        socketEvents: SocketEvents.UNMOUNT_PATH,
-        payload: {
-          mountBaseDir: this.mountBasePath,
-          ...payload
-        }
-    });
+  async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
+    const signal: SignalWorkFlowPayload = {
+      payload: approvalRequest.action,
+      signalName:  'approve',
+      workflowId: `${WorkFlows.CUT_OVER}-${approvalRequest.jobRunId}`
+    }
+    return await this.workFlowService.sendSignal(signal)
   }
 
   // ------------------ Ad-hoc Run -------------------- //
@@ -113,294 +76,12 @@ export class JobRunService {
       throw new BadRequestException(`Job run is already created for ${jobConfigId}`)
     if(jobConfig.status === JobStatus.InActive)
       throw new BadRequestException(`Job run can not be created to Inactive Job Config`)
-    return await this.createJobRun(jobConfig.id, new Date())
+    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date())
   }
    
-  // ------------------ Cron schedule -------------------- //
-  async scheduleAJob() {
-    const currentTime = new Date();
-    const jobs: JobConfigEntity[] = await this.jobConfigRepo.find({
-      select:{id: true},
-      where: {
-        status: JobStatus.Active, scheduler: ScheduleStatus.SCHEDULING, 
-        firstRunAt: LessThan(currentTime)
-      },
-    })
-    for(const job of jobs)
-      await this.createJobRun(job.id, currentTime)
-    return jobs;
-  }
-
-  // ------------------ Update Job Config by Job Run Id ---------------//
-  async reScheduleJobConfigById(jobRunId: string) {
-    const jonRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations:{jobConfig: true}})
-    if(jonRun.jobConfig?.firstRunAt > new Date()) {
-      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.SCHEDULING})
-      this.logger.log(`Rescheduling Job ${jonRun.jobConfig.id}}`)
-    }
-    else
-      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
-  }
-
-
-  // ------------------ Get list of workers -------------------- //
-  async getJobConfig(
-    jobConfigId
-  ): Promise<JobRunConfig> {
-    const jobConfig = await this.jobConfigRepo.findOne({
-      where : {id: jobConfigId},
-      relations: {
-        sourcePath: { fileServer: { config: true, workers:true } },
-        targetPath: { fileServer: { config: true, workers:true } }
-      },
-    })
-
-    const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
-    const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-
-    const details : JobRunConfig = {
-      preserveAccessTime: jobConfig.preserveAccessTime,
-      excludeFilePatterns: jobConfig.excludeFilePatterns,
-      excludeOlderThan: jobConfig.excludeOlderThan,
-      connection: {
-        sourceCredential: {
-          path: jobConfig?.sourcePath?.volumePath ,
-          pathId : jobConfig?.sourcePath?.id ,
-          protocol: jobConfig?.sourcePath?.fileServer?.protocol,
-          username: jobConfig?.sourcePath?.fileServer?.userName,
-          password: jobConfig?.sourcePath?.fileServer?.password,
-          host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: this.mountBasePath
-        }
-      },
-      workers: sourceWorkers.map((worker) => worker.workerId),
-      jobType: jobConfig.jobType
-    }
-
-    if (jobConfig.targetPathId) {
-      const workers: string[] = [];
-      const workerSet = new Set<string>();
-      sourceWorkers.forEach((worker) => workerSet.add(worker.workerId));
-      targetWorkers?.forEach((worker) => {
-        if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
-      });
-
-      details.connection['targetCredential'] = {
-        path: jobConfig?.targetPath?.volumePath ,
-        pathId : jobConfig?.targetPath?.id ,
-        protocol: jobConfig?.targetPath?.fileServer?.protocol ,
-        username: jobConfig?.targetPath?.fileServer?.userName,
-        password: jobConfig?.targetPath?.fileServer?.password,
-        host: jobConfig?.targetPath?.fileServer?.host,
-        workingDirectory: this.mountBasePath
-      }
-      details['workers'] = workers
-      return details;
-    }
-    return details
-  }
-
-  // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string , currentTime: Date) {
-    const details:JobRunConfig = await this.getJobConfig(jobConfigId)
-    console.log('details--->', JSON.stringify(details)) 
-    
-    if(details.workers.length === 0) {
-      this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)
-      return
-    }
-    const workerMap = details.workers.map((worker) =>
-      this.workerJobRunMapRepo.create({ workerId: worker, isActive: true, isPathMounted: false })
-    )
-
-    const options = this.optionRepo.create({
-      excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: this.mountBasePath,
-      targetWorkingDir: this.mountBasePath,
-      preserveAccessTime: details.preserveAccessTime,
-      excludeOlderThan: details.excludeOlderThan
-    })
-    const jobRunRecord = this.jobRunRepo.create({
-      status: JobRunStatus.Ready,
-      startTime: currentTime,
-      endTime: null,
-      iterationNumber: 1,
-      jobConfigId: jobConfigId,
-      workerMap: workerMap,
-      options: options,
-    });
-    const jobRun = await this.jobRunRepo.save(jobRunRecord);
-    await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-    await this.initiateWorkflow(jobRun.id, details.jobType,details)
-    return jobRun
-  }
-
-
-  async initiateWorkflow(jobRunId: string, jobType: JobType, jobRunConfig: JobRunConfig) {
-    let jobRunWorkflow;
-  
-    switch (jobType) {  
-      case JobType.DISCOVER:
-        jobRunWorkflow = await this.starDiscoveryWorkFlow(jobRunId, jobRunConfig, jobType);
-        break;
-  
-      default:
-        jobRunWorkflow = await this.startMigrateWorkFlow(jobRunId, jobRunConfig, jobType);
-        return;
-    }
-    if (jobRunWorkflow) {
-      await this.jobRunRepo.update(
-        { id: jobRunId },
-        { workFlowId: jobRunWorkflow.workflowId }
-      );
-      this.logger.log(
-        `Starting ${jobType} workflow for jobRunId: ${jobRunId}, with workflowId: ${jobRunWorkflow.workflowId}`
-      );
-    }
-  }
-
-  async starDiscoveryWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
-    const options = {
-      workflowExecutionTimeout: '60s',
-      workflowTaskTimeout: '30s',
-      workflowRunTimeout: '30s',
-      startDelay: '1s'
-    }
-    await this.buildJobContext(jobRunId,jobRunConfig,jobType);
-    const startWorkFlowPayload: StartWorkFlowPayload = {
-      workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
-      taskQueue: 'ParentWorkflow-TaskQueue',
-      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
-      options:options
-    }
-    const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
-    await this.startStreamConsumer(jobRunId)
-    return {workflowId : workflow.workflowId}
-  }
-
-
-  async resumeDiscoveryWorkFlow(jobRunId: string, jobRunConfig:JobRunConfig): Promise<{workflowId: string}> {
-    const options = {
-      workflowExecutionTimeout: '60s',
-      workflowTaskTimeout: '30s',
-      workflowRunTimeout: '30s',
-      startDelay: '1s'
-    }
-    const startWorkFlowPayload: StartWorkFlowPayload = {
-      workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
-      taskQueue: 'ParentWorkflow-TaskQueue',
-      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
-      options:options
-    }
-   const workflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
-   await this.startStreamConsumer(jobRunId)
-   return {workflowId : workflow.workflowId}
-  }
-
-  startStreamConsumer = async (jobRunId:string) => {
-    const START_CONSUMER_URL = this.configService.get<string>('app.paths.startConsumer');
-    for (const consumerType of Object.values(ConsumerType)) {
-      const payload = {
-        jobRunId: jobRunId,
-        readerName: `${consumerType}-reader`,
-        consumerType: consumerType,
-      };
-      try {
-        const response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, payload);
-        this.logger.log(`Started consumer for ${consumerType}:`, response.data);
-      } catch (error) {
-        this.logger.error(`Failed to start consumer for ${consumerType}:`, error.message);
-      }
-    }
-  }
-
-  async buildJobContext(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType) {
-    let sourcefileServerDetails: FileServerDetails;
-    let targetfileServerDetails: FileServerDetails;
-
-    const sourceCredential = jobRunConfig.connection.sourceCredential;
-    const targetCredential = jobRunConfig.connection.targetCredential;
-
-    const createFileServerDetails = (credential: any) => {
-      return credential.protocol === Protocol.NFS
-        ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory)
-        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)],credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory);
-    };
-    sourcefileServerDetails= createFileServerDetails(sourceCredential);
-
-    if (jobType !== JobType.DISCOVER) 
-      targetfileServerDetails= createFileServerDetails(targetCredential);
-
-      const jobConfig = new JobConfig(
-        jobRunId,
-        jobType,
-        sourcefileServerDetails,
-        jobRunConfig.connection.sourceCredential.path,
-        jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
-        jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
-        jobRunConfig.workers
-      )
-      const redisClient = await RedisUtils.getClient();
-      if(!redisClient.isOpen)await redisClient.connect();
-      const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
-      const jobContext = JobContextFactory.getProvider('redis', redisClient)
-      .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-       (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
-      redisClient.set(jobRunId, (await jobContext).serialize());
-  }
-
-  async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-
-    const sourceBasePath =  jobRunConfig.jobType === JobType.DISCOVER ? `${this.configService.get<string>('app.paths.mountBasePath')}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`: '';
-    const commands = new Command(sourceBasePath, {0: {cmd : 'SCAN', status: 'PENDING'}}, uuid4())
-    const task = new Task(
-      uuid4(),
-      jobRunId,
-      'SCAN',
-      'PENDING',
-      jobRunConfig.workers[0],
-      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
-      jobRunConfig.connection.sourceCredential.pathId,
-      [commands],
-      jobRunConfig.jobType!==JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
-      jobRunConfig.jobType!==JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
-      jobRunConfig.excludeFilePatterns,
-    )
-    return task;
-  }
-
-  async startMigrateWorkFlow(jobRunId: string,jobRunConfig:JobRunConfig,jobType:JobType): Promise<{workflowId: string}> {
-    const options = {
-      workflowExecutionTimeout: '60s',
-      workflowTaskTimeout: '30s',
-      workflowRunTimeout: '30s',
-      startDelay: '1s'
-    }
-    await this.buildJobContext(jobRunId,jobRunConfig,jobType);
-    const startWorkFlowPayload: StartWorkFlowPayload = {
-      workflowId: WorkFlows.MIGRATE + '-' + jobRunId,
-      taskQueue: 'ParentWorkflow-TaskQueue',
-      args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
-      options:options
-    }
-  const workflow = await this.workFlowService.startWorkflow(WorkFlows.MIGRATE, startWorkFlowPayload)
-  await this.startStreamConsumer(jobRunId)
-  return {workflowId : workflow.workflowId}
-  }
-  
-  //  ------------------- sendMountMessage ------------------ //
-  async sendMountMessage(details: JobRunConfig, jobRunId: string) {
-      details.workers.forEach(worker => 
-        this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
-          workerId: worker,
-          socketEvents: SocketEvents.MOUNT_PATH,
-          payload: { jobRunId: jobRunId, ...details.connection}
-      })
-    )
-  }
  
   //  ------------------- JobRun actions ------------------ //
-  async actions( jobRunActions: JobRunActionsReq) {
+  async actions(jobRunActions: JobRunActionsReq) {
     switch (jobRunActions.action) {
       case JobRunActions.PAUSE:
         return await this.pauseJobRuns(jobRunActions.jobRuns);
@@ -413,38 +94,14 @@ export class JobRunService {
     }
   }
 
-  async cutoverApprove(jobRunId: string) {
-    const jobRun = await this.jobRunRepo.findOne({
-      where: {
-        id: jobRunId,
-        status: JobRunStatus.Blocked,
-        jobConfig: { jobType: JobType.CutOver }
-      },
-      relations: ['jobConfig'],
-    });
-
-    if (!jobRun) {
-      throw new NotFoundException(CutoverErrors.VALID_JOB_RUN_NOT_FOUND);
-    }
-
-    jobRun.status = JobRunStatus.Completed;
-    await this.jobRunRepo.save(jobRun);
-
-    return { details: 'Cutover job approved successfully' };
-  }
-
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
     await this.jobRunRepo.update({id: In(jobRuns)}, {status: JobRunStatus.Paused})
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Paused;
-      const serializedContext = jobContext.serialize();
-      await redisClient.set(jobRunId, serializedContext);
+      await this.redisService.setJobContext(jobRunId, jobContext);
     }
     return {details: 'Operation Completed Successfully'}
   }
@@ -459,16 +116,13 @@ export class JobRunService {
       worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
+    const jobRunConfigs = await this.jobRunRepo.find({where: {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, select: {jobConfigId : true}})
     await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+    await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Stopped;
-      const serializedContext = jobContext.serialize();
-      await redisClient.set(jobRunId, serializedContext);
-      await redisClient.set(jobRunId, jobContext.serialize());
+      await this.redisService.setJobContext(jobRunId, jobContext);
     }
     return {details: 'Operation Completed Successfully'}
   }
@@ -481,14 +135,12 @@ export class JobRunService {
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: true})
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
-    const redisClient = await RedisUtils.getClient();
-    if(!redisClient.isOpen)await redisClient.connect();
-    const redisContextProvider = await JobContextFactory.getProvider('redis', redisClient);
+
     for(const jobRunId of jobRuns) {
-      const jobContext = await redisContextProvider.getJobContext(jobRunId);
+      const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Pending;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      await redisClient.set(jobRunId, jobContext.serialize());
+      await this.redisService.setJobContext(jobRunId, jobContext);
       await this.resumeJobRun(jobRunId);
     }
     return {details: 'Operation Completed Successfully'}
@@ -497,12 +149,12 @@ export class JobRunService {
   async resumeJobRun(jobRunId: string) {
     const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
     if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
-    const details:JobRunConfig = await this.getJobConfig(jobRun.jobConfigId);
+    const details:JobRunConfig = await this.jobRunInitService.getJobConfig(jobRun.jobConfigId);
     if(details.workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
       return
     }
-    await this.resumeDiscoveryWorkFlow(jobRunId, details)
+    await this.jobRunInitService.initiateWorkflow(jobRunId, details)
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -650,6 +302,7 @@ export class JobRunService {
       .select([
         "jobRun.id AS jobRunId",
         "jobRun.isReportReady AS isReportReady",
+        "jobRun.isCocReportReady AS isCocReportReady",
         "jobConfig.jobType AS jobType",
         "jobConfig.id AS jobConfigId",
         "jobConfig.futureScheduleAt AS nextSchedule",
@@ -686,6 +339,7 @@ export class JobRunService {
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
           isReportReady:jobRun.isreportready,
+          isCocReportReady:jobRun.iscocreportready,
           jobConfigId: jobRun?.jobconfigid,
           nextSchedule: jobRun?.nextschedule,
           sourceServer: {

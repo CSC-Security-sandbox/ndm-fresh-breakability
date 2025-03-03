@@ -39,7 +39,7 @@ export enum JobConfigBulkMigrateResStatus {
 export enum JobType {
     DISCOVER = 'DISCOVER',
     MIGRATE = 'MIGRATE',
-    CutOver = 'CUT_OVER',
+    CUT_OVER = 'CUT_OVER',
 }
 
 export enum JobIdMappingType {
@@ -118,7 +118,8 @@ export enum WorkFlowType {
 export enum WorkFlows{
     DISCOVERY = 'DiscoveryWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
-    MIGRATE = 'MigrationWorkflow'
+    MIGRATE = 'MigrationWorkflow',
+    CUT_OVER = 'CutOverWorkFlow',
 }
 
 export enum ConsumerType{
@@ -142,4 +143,8 @@ export enum ProtocolVersion {
     SMBv2_0 = 'v2.0',
     SMBv3_0 = 'v3.0',
     SMBv3_1_1 = 'v3.1.1',
+
+export enum CutOverStatus {
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED'
 }

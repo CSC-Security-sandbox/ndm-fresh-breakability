@@ -3,22 +3,26 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { JobRunDetailsDTO } from './dto/jobrun.dto';
-import { ApproveData, JobRunActionsReq } from './dto/jobrunactions.dto';
+import {  ApprovalRequestDTO, JobRunActionsReq } from './dto/jobrunactions.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunService } from './jobrun.service';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
-import { JobRunStatus } from 'src/constants/enums';
+import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
+import { JobRunInitService } from './jobrun.init.service';
 
 @ApiTags('jobs run')
 @Controller('job-run')
 export class JobRunController {
   private readonly logger = new Logger(JobRunController.name);
-  constructor(private readonly jobRunService: JobRunService) {}
+  constructor(
+    private readonly jobRunService: JobRunService,
+    private readonly jobRunInitService: JobRunInitService
+    ) {}
 
   // remove the schedule cron job
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron(){
-    await this.jobRunService.scheduleAJob()
+    await this.jobRunInitService.scheduleAJob()
   }
 
 
@@ -51,8 +55,9 @@ export class JobRunController {
   @ApiOperation({ summary: 'Approve cutover by jon run ID' })
   @ApiResponse({ status: 200, description: 'The cutover job approved successfully.' })
   @Put('/cutover/approve')
-  async cutoverApprove(@Body() approveData: ApproveData) {
-    return this.jobRunService.cutoverApprove(approveData?.jobRunId);
+  async cutoverApprove(@Body() approval: ApprovalRequestDTO) {
+    this.logger.log(approval)
+    return this.jobRunService.approveCutoverRequest(approval);
   }
 
   @ApiOperation({ summary: 'Creates excesive job run based on job config' })
@@ -68,6 +73,14 @@ export class JobRunController {
   async updateJobRunStatus(@Param('jobRunId') jobRunId: string, @Param('status') status: JobRunStatus) {
     console.log('updatingStatus' + 'jobRunId', jobRunId, 'status', status);
     return await this.jobRunService.updateJobRunStatus(jobRunId, status);
+  }
+
+  @ApiOperation({ summary: 'Approve cutover by jon run ID' })
+  @ApiResponse({ status: 200, description: 'The cutover job approved successfully.' })
+  @Put('/cutover/:jobRunId/:status')
+  async cutoverApproval(@Param('jobRunId') jobRunId: string, @Param('status') status: CutOverStatus) {
+
+    return this.jobRunService.cutOverApproval(jobRunId, status);
   }
 
 }

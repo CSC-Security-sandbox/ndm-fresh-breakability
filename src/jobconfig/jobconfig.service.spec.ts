@@ -606,7 +606,7 @@ describe('createBulkMigrate', () => {
         {
           status: 'created',
           id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          jobType: JobType.CutOver,
+          jobType: JobType.CUT_OVER,
           sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
           targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
         },
