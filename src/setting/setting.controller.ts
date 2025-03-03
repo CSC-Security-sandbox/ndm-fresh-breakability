@@ -9,7 +9,8 @@ import {
 } from '@nestjs/common';
 import { SettingService } from './setting.service';
 import { CreateSettingDto } from './dto/create-setting.dto';
-import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('Global Settings')
 @Controller('setting')
@@ -17,6 +18,8 @@ export class SettingController {
   constructor(private readonly settingService: SettingService) {}
 
   @Post()
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @ApiBody({ type: CreateSettingDto, isArray: true })
   @ApiOperation({
     summary: 'Create Account', description: 'Create Global Settings',
@@ -26,6 +29,8 @@ export class SettingController {
   }
 
   @Get()
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get All Global Settings',
     description: 'Get all global settings',
@@ -35,6 +40,8 @@ export class SettingController {
   }
 
   @Get(':settingType')
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get Global Setting',
     description: 'Get a global setting by setting type',
