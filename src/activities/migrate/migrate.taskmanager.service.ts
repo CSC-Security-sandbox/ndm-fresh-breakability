@@ -133,12 +133,12 @@ export class MigrationTaskService{
   async generateCOCReport(jobRunId: string) {
     try {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}`);
-      this.logger.log(`[${jobRunId}] Triggering generateCOCReport`);
+      this.logger.log(`[${jobRunId}] Triggering generateCOCReport for url : ${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
       await axios.get(`${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
       this.logger.log(`[${jobRunId}] Triggering generateCOCReport successful`);
       return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
     } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to Trigger generateCOCReport: ${error}`);
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateCOCReport: ${error} | for url : ${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
       return { message: 'Error while Triggering generateCOCReport for the job id : ' + jobRunId };
     }
   }
