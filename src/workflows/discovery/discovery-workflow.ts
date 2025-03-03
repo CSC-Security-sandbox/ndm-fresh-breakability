@@ -136,7 +136,6 @@ export async function DiscoveryWorkflow({
     cleanupResponse.flat().map((r) =>
       result.push(r),
     );
-  }
 
   await ReportingWorkflow(traceId, reportingSignal)
 
