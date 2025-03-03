@@ -10,13 +10,13 @@ export default registerAs(
     buildId: process.env.BUILD_ID || '1.0.0',
     workerConfigUrl:
       process.env.WORKER_CONFIG_URL ||
-      'http://localhost:3004/api/v1/work-manager/',
+      'http://localhost:3002',
     workerReportServiceUrl:
       process.env.WORKER_REPORT_SERVICE_URL ||
-      'http://localhost:3007/api/v1/report',
+      'http://localhost:3003',
     workerJobServiceUrl:
       process.env.WORKER_JOB_SERVICE_URL ||
-      'http://localhost:3008',
+      'http://localhost:3006',
     platform: process.platform,
     baseMountDir: process.env.BASE_MOUNT_DIR || '/mnt/datamigrate',
     workerName: process.env.WORKER_NAME || 'worker',

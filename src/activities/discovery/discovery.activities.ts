@@ -166,10 +166,10 @@ export class DiscoveryActivity {
 
   async generateDiscoveryReport(jobRunId: string) {
     try {
-      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}`);
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
       const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
-      await axios.post( `${this.reportServiceUrl}/inventory/generate-report`, payload);
+      await axios.post( `${this.reportServiceUrl}/api/v1/report/inventory/generate-report`, payload);
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
       return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
     } catch (error) {
