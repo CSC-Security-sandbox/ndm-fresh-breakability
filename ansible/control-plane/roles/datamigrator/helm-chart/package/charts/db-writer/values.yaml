@@ -80,6 +80,8 @@ env:
     value: "http://reports-service-service:3000/api/v1/report"
   - name: JOB_SERVICE_URL
     value: "http://job-service-service:3000/api/v1/job-run"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
 
 service:
   type: ClusterIP

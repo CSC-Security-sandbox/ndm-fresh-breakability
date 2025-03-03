@@ -90,6 +90,8 @@ env:
     value: "/api/v1"
   - name: NEXT_PUBLIC_TIME_INTERVAL
     value: "30000"
+  - name: NEXT_PUBLIC_GRAFANA_URL
+    value: "https://$(MY_HOST_IP)/grafana"
 
 service:
   type: ClusterIP
