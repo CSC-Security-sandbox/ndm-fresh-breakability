@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from 'src/entities/jobconfig.entity';
 import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
 
@@ -17,7 +17,7 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity]),
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]

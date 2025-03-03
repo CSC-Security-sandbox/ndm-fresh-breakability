@@ -104,6 +104,40 @@ export class JobRunInitService {
     return jobRun
   }
 
+  async getJobConfigSpeedTest(
+    jobConfigId
+  ): Promise<JobRunConfig> {
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where : {id: jobConfigId},
+      relations: {
+        speedTestConfigs: {
+          workerEntities: true
+        },
+      },
+    })
+    const workers = jobConfig?.speedTestConfigs?.flatMap((config) => config.workerEntities.map(worker => worker.workersId)) || [];
+
+    const details : JobRunConfig = {
+      preserveAccessTime: jobConfig.preserveAccessTime,
+      excludeFilePatterns: jobConfig.excludeFilePatterns,
+      excludeOlderThan: jobConfig.excludeOlderThan,
+      connection: {
+        sourceCredential: {
+          path: jobConfig?.sourcePath?.volumePath ,
+          pathId : jobConfig?.sourcePath?.id ,
+          protocol: jobConfig?.sourcePath?.fileServer?.protocol,
+          username: jobConfig?.sourcePath?.fileServer?.userName,
+          password: jobConfig?.sourcePath?.fileServer?.password,
+          host: jobConfig?.sourcePath?.fileServer?.host,
+          workingDirectory: this.mountBasePath
+        }
+      },
+      workers: workers,
+      jobType: jobConfig.jobType
+    }
+    return details
+  }
+
     // ------------------ Get list of workers -------------------- //
     async getJobConfig(
         jobConfigId
@@ -115,7 +149,9 @@ export class JobRunInitService {
             targetPath: { fileServer: { config: true, workers:true } }
           },
         })
-    
+        if (jobConfig.jobType===JobType.SPEED_TEST) {
+          return  this.getJobConfigSpeedTest(jobConfigId)
+        }
         const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
         const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
     
@@ -166,6 +202,8 @@ export class JobRunInitService {
 
     // ------------------ InitiateWorkflow -------------------- //
     async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
+      console.log("initiateWorkflow Speedtest walaayyy !!!!!!!!!")
+
         let jobRunWorkflow: WorkflowHandleWithFirstExecutionRunId | null = null ;
         const options = new Options()
         options.workflowExecutionTimeout = '120s'
@@ -181,6 +219,17 @@ export class JobRunInitService {
               }
             jobRunWorkflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
             break;
+          }
+          case JobType.SPEED_TEST: {
+            console.log("Speedtest walaayyy !!!!!!!!!")
+            // const startWorkFlowPayload: StartWorkFlowPayload = {
+            //     workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
+            //     taskQueue: 'ParentWorkflow-TaskQueue',
+            //     args: [{ traceId: jobRunId, payload: jobRunConfig, options: options }],
+            //     options:options
+            //   }
+            // jobRunWorkflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+            // break;
           }
 
           case JobType.CUT_OVER: {

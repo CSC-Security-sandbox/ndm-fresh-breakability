@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {  Protocol } from 'src/constants/enums';
 import { Type } from 'class-transformer';
 import {
     ArrayUnique,
@@ -78,6 +79,63 @@ export class JobConfigDiscoverBulk {
   options: WorkFlowOptions = new WorkFlowOptions();
 }
 
+class speedTests{
+  @ApiProperty({ description: 'Read test' })
+  @IsBoolean()
+  readTest: boolean;
+  @ApiProperty({ description: 'Write test' })
+  @IsBoolean()
+  writeTest: boolean;
+  @ApiProperty({ description: 'packet loss test' })
+  @IsBoolean()
+  packetLossTest: boolean;
+
+}
+
+export class speedTestConfigOptions{
+  @ApiProperty({ description: 'File serverr name' })
+  @IsString()
+  fileServer: string;
+
+  @ApiProperty({ description: 'protocol for file server', required: false })
+  @IsString()
+  protocol?: Protocol;
+
+  @ApiProperty({ description: 'List of workers' })
+  @IsArray()
+  workers: string[];
+
+  @ApiProperty({ description: 'List of workers' })
+  test: speedTests;
+}
+
+
+
+export class JobConfigSpeedTest {
+  
+  @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  firstRunAt: Date;
+
+  @ApiProperty({ 
+    description: 'List of speedTest Fileserver config and tests to be performed ', 
+    isArray: true, 
+    type: speedTestConfigOptions 
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => speedTestConfigOptions)
+  speedTests: speedTestConfigOptions[];
+
+
+
+  @ApiProperty({ description: 'UUID of createdBy', required: false })
+  @IsOptional()
+  @IsUUID()
+  createdBy?: string;
+}
 
 export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Exclude files older than this date', required: false })

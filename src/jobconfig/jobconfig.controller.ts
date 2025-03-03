@@ -1,10 +1,10 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity, SpeedTestConfigEntity } from '../entities/jobconfig.entity';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, JobConfigSpeedTest } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
@@ -25,6 +25,17 @@ export class JobConfigController {
       throw new BadRequestException('Source path IDs cannot be empty.');
     }
     const jobConfig = await this.jobConfigService.createBulkDiscovery(bulkDiscovery);
+    return jobConfig;
+  }
+
+  @ApiOperation({ summary: 'Create a new Speed Test job' })
+  @ApiResponse({ status: 201, description: 'Speed Test job has been successfully created.' })
+  @Post('/speed-test')
+  async createSpeedTest(@Body() speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
+    if (!speedTest.speedTests || speedTest.speedTests.length === 0) {
+      throw new BadRequestException('Source path IDs cannot be empty.');
+    }
+    const jobConfig = await this.jobConfigService.createSpeedTest(speedTest);
     return jobConfig;
   }
 

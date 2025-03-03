@@ -29,9 +29,9 @@ import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Repository } from "typeorm";
-import { validate as isUUID } from "uuid";
-import { JobConfigEntity } from "../entities/jobconfig.entity";
-import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
+import { validate as isUUID, v4 as uuidv4 } from "uuid";
+import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "../entities/jobconfig.entity";
+import { BulkMigrateJobConfig, JobConfigSpeedTest } from "./dto/bulkMigrateJob.dto";
 import { JobConfigDto } from "./dto/jobconfig.dto";
 import {
   JobConfigCutoverBulk,
@@ -54,6 +54,10 @@ export class JobConfigService {
   constructor(
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
+    @InjectRepository(SpeedTestConfigEntity)
+    private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
+    @InjectRepository(SpeedTestConfigWorkerEntity)
+    private SpeedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(JobRunEntity)
@@ -120,6 +124,50 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
+  // ------------ Speed Test ---------------- //
+  async createSpeedTest(speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
+    const firstRunAt = speedTest?.firstRunAt ?? new Date()
+    const jobConfig = this.jobConfigRepo.create({
+          status: JobStatus.Active,
+          jobType:  JobType.SPEED_TEST,
+          firstRunAt: firstRunAt,
+          scheduler: ScheduleStatus.SCHEDULING,
+          preserveAccessTime:false,
+          sourcePathId:  uuidv4(),
+          createdBy: speedTest.createdBy
+        });
+
+    await this.jobConfigRepo.save(jobConfig);
+    const speedTestJobID = jobConfig.id;
+
+    const entries: SpeedTestConfigEntity[] = [];
+    const workersEntity: SpeedTestConfigWorkerEntity[] = [];
+    console.log("speedTest.speedTests")
+    console.log(speedTest.speedTests)
+    for (const fileServerConfig of speedTest.speedTests) {
+      const speedTestConfig = this.SpeedTestConfigRepo.create({
+        jobId: speedTestJobID,
+        fileServer: fileServerConfig.fileServer,
+        protocol: fileServerConfig.protocol,
+      });
+      entries.push(speedTestConfig);
+    
+      const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
+    
+      for (const worker of fileServerConfig.workers) {
+        const workerEntity = this.SpeedTestConfigWorkerRepo.create({
+          workersId: worker,
+          jobId: savedSpeedTestConfig.id,
+          
+        });
+        workersEntity.push(workerEntity);
+      }
+    }
+    
+    this.SpeedTestConfigWorkerRepo.save(workersEntity);
+
+    return entries;
+  }
   async createBulkMigrate(
     bulkMigrate: BulkMigrateJobConfig
   ): Promise<JobConfigBulkMigrateRes[]> {
@@ -339,7 +387,7 @@ export class JobConfigService {
   }
 
   async precheck(data: JobConfigPrecheck) {
-    const traceId:string=uuidv4();
+    const traceId: string = uuidv4();
     try {
       const serverMappings = new Map();
       for (const config of data.migrateConfigs) {
