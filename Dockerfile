@@ -47,4 +47,4 @@ EXPOSE 3000
 RUN chmod +x /app/entrypoint.sh
 
 # Start application
-CMD ["/app/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
