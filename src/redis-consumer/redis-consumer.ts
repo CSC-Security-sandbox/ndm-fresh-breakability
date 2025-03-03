@@ -10,6 +10,8 @@ import { InventoryService } from "src/inventory/inventory.service";
 import axios from "axios";
 import { RedisConsumerService } from "./redis-consumer.service";
 import { OperationStatus, TaskStatus } from "src/enum/queues.enum";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { defaultDataConverter } from "@temporalio/common";
 
 const args = process.argv.slice(2);
 const [jobRunId, readerName, consumerType] = args;
@@ -26,6 +28,7 @@ export enum ConsumerType {
   const app = await NestFactory.create(AppModule);
   const inventoryService = app.get(InventoryService);
   const redisService = app.get(RedisConsumerService);
+  const workflowService = app.get(WorkflowService);
 
   const redisClient = await RedisUtils.getClient();
   if (!redisClient.isOpen) await redisClient.connect();
@@ -33,8 +36,6 @@ export enum ConsumerType {
   const contextProvider = JobContextFactory.getProvider("redis", redisClient);
   const jobContext = await contextProvider.getJobContext(jobRunId);
   const { pathId } = jobContext.jobConfig.sourceFileServer;
-  const jobServiceUrl = process.env.JOB_SERVICE_URL;
-  const reportServiceUrl = process.env.REPORT_SERVICE_URL;
   while (true) {
     if (!jobContext) {
       process.exit(1);
@@ -58,26 +59,20 @@ export enum ConsumerType {
     const consumerActions = {
       files: async (file) => {
         if (file.fileName === "LAST_FILE") {
-          await axios.patch(`${jobServiceUrl}/${jobRunId}/COMPLETED`);
-          const payload = {
-            jobRunId: jobRunId,
-            "report-type": "DISCOVER",
-          };
-          //TODO: call the report service to generate the report from temporal
-          await axios.post(
-            `${reportServiceUrl}/inventory/generate-report`,
-            payload
-          );
-
-          // call the report service to generate coc report
-          await axios.get(`${reportServiceUrl}/job-run/coc-report/${jobRunId}`);
-          
-          console.log(`[${jobRunId}] Discovery status updated to Completed`);
-          Object.keys(ConsumerType).forEach(
-            async (consumer) =>
-              await redisService.deleteConsumer(jobRunId, consumer)
-          );
+          Object.keys(ConsumerType).forEach(async (consumer) => await redisService.deleteConsumer(jobRunId, consumer));
           console.log(`[${jobRunId}] Consumer stopped`);
+          
+          const jobType = jobContext.jobConfig.jobType;
+          const workflowId = getWorkflowId(jobRunId, jobType);
+
+          console.log(`[${jobRunId}] Signalling workflow ${workflowId} with signal ${jobType}_REPORTED`);
+          await workflowService.signalWorkflow({
+            namespace: 'default',
+            workflowExecution: { workflowId: workflowId },
+            signalName: 'reportingSignal',
+            input: { payloads:  [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`) ]}
+          })
+          console.log(`[${jobRunId}] Signalled workflow ${workflowId} with signal ${jobType}_REPORTED`);
         } else await inventoryService.createInventory([file], jobRunId, pathId);
       },
       directories: async (directory) => {},
@@ -104,3 +99,18 @@ export enum ConsumerType {
     }
   }
 })();
+
+export enum WorkFlows {
+  DISCOVERY = 'DiscoveryWorkflow',
+  PRECHECK='PreCheckValidationWorkflow',
+  MIGRATE = 'MigrationWorkflow',
+  CUT_OVER = 'CutOverWorkFlow',
+}
+
+
+const getWorkflowId = (jobRunId: string, jobType: string) => {
+  if(jobType === 'CUT_OVER') return `${WorkFlows.CUT_OVER}-${jobRunId}`;
+  if(jobType === 'MIGRATE') return `${WorkFlows.MIGRATE}-${jobRunId}`;
+  if(jobType === 'PRECHECK') return `${WorkFlows.PRECHECK}-${jobRunId}`;
+  return `${WorkFlows.DISCOVERY}-${jobRunId}`;
+}
