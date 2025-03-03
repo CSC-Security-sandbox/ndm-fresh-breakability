@@ -47,6 +47,7 @@ import {
 
 @Injectable()
 export class JobConfigService {
+ 
   private readonly logger = new Logger(JobConfigService.name);
   constructor(
     @InjectRepository(JobConfigEntity)
@@ -321,33 +322,25 @@ export class JobConfigService {
   }
 
   async precheck(data: JobConfigPrecheck) {
-    const trackId:string=crypto.randomUUID();
-      const pathIds = new Set<string>();
+    const traceId:string=uuidv4();
     try {
       const serverMappings = new Map();
       for (const config of data.migrateConfigs) {
+        const pathIds = new Set<string>();
         const destinationPathIds = config.destinationPathId;
         pathIds.add(config.sourcePathId);
         destinationPathIds.forEach((id) => pathIds.add(id));
         const pathToWorkerMapping = await this.volumeRepo.find({
           where: { id: In([...pathIds]) },
           relations: {
-            fileServer: { workers: true, workingDirectory: true },
+            fileServer: { workers: true},
           },
         });
         const sourceVolume = pathToWorkerMapping.find(
           (p) => p.id === config.sourcePathId
         );
-        if (!sourceVolume)
-          return {
-            status: "error",
-            erros: ["SOURCE_PATH_NOT_FOUND"],
-            message: `Source path ${config.sourcePathId} not found`,
-          };
 
         const sourceFileServer = sourceVolume.fileServer;
-        const sourceWorkers =
-          sourceFileServer?.workers?.filter((w) => w.status === "Online") || [];
 
         let sourceEntry = serverMappings.get(sourceFileServer.id);
         if (!sourceEntry) {
@@ -368,11 +361,8 @@ export class JobConfigService {
         const sourcePathEntry = {
           pathId: config.sourcePathId,
           preserveAccessTime: data.preserveAccessTime,
-          workingDirectory : sourceFileServer.workingDirectory?.workingDirectory,
-          workingDirectoryPathId: sourceFileServer.workingDirectory?.pathId,
           mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
           exportPathName: sourceVolume.volumePath,
-          workingDirectoryExportPathName: sourceFileServer.workingDirectory?.pathName,
           destinations: [],
           commonWorkers: [],
         };
@@ -388,20 +378,6 @@ export class JobConfigService {
             };
 
           const destinationFileServer = destinationVolume.fileServer;
-          const destinationWorkers =
-            destinationFileServer?.workers?.filter(
-              (w) => w.status === "Online"
-            ) || [];
-
-          const commonWorkers = sourceWorkers.filter((sw) =>
-            destinationWorkers.some((dw) => dw.workerId === sw.workerId)
-          );
-          if (commonWorkers.length === 0)
-            return {
-              status: "error",
-              erros: ["NO_COMMON_WORKERS"],
-              message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
-            };
 
           sourcePathEntry.destinations.push({
             destinationPathId,
@@ -411,30 +387,25 @@ export class JobConfigService {
               userName: destinationFileServer.userName,
               protocol: destinationFileServer.protocol,
               serverType: destinationFileServer.serverType,
-              workingDirectory: destinationFileServer.workingDirectory?.workingDirectory,
-              workingDirectoryPathId: destinationFileServer.workingDirectory?.pathId,
               mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
               exportPathName: destinationVolume.volumePath,
-              workingDirectoryExportPathName: destinationFileServer.workingDirectory?.pathName, 
             },
           });
-          sourcePathEntry.commonWorkers = commonWorkers.map((w) => ({
-            workerId: w.workerId,
-          }))
+          sourcePathEntry.commonWorkers = [];
         }
         sourceEntry.sourcePaths.push(sourcePathEntry);
       }
       const finalResult = Array.from(serverMappings.values());
 
       this.logger.debug(
-        `[${trackId}] Precheck payload: ${JSON.stringify(finalResult)}`
+        `[${traceId}] Precheck payload: ${JSON.stringify(finalResult)}`
       );
       const startPrecheckWorkPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.PRECHECK + "-" + trackId,
+        workflowId: WorkFlows.PRECHECK + "-" + traceId,
         taskQueue: "ParentWorkflow-TaskQueue",
         args: [
           {
-            traceId: trackId,
+            traceId: traceId,
             payload: finalResult,
             options: new Options()
           },
@@ -443,7 +414,7 @@ export class JobConfigService {
          const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK, startPrecheckWorkPayload);
          return { workflowId: workflow.workflowId };
     } catch (error) {
-        this.logger.error(`${trackId}] Failed to perform the precheck: ${error}`);
+        this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
         return {
           status: "error",
           erros: ["PRECHECK_FAILED"],
@@ -769,71 +740,8 @@ export class JobConfigService {
       }
     }
     return false;
-  }
-  async getPrecheckPayload(data: any): Promise<any> {
-    const mountBasePath = this.configService.get<string>(
-      "app.paths.mountBasePath"
-    );
-    const payload = [];
-    for (const [sourceDetails, destinationPathIds] of data) {
-      const ids = [sourceDetails?.pathId, ...destinationPathIds];
-      const pathDetails = await this.volumeRepo.find({
-        where: { id: In(ids) },
-        relations: {
-          fileServer: { workingDirectory: true },
-        },
-      });
-      const sourceFileServer = pathDetails.filter(
-        (p) => p.id === sourceDetails.pathId
-      )[0].fileServer;
-      const exportPathName = pathDetails.filter(
-        (p) => p.id === sourceDetails.pathId
-      )[0].volumePath;
-      const workingDirectoryExportPathName =
-        sourceFileServer.workingDirectory.pathName;
-      payload.push({
-        workerIds: ["6cf21220-5627-4614-a947-778915dba29f"],
-        sourceCredentials: {
-          hostName: sourceFileServer.host,
-          pathId: sourceDetails.pathId,
-          protocol: sourceFileServer.protocol,
-          exportPathName: exportPathName,
-          user: sourceFileServer.userName,
-          password: sourceFileServer.password,
-          workingDirectory: sourceFileServer.workingDirectory?.workingDirectory,
-          workingDirectoryPathId: sourceFileServer.workingDirectory?.pathId,
-          mountBasePath: mountBasePath,
-          workingDirectoryExportPathName: workingDirectoryExportPathName,
-        },
-        destinationCredentials: destinationPathIds.map((id) => {
-          const destinationFileServer = pathDetails.filter(
-            (p) => p.id === id
-          )[0].fileServer;
-          const destinationExportPathName = pathDetails.filter(
-            (p) => p.id === id
-          )[0].volumePath;
-          const workingDirectoryExportPathName =
-            destinationFileServer.workingDirectory.pathName;
-          return {
-            hostName: destinationFileServer.host,
-            pathId: id,
-            exportPathName: destinationExportPathName,
-            user: destinationFileServer.userName,
-            protocol: destinationFileServer.protocol,
-            password: destinationFileServer.password,
-            workingDirectory:
-              destinationFileServer.workingDirectory?.workingDirectory,
-            workingDirectoryPathId:
-              destinationFileServer.workingDirectory?.pathId,
-            mountBasePath: mountBasePath,
-            workingDirectoryExportPathName: workingDirectoryExportPathName,
-          };
-        }),
-        preserveAccessTime: sourceDetails.preserveAccessTime,
-      });
-    }
-    return payload;
-  }  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
+  }  
+  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
     if (conditions.length === 0) return [];
     const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
     conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
@@ -853,4 +761,113 @@ export class JobConfigService {
     });
     return await queryBuilder.getMany();
   }
+
+  async precheckValidation(precheckData: MigrateConfig[]) {
+    console.log("precheckData",JSON.stringify(precheckData));
+    const results = new Map<string,any>();
+    for (const config of precheckData) {
+      if(!results.has(config.sourcePathId)){
+        const payload = {
+          sourcePathId: config.sourcePathId,
+          destinations:[]
+        };
+        results.set(config.sourcePathId,payload);
+      }
+      const pathIds = new Set<string>();
+      const destinationPathIds = config.destinationPathId;
+      pathIds.add(config.sourcePathId);
+      destinationPathIds.forEach((id) => pathIds.add(id));
+      const pathToWorkerMapping = await this.volumeRepo.find({
+        where: { id: In([...pathIds]) },
+        relations: {
+          fileServer: { workers: true},
+        },
+      });
+      console.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
+      const sourceVolume = pathToWorkerMapping.find(
+        (p) => p.id === config.sourcePathId
+      );
+      if (!sourceVolume){
+        const data = results.get(config.sourcePathId);
+        data.status = "failed";
+        data.error = ["SOURCE_PATH_NOT_FOUND"];
+        data.message = `Source path ${config.sourcePathId} not found`;
+        results.set(config.sourcePathId,data);
+        continue;
+      }
+
+      const sourceFileServer = sourceVolume.fileServer;
+      const sourceWorkers =
+        sourceFileServer?.workers?.filter((w) => w.status === "Online") || [];
+
+      for (const destinationPathId of destinationPathIds) {
+        const destinationVolume = pathToWorkerMapping.find(
+          (p) => p.id === destinationPathId
+        );
+        if (!destinationVolume){
+          const data = results.get(config.sourcePathId);
+              data.status = "failed";
+              const destinationPayload ={
+                status: "failed",
+                errors: ["DESTINATION_PATH_NOT_FOUND"],
+                message: `Destination path ${destinationPathId} not found`,
+                destinationPathId: destinationPathId
+              };
+              data.destinations.push(destinationPayload);
+              results.set(config.sourcePathId,data);
+              continue;
+          }
+        const destinationFileServer = destinationVolume.fileServer;
+        const destinationWorkers =
+          destinationFileServer?.workers?.filter(
+            (w) => w.status === "Online"
+          ) || [];
+
+        if(sourceFileServer.protocolVersion !== destinationFileServer.protocolVersion){
+          const data = results.get(config.sourcePathId);
+          const destinationPayload ={
+            status: "failed",
+            errors: ["PROTOCOL_VERSION_MISMATCH"],
+            message: `Protocol version mismatch between source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+            destinationPathId: destinationPathId
+          };
+          data.destinations.push(destinationPayload);
+          results.set(config.sourcePathId,data);
+          continue;
+        }
+        this.logger.log('protocolVersion',sourceFileServer.protocolVersion);
+        this.logger.log('protocolVersion',destinationFileServer.protocolVersion);
+        const commonWorkers = sourceWorkers.filter((sw) =>
+          destinationWorkers.some((dw) => dw.workerId === sw.workerId)
+        );
+        console.log("commonWorkers",JSON.stringify(commonWorkers)); 
+        if (commonWorkers.length === 0)
+          {
+            const data = results.get(config.sourcePathId);
+            const destinationPayload ={
+              status: "failed",
+              errors: ["NO_COMMON_WORKERS"],
+              message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+              destinationPathId: destinationPathId
+            };
+            data.destinations.push(destinationPayload);
+            results.set(config.sourcePathId,data);
+          }else{
+            const data = results.get(config.sourcePathId);
+            data.destinations.push({
+              destinationPathId: destinationPathId,
+              status: "success",
+              commonWorkers: commonWorkers.map((w) => ({workerId: w.workerId})),
+            });
+            results.set(config.sourcePathId,data);
+          }
+        }
+        const data = results.get(config.sourcePathId);
+        data.status = "success";
+        results.set(config.sourcePathId,data);
+      }
+      this.logger.log("results",JSON.stringify(results));
+      return Array.from(results.values()).flatMap((it) => it);
+    }
+      
 }
