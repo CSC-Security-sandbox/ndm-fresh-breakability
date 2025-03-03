@@ -5,11 +5,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryModule } from './inventory/inventory.module';
 import { RedisConsumerModule } from './redis-consumer/redis-consumer.module';
 import appConfig from './config/app.config';
-
+import temporalConfig from './config/temporal.config';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      load: [databaseConfig, appConfig],
+      load: [databaseConfig, appConfig, temporalConfig],
       isGlobal: true
     }),
     TypeOrmModule.forRootAsync({

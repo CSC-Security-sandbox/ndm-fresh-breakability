@@ -1,11 +1,9 @@
-import { NestFactory } from '@nestjs/core';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config'
-import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -14,25 +12,7 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  Logger.log(`RabbitMQ URLs: ${configService.get<string>('app.rabbitmq.urls')}`);
-  Logger.log(`Queue name: ${configService.get<string>('app.rabbitmq.inventoryQueue')}`);
 
-  // app.connectMicroservice<MicroserviceOptions>({
-  //   transport: Transport.RMQ,
-  //   options: {
-  //     urls: configService.get('app.rabbitmq.urls'),
-  //     queue: configService.get('app.rabbitmq.inventoryQueue'),
-  //     noAck: false,
-  //     queueOptions: {
-  //       durable: true,
-  //       arguments: {
-  //         'x-queue-type': 'quorum',
-  //       },
-  //     },
-  //   },
-  // });
-
-  // await app.startAllMicroservices();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.setGlobalPrefix('api/v1/');

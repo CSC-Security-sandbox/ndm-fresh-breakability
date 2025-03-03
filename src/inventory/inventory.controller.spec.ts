@@ -1,9 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
+import { RmqContext } from '@nestjs/microservices';
+import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
-import { RmqContext } from '@nestjs/microservices';
-import { Pattern } from '../enum/queues.enum';
 import { InventoryPayload, InventoryPayloadType } from './inventory.type';
 
 describe('InventoryController', () => {

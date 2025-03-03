@@ -1,17 +1,11 @@
 import {
-  Inject,
-  Injectable,
-  OnModuleDestroy,
-  OnModuleInit,
+  Injectable
 } from "@nestjs/common";
-import { RedisClientType } from "redis";
 import {
-  JobContextFactory,
-  RedisUtils,
-  Task,
+  RedisUtils
 } from "@netapp-cloud-datamigrate/jobs-lib";
-import { InventoryService } from "src/inventory/inventory.service";
 import { exec } from "child_process";
+import { InventoryService } from "src/inventory/inventory.service";
 
 @Injectable()
 export class RedisConsumerService  {

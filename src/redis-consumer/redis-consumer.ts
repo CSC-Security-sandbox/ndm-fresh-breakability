@@ -1,13 +1,15 @@
 import { NestFactory } from "@nestjs/core";
 import {
-  RedisUtils,
-  JobContextFactory,
-  Task,
   DMError,
+  JobContextFactory,
+  RedisUtils,
+  Task,
 } from "@netapp-cloud-datamigrate/jobs-lib";
+import { defaultDataConverter } from "@temporalio/common";
 import { AppModule } from "src/app.module";
+import { OperationStatus } from "src/enum/queues.enum";
 import { InventoryService } from "src/inventory/inventory.service";
-import axios from "axios";
+import { WorkflowService } from "src/workflow/workflow.service";
 import { RedisConsumerService } from "./redis-consumer.service";
 import { OperationStatus, TaskStatus } from "src/enum/queues.enum";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -59,20 +61,22 @@ export enum ConsumerType {
     const consumerActions = {
       files: async (file) => {
         if (file.fileName === "LAST_FILE") {
-          Object.keys(ConsumerType).forEach(async (consumer) => await redisService.deleteConsumer(jobRunId, consumer));
-          console.log(`[${jobRunId}] Consumer stopped`);
-          
+
           const jobType = jobContext.jobConfig.jobType;
           const workflowId = getWorkflowId(jobRunId, jobType);
 
-          console.log(`[${jobRunId}] Signalling workflow ${workflowId} with signal ${jobType}_REPORTED`);
           await workflowService.signalWorkflow({
             namespace: 'default',
             workflowExecution: { workflowId: workflowId },
             signalName: 'reportingSignal',
             input: { payloads:  [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`) ]}
           })
-          console.log(`[${jobRunId}] Signalled workflow ${workflowId} with signal ${jobType}_REPORTED`);
+
+          console.log(`[${jobRunId}] Signalling workflow ${workflowId} with signal ${jobType}_REPORTED`);
+          
+          Object.keys(ConsumerType).forEach(async (consumer) => await redisService.deleteConsumer(jobRunId, consumer));
+          console.log(`[${jobRunId}] Consumer stopped`);
+
         } else await inventoryService.createInventory([file], jobRunId, pathId);
       },
       directories: async (directory) => {},

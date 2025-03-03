@@ -19,7 +19,8 @@ export class WorkflowService {
             this.client = new Client({ connection: this.connection });
             return this.client;
         } catch (error) {
-            throw error;
+            console.log(`Error on getClient : ${error} ${this.configService.get<any>('temporal.address')}`)
+            return this.getClient()
         }
     }
 

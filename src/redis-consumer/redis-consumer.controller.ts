@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { RedisConsumerService } from "./redis-consumer.service";
 import { ConsumerDto } from "./consumer-dto";
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { ApiBody } from "@nestjs/swagger";
 
 @Controller("redis-consumer")

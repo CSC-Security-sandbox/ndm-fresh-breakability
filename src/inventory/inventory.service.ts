@@ -1,17 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, UpdateResult } from 'typeorm';
-import { InventoryEntity } from '../entities/inventory.entity';
-import { CreateInventory, DiscoveryCompletedPayload, InventoryPayload, InventoryPayloadType, FileType } from './inventory.type';
 import { ConfigService } from '@nestjs/config';
-import { ClientProxy, ClientProxyFactory, Transport } from '@nestjs/microservices';
-import { OperationStatus, OperationType, Pattern } from 'src/enum/queues.enum';
-import { TaskEntity } from 'src/entities/task.entity';
-import { OperationsEntity } from 'src/entities/operation.entity';
+
+import { InjectRepository } from '@nestjs/typeorm';
+import { OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
 import { randomUUID } from 'crypto';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
 import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { OperationError, Task, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
+import { TaskEntity } from 'src/entities/task.entity';
+import { OperationStatus, Pattern } from 'src/enum/queues.enum';
+import { Repository, UpdateResult } from 'typeorm';
+import { InventoryEntity } from '../entities/inventory.entity';
+import { CreateInventory, DiscoveryCompletedPayload, InventoryPayload, InventoryPayloadType } from './inventory.type';
 
 @Injectable()
 export class InventoryService {
@@ -22,12 +22,10 @@ export class InventoryService {
   private completedCount = 0;
 
   private readonly logger = new Logger(InventoryService.name);
-  private reportsClient: ClientProxy;
 
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
-    private readonly configService: ConfigService,
     @InjectRepository(TaskEntity)
     private readonly taskRepo: Repository<TaskEntity>,
     @InjectRepository(OperationsEntity)
@@ -39,20 +37,6 @@ export class InventoryService {
 
   ) {
 
-    const urls: any = this.configService.get<string[]>('app.rabbitmq.urls') || '';
-    this.reportsClient = ClientProxyFactory.create({
-      transport: Transport.RMQ,
-      options: {
-        urls: urls,
-        queue: this.configService.get<string>('app.rabbitmq.reportsQueue') || '',
-        queueOptions: {
-          durable: true,
-          arguments: {
-            'x-queue-type': 'quorum',
-          },
-        },
-      },
-    });
   }
 
   async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
@@ -88,21 +72,8 @@ export class InventoryService {
     };
   }
 
-  async operate(payload: InventoryPayload) {
-    switch (payload.type) {
-      case InventoryPayloadType.DISCOVERY_COMPLETED:
-        this.completedCount++;
-        this.notifyDiscoveryCompleted(payload.data)
-        this.logger.debug(`------------------ ${JSON.stringify(payload.data)} ----------------`)
-        break;
-      default:
-        throw new Error('Invalid Type')
-    }
-  }
 
-  async notifyDiscoveryCompleted(data: DiscoveryCompletedPayload) {
-    await this.reportsClient.send(Pattern.DISCOVERY_COMPLETED, data).toPromise()
-  }
+
   async saveTasks(data: any) {
     try {
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
