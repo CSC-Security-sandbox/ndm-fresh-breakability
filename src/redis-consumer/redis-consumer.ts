@@ -7,13 +7,10 @@ import {
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { defaultDataConverter } from "@temporalio/common";
 import { AppModule } from "src/app.module";
-import { OperationStatus } from "src/enum/queues.enum";
 import { InventoryService } from "src/inventory/inventory.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { RedisConsumerService } from "./redis-consumer.service";
 import { OperationStatus, TaskStatus } from "src/enum/queues.enum";
-import { WorkflowService } from "src/workflow/workflow.service";
-import { defaultDataConverter } from "@temporalio/common";
 
 const args = process.argv.slice(2);
 const [jobRunId, readerName, consumerType] = args;
