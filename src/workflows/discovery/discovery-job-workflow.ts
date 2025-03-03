@@ -39,7 +39,6 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         if (isJobCompleted) {
           log(traceId, `No tasks found. sending last entry`);
           await updateLastEntry(traceId);
-          await updateDiscoveryStatus(traceId, 'COMPLETED');
           await setJobState(traceId, { ...newJobState, status: 'COMPLETED' });
           const finalJobState = await getJobState(traceId);
           log(traceId, `Discovery completed with finalJobState: ${JSON.stringify(finalJobState)}`);

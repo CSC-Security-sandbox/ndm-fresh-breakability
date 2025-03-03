@@ -21,7 +21,7 @@ export class DiscoveryActivity {
   }
   
   async getWorkerId(): Promise<string> {
-    return this.workerId;
+    return await this.workerId;
   }
 
   async fetchTasks(traceId: string): Promise<any> {
