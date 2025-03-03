@@ -11,6 +11,7 @@ import { ValidateConnectionActivity } from "src/activities/validate-connection/v
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
+import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -22,7 +23,8 @@ export class WorkerOptionsService {
     private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
-    private readonly migrationSyncService:MigrationSyncService
+    private readonly migrationSyncService:MigrationSyncService,
+    private readonly precheckActivity:PrecheckActivity
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -32,6 +34,7 @@ export class WorkerOptionsService {
           getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
           getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
           setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+          checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
           generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
           updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
@@ -59,7 +62,8 @@ export class WorkerOptionsService {
             updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
             updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
-            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
+            syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
+            checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

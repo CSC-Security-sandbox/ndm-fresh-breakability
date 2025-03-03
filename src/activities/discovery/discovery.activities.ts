@@ -121,7 +121,7 @@ export class DiscoveryActivity {
     try {
       const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
       this.logger.log(`[${traceId}] Updating discovery status to ${status}`);
-      await axios.patch(`${workerJobServiceUrl}/${traceId}/${status}`);
+      await axios.patch(`${workerJobServiceUrl}/api/v1/job-run/${traceId}/${status}`);
       this.logger.log(`[${traceId}] Discovery status updated to ${status}`);
       return { message: 'Discovery Job status updated as completed for job id: ' + traceId };
     } catch (error) {
@@ -166,10 +166,10 @@ export class DiscoveryActivity {
 
   async generateDiscoveryReport(jobRunId: string) {
     try {
-      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}`);
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
       const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
-      await axios.post( `${this.reportServiceUrl}/inventory/generate-report`, payload);
+      await axios.post( `${this.reportServiceUrl}/api/v1/report/inventory/generate-report`, payload);
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
       return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
     } catch (error) {

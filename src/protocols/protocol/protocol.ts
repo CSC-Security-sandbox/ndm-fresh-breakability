@@ -24,7 +24,7 @@ export abstract class Protocol {
         commandPattern: string,
         commandDescription: string,
       ): Promise<any> {
-      console.log('traceId----->', traceId, 'protocolType----->', protocolType, 'payload----->', payload, 'commandPattern----->', commandPattern, 'commandDescription----->', commandDescription);  
+      const directoryPath= `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
         const response = {
           traceId: traceId,
           status: 'success',
@@ -37,13 +37,9 @@ export abstract class Protocol {
           ?.replace('${HOST}', payload?.hostname)
           ?.replace('${USERNAME}', payload?.username)
           ?.replace('${PASSWORD}', payload?.password)
-          ?.replace('${PATH}', payload?.path)
-          ?.replace('${BASE_DIR}', payload?.workingDirectory) 
-          ?.replace('${JOB_RUN_ID}', payload?.jobRunId)
-          ?.replace('${PATH_ID}', payload?.pathId);
-
-          console.log('command-->', command);
-      
+          ?.replace('${MOUNT_PATH}', payload?.path)
+          ?.replace('${DIR_PATH}', directoryPath)
+        
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
             this.logger.info(

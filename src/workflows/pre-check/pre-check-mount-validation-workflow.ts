@@ -12,15 +12,15 @@ export async function PreCheckMountAndWritePermissionValidation(
   args: any,
 ): Promise<any> {
   const { traceId, fileServer, feature } = args;
-  log(
-    'PreCheckMountAndWritePermissionValidation----->',
-    JSON.stringify(fileServer),
+  log(traceId,
+    `[PreCheckMountAndWritePermissionValidation],
+    ${JSON.stringify(fileServer)}`,
   );
   const mountResult =  await mountAndCheckWritePermissionActivity(
     fileServer,
     traceId,
-    feature,
+    feature.checkWritePermission,
   );
- log('mountResult----->in workflow', mountResult);
+ log(traceId,`[PreCheckMountAndWritePermissionValidation Result]', ${JSON.stringify(mountResult)}`);
   return mountResult;
 }
