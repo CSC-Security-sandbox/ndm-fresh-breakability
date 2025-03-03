@@ -54,6 +54,7 @@ export class ConfigurationService {
             createdBy: true,
             scannedDate: true,
             status: true,
+            errorMessage: true,
             fileServers:{
                 id: true,
                 host: true,
