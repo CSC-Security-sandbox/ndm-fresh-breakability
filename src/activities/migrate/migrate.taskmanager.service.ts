@@ -14,6 +14,7 @@ export class MigrationTaskService{
   readonly fetchTaskBatch: number;
   readonly pushTaskDirSize: number;
   readonly workerJobServiceUrl: string;
+  readonly reportServiceUrl: string;
   
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -22,6 +23,7 @@ export class MigrationTaskService{
   ) {
       this.workerId = this.configService.get('worker.workerId');
       this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
+      this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
       this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
   }
 
@@ -88,10 +90,10 @@ export class MigrationTaskService{
 
   async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
     try {
-      const workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
-      this.logger.log(`[${jobRunId}] Updating status to URL ${workerJobServiceUrl}`);
+
+      this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}`);
       this.logger.log(`[${jobRunId}] Updating status to ${status}`);
-      await axios.patch(`${workerJobServiceUrl}/${jobRunId}/${status}`);
+      await axios.patch(`${this.workerJobServiceUrl}/${jobRunId}/${status}`);
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
@@ -115,13 +117,11 @@ export class MigrationTaskService{
     }
   }
 
-
   async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
     try {
-      const workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
-      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${workerJobServiceUrl}`);
+      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}`);
       this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
-      await axios.put(`${workerJobServiceUrl}/cutover/${jobRunId}/${status}`);
+      await axios.put(`${this.workerJobServiceUrl}/cutover/${jobRunId}/${status}`);
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
@@ -130,5 +130,17 @@ export class MigrationTaskService{
     }
   }
 
+  async generateCOCReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}`);
+      this.logger.log(`[${jobRunId}] Triggering generateCOCReport for url : ${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
+      await axios.get(`${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
+      this.logger.log(`[${jobRunId}] Triggering generateCOCReport successful`);
+      return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateCOCReport: ${error} | for url : ${this.reportServiceUrl}/job-run/coc-report/${jobRunId}`);
+      return { message: 'Error while Triggering generateCOCReport for the job id : ' + jobRunId };
+    }
+  }
 
 }

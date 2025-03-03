@@ -13,3 +13,4 @@ export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-wor
 export {CutOverWorkFlow, WaitingForApproval} from '../workflows/migration/parent/cutover-job-workflow'
 export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
 export {SyncWorkflow} from '../workflows/migration/core/sync.workflow'
+export {ReportingWorkflow} from '../workflows/reporting/reporting.workflow'

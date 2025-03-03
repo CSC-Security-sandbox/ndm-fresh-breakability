@@ -5,9 +5,11 @@ import * as wf from '@temporalio/workflow';
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { CutOverStatus } from "src/activities/migrate/migrate.type";
+import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 
 
 export const unblockSignal =  wf.defineSignal<[string]>('approve');
+export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');
 
 
@@ -148,7 +150,9 @@ export const CutOverWorkFlow = async ({
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 
+  await ReportingWorkflow(traceId, reportingSignal)
   await WaitingForApproval(traceId, unblockSignal)
+
 
   if (activeWorkerIds.length > 0) {
     const cleanupResponses = await Promise.all(
@@ -177,7 +181,6 @@ export const WaitingForApproval = async (
   let isBlocked = true;
   let approval_status: CutOverStatus | undefined;
 
-  await updateStatusActivity({jobRunId: traceId,  status: JobRunStatus.BLOCKED})
 
   wf.setHandler(isBlockedQuery, () => isBlocked);
 
@@ -189,15 +192,12 @@ export const WaitingForApproval = async (
     }
   });
 
-  wf.setHandler(isBlockedQuery, () => isBlocked);
-
   wf.log.info('Waiting for approval...');
 
   try {
     await wf.condition(() => !isBlocked);
     await updateCutOverStatusActivity({jobRunId: traceId,  status: approval_status })
     wf.log.info(`Cutover approval received: ${approval_status}`);
-
     console.error(`Cutover approval received: ${approval_status}`);
 
   } catch (err) {
