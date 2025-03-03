@@ -8,7 +8,7 @@ export interface ProtocolPayload{
     path?: string;
     jobRunId?: string
     pathId?: string;
-    workingDirectory?: string;
+    mountBasePath?: string;
 }
 
 export interface CommandOutput{

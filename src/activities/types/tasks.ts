@@ -66,3 +66,8 @@ export interface ProcessInventoryParams {
   discoveryStats: TaskStats;
 }
 
+export interface PrecheckConfig{
+  sourcePathId: string;
+  destinationPathId: string[];
+}
+

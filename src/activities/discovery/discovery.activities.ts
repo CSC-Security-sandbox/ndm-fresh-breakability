@@ -10,12 +10,14 @@ import { RedisService } from 'src/redis/redis.service';
 @Injectable()
 export class DiscoveryActivity {
   readonly workerId: string;
+  readonly reportServiceUrl: string;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
   }
   
   async getWorkerId(): Promise<string> {
@@ -119,7 +121,7 @@ export class DiscoveryActivity {
     try {
       const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
       this.logger.log(`[${traceId}] Updating discovery status to ${status}`);
-      await axios.patch(`${workerJobServiceUrl}/${traceId}/${status}`);
+      await axios.patch(`${workerJobServiceUrl}/api/v1/job-run/${traceId}/${status}`);
       this.logger.log(`[${traceId}] Discovery status updated to ${status}`);
       return { message: 'Discovery Job status updated as completed for job id: ' + traceId };
     } catch (error) {
@@ -159,6 +161,21 @@ export class DiscoveryActivity {
     );
     jobContext.jobState = newjobState;
     await this.redisService.setJobContext(traceId, jobContext);
+  }
+
+
+  async generateDiscoveryReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
+      const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
+      await axios.post( `${this.reportServiceUrl}/api/v1/report/inventory/generate-report`, payload);
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
+      return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: ${error}`);
+      return { message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId };
+    }
   }
 
 }
