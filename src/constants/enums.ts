@@ -133,3 +133,13 @@ export enum ConsumerType{
 export enum CutoverErrors {
     VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND'
 }
+
+export enum ProtocolVersion {
+    NFSv3 = 'v3',
+    NFSv4_0 = 'v4.0',
+    NFSv4_1 = 'v4.1',
+    NFSv4_2 = 'v4.2',
+    SMBv2_0 = 'v2.0',
+    SMBv3_0 = 'v3.0',
+    SMBv3_1_1 = 'v3.1.1',
+}

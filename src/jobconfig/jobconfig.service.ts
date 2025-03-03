@@ -337,7 +337,7 @@ export class JobConfigService {
   }
 
   async precheck(data: JobConfigPrecheck) {
-    const trackId:string=uuidv4();
+    const traceId:string=uuidv4();
     try {
       const serverMappings = new Map();
       for (const config of data.migrateConfigs) {
@@ -413,14 +413,14 @@ export class JobConfigService {
       const finalResult = Array.from(serverMappings.values());
 
       this.logger.debug(
-        `[${trackId}] Precheck payload: ${JSON.stringify(finalResult)}`
+        `[${traceId}] Precheck payload: ${JSON.stringify(finalResult)}`
       );
       const startPrecheckWorkPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.PRECHECK + "-" + trackId,
+        workflowId: WorkFlows.PRECHECK + "-" + traceId,
         taskQueue: "ParentWorkflow-TaskQueue",
         args: [
           {
-            traceId: trackId,
+            traceId: traceId,
             payload: finalResult,
             options: new Options()
           },
@@ -429,7 +429,7 @@ export class JobConfigService {
          const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK, startPrecheckWorkPayload);
          return { workflowId: workflow.workflowId };
     } catch (error) {
-        this.logger.error(`${trackId}] Failed to perform the precheck: ${error}`);
+        this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
         return {
           status: "error",
           erros: ["PRECHECK_FAILED"],
@@ -803,7 +803,7 @@ export class JobConfigService {
       );
       if (!sourceVolume){
         const data = results.get(config.sourcePathId);
-        data.status = "error";
+        data.status = "failed";
         data.error = ["SOURCE_PATH_NOT_FOUND"];
         data.message = `Source path ${config.sourcePathId} not found`;
         results.set(config.sourcePathId,data);
@@ -820,8 +820,9 @@ export class JobConfigService {
         );
         if (!destinationVolume){
           const data = results.get(config.sourcePathId);
+              data.status = "failed";
               const destinationPayload ={
-                status: "error",
+                status: "failed",
                 errors: ["DESTINATION_PATH_NOT_FOUND"],
                 message: `Destination path ${destinationPathId} not found`,
                 destinationPathId: destinationPathId
@@ -836,6 +837,20 @@ export class JobConfigService {
             (w) => w.status === "Online"
           ) || [];
 
+        if(sourceFileServer.protocolVersion !== destinationFileServer.protocolVersion){
+          const data = results.get(config.sourcePathId);
+          const destinationPayload ={
+            status: "failed",
+            errors: ["PROTOCOL_VERSION_MISMATCH"],
+            message: `Protocol version mismatch between source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+            destinationPathId: destinationPathId
+          };
+          data.destinations.push(destinationPayload);
+          results.set(config.sourcePathId,data);
+          continue;
+        }
+        this.logger.log('protocolVersion',sourceFileServer.protocolVersion);
+        this.logger.log('protocolVersion',destinationFileServer.protocolVersion);
         const commonWorkers = sourceWorkers.filter((sw) =>
           destinationWorkers.some((dw) => dw.workerId === sw.workerId)
         );
@@ -844,7 +859,7 @@ export class JobConfigService {
           {
             const data = results.get(config.sourcePathId);
             const destinationPayload ={
-              status: "error",
+              status: "failed",
               errors: ["NO_COMMON_WORKERS"],
               message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
               destinationPathId: destinationPathId
@@ -865,7 +880,7 @@ export class JobConfigService {
         data.status = "success";
         results.set(config.sourcePathId,data);
       }
-      console.log("results",JSON.stringify(results));
+      this.logger.log("results",JSON.stringify(results));
       return Array.from(results.values()).flatMap((it) => it);
     }
       
