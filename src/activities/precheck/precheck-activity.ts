@@ -15,10 +15,15 @@ export class PrecheckActivity{
       
 
       async checkForCommonWorkersAndExportPath(precheckConfig:PrecheckConfig[], traceId: string): Promise<any>{
-        this.logger.log(`[${traceId}] Starting Precheck Activity Check for Common Workers and Export Path ${this.jobServiceUrl}`);
-        const response = await axios.post(`${this.jobServiceUrl}/api/v1/jobs/precheck/validate`, precheckConfig);
-        this.logger.log(`[${traceId}] Precheck Activity Check for Common Workers and Export Path completed`);
-        return response.data;
+        try {
+          this.logger.log(`[${traceId}] Starting Precheck Activity Check for Common Workers and Export Path ${this.jobServiceUrl}`);
+          const response = await axios.post(`${this.jobServiceUrl}/api/v1/jobs/precheck/validate`, precheckConfig);
+          this.logger.log(`[${traceId}] Precheck Activity Check for Common Workers and Export Path completed`);
+          return response.data;
+        } catch (error) {
+          this.logger.error(`[${traceId}] Error occurred during Precheck Activity: ${error.message}`);
+          throw error;
+        }
       }
 
 

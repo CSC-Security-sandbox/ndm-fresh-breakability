@@ -83,7 +83,7 @@ export const PreCheckValidationWorkflow = async ({
           let payload = {
             destinationPathId: destination.destinationPathId,
             status: 'failed',
-            errors: [destinationDetails.error],
+            errors: [destinationDetails.errors],
           };
           sourcePathEntry.destination.push(payload);
           result.set(sourcePath.pathId, sourcePathEntry);
