@@ -174,7 +174,7 @@ export class JobRunService {
     // check if this jonrunid is a migration job
     const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
     if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
-    if(jobRun.jobConfig.jobType !== JobType.Migrate) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
+    if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
     const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
     if (fs.existsSync(filePath)) return filePath;
     await this.csvService.generateCsv(filePath, jobRunId);
