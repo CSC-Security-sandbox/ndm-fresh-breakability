@@ -1,0 +1,14 @@
+---
+- name: Configure data directory for grafana
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-grafana/grafana-data, tags: 'grafana-data' }
+
+- name: Configure grafana
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-grafana/setup-grafana, tags: 'setup-grafana' }

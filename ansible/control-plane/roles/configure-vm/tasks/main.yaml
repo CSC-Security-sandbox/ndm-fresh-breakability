@@ -114,3 +114,8 @@
   
 - name: 2.7. Set the hostname
   command: hostnamectl set-hostname datamigrator
+
+- name: 2.8. Set the system timezone to UTC
+  ansible.builtin.command:
+    cmd: timedatectl set-timezone UTC
+  become: yes

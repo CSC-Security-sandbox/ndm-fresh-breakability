@@ -1,0 +1,72 @@
+---
+- name: Create Fluent Bit directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/fluentbit
+    state: directory
+
+- name: Create Fluent Bit namespace
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: 
+    src: ./templates/fluentbit-namespace.yaml.j2 
+    dest: $HOME/fluentbit/fluentbit-namespace.yaml
+
+- name: Create Fluent Bit values file for Helm
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: 
+    src: ./templates/fluentbit-values.yaml.j2 
+    dest: $HOME/fluentbit/fluentbit-values.yaml
+
+- name: Remove Fluent Bit installation
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm uninstall fluent-bit --namespace fluentbit
+    kubectl delete -f $HOME/fluentbit/fluentbit-namespace.yaml
+  when: fluentbit_uninstall is defined
+
+- name: Apply Fluent Bit configurations
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/fluentbit/fluentbit-namespace.yaml
+  register: SHELL_STDOUT
+
+- name: Deploy Fluent Bit using Helm
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm repo add fluent https://fluent.github.io/helm-charts
+    helm repo update
+    helm upgrade --install fluent-bit fluent/fluent-bit -f $HOME/fluentbit/fluentbit-values.yaml --namespace fluentbit --version {{ fluentbit_version }} 
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Helm Install (fluentbit): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for Fluent Bit pods to be ready
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: kubectl wait --namespace="fluentbit" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
+
+- name: Check Fluent Bit pod status
+  shell: kubectl get pods -n fluentbit
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
+
+- name: Delete Fluent Bit directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/fluentbit
+    state: absent

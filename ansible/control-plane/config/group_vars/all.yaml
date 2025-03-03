@@ -19,6 +19,7 @@ keycloak_customizations_tag: "latest"
 # config_service_tag: "latest-temporal"
 # config_service_liquibase_tag: "latest-temporal"
 # db_writer_service_tag: "latest-temporal"
+# db_writer_service_liquibase_tag: "latest-temporal"
 # admin_service_liquibase_tag: "latest-temporal"
 # jobs_service_tag: "latest-temporal"
 # jobs_service_liquibase_tag: "latest-temporal"
@@ -26,7 +27,6 @@ keycloak_customizations_tag: "latest"
 # reports_service_tag: "latest-temporal"
 # reports_service_liquibase_tag: "latest-temporal"
 # admin_service_tag: "latest-temporal"
-# db_writer_service_liquibase_tag: "latest-temporal"
 # keycloak_customizations_tag: "microk8s-new"
 
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
@@ -128,13 +128,23 @@ postgres_data_volume_size: 30Gi
 vault_version: 0.29.1
 vault_data_volume_size: 8Gi
 
-keycloak_version: 24.3.2
+keycloak_version: 24.4.11
 
 #redis_version: 11.4.1
-redis_version: 20.7.1
+redis_version: 20.8.0
 redis_data_volume_size: 30Gi
 
 temporal_version: 0.55.0
 
-kube_prometheus_stack_version: 68.3.2
-loki_stack_version: 2.10.2
+grafana_version: 11.4.7
+grafana_data_volume_size: 10Gi
+lokistack_version: 6.27.0
+loki_data_volume_size: 10Gi
+
+prometheus_version: 27.5.1
+prometheus_alertmanager_data_volume_size: 10Gi
+prometheus_data_volume_size: 10Gi
+
+fluentbit_version: 0.48.8
+fluentbit_data_volume_size: 10Gi
+

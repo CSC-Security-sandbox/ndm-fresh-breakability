@@ -1,0 +1,39 @@
+#reference: https://artifacthub.io/packages/helm/prometheus-community/prometheus?modal=values
+
+configmapReload:
+  prometheus:
+    enabled: false
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs: {{ customScrapeConfigs }}
+  alerting_rules.yml:
+    groups: {{ customAlertingRules }}
+
+server:
+  retention: "30d"
+  ingress:
+    enabled: false
+  
+  persistentVolume:
+    storageClass: "local-storage-prometheus"
+    size: {{ prometheus_data_volume_size }}
+    selector:
+      matchLabels: 
+        role: prometheus-server-data
+  
+alertmanager:
+  enabled: true
+
+  service:
+    type: ClusterIP
+
+  persistence:
+    enabled: true
+    size: {{ prometheus_alertmanager_data_volume_size }}
+    storageClass: "local-storage-alertmanager"
+    selector:
+      matchLabels: 
+        role: prometheus-alertmanager-data
+
+  

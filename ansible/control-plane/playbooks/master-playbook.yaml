@@ -16,6 +16,15 @@
 - name: Configure postgres
   import_playbook: configure-postgres.yaml
 
+- name: Configure prometheus
+  import_playbook: configure-prometheus.yaml
+
+- name: Configure fluentbit
+  import_playbook: configure-fluentbit.yaml
+
+- name: Configure grafana
+  import_playbook: configure-grafana.yaml
+
 - name: Configure redis
   import_playbook: configure-redis-standalone.yaml
 

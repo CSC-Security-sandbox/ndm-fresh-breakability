@@ -1,0 +1,99 @@
+---
+- name: Creates prometheus directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/prometheus
+    state: directory
+
+- name: prometheus-storageclass template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/prometheus-storageclass.j2 dest=$HOME/prometheus/prometheus-storageclass.yaml
+
+- name: alertmanager-storageclass template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/alertmanager-storageclass.j2 dest=$HOME/prometheus/alertmanager-storageclass.yaml
+
+- name: prometheus namespace
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/prometheus-namespace.j2 dest=$HOME/prometheus/prometheus-namespace.yaml
+
+- name: prometheus-alertmanager-pv template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/alertmanager-pv.j2 dest=$HOME/prometheus/prometheus-alertmanager-pv.yaml
+
+- name: prometheus-server-pv template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/prometheus-pv.j2 dest=$HOME/prometheus/prometheus-server-pv.yaml
+
+- name: prometheus-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/prometheus-values.j2 dest=$HOME/prometheus/prometheus-values.yaml
+
+- name: remove previous installation
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm delete prometheus --namespace "prometheus"
+    kubectl delete pvc --all --namespace "prometheus"
+    kubectl delete -f $HOME/prometheus/prometheus-storageclass.yaml
+    kubectl delete -f $HOME/alertmanager/alertmanager-storageclass.yaml
+    kubectl delete -f $HOME/prometheus/prometheus-alertmanager-pv.yaml
+    kubectl delete -f $HOME/prometheus/prometheus-server-pv.yaml
+    kubectl delete -f $HOME/prometheus/prometheus-namespace.yaml
+  when: prometheus_uninstall is defined    
+  args:
+    chdir: $HOME
+
+- name: setup namespace, persistentvolume for prometheus
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/prometheus/prometheus-namespace.yaml
+    kubectl apply -f $HOME/prometheus/prometheus-storageclass.yaml
+    kubectl apply -f $HOME/alertmanager/alertmanager-storageclass.yaml
+    kubectl apply -f $HOME/prometheus/prometheus-alertmanager-pv.yaml
+    kubectl apply -f $HOME/prometheus/prometheus-server-pv.yaml
+  args:
+    chdir: $HOME
+
+- name: Deploy prometheus helm chart
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
+    helm upgrade --install prometheus prometheus-community/prometheus -f $HOME/prometheus/prometheus-values.yaml --version "{{ prometheus_version }}" --namespace "prometheus"
+    exit 0
+  args:
+    executable: /bin/bash      
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Helm Install (prometheus): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: wait for pods to come up
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: kubectl wait --namespace="prometheus" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  retries: 10
+  delay: 20
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Get pods (prometheus): {{ kubectl_get_pods.stdout | split('\n') }}"
+
+- name: Delete prometheus directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/prometheus
+    state: absent
