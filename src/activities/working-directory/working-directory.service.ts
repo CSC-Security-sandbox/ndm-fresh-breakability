@@ -101,7 +101,7 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("started validating the working directory");
-        const mountPoint = `/etc/${traceId}/${traceId}`;
+        const mountPoint = `${WorkersConfig.get('baseDirectoryToValidateWorkingDirectory')}/${traceId}/${traceId}`;
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {
