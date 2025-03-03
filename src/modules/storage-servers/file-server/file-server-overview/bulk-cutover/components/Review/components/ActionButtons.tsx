@@ -25,7 +25,7 @@ const ActionButtons = () => {
   return (
     <Box className="flex justify-end gap-3">
       <Button
-        disabled={reviewStepSelectedIds.length === 0}
+        disabled={reviewStepSelectedIds?.length === 0}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.PAUSE)}
         style={{ width: 152 }}
         isSubmitting={isUpdating}
@@ -33,7 +33,7 @@ const ActionButtons = () => {
         Pause
       </Button>
       <Button
-        disabled={reviewStepSelectedIds.length === 0}
+        disabled={reviewStepSelectedIds?.length === 0}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.STOP)}
         style={{ width: 152 }}
         isSubmitting={isUpdating}

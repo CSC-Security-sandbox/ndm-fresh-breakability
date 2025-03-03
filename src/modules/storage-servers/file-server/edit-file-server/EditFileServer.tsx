@@ -6,10 +6,12 @@ const EditFileServerContextWrapper = withEditFileServer(
   CommonFileServerContextProvider
 );
 
-export default () => {
+const EditFileServer = () => {
   return (
     <EditFileServerContextWrapper>
       <WizardProvider />
     </EditFileServerContextWrapper>
   );
 };
+
+export default EditFileServer;

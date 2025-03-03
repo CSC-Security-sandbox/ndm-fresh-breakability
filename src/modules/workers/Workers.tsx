@@ -7,7 +7,7 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 
-const WorkersPage = () => {
+const Workers = () => {
   const { workers, isLoading } = useWorkers();
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
@@ -17,21 +17,19 @@ const WorkersPage = () => {
   };
 
   return (
-    <Box className="p-6">
-      <TableWrapper
-        tableStateProps={tableStateProps}
-        content={
-          <PermissionAuth
-            permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}
-          >
-            <WorkerInstallationContent />
-          </PermissionAuth>
-        }
-        isLoading={isLoading}
-        label="Workers"
-      />
-    </Box>
+    <TableWrapper
+      tableStateProps={tableStateProps}
+      content={
+        <PermissionAuth
+          permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}
+        >
+          <WorkerInstallationContent />
+        </PermissionAuth>
+      }
+      isLoading={isLoading}
+      label="Workers"
+    />
   );
 };
 
-export default WorkersPage;
+export default Workers;

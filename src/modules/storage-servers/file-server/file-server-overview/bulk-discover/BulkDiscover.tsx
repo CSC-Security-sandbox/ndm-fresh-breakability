@@ -52,7 +52,7 @@ const BulkDiscover = () => {
       const successMessage = (
         <>
           Bulk Discover Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs/listing")}>
+          <Button variant="text" onClick={() => navigate("/jobs-list")}>
             View Job Listing
           </Button>
         </>

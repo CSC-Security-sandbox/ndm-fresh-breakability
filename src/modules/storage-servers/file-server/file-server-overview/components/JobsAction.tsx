@@ -18,7 +18,7 @@ const JobsAction = ({
   const isActive = fileServerDetails?.status === FILE_SERVER_STATUS.ACTIVE;
 
   const handleEdit = () => {
-    navigate(`/config/file-server/edit/${fileServerDetails?.id}`);
+    navigate(`/config/edit-file-server/${fileServerDetails?.id}`);
   };
 
   return (

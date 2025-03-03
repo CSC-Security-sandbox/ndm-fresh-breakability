@@ -34,12 +34,12 @@ const JOB_HEADER_TAB: BlueXpTabHeaderPropsType = {
   tabLinks: [
     {
       label: "Job List",
-      path: "/jobs/listing",
+      path: "/jobs-list",
       id: 0,
     },
     {
       label: "Job Run List",
-      path: "/jobs/run",
+      path: "/job-run-list",
       id: 1,
     },
   ],
@@ -60,6 +60,7 @@ const WORKERS_HEADER_TAB: BlueXpTabHeaderPropsType = {
 export const HEADER_WITH_PATHNAME: HeaderType = {
   "/config/file-server": CONFIG_HEADER_TAB,
   "/new-file-server": CONFIG_HEADER_TAB,
+  "/config/edit-file-server": CONFIG_HEADER_TAB,
   "/job": JOB_HEADER_TAB,
   "/reports": REPORTS_HEADER_TAB,
   "/workers": WORKERS_HEADER_TAB,

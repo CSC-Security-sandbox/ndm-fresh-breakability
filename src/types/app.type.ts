@@ -8,7 +8,7 @@
  */
 
 import { ReactNode } from "react";
-// import { WorkingDirectoryDetailsType } from "./(pages)/config/file-server/fileServer.interface";
+import { WorkingDirectoryDetailsType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 export type GraphLoaderType = {
   label: string;
@@ -344,6 +344,7 @@ export enum JOB_STATUS_TYPE_ENUM {
   COMPLETED = TASK_STATUS_TYPE_ENUM.COMPLETED,
   FAILED = "FAILED",
   ERRORED = TASK_STATUS_TYPE_ENUM.ERRORED,
+  BLOCKED = "BLOCKED",
 }
 
 export enum JOB_ACTION_STATUS_ENUM {
@@ -696,4 +697,9 @@ export type TemporaryPasswordPropsType = {
 export enum ReportENUM {
   DISCOVERY = "DISCOVER",
   COC = "COC",
+}
+
+export enum CutOverStatus {
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
 }

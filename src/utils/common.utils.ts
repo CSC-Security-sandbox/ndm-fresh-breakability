@@ -13,6 +13,18 @@ export const getJobType = (type: JOBS_TYPE) => {
   }
 };
 
+export const getJobTypeTextForHeader = (type: JOBS_TYPE) => {
+  switch (type) {
+    case JOBS_TYPE["DISCOVERY"]:
+      return "Discovered";
+    case JOBS_TYPE["MIGRATE"]:
+    case JOBS_TYPE["CUT_OVER"]:
+      return "Migrated";
+    default:
+      return type;
+  }
+};
+
 export const getJobStatusFormat = (status: JOB_CONFIG_STATUS_ENUM) => {
   switch (status) {
     case JOB_CONFIG_STATUS_ENUM.ACTIVE:

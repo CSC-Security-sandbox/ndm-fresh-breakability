@@ -23,9 +23,6 @@ const AuthenticationProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  console.log("oidcConfig", oidcConfig);
-  console.log("mode ->", import.meta.env.MODE);
-  console.log("title ->", import.meta.env.VITE_APP_TITLE);
   return <AuthProvider {...oidcConfig}>{children}</AuthProvider>;
 };
 

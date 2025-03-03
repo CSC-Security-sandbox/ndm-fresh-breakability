@@ -14,7 +14,7 @@ const BulkDiscoveryFooter = ({
 
   return (
     <Box className="flex gap-3">
-      <Button color="secondary" onClick={() => router.back()}>
+      <Button color="secondary" onClick={() => navigate(-1)}>
         Cancel
       </Button>
       <Button

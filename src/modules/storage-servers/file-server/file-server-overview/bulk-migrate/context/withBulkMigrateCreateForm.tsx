@@ -286,7 +286,7 @@ export function withBulkMigrateCreateForm(
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs/listing")}>
+          <Button variant="text" onClick={() => navigate("/jobs-list")}>
             View Job Listing
           </Button>
         </>

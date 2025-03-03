@@ -83,14 +83,9 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   }, [auth]);
 
   useEffect(() => {
-    console.log("INSIDE getUserPermissionsApi EFFECT");
     if (auth.isAuthenticated) {
-      console.log("INSIDE getUserPermissionsApi EFFECT IF STATEMENT");
-
       (async () => {
-        console.log("API GOT CALLED");
         const resp = await getUserPermissionsApi("").unwrap();
-        console.log("getUserPermissionsApi -->", resp);
         dispatch(setUserPermissions(resp));
         getAllProjects(accountDetails?.id)
           .unwrap()

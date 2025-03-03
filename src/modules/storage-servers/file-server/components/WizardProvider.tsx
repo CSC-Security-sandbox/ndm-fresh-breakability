@@ -9,9 +9,8 @@ import {
 } from "@modules/storage-servers/file-server/file-server.constant";
 
 const WizardProvider = () => {
-  console.log("first");
   return (
-    <Box className="w-full py-5 h-[calc(100vh-5rem)]">
+    <Box className="w-full py-5 h-[calc(100vh-9rem)]">
       <Wizard
         stepsMap={STEPS_MAP}
         stepPaths={STEPS_PATHS}

@@ -20,12 +20,10 @@ const LinkWithActiveClass = (props: any) => {
 const TabHeaderWrapper = () => {
   const location = useLocation();
   const pathname = location.pathname;
-  console.log("pathname", pathname);
 
   const { currantPath, blueXpTabHeaderProps } = useMemo(() => {
     const allKeys = Object.keys(HEADER_WITH_PATHNAME);
     const currantPath = allKeys.find((row) => pathname.includes(row)) || "";
-    console.log("currantPath", currantPath);
     const blueXpTabHeaderProps = HEADER_WITH_PATHNAME[currantPath || ""];
     return { currantPath, blueXpTabHeaderProps };
   }, [pathname]);

@@ -164,6 +164,14 @@ export const jobsApi = createApi({
         responseHandler: async (response) => response.blob(),
       }),
     }),
+
+    confirmCutOver: builder.mutation({
+      query: (body) => ({
+        url: "/cutover/approve",
+        method: "PUT",
+        body,
+      }),
+    }),
   }),
 });
 
@@ -182,4 +190,5 @@ export const {
   useLazyGetAllFileServersWithVolumeQuery,
   useBulkCutOverMutation,
   useLazyDownloadTemplateQuery,
+  useConfirmCutOverMutation,
 } = jobsApi;

@@ -1,0 +1,66 @@
+import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
+import JobInfoCard from "./JobInfoCard";
+import JobInfoReverseCard from "./JobInfoReverseCard";
+import { Card } from "@netapp/bxp-design-system-react";
+import Divider from "@mui/material/Divider";
+import {
+  JOBS_TYPE,
+  JOB_CONFIG_STATUS_ENUM,
+  JOB_STATUS_TYPE_ENUM,
+  JobHeaderPropType,
+} from "@/types/app.type";
+import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
+import {
+  getJobStatusFormat,
+  getJobType,
+  getJobTypeTextForHeader,
+} from "@/utils/common.utils";
+
+const JobHeader = ({ jobConfigDetails }: JobHeaderPropType) => {
+  if (!jobConfigDetails) return <></>;
+  const jobRunLatest =
+    jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
+      ? [...jobConfigDetails?.jobRuns]
+          ?.sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime))
+          ?.find((row) => row.status === JOB_STATUS_TYPE_ENUM.COMPLETED)
+      : jobConfigDetails?.aggregateData;
+  const timeElapsed = jobRunLatest?.timeElapsed || 0;
+
+  return (
+    <Card className="flex gap-16" style={{ padding: 40 }}>
+      <JobInfoCard
+        label={getJobType(jobConfigDetails.jobType)}
+        value={
+          <StatusCellRenderer
+            status={getJobStatusFormat(jobConfigDetails.status)}
+            active={jobConfigDetails.status === JOB_CONFIG_STATUS_ENUM.ACTIVE}
+          />
+        }
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label="Files"
+        value={jobRunLatest?.scannedFilesCount || "--"}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label="Directories"
+        value={jobRunLatest?.scannedDirectoriesCount || "--"}
+      />
+
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label="Time Elapsed"
+        value={<TimeElapsedRenderer value={timeElapsed} />}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label={getJobTypeTextForHeader(jobConfigDetails.jobType)}
+        value={jobRunLatest?.totalScannedSize || "--"}
+        // valueType="gb"
+      />
+    </Card>
+  );
+};
+
+export default JobHeader;
