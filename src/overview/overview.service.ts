@@ -120,10 +120,10 @@ export class OverviewService {
                 totalMigratedSize = (migratedSize && migratedSize.length > 0) ? migratedSize[0]?.totalMigratedSize : 0;
             }
            let totalPending = totalDiscoveredSize - totalMigratedSize;
-           let totalPendingSize = covertBytes(totalPending);
+           let totalPendingSize = covertBytes(Number(totalPending));
            
-           let updateTotalMigratedSize = covertBytes(totalMigratedSize);
-           let updateTotalDiscoveredSize = covertBytes(totalDiscoveredSize);
+           let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
+           let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
           
            const overViewData: OverviewDTO = {
             storageDetails: {
