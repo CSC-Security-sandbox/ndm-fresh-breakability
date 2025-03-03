@@ -19,8 +19,7 @@ const UserDetailsContent = () => {
 
   //TODO: Copy the session data to redux and access from there.
   const sessionData = JSON.parse(
-    sessionStorage.getItem(import.meta.env.VITE_PUBLIC_SESSION_KEY || "") ||
-      "{}"
+    sessionStorage.getItem(import.meta.env.VITE_SESSION_KEY || "") || "{}"
   );
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -33,8 +32,8 @@ const UserDetailsContent = () => {
     setIsLoading(true);
     try {
       const refresh_token = Cookies.get("refresh_token");
-      const client_id = import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_ID;
-      const client_secret = import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_SECRET;
+      const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+      const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
 
       if (!refresh_token || !client_id || !client_secret) {
         console.error("Required parameters for logout are missing.");

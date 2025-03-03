@@ -3,7 +3,7 @@ export type TaskFiltersType = {
     accessor: string;
     label: string;
     options: string[];
-    formater?: Function;
+    formatter?: Function;
   }[];
   setFilters?: Function;
   preSelectedFilter?: any;

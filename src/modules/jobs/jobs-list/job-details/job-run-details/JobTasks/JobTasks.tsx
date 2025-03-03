@@ -1,28 +1,27 @@
-"use client";
-import { useLazyGetJobTasksQuery } from "@api/jobsApi";
-import {
-  Table,
-  TablePager,
-  Notification,
-  useTable,
-} from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { TASKS_COLUMN_DEFS } from "./tasks.constants";
-import { Box } from "@components/container/index";
-import { Breadcrumbs, Button } from "@netapp/bxp-design-system-react";
-import TaskFilters from "./TaskFilters";
-import { useNavigate } from "react-router-dom";
 import {
   TASK_STATUS_TYPE_ENUM,
   TASK_TYPE_TYPE_ENUM,
   WorkerApiType,
 } from "@/types/app.type";
-import { useParams, useSearchParams } from "react-router-dom";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { useGetAllWorkersQuery } from "@api/workersApi";
 import { toTitleCase } from "@/utils/common.utils";
+import { useLazyGetJobTasksQuery } from "@api/jobsApi";
+import { useGetAllWorkersQuery } from "@api/workersApi";
+import { Box } from "@components/container/index";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
+import {
+  Breadcrumbs,
+  Button,
+  Notification,
+  Table,
+  TablePager,
+  useTable,
+} from "@netapp/bxp-design-system-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import TaskFilters from "./TaskFilters";
+import { TASKS_COLUMN_DEFS } from "./tasks.constants";
 
-const Task = () => {
+const JobTasks = () => {
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
   const navigate = useNavigate();
   const [tableRows, setTableRows] = useState([]);
@@ -178,4 +177,4 @@ const Task = () => {
   );
 };
 
-export default Task;
+export default JobTasks;

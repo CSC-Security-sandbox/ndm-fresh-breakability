@@ -17,7 +17,7 @@ const useAccountDetails = () => {
   // }, [fetchAllAccounts]);
 
   return {
-    accountDetails: { id: import.meta.env.VITE_PUBLIC_HARD_CODE_ACCOUNT_ID },
+    accountDetails: { id: import.meta.env.VITE_HARD_CODE_ACCOUNT_ID },
     isLoading: false,
     error: null,
   };

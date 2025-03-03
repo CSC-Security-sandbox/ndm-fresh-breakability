@@ -102,7 +102,7 @@ const CreateProjectForm = ({
   const handleAssociateUsers = async (projectId: string) => {
     const body = {
       project_id: projectId,
-      account_id: import.meta.env.VITE_PUBLIC_HARD_CODE_ACCOUNT_ID,
+      account_id: import.meta.env.VITE_HARD_CODE_ACCOUNT_ID,
       users: associatedUsers?.map(({ user, role }) => ({
         user_id: user.value,
         role_id: role.value,

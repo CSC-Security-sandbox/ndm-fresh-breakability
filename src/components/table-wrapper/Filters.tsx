@@ -49,19 +49,19 @@ const Filters = ({
     setFilters && setFilters(form.formState);
   }, [form]);
 
-  const formatOptions = (data: any[], formater?: Function) => {
+  const formatOptions = (data: any[], formatter?: Function) => {
     let options: { value: string; label: string }[] = [];
     data.forEach((value) => {
       if (!value) return;
-      options.push(getOptionFormatting(value, formater));
+      options.push(getOptionFormatting(value, formatter));
     });
     return options;
   };
 
-  const getOptionFormatting = (value: any, formater?: Function) => {
+  const getOptionFormatting = (value: any, formatter?: Function) => {
     value = value.toString();
     return {
-      label: formater ? formater(value) : value,
+      label: formatter ? formatter(value) : value,
       value,
     };
   };
@@ -91,7 +91,7 @@ const Filters = ({
           <AccordionCardContent>
             <Box className="flex flex-col">
               <Box className="flex gap-4">
-                {columnsToFilter?.map(({ accessor, label, formater }) => (
+                {columnsToFilter?.map(({ accessor, label, formatter }) => (
                   <FormFieldSelect
                     key={nanoid()}
                     label={label}
@@ -103,7 +103,7 @@ const Filters = ({
                     isClearable={true}
                     options={formatOptions(
                       dataToFilter?.[accessor] || [],
-                      formater
+                      formatter
                     )}
                   />
                 ))}

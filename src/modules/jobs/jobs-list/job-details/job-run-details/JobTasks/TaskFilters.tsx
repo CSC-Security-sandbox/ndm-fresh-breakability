@@ -15,9 +15,9 @@ import { Button } from "@netapp/bxp-design-system-react";
 
 const getLabelValueObject = (
   value?: string,
-  formater?: Function
+  formatter?: Function
 ): TaskFilterOption[] =>
-  value ? [{ label: formater ? formater(value) : value, value }] : [];
+  value ? [{ label: formatter ? formatter(value) : value, value }] : [];
 
 const TaskFilters = ({
   columnsToFilter,
@@ -26,11 +26,11 @@ const TaskFilters = ({
 }: TaskFiltersType) => {
   const form = useForm(
     columnsToFilter?.reduce(
-      (filterForm, { accessor: fileName, formater }) => ({
+      (filterForm, { accessor: fileName, formatter }) => ({
         ...filterForm,
         [fileName]: getLabelValueObject(
           preSelectedFilter?.[fileName],
-          formater
+          formatter
         ),
       }),
       {}
@@ -43,21 +43,21 @@ const TaskFilters = ({
 
   const formatOptions = (
     data: string[],
-    formater?: Function
+    formatter?: Function
   ): TaskFilterOption[] => {
     let options: TaskFilterOption[] = [];
     data.forEach((value) => {
       if (!value) return;
-      options.push(getOptionFormatting(value, formater));
+      options.push(getOptionFormatting(value, formatter));
     });
     return options;
   };
 
   const getOptionFormatting = (
     value: string,
-    formater?: Function
+    formatter?: Function
   ): TaskFilterOption => ({
-    label: formater ? formater(value) : value,
+    label: formatter ? formatter(value) : value,
     value,
   });
 
@@ -88,7 +88,7 @@ const TaskFilters = ({
             <Box className="flex flex-col">
               <Box className="flex gap-4">
                 {columnsToFilter?.map(
-                  ({ accessor, label, options, formater }) => (
+                  ({ accessor, label, options, formatter }) => (
                     <FormFieldSelect
                       key={nanoid()}
                       label={label}
@@ -98,7 +98,7 @@ const TaskFilters = ({
                       labelClassName="capitalize"
                       isMulti={true}
                       isClearable={true}
-                      options={formatOptions(options || [], formater)}
+                      options={formatOptions(options || [], formatter)}
                     />
                   )
                 )}

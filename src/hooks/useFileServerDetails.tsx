@@ -11,7 +11,7 @@ import { useParams } from "react-router-dom";
 const useFileServerDetails = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
   const [getFileServerByIdApi] = useLazyGetFileServerByIdQuery({
-    pollingInterval: Number(import.meta.env.VITE_PUBLIC_TIME_INTERVAL),
+    pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
     skipPollingIfUnfocused: true,
   });
   const [allExportPaths, setAllExportPaths] = useState<VolumeType[]>([]);

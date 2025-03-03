@@ -7,14 +7,14 @@ const onSigninCallback = (): void => {
 };
 
 const oidcConfig = {
-  authority: import.meta.env.VITE_PUBLIC_KEYCLOAK_AUTHORITY || "",
-  grant_type: import.meta.env.VITE_PUBLIC_KEYCLOAK_GRANT_TYPE || "",
-  client_id: import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_ID || "",
-  client_secret: import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_SECRET || "",
-  redirect_uri: import.meta.env.VITE_PUBLIC_KEYCLOAK_REDIRECT_URI || "",
-  response_type: import.meta.env.VITE_PUBLIC_KEYCLOAK_RESPONSE_TYPE || "",
+  authority: import.meta.env.VITE_KEYCLOAK_AUTHORITY || "",
+  grant_type: import.meta.env.VITE_KEYCLOAK_GRANT_TYPE || "",
+  client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "",
+  client_secret: import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET || "",
+  redirect_uri: import.meta.env.VITE_KEYCLOAK_REDIRECT_URI || "",
+  response_type: import.meta.env.VITE_KEYCLOAK_RESPONSE_TYPE || "",
   postLogoutRedirectUri:
-    import.meta.env.VITE_PUBLIC_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || "",
+    import.meta.env.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || "",
   onSigninCallback,
 };
 

@@ -93,7 +93,7 @@ export default function Page({
             setCurrentTab(2);
           }}
         >
-          Transiant Errors
+          Transient Errors
         </InnerTab.Button>
       </InnerTab>
       <Box>

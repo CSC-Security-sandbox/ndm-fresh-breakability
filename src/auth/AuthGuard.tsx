@@ -30,8 +30,8 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const client_id = import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_ID;
-    const client_secret = import.meta.env.VITE_PUBLIC_KEYCLOAK_CLIENT_SECRET;
+    const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+    const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
     const body = {
       refresh_token,
       client_id,

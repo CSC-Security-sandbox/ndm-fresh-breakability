@@ -5,7 +5,7 @@ export const permissionApi = createApi({
   reducerPath: "permissionApi",
   tagTypes: ["PERMISSIONS"],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_PUBLIC_ADMIN_SERVICE_URL,
+    baseUrl: import.meta.env.VITE_ADMIN_SERVICE_URL,
     prepareHeaders: (headers) => {
       const token = Cookies.get("access_token");
       if (token) {

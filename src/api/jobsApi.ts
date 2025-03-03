@@ -15,7 +15,7 @@ export const jobsApi = createApi({
     "ALL_MIGRATION_PATHS",
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_PUBLIC_JOBS_SERVICE_URL,
+    baseUrl: import.meta.env.VITE_JOBS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({
