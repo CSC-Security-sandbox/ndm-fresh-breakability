@@ -1,7 +1,8 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
 import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
 import { ScanWorkflow } from "../core/scan.workflow";
-
+import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
+import * as wf from '@temporalio/workflow';
 interface MigrationWorkflowInput {
   traceId: string;
   payload: {
@@ -13,6 +14,8 @@ interface MigrationWorkflowInput {
 async function log(traceId: string, message: string): Promise<void> {
   console.log(`[${traceId}] ${message}`);
 }
+
+export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 export const MigrationWorkflow = async ({
   traceId,
@@ -133,6 +136,8 @@ export const MigrationWorkflow = async ({
   result.push(syncResponse);
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
+
+  await ReportingWorkflow(traceId, reportingSignal)
 
   if (activeWorkerIds.length > 0) {
     const cleanupResponses = await Promise.all(

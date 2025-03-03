@@ -35,8 +35,10 @@ export class WorkerOptionsService {
           getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
           setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
           checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
+          generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
           updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
+          generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

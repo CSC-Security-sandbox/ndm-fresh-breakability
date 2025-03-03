@@ -10,7 +10,10 @@ export default registerAs(
     buildId: process.env.BUILD_ID || '1.0.0',
     workerConfigUrl:
       process.env.WORKER_CONFIG_URL ||
-      'http://localhost:3004',
+      'http://localhost:3004/api/v1/work-manager/',
+    workerReportServiceUrl:
+      process.env.WORKER_REPORT_SERVICE_URL ||
+      'http://localhost:3007/api/v1/report',
     workerJobServiceUrl:
       process.env.WORKER_JOB_SERVICE_URL ||
       'http://localhost:3008',
