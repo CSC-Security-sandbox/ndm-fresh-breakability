@@ -1,30 +1,28 @@
 #!/bin/bash
 
-# Set VM name and export directory
-VM_NAME="datamigrator-nfs"
+# Set VM names and export directory
+SRC_VM_NAME="datamigrator-src-nfs"
+TARGET_VM_NAME="datamigrator-target-nfs"
 EXPORT_DIR="/srv/nfs_share"
 
-# check if multipass is installed or not
-if ! command -v multipass &> /dev/null
-then
-    echo "multipass could not be found"
-    echo "Please install multipass and try again"
-    exit
-else
-    echo "multipass is installed"
-fi
-
-if multipass list | grep -q $VM_NAME
-then
-    echo "$VM_NAME vm is already present"
-    echo "Please delete the existing $VM_NAME vm and try again"
-    echo "multipass delete $VM_NAME"
+# Function to check if a VM exists
+check_vm_exists() {
+  local vm_name=$1
+  if multipass list | grep -q $vm_name
+  then
+    echo "$vm_name vm is already present"
+    echo "Please delete the existing $vm_name vm and try again"
+    echo "multipass delete $vm_name"
     echo "multipass purge"
     exit
-fi
+  fi
+}
 
-# Launch a new Multipass VM
-multipass launch -c 1 -m 2g -d 10g -n "$VM_NAME" --cloud-init - <<-EOF
+# Function to launch a VM
+launch_vm() {
+  local vm_name=$1
+  local create_files=$2
+  multipass launch -c 1 -m 2g -d 10g -n "$vm_name" --cloud-init - <<-EOF
 #cloud-config
 package_update: true
 packages:
@@ -41,21 +39,53 @@ runcmd:
   - exportfs -a
   # Restart the NFS server to apply changes
   - systemctl restart nfs-kernel-server
-  # Create 1000 empty files in the export directory
-  - for i in \$(seq -w 0001 1000); do touch $EXPORT_DIR/file_\$i.txt; done
+  # Create files in the export directory if specified
+  - if [ "$create_files" = "true" ]; then for i in \$(seq -w 0001 1000); do touch $EXPORT_DIR/file_\$i.txt; done; fi
 EOF
+}
 
-status=$(multipass info $VM_NAME | grep 'State' | awk '{print $2}')
-while [ "$status" != "Running" ]
-do
-    echo "Waiting for $VM_NAME vm to be in running state; current state: $status"
+# Check if multipass is installed
+if ! command -v multipass &> /dev/null
+then
+  echo "multipass could not be found"
+  echo "Please install multipass and try again"
+  exit
+else
+  echo "multipass is installed"
+fi
+
+# Check if VMs already exist
+check_vm_exists $SRC_VM_NAME
+check_vm_exists $TARGET_VM_NAME
+
+# Launch the source VM with 1000 files
+launch_vm $SRC_VM_NAME true
+
+# Launch the target VM without creating files
+launch_vm $TARGET_VM_NAME false
+
+# Function to wait for a VM to be in running state
+wait_for_vm() {
+  local vm_name=$1
+  status=$(multipass info $vm_name | grep 'State' | awk '{print $2}')
+  while [ "$status" != "Running" ]
+  do
+    echo "Waiting for $vm_name vm to be in running state; current state: $status"
     sleep 5
-    status=$(multipass info $VM_NAME | grep 'State' | awk '{print $2}')
-done
+    status=$(multipass info $vm_name | grep 'State' | awk '{print $2}')
+  done
+}
 
-# Retrieve the IP address of the VM
-VM_IP=$(multipass info $VM_NAME | grep 'IPv4' | awk '{print $2}')
+# Wait for both VMs to be in running state
+wait_for_vm $SRC_VM_NAME
+wait_for_vm $TARGET_VM_NAME
 
-# Display the VM IP address
-echo "NFS server is set up in VM '$VM_NAME' with IP address: $VM_IP"
+# Retrieve the IP addresses of the VMs
+SRC_VM_IP=$(multipass info $SRC_VM_NAME | grep 'IPv4' | awk '{print $2}')
+TARGET_VM_IP=$(multipass info $TARGET_VM_NAME | grep 'IPv4' | awk '{print $2}')
+
+# Display the VM IP addresses
+echo "NFS server is set up in VM '$SRC_VM_NAME' with IP address: $SRC_VM_IP"
+echo "The NFS share is located at: $EXPORT_DIR"
+echo "NFS server is set up in VM '$TARGET_VM_NAME' with IP address: $TARGET_VM_IP"
 echo "The NFS share is located at: $EXPORT_DIR"
