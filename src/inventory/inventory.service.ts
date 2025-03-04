@@ -34,9 +34,7 @@ export class InventoryService {
     private readonly operationErrorRepo: Repository<OperationErrorEntity>,
     @InjectRepository(TaskErrorEntity)
     private readonly taskErrorRepo: Repository<TaskErrorEntity>,
-
   ) {
-
   }
 
   async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
@@ -49,12 +47,13 @@ export class InventoryService {
       throw new Error('Error while saving inventory records to the database');
     }
   }
+
   mapSourceToTarget(file: any, jobRunId: string, pathId: string): any {
     return {
       path: file.path,
       isDirectory: file.isDirectory,
-      sourceChecksum: "",
-      targetChecksum: "",
+      sourceChecksum: file?.sourceChecksum,
+      targetChecksum: file?.targetChecksum,
       parentPath: file.parentPath,
       depth: file.depth,
       fileName: file.fileName,
