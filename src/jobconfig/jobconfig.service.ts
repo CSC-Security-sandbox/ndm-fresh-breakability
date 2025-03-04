@@ -245,6 +245,7 @@ export class JobConfigService {
       });
 
       const newCutoverJobs: JobConfigEntity[] = [];
+      const updatedCutoverJobs: JobConfigEntity[] = [];
 
       for (const { sourcePathId, destinationPathId } of allCutoverConfigs) {
         for (const config of jobConfigMap.values()) {
@@ -274,6 +275,30 @@ export class JobConfigService {
                   firstRunAt: config.firstRunAt,
                 })
               );
+            }else{
+              if(existingCutover && existingCutover.status === JobStatus.Active){
+                await this.jobConfigRepo.update(existingCutover.id,
+                  {
+                    jobType: JobType.CUT_OVER,
+                    excludeFilePatterns: config.excludeFilePatterns,
+                    scheduler: ScheduleStatus.SCHEDULING,
+                    futureScheduleAt: config.futureScheduleAt,
+                    status: config.status,
+                    preserveAccessTime: config.preserveAccessTime,
+                    firstRunAt: config.firstRunAt,
+                  })
+                  updatedCutoverJobs.push({ ...existingCutover, ...config });
+              }
+              else{
+                throw new HttpException(
+                  {
+                    status: "failed",
+                    message:
+                      `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`,
+                  },
+                  HttpStatus.BAD_REQUEST
+                );
+              }
             }
           }
         }
@@ -281,18 +306,7 @@ export class JobConfigService {
 
       const savedJobs = await this.jobConfigRepo.save(newCutoverJobs);
 
-      if (savedJobs.length === 0) {
-        throw new HttpException(
-          {
-            status: "failed",
-            message:
-              "No completed migration found for the given source path ID or its already exists",
-          },
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      return savedJobs.map((job) => ({
+      return [...savedJobs, ...updatedCutoverJobs].map((job) => ({
         id: job.id,
         firstRunAt: job.firstRunAt,
         jobType: job.jobType,
