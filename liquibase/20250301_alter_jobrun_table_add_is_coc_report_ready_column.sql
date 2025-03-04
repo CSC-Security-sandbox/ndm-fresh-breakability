@@ -1,0 +1,1 @@
+ALTER TABLE jobrun ADD is_coc_report_ready boolean DEFAULT false NOT NULL;

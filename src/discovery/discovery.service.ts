@@ -11,6 +11,8 @@ import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
+import puppeteer from "puppeteer";
+import { ReportHeaders } from "./pattern.enum";
 @Injectable()
 export class DiscoveryService {
   private logger: Logger = new Logger(DiscoveryService.name);
@@ -39,26 +41,33 @@ export class DiscoveryService {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
 
+      this.logger.log("procedure started")
+      const startTime = Date.now();
       await this.inventoryRepo.query(
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1)`,
         [jobRunId]
       );
-
+      this.logger.log(`procedure ended in ${Date.now() - startTime}`)
       const latestReport = await this.reportsRepo.find({
         where: { jobRunId: jobRunId, reportType: reportType },
         order: { createdAt: "DESC" },
         take: 1,
       });
 
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
-      const filePath = path.join(this.reportsDirectory, fileName);
-
-      if (latestReport?.length > 0) {
-        this.formatAndWriteToFile(
-          JSON.parse(latestReport[0].reportData),
-          filePath
-        );
+      if (latestReport?.length === 0) {
+        throw new Error("No report data found");
       }
+
+      const reportData = JSON.parse(latestReport[0].reportData);
+
+      const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
+      const csvFilePath = path.join(this.reportsDirectory, csvFileName);
+      this.formatAndWriteToFile(reportData, csvFilePath);
+
+      const pdfBuffer = await this.generatePdfFromData(reportData);
+      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
+      const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
+      fs.writeFileSync(pdfFilePath, pdfBuffer);
 
       return {
         message: "Report generated successfully",
@@ -70,6 +79,88 @@ export class DiscoveryService {
       );
     }
   }
+
+  generateHtmlTable(data: any[]): string {
+    const categories: { [key: string]: any[] } = {};
+    data.forEach((entry) => {
+      const category = entry.category;
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push(entry);
+    });
+    let htmlString = `
+      <html>
+      <head>
+        <style>
+          table {
+            border-collapse: collapse;
+            width: 100%;
+          }
+          th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+          }
+          th {
+            background-color: #f2f2f2;
+          }
+          tr:nth-child(even) {
+            background-color: #f9f9f9;
+          }
+          tr:hover {
+            background-color: #ddd;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Data Summary</h1>
+    `;
+    for (const category in categories) {
+      htmlString += `
+        <h2>${category}</h2>
+        <table>
+          <tr>
+            <th>Sub Category</th>
+            <th>Count or Space</th>
+          </tr>
+      `;
+  
+      categories[category].forEach((entry) => {
+        const subCategory = entry.sub_category;
+        const value =  entry.value;
+        htmlString += `
+          <tr>
+            <td>${subCategory}</td>
+            <td>${value}</td>
+          </tr>
+        `;
+      });
+  
+      htmlString += `</table>`;
+    }
+  
+    htmlString += `
+      </body>
+      </html>
+    `;
+  
+    return htmlString;
+  }
+
+  async generatePdfFromData(reportData: any[]): Promise<Buffer> {
+    const htmlOutput = this.generateHtmlTable(reportData);
+    
+    const browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlOutput, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+
+    await browser.close();
+    return Buffer.from(pdfBuffer);
+}
 
   async createMigrationReportFile(jobRunId: string, reportType: string): Promise<any> {
     this.logger.log(
@@ -108,24 +199,37 @@ export class DiscoveryService {
     }
   }
 
-  formatAndWriteToFile(data: any[], filePath: string): void {
-    const resultRow: { [key: string]: string | number } = {};
+ formatAndWriteToFile(reportData: any[], filePath: string) {
+  const predefinedHeaders = Object.values(ReportHeaders);
+  const dynamicHeaders = new Set<string>();
 
-    data.forEach((entry) => { 
-      resultRow[entry.sub_category] = entry.value;
-    });
-    const headers = Object.keys(resultRow);
-    const values = headers.map((header) => {
-      const value = resultRow[header] || "";
-      return typeof value === 'string' && value.includes(";") ? `"${value}"` : value;
+  reportData.forEach((entry) => {
+      const subCategory = entry.sub_category;
+      if (subCategory && !predefinedHeaders.includes(subCategory)) {
+          dynamicHeaders.add(subCategory);
+      }
   });
 
-    const csvData = [headers.join(","), values.join(",")].join("\n");
-   // if(filePath.startsWith(this.reportsDirectory)) {
-      fs.writeFileSync(filePath, csvData);
-      console.log(`Data has been written to ${filePath}`);
-  //  }
-  }
+  const allHeaders = [...predefinedHeaders, ...Array.from(dynamicHeaders)];
+
+  const row: string[] = [];
+  allHeaders.forEach((header) => {
+      let value = "";
+      reportData.forEach((entry) => {
+          if (header in entry) {
+              value = entry[header] !== undefined ? entry[header].toString() : "";
+          } else if (header === entry.sub_category) {
+              value = entry.value !== undefined ? entry.value.toString() : "";
+          }
+      });
+      row.push(value);
+  });
+
+  const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
+
+  fs.writeFileSync(filePath, csvContent);
+  console.log(`Data has been written to ${filePath}`);
+}
 
   async getReportsAsZip(
     jobRunIds: string[],

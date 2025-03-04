@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { CsvService } from './../csv/csv_export.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -9,6 +10,7 @@ import { covertBytes } from 'src/utils/mapper';
 import { Repository } from 'typeorm';
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto } from './dto/job-rundetails.dto';
 import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
+import * as fs from 'fs';
 
 @Injectable()
 export class JobRunService {
@@ -22,6 +24,7 @@ export class JobRunService {
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(ReportsEntity)
         private reportsRepo: Repository<ReportsEntity>,
+        private csvService: CsvService
     ){}
 
     async jobRunReportByJobRunId(jobRunId:string, reportType:string) {
@@ -153,5 +156,21 @@ export class JobRunService {
         }
         return response; 
       }
-      
+
+  get getReportsDirectory(): string {
+    return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
+  }
+
+  async getCocReportByJobRunId(jobRunId: string) {
+    // check if this jonrunid is a migration job
+    const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
+    if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+    if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
+    const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
+    if (fs.existsSync(filePath)) return filePath;
+    await this.csvService.generateCsv(filePath, jobRunId);
+    // update the isReportReady flag in the jobrun table
+    await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+    return filePath;
+  }
 }
