@@ -7,11 +7,30 @@ import { HttpStatus } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('SettingController', () => {
   let controller: SettingController;
   let service: SettingService;
   let settingsRepo: Repository<GlobalSettings>;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
+  
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SettingController],
@@ -20,6 +39,10 @@ describe('SettingController', () => {
           provide: getRepositoryToken(GlobalSettings),
           useClass: Repository,
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        }
       ],
       
     }).compile();
