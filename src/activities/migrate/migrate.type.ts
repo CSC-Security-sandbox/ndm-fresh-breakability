@@ -81,6 +81,10 @@ export interface SyncOperationOutput {
     status: OPS_STATUS;
     ops: Record<number, CommandOperation>
     errors: Set<string>
+    checksums?:{
+        sourceChecksum?: string,
+        targetChecksum?:string
+    }
 }
 
 export interface UpdateStatusInput{

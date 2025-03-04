@@ -78,7 +78,12 @@ export function getFileType(stats: fs.Stats): FileType {
     }
   }
 
-export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string): Promise<any>  => {
+export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string, 
+  checksums?:{
+    sourceChecksum?: string,
+    targetChecksum?:string
+  }
+): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
     const obj = new FileInfo(
         name,
@@ -106,6 +111,7 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
       modifiedTime: new Date(lStat.mtime).toISOString(),
       birthTime: new Date(lStat.birthtime).toISOString(),
       accessTime: new Date(lStat.atime).toISOString(),
+      ...checksums
     }
 }
 

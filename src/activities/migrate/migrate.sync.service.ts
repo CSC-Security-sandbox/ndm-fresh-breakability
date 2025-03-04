@@ -44,7 +44,7 @@ export class MigrationSyncService {
     });
   }
 
-  async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<string> {
+  async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
@@ -73,18 +73,16 @@ export class MigrationSyncService {
       writeStream.on("finish", resolve);
       readStream.on("error", reject);
       writeStream.on("error", reject);
-      readStream.close()
-      writeStream.close()
 
     });
   
-    const checksum = hash.digest("hex");
+    const sourceChecksum = hash.digest("hex");
     const targetChecksum = await this.calculateChecksum(destinationFile);
   
-    if (checksum !== targetChecksum) {
-      throw new Error(`Checksum mismatch for file ${destinationFile}. Checksum: ${checksum} != ${targetChecksum}`);
+    if (sourceChecksum !== targetChecksum) {
+      throw new Error(`Checksum mismatch for file ${destinationFile}. Checksum: ${sourceChecksum} != ${targetChecksum}`);
     }
-    return checksum;
+    return {sourceChecksum, targetChecksum};
   }
 
 
@@ -137,6 +135,7 @@ export class MigrationSyncService {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
           const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
+          syncOperation.checksums = checksum
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
@@ -195,7 +194,7 @@ export class MigrationSyncService {
         syncTask.error++;
       }
       else {
-        const fileInfo: FileInfo = await getFileInfo(task.commands[i].fPath, `${task.sPath}${task.commands[i].fPath}`, task.commands[i].fPath);
+        const fileInfo: FileInfo = await getFileInfo(task.commands[i].fPath, `${task.sPath}${task.commands[i].fPath}`, task.commands[i].fPath, syncOperationOp.checksums);
         const id = await jobContext.appendToFileList(fileInfo);
         jobContext.filesInfo.lastId = id;
         jobContext.filesInfo.numMessages++;
