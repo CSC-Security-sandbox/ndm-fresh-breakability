@@ -40,21 +40,13 @@ export class JobRunService {
     async getJobStatsId(id: string) {
           const getLatestReportStatus = await this.jobRunRepo.findOne({
             where: { id: id },
-            select: ['isReportReady', 'isCocReportReady'],
+            select: ['isReportReady'],
           });
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
         if (saved) {
           const parsedReport = JSON.parse(saved.reportData);
           if (parsedReport.isReportReady !==  getLatestReportStatus.isReportReady) {
             parsedReport.isReportReady = getLatestReportStatus.isReportReady;
-            saved.reportData = JSON.stringify(parsedReport);
-            await this.reportsRepo.update(
-              { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
-              { reportData: JSON.stringify(parsedReport) }
-            );
-          }
-          if (parsedReport.isCocReportReady !==  getLatestReportStatus.isCocReportReady) {
-            parsedReport.isCocReportReady = getLatestReportStatus.isCocReportReady;
             saved.reportData = JSON.stringify(parsedReport);
             await this.reportsRepo.update(
               { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
@@ -78,7 +70,6 @@ export class JobRunService {
             id: true,
             startTime: true,
             isReportReady:true,
-            isCocReportReady: true,
             status: true,
             endTime: true,
             worker: {workerId: true},
@@ -178,8 +169,8 @@ export class JobRunService {
     const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
     if (fs.existsSync(filePath)) return filePath;
     await this.csvService.generateCsv(filePath, jobRunId);
-    // update the isCocReportReady flag in the jobrun table
-    await this.jobRunRepo.update({ id: jobRunId }, { isCocReportReady: true });
+    // update the isReportReady flag in the jobrun table
+    await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
     return filePath;
   }
 }
