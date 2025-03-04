@@ -1,0 +1,74 @@
+name: Packer Build for Datamigrator to create VM images for Control Plane
+
+on:
+  # schedule:
+  #   - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  control-plane-build:
+    name: Build Control Plane Image with Packer
+    runs-on: ubuntu-latest
+
+    env:
+      # Azure environment variables
+      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Packer environment variables
+      PRODUCT_VERSION: "1.11.2"
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup `packer`
+      uses: hashicorp/setup-packer@main
+      id: setup
+      with:
+        version: ${{ env.PRODUCT_VERSION }}
+
+    - name: Navigate to the Packer Control Plane Template Directory
+      run: |
+        echo "Navigating to the directory containing the Packer template..."
+        cd app-deployment/packer/control-plane
+        echo "Current Directory: $(pwd)"
+
+    - name: Packer Init
+      run: |
+        echo "Initializing Packer..."
+        cd app-deployment/packer/control-plane
+        packer init -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+
+    - name: Validate Packer Template
+      run: |
+        echo "Validating Packer template..."
+        cd app-deployment/packer/control-plane
+        packer validate -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl
+
+    - name: Build Azure Image with Packer
+      run: |
+        echo "Building Azure Image with Packer..."
+        cd app-deployment/packer/control-plane
+        packer build -var-file=cloud-packer.json ubuntu-packer-cloud.pkr.hcl | tee packer-output.log
+
+    - name: Capture Azure Image Details
+      run: |
+        echo "Capturing image details for Azure..."
+        
+        IMAGE_RESOURCE_GROUP=$(grep 'ManagedImageResourceGroupName' packer-output.log | awk '{print $2}')
+        IMAGE_NAME=$(grep 'ManagedImageName' packer-output.log | awk '{print $2}')
+        IMAGE_ID=$(grep 'ManagedImageId' packer-output.log | awk '{print $2}')
+        IMAGE_LOCATION=$(grep 'ManagedImageLocation' packer-output.log | awk '{print $2}')
+      
+        echo "Generated Image Resource Group: $IMAGE_RESOURCE_GROUP"
+        echo "Generated Image Name: $IMAGE_NAME"
+        echo "Generated Image ID: $IMAGE_ID"
+        echo "Generated Image Location: $IMAGE_LOCATION"
+      
+        echo "IMAGE_RESOURCE_GROUP=$IMAGE_RESOURCE_GROUP" >> $GITHUB_ENV
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+        echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+        echo "IMAGE_LOCATION=$IMAGE_LOCATION" >> $GITHUB_ENV

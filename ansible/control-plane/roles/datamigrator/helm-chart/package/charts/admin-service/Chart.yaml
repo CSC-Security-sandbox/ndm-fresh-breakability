@@ -1,0 +1,5 @@
+apiVersion: v2
+name: admin-service
+description: Helm chart to deploy admin-service 
+version: 0.1.0
+type: application

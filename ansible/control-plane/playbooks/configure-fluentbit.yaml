@@ -1,0 +1,7 @@
+---
+- name: Configure fluentbit
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-fluentbit, tags: 'configure-fluentbit' }

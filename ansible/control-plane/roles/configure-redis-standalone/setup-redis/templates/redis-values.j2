@@ -1,0 +1,40 @@
+#reference: https://artifacthub.io/packages/helm/bitnami/redis?modal=values
+architecture: standalone
+auth:
+  enabled: true
+  password: "welcome"
+
+existingConfigmap: "redis-config"
+
+master:
+  count: 1
+  persistence:
+    enabled: true
+    storageClass: "local-storage-redis"
+    size: {{ redis_data_volume_size }}
+    selector:
+        matchLabels:
+            role: redis-data
+{% if local_cluster is defined %}
+  resources:
+    requests:
+      cpu: "0.3"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+{% else %}
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "786Mi"
+    limits:
+      cpu: "1.2"
+      memory: "1.5Gi"
+{% endif %}
+
+volumePermissions:
+  enabled: true
+
+replica:
+  replicaCount: 0

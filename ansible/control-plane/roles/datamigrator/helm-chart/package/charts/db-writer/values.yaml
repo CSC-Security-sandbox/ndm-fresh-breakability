@@ -1,0 +1,113 @@
+appName: "db-writer"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+name: datamigrator
+
+image:
+  repository: db-writer
+
+annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-init-first: "true"
+    vault.hashicorp.com/role: "datamigrator-role"
+    vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+    vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
+    vault.hashicorp.com/agent-inject-status: "update"
+    vault.hashicorp.com/agent-inject-template-postgres.env: |
+      {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+      export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
+      export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+      export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
+      export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
+      {{- end }}
+    # vault.hashicorp.com/agent-inject-template-redis.env: |
+    #   {{- with secret "secrets/redis-secrets/redis-creds" -}}
+    #   export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
+    #   export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"      
+    #   {{- end }}
+    vault.hashicorp.com/agent-inject-template-redis.env: |
+      {{- with secret "secrets/redis-secrets/redis-creds" -}}
+      export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}" 
+      {{- end }}
+    
+serviceAccountName: datamigrator-vault-sa
+
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: APP_PORT
+    value: "3000"
+  - name: APP_HOST
+    value: "$(MY_HOST_IP)"
+  - name: DB_PORT
+    value: "5432"
+  - name: DB_HOST
+    value: "postgresql.postgres.svc.cluster.local"
+  # - name: DB_USER # from secret
+  #   value: ""
+  # - name: DB_PASSWORD # from secret
+  #   value: ""
+  - name: DB_NAME
+    value: "datamigrator"
+  - name: SCHEMA
+    value: "datamigrator"
+  - name: DB_SCHEMA
+    value: "datamigrator"
+
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_DIR
+    value: "/logs"
+  - name: REDIS_HOST
+    value: "redis-master.redis.svc.cluster.local"
+
+  # - name: REDIS_USERNAME
+  #   value: "default"
+  - name: REDIS_PASSWORD
+    value: "welcome"
+
+  - name: REDIS_PORT
+    value: "6379"
+
+  - name: REPORT_SERVICE_URL
+    value: "http://reports-service-service:3000/api/v1/report"
+  - name: JOB_SERVICE_URL
+    value: "http://job-service-service:3000/api/v1/job-run"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(redis-consumer|db-writer-docs)/*"
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  ingressClassName: public
+  tls:
+    enabled: false
+  host: ""
+
+liquibase:
+  enabled: true
+  env:
+    - name: LIQUIBASE_COMMAND_URL
+      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
+    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
+      value: "liquibase"
+    - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
+      value: "datamigrator"
+  args: 
+    - "update"
+    - "--source-vault"

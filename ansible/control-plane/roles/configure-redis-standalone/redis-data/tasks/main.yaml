@@ -1,0 +1,24 @@
+---
+
+- name: delete redis-data directory if uninstall flag is defined 
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: /data/redis-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: redis_uninstall is defined
+
+- name: create redis-data directory 
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: /data/redis-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+
+

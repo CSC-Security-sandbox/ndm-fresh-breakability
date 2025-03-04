@@ -1,0 +1,26 @@
+---
+- name: 3.1. Run apt update before installing prerequisites
+  apt:
+    update_cache: yes
+
+- name: 3.2. Start firewalld
+  command: systemctl start firewalld.service
+
+- name: 3.3. Enable firewalld
+  command: systemctl enable firewalld.service
+
+- name: 3.4. Check status of firewalld
+  command: systemctl status firewalld.service
+
+- name: 3.5. Add firewall rules for the public zone (ports)
+  command: firewall-cmd --permanent --zone=public --add-port={{ item }}
+  loop: "{{ ports_to_open }}"
+
+- name: 3.6. Add service cidr in trusted zone
+  command: firewall-cmd --permanent --zone=trusted --add-source={{ service_cidr }}
+
+- name: 3.7. Add pod cidr in trusted zone
+  command: firewall-cmd --permanent --zone=trusted --add-source={{ pod_network_cidr }}
+
+- name: 3.8.reload_firewall
+  command: firewall-cmd --reload

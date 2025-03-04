@@ -1,0 +1,118 @@
+appName: "admin-service"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  repository: admin-service
+
+annotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/role: "datamigrator-role"
+  vault.hashicorp.com/agent-inject-status: "update"
+  vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
+  vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-template-keycloak.env: |
+    {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
+    export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
+    export KEYCLOAK_ADMIN_USERNAME="{{ .Data.KEYCLOAK_ADMIN_USER }}"
+    export KEYCLOAK_ADMIN_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-postgres.env: |
+    {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+    export DATABASE_USERNAME="{{ .Data.POSTGRES_DMADMIN_USER }}"
+    export DATABASE_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
+    export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
+    {{- end }}
+    
+    
+serviceAccountName: datamigrator-vault-sa
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: DATABASE_HOST
+    value: "postgresql.postgres.svc.cluster.local"
+  - name: DATABASE_PORT
+    value: "5432"
+
+  # - name: DATABASE_USERNAME # from secret
+  #   value: "dmadmin"
+  # - name: DATABASE_PASSWORD # from secret
+  #   value: "dmadmin"
+  # - name: KEYCLOAK_CLIENT_SECRET # from secret
+  #   value: "123"
+  # - name: KEYCLOAK_ADMIN_USERNAME # from secret
+  #   value: "admin"
+  # - name: KEYCLOAK_ADMIN_PASSWORD # from secret
+  #   value: "admin"
+
+  - name: KEYCLOAK_ADMIN_CLIENT
+    value: "admin-cli"
+  - name: DATABASE_NAME
+    value: "datamigrator"
+  - name: DATABASE_SCHEMA
+    value: "datamigrator"
+  - name: DATABASE_TYPE
+    value: "postgres"
+  - name: AUTOLOAD_ENTITIES
+    value: "true"
+  - name: SYNCHRONIZE
+    value: "false"
+  - name: KEYCLOAK_BASE_URL
+    value: "https://$(MY_HOST_IP)/keycloak"
+  - name: SWAGGER_BASEURL
+    value: "https://$(MY_HOST_IP)"
+  - name: KEYCLOAK_REALM
+    value: "datamigrator"
+  - name: KEYCLOAK_CLIENT_ID
+    value: "datamigrator-client"
+  - name: NODE_TLS_REJECT_UNAUTHORIZED
+    value: '0'
+  - name: ENABLE_VERSIONS_FETCH
+    value: "false"
+  - name: ENABLE_PRE_LIST_PATH
+    value: "false"
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_DIR
+    value: "/logs"
+  - name: CONTROL_PLANE_IP
+    value: "$(MY_HOST_IP)"
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  
+  trailingPath: "(health|admin-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects|worker-registration)/*"
+  ingressClassName: public
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  tls:
+    enabled: false
+  host: ""
+
+liquibase:
+  enabled: true
+  env:
+    - name: LIQUIBASE_COMMAND_URL
+      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
+    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
+      value: "liquibase"
+    - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
+      value: "datamigrator"
+  args: 
+    - "update"
+    - "--source-vault"

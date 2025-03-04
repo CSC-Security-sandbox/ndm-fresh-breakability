@@ -1,0 +1,66 @@
+##reference: https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values
+
+architecture: standalone
+global:
+  postgresql:
+    auth:
+      username: dmadmin
+      database: datamigrator  
+      existingSecret: postgres-credentials
+      secretKeys:
+        adminPasswordKey: postgres-password
+        userPasswordKey: password
+
+primary:
+  persistence:
+    enabled: true
+    storageClass: "local-storage-postgres"
+    size: {{ postgres_data_volume_size }}
+    selector:
+        matchLabels:
+            role: postgres-primary-data
+
+  extendedConfiguration: |
+    max_connections = 1000
+    tcp_keepalives_idle = 180
+    tcp_keepalives_interval = 10
+    tcp_keepalives_count = 5
+    shared_buffers = 768MB
+    work_mem = 16MB
+    maintenance_work_mem = 256MB
+    max_parallel_workers_per_gather = 2
+    parallel_tuple_cost = 0.1
+    parallel_setup_cost = 500
+    wal_buffers = 8MB
+    checkpoint_completion_target = 0.9
+    max_wal_size = 1GB
+              
+  initdb:
+    scriptsConfigMap: postgres-init-config
+    user: postgres
+    password: {{ postgres_root_password }}
+
+{% if local_cluster is defined %}
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "786Mi"
+    limits:
+      cpu: "1.2"
+      memory: "1.7Gi"
+{% else %}
+  resources:
+    requests:
+      cpu: "0.7"
+      memory: "786Mi"
+    limits:
+      cpu: "1.5"
+      memory: "2.5Gi"
+{% endif %}
+
+
+volumePermissions:
+  enabled: true
+
+readReplicas:
+    replicaCount: 0

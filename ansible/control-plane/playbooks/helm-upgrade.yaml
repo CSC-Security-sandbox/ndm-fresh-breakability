@@ -1,0 +1,7 @@
+---
+- name: Deploy datamigrator helm chart
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+      - { role: ../roles/datamigrator/helm-chart/install, tags: 'helm-chart-install' }

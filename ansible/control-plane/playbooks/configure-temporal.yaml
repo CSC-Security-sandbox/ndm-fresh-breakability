@@ -1,0 +1,7 @@
+---
+- name: Configure Temporal
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-temporal, tags: 'configure-temporal' }

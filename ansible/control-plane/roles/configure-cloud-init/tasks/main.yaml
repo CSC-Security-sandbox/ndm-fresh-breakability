@@ -1,0 +1,59 @@
+---
+- name: Ensure destination directories exist
+  become: yes
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: '0755'
+  loop:
+    - { path: "/opt/datamigrator" }
+    - { path: "/opt/datamigrator/bin" }
+    - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/logs" }
+    - { path: "/var/log/datamigrator" }
+
+- name: Copy cloud-init configuration
+  become: yes
+  copy:
+    src: ./templates/cloud-init.j2
+    dest: /etc/cloud/cloud.cfg.d/00-datamigrator-hostname-init.cfg
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy boot script for microk8s
+  become: yes
+  template:
+    src: ./templates/boot-script.j2
+    dest: /opt/datamigrator/bin/microk8s-boot.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Copy systemd service file for boot script
+  become: yes
+  template:
+    src: ./templates/microk8s-boot-service.j2
+    dest: /etc/systemd/system/boot-microk8s.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload systemd daemon
+  become: yes
+  command: systemctl daemon-reload
+
+- name: Disable the boot-microk8s.service from starting on boot
+  become: yes
+  ansible.builtin.systemd_service:
+    name: boot-microk8s.service
+    enabled: false
+    state: stopped
+
+# - name: Enable the microk8s boot service
+#   become: yes
+#   systemd:
+#     name: boot-microk8s.service
+#     enabled: yes

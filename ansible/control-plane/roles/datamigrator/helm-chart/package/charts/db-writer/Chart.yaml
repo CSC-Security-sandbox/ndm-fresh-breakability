@@ -1,0 +1,5 @@
+apiVersion: v2
+name: db-writer
+description: Helm chart to deploy db-writer 
+version: 0.1.0
+type: application

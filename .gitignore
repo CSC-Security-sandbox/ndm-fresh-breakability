@@ -1,0 +1,8 @@
+*.tgz
+**/package/values.yaml
+/datamigrator/
+inventory.yaml
+.ansible
+.vscode
+.DS_Store
+packer-provisioner-*

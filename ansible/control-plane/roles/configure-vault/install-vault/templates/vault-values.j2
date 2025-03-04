@@ -1,0 +1,54 @@
+## https://github.com/hashicorp/vault-helm/blob/main/values.yaml
+
+server:
+  dataStorage:
+    enabled: true
+    size: {{ vault_data_volume_size }}
+    mountPath: "/vault/data"
+    storageClass: "local-storage-vault"
+    accessMode: ReadWriteOnce
+    annotations: {}
+    labels: 
+      role: vault-data
+    
+  affinity: {}
+
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+          }          
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }          
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }          
+        }
+
+        service_registration "kubernetes" {}
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 120
+    successThreshold: 1
+    failureThreshold: 5
+ui:
+  enabled: true

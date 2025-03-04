@@ -1,0 +1,7 @@
+---
+- name: Configure VM by upgrading packages
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role:  ../roles/configure-vm, tags: 'configure-vm' }

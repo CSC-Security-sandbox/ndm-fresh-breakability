@@ -1,0 +1,7 @@
+---
+- name: Configure user access on VM
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role:  ../roles/configure-user-account, tags: 'configure-user-account' }

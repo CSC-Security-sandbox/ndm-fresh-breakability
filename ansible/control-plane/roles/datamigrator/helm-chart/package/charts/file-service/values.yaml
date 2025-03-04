@@ -1,0 +1,45 @@
+appName: "file-service"
+kubeApiVersion: "apps/v1"
+replicaCount: 1
+
+image:
+  repository: file-service
+
+annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-init-first: "true"
+    vault.hashicorp.com/role: "datamigrator-role"
+    vault.hashicorp.com/agent-inject-status: "update"
+    
+serviceAccountName: datamigrator-vault-sa
+
+args: 
+  - "--source-vault"
+
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: MY_HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: APP_PORT
+    value: "3000"
+  - name: APP_HOST
+    value: "$(MY_HOST_IP)"
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(inventory|publish|file-docs)/*"
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  ingressClassName: public
+  tls:
+    enabled: false
+  host: ""

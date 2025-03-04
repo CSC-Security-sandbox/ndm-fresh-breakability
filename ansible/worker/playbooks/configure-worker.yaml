@@ -1,0 +1,7 @@
+---
+- name: Configure datamigrator worker
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role:  ../roles/configure-worker, tags: 'configure-worker' }

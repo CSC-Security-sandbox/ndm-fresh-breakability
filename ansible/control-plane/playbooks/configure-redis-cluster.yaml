@@ -1,0 +1,14 @@
+---
+- name: Configure data directory for Redis
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-redis-cluster/redis-data, tags: 'redis-data' }
+
+- name: Configure Redis
+  hosts: default
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: ../roles/configure-redis-cluster/setup-redis, tags: 'setup-redis' }

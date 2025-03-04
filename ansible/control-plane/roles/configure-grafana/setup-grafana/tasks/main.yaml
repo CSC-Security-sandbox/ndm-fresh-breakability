@@ -1,0 +1,152 @@
+---
+- name: Creates grafana directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/grafana
+    state: directory
+
+- name: Creates grafana directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/grafana/dashboards
+    state: directory
+
+- name: grafana-namespace template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/grafana-namespace.yaml.j2 dest=$HOME/grafana/grafana-namespace.yaml
+
+- name: loki-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/loki-values.yaml.j2 dest=$HOME/grafana/loki-values.yaml
+
+- name: grafana-values template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/grafana-values.yaml.j2 dest=$HOME/grafana/grafana-values.yaml
+
+- name: grafana-storageclass template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/grafana-storageclass.j2 dest=$HOME/grafana/grafana-storageclass.yaml
+
+- name: grafana-pv template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/grafana-pv.j2 dest=$HOME/grafana/grafana-pv.yaml
+
+- name: loki-storageclass template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/loki-storageclass.j2 dest=$HOME/grafana/loki-storageclass.yaml
+
+- name: loki-pv template
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/loki-pv.j2 dest=$HOME/grafana/loki-pv.yaml
+
+- name: Grafana dashboard templates
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src={{ item }} dest="$HOME/grafana/dashboards/{{ item | basename | regex_replace('\.j2$', '.json') }}"
+  with_fileglob:
+    - ./templates/dashboards/*.j2
+
+- name: Copy JSON files to server
+  become: yes
+  become_user: "{{ vm_username }}"
+  copy:
+    src: "{{ item }}"
+    dest: "$HOME/grafana/dashboards/"
+  with_fileglob:
+    - ./templates/dashboards/*.json
+
+- name: Get dashboard config maps on remote machine
+  become: yes
+  become_user: "{{ vm_username }}"
+  find:
+    paths: $HOME/grafana/dashboards
+  register: dashboards
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "{{ item.path | basename }}"
+  with_items: "{{ dashboards.files }}"
+
+- name: Uninstall grafana when grafana_uninstall is defined
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm uninstall loki --namespace "grafana"
+    helm uninstall grafana --namespace "grafana"
+    kubectl delete pvc --all --namespace "grafana"
+    kubectl delete -f $HOME/grafana/grafana-pv.yaml
+    kubectl delete -f $HOME/grafana/grafana-storageclass.yaml
+    kubectl delete -f $HOME/grafana/loki-pv.yaml
+    kubectl delete -f $HOME/grafana/loki-storageclass.yaml
+    kubectl delete -f $HOME/grafana/grafana-namespace.yaml
+  args:
+    executable: /bin/bash      
+  when: grafana_uninstall is defined
+  ignore_errors: yes
+
+- name: Create grafana namespace, storageclass, pv
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl apply -f $HOME/grafana/grafana-namespace.yaml
+    kubectl apply -f $HOME/grafana/grafana-storageclass.yaml
+    kubectl apply -f $HOME/grafana/grafana-pv.yaml
+    kubectl apply -f $HOME/grafana/loki-storageclass.yaml
+    kubectl apply -f $HOME/grafana/loki-pv.yaml
+  register: SHELL_STDOUT
+
+- name: Create configmaps for dashboards
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl create configmap "{{ item.path | basename | regex_replace('\.json$', '') }}" --namespace "grafana" --from-file="{{ item.path }}"
+  with_items: "{{ dashboards.files }}"
+
+- name: Deploy Grafana and Loki using Helm
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    helm repo add grafana https://grafana.github.io/helm-charts
+    helm repo update
+    helm upgrade --install grafana oci://registry-1.docker.io/bitnamicharts/grafana -f $HOME/grafana/grafana-values.yaml --namespace "grafana" --version "{{ grafana_version }}"
+    helm upgrade --install loki grafana/loki -f $HOME/grafana/loki-values.yaml --namespace "grafana" --version {{ lokistack_version }}
+    exit 0
+  args:
+    executable: /bin/bash      
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug: 
+    msg: "Helm Install (grafana): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: wait for pods to come up
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: kubectl wait --namespace="grafana" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
+
+- name: Check grafana pod status
+  shell: kubectl get pods -n grafana
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
+
+- name: Delete grafana directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/grafana
+    state: absent

@@ -1,0 +1,54 @@
+
+# --------------------------------------------------------------------
+# Default values
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  registry: {{ acr_registry }}
+{% if local_cluster is defined %}
+  local_cluster: {{ local_cluster }}
+{% endif %}
+  
+admin-service:
+  image:
+    tag: {{ admin_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ admin_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+
+config-service:
+  image:
+    tag: {{ config_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ config_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+
+db-writer:
+  image:
+    tag: {{ db_writer_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ db_writer_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+
+jobs-service:
+  image:
+    tag: {{ jobs_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ jobs_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+
+file-service:
+  image:
+    tag: {{ file_service_tag | default(common_tag) | default("latest") }}
+
+reports-service:
+  image:
+    tag: {{ reports_service_tag | default(common_tag) | default("latest") }}
+  liquibase:
+    image:
+      tag: {{ reports_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
+
+data-migrate-ui:
+  image:
+    tag: {{ data_migrate_ui_tag | default(common_tag) | default("latest") }}
