@@ -215,11 +215,11 @@ export class DiscoveryService {
   const row: string[] = [];
   allHeaders.forEach((header) => {
       let value = "";
-      reportData.forEach((entry) => {
+      reportData?.forEach((entry) => {
           if (header in entry) {
-              value = entry[header] !== undefined ? entry[header].toString() : "";
-          } else if (header === entry.sub_category) {
-              value = entry.value !== undefined ? entry.value.toString() : "";
+              value = entry[header] !== undefined ? entry[header]?.toString() : "";
+          } else if (header === entry?.sub_category) {
+              value = entry?.value !== undefined ? entry?.value?.toString() : "";
           }
       });
       row.push(value);
