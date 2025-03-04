@@ -5,6 +5,7 @@
       <th colspan="2" style="padding: 3px 8px;">Source</th>
       <th colspan="5" style="padding: 3px 8px;">Target</th>
       <th colspan="8" style="padding: 3px 8px;">Cutover</th>
+      <th colspan="3" style="padding: 3px 8px;">COC Report</th>
     </tr>
   </thead>
   <thead>
@@ -24,25 +25,39 @@
       <th style="padding: 3px 8px;">Operations</th>
       <th style="padding: 3px 8px;">Others</th>
       <th style="padding: 3px 8px;">Errors</th>
+      <th style="padding: 3px 8px;">file path</th>
+      <th style="padding: 3px 8px;">size</th>
+      <th style="padding: 3px 8px;">digest</th>
     </tr>
   </thead>
   <tbody>
+    {{#if cutovers.length}}
+    {{#each cutovers}}
     <tr>
-      <td style="padding: 3px 8px;">{{summary.source.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol_version}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.job_type}}</td>
-      <td style="padding: 3px 8px;">{{cutover.start_time}}</td>
-      <td style="padding: 3px 8px;">{{cutover.duration}}</td>
-      <td style="padding: 3px 8px;">{{cutover.capacity}}</td>
-      <td style="padding: 3px 8px;">{{cutover.items}}</td>
-      <td style="padding: 3px 8px;">{{cutover.directories}}</td>
-      <td style="padding: 3px 8px;">{{cutover.operations}}</td>
-      <td style="padding: 3px 8px;">{{cutover.others}}</td>
-      <td style="padding: 3px 8px;">{{cutover.errors}}</td>
+      <td style="padding: 3px 8px;">{{source.file_server}}</td>
+      <td style="padding: 3px 8px;">{{source.path}}</td>
+      <td style="padding: 3px 8px;">{{target.file_server}}</td>
+      <td style="padding: 3px 8px;">{{target.path}}</td>
+      <td style="padding: 3px 8px;">{{source.protocol}}</td>
+      <td style="padding: 3px 8px;">{{source.protocol_version}}</td>
+      <td style="padding: 3px 8px;">{{source.job_type}}</td>
+      <td style="padding: 3px 8px;">{{details.created_at}}</td>
+      <td style="padding: 3px 8px;">{{details.duration}} sec</td>
+      <td style="padding: 3px 8px;">{{details.capacity}}</td>
+      <td style="padding: 3px 8px;">{{details.files}}</td>
+      <td style="padding: 3px 8px;">{{details.directories}}</td>
+      <td style="padding: 3px 8px;">{{details.operations}}</td>
+      <td style="padding: 3px 8px;">-</td>
+      <td style="padding: 3px 8px;">{{details.errors}}</td>
+      <td style="padding: 3px 8px;">{{ coc_report.filePath }}</td>
+      <td style="padding: 3px 8px;">{{ coc_report.size }}</td>
+      <td style="padding: 3px 8px;">{{ coc_report.status }}</td>
     </tr>
+    {{/each}}
+    {{else}}
+    <tr>
+      <td colspan="15" style="padding: 3px 8px;">No data available</td>
+    </tr>
+    {{/if}}
   </tbody>
 </table>

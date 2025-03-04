@@ -169,7 +169,7 @@ export class DiscoveryService {
     try {
       const jobRunUUID = `${jobRunId}::UUID`;
       await this.inventoryRepo.query(
-        "CALL generate_coc_report($1, $2);",
+        `CALL ${process.env.SCHEMA}.jobs_report_data_v2($1, $2);`,
         [jobRunUUID, `${this.reportLocation}::TEXT`]
       );
       return { message: "Report generated successfully" };
@@ -182,20 +182,13 @@ export class DiscoveryService {
   }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
-    this.logger.log(
-      `Creating jobs report data for jobRunId: ${jobRunId}`
-    );
+    this.logger.log(`Creating jobs report data for jobRunId: ${jobRunId}`);
     try {
-      await this.inventoryRepo.query(
-        "CALL jobs_report_data($1);",
-        [jobRunId]
-      );
+      await this.inventoryRepo.query("CALL jobs_report_data($1);", [jobRunId]);
       return { message: "Report data generated successfully for jobs report" };
     } catch (error) {
-      this.logger.log(error);
-      throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId}`
-      );
+      this.logger.log(`Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`);
+      throw new InternalServerErrorException(`Failed to generate report for jobRunId: ${jobRunId}`);
     }
   }
 

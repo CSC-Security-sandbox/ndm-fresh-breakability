@@ -1,3 +1,4 @@
+import { last } from 'rxjs';
 import * as fs from 'fs';
 import * as path from "path";
 import { Repository } from 'typeorm';
@@ -41,27 +42,34 @@ export class PdfService {
     }
 
     async generateJobsReportPdf(jobRunId: string): Promise<Buffer> {
-      const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
-      const reportContent = fs.readFileSync(reportPath, 'utf8');
-      const report = hbs.compile(reportContent);
-      const latestReportData = await this.reportsRepo.query(
-        `SELECT * FROM jobs_report WHERE job_run_id = $1 and job_type = $2
-        order by created_at DESC
-        limit 1;
-        `,
-        [jobRunId, 'JOBS_REPORT']
-      )
-      const html = report(latestReportData[0].report_data);
-      const browser = await puppeteer.launch();
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      const pdfBuffer = await page.pdf({ 
-        format: 'A4', 
-        printBackground: true,
-        scale: 0.6,
-        landscape: true
-      });
-      await browser.close();
-      return Buffer.from(pdfBuffer);
+      try {
+        const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
+        const reportContent = fs.readFileSync(reportPath, 'utf8');
+        const report = hbs.compile(reportContent);
+        const data = await this.reportsRepo.query(
+          `SELECT * FROM jobs_report WHERE job_run_id = $1 and job_type = $2
+          order by created_at DESC
+          limit 1;
+          `,
+          [jobRunId, 'JOBS_REPORT']
+        )
+        data.last_iteration.summary = data.summary.filter((item: any) => item.details.job_run_id === data.last_iteration.job_run_id)[0];
+        data.last_errors.summary = data.summary[0];
+        const html = report(data);
+        const browser = await puppeteer.launch();
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: 'networkidle0' });
+        const pdfBuffer = await page.pdf({ 
+          format: 'A4', 
+          printBackground: true,
+          scale: 0.6,
+          landscape: true
+        });
+        await browser.close();
+        return Buffer.from(pdfBuffer);
+      } catch (error) {
+        this.logger.log(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
+        throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);
+      }
     }
 }

@@ -31,4 +31,9 @@
       <sqlFile path="liquibase/20250304_01_drop_column_is_coc_report_ready.sql" splitStatements="false"/>
    </changeSet>
 
+
+   <changeSet id="9008" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250304_02_updated_jobs_report_proc.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>

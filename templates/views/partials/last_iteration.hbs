@@ -32,33 +32,27 @@
      <th style="padding: 3px 8px;">Throughput</th>
     </tr>
    </thead>
-       {{#if last_iteration}}
    <tbody>
     <tr>
-      <td style="padding: 3px 8px;">{{summary.source.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol_version}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.job_type}}</td>
-     <td style="padding: 3px 8px;">{{last_iteration.job_run_id}}</td>
-     <td style="padding: 3px 8px;">{{last_iteration.s_duration}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.s_files}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.s_capacity}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.delta_items}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.path}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.target.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.target.path}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.protocol}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.protocol_version}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.job_type}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.job_run_id}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.duration}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.details.files}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.details.capacity}}</td>
+      <td style="padding: 3px 8px;">{{sum last_iteration.delta_files last_iteration.delta_directories}}</td>
       <td style="padding: 3px 8px;">{{last_iteration.delta_operations}}</td>
       <td style="padding: 3px 8px;">{{last_iteration.capacity_copied}}</td>
       <td style="padding: 3px 8px;">{{last_iteration.capacity_deleted}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.source_scan_spped}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.target_scan_speed}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.bandwidth}}</td>
-      <td style="padding: 3px 8px;">{{last_iteration.throughput}}</td>
-    </tr>
-    {{else}}
-    <tr>
+      <td style="padding: 3px 8px;">-</td>
+      <td style="padding: 3px 8px;">-</td>
+      <td style="padding: 3px 8px;">-</td>
       <td style="padding: 3px 8px;">-</td>
     </tr>
-    {{/if}}
     </tbody>
   </table>

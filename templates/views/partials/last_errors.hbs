@@ -22,29 +22,33 @@
      <th style="padding: 3px 8px;">In use</th>
      <th style="padding: 3px 8px;">Timed out</th>
      <th style="padding: 3px 8px;">Network Issues</th>
-     <th style="padding: 3px 8px;">Modified externally</th>
      <th style="padding: 3px 8px;">Other</th>
     </tr>
    </thead>
    <tbody>
    </tbody>
    <tbody>
+    {{#if last_errors}}
     <tr>
-      <td style="padding: 3px 8px;">{{summary.source.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol_version}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.job_type}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.source.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.source.path}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.target.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.target.path}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.source.protocol}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.source.protocol_version}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.summary.source.job_type}}</td>
       <td style="padding: 3px 8px;">{{last_errors.permission_denied}}</td>
       <td style="padding: 3px 8px;">{{last_errors.out_of_space}}</td>
-      <td style="padding: 3px 8px;">{{last_errors.not_found}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.file_not_found}}</td>
       <td style="padding: 3px 8px;">{{last_errors.in_use}}</td>
       <td style="padding: 3px 8px;">{{last_errors.timed_out}}</td>
-      <td style="padding: 3px 8px;">{{last_errors.network_issue}}</td>
-      <td style="padding: 3px 8px;">{{last_errors.modified_externally}}</td>
+      <td style="padding: 3px 8px;">{{last_errors.network_error}}</td>
      <td style="padding: 3px 8px;">{{last_errors.others}}</td>
     </tr>
+    {{else}}
+    <tr>
+      <td colspan="15" style="padding: 3px 8px;">No data available</td>
+    </tr>
+    {{/if}}
    </tbody>
   </table>

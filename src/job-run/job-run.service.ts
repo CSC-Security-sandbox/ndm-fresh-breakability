@@ -11,6 +11,7 @@ import { Repository } from 'typeorm';
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto } from './dto/job-rundetails.dto';
 import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class JobRunService {
@@ -163,14 +164,27 @@ export class JobRunService {
 
   async getCocReportByJobRunId(jobRunId: string) {
     // check if this jonrunid is a migration job
-    const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
-    if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
-    if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
-    const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
-    if (fs.existsSync(filePath)) return filePath;
-    await this.csvService.generateCsv(filePath, jobRunId);
-    // update the isReportReady flag in the jobrun table
-    await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
-    return filePath;
+    try {
+      const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
+      if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
+      const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
+      if (fs.existsSync(filePath)) return filePath;
+      await this.csvService.generateCsv(filePath, jobRunId);
+      
+      // update the isReportReady flag in the jobrun table
+      await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+
+      if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`)
+    
+      const fileBuffer = fs.readFileSync(filePath);
+      const reportData = { filePath, size: fileBuffer.length, digest: crypto.createHash('sha256').update(fileBuffer).digest('hex') };
+      const report = this.reportsRepo.create({ jobRunId, reportData: JSON.stringify(reportData), reportType: ReportType.MIGRATION_COC });
+      await this.reportsRepo.save(report);
+      return filePath;
+    } catch (error) {
+      console.log(`Error while generating report for jobRunId: ${jobRunId} - ERROR: ${error}`);
+      throw new NotFoundException(`Error while generating report for jobRunId: ${jobRunId}`);
+    }
   }
 }

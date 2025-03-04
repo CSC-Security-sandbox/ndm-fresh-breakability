@@ -3,7 +3,7 @@ export enum Pattern {
 }
 
 export enum ReportType {
-  COC = "COC",
+  MIGRATION_COC = "MIGRATION_COC",
   DISCOVERY = "DISCOVER",
   JOBS_REPORT = "JOBS_REPORT",
 }
