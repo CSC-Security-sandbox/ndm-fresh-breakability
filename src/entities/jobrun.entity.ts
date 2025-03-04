@@ -40,10 +40,6 @@ export class JobRunEntity extends Base {
   @Column({ name: "is_report_ready" })
   isReportReady: boolean;
 
-  @ApiProperty({ description: "COC report ready status" })
-  @Column({ name: "is_coc_report_ready", default: false, nullable: false })
-  isCocReportReady: boolean;
-
   @ManyToOne(() => JobConfigEntity, (jobConfig) => jobConfig.jobRuns, {
     onDelete: "CASCADE",
     orphanedRowAction: "delete",
