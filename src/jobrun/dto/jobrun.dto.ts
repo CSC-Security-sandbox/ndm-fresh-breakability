@@ -96,7 +96,6 @@ export interface JobRunsDTO {
   errors: string[];
   totalMigratedSize: string;
   isReportReady:boolean;
-  isCocReportReady: boolean;
 }
 
 export interface ServerDetailsDTO {
