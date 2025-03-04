@@ -46,14 +46,21 @@ export class JobRunService {
   }
 
   async cutOverApproval(jobRunId: string, status: CutOverStatus) {
+    const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations: {jobConfig: true}})
     if(status === CutOverStatus.REJECTED) {
-      const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations: {jobConfig: true}})
       if(jobRun)
         await this.jobConfigRepo.update({
           sourcePathId:  jobRun.jobConfig.sourcePathId,
           targetPathId:  jobRun.jobConfig.targetPathId,
           jobType: JobType.MIGRATE
         }, {status : JobStatus.Active})
+    }
+    else {
+      await this.jobConfigRepo.update({
+        sourcePathId:  jobRun.jobConfig.sourcePathId,
+        targetPathId:  jobRun.jobConfig.targetPathId,
+        jobType: JobType.CUT_OVER
+      }, {status : JobStatus.InActive})
     }
     await this.jobRunRepo.update({id: jobRunId}, {status: JobRunStatus.Completed})
   }
@@ -117,7 +124,7 @@ export class JobRunService {
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
     const jobRunConfigs = await this.jobRunRepo.find({where: {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, select: {jobConfigId : true}})
-    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped})
+    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])}, {status: JobRunStatus.Stopped})
     await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
     for(const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
