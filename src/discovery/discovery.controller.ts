@@ -129,7 +129,7 @@ export class DiscoveryController {
   async generateReport(
     @Body('jobRunId') jobRunId: string,
     @Body('report-type') reportType: ReportType
-  ): Promise<Buffer> {
+  ): Promise<string> {
     this.logger.log("reached here in controller");
 
     if (!jobRunId) {
@@ -138,9 +138,8 @@ export class DiscoveryController {
     if (!reportType || !Object.values(ReportType).includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY');
     }
-
-    if(reportType === ReportType.JOBS_REPORT) return this.discoveryService.createJobsPDFReportData(jobRunId);
-    return this.discoveryService.createReportFile(jobRunId, reportType);
+    this.discoveryService.createReportFile(jobRunId, reportType);
+    return "OK"
   }
 
 
@@ -161,8 +160,9 @@ export class DiscoveryController {
   @Header('Content-Disposition', 'attachment; filename=generated-report.txt')
   async generateJobsReport(
     @Body('jobRunId') jobRunId: string,
-  ): Promise<Buffer> {
-    return await this.discoveryService.createJobsPDFReportData(jobRunId);
+  ): Promise<string> {
+    this.discoveryService.createJobsPDFReportData(jobRunId);
+    return "OK"
   }
 
 
