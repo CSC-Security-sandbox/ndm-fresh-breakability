@@ -13,6 +13,7 @@ const {
 
   const {
     generateCOCReport: generateCOCReportActivity,
+    generateJobsReport,
     updateStatus: updateStatusActivity,
   } = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
 
@@ -42,7 +43,8 @@ export const ReportingWorkflow = async (
       switch(reportType) {
         case JobReportType.CUT_OVER: {
             await updateStatusActivity({jobRunId: traceId, status: JobRunStatus.BLOCKED})
-            await generateCOCReportActivity(traceId)
+            await generateCOCReportActivity(traceId);
+            await generateJobsReport(traceId);
             break
         }
         case JobReportType.DISCOVER: {

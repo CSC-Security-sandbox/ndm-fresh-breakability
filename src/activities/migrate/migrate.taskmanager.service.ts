@@ -143,4 +143,17 @@ export class MigrationTaskService{
     }
   }
 
+  async generateJobsReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
+      this.logger.log(`[${jobRunId}] Triggering generateJobsReport for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
+      // API -> /api/v1/report/inventory/generate-jobs-report
+      await axios.post(`${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`, { jobRunId });
+      this.logger.log(`[${jobRunId}] Triggering generateJobsReport successful`);
+      return { message: 'Triggering generateJobsReport successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateJobsReport: ${error} | for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
+      return { message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId };
+    }
+  }
 }
