@@ -223,7 +223,7 @@ export class SetupActivityService {
         payload.type,
       );
       if (writePermission.status === 'failed') {
-        await protocol.unmountPath(traceId, mountPayload);
+        // await protocol.unmountPath(traceId, mountPayload);
         delay(5000);
         if (payload.type == 'DESTINATION') {
           return {
@@ -249,7 +249,7 @@ export class SetupActivityService {
       );
       return { status: 'success' };
     } else {
-      await protocol.unmountPath(traceId, mountPayload);
+      // await protocol.unmountPath(traceId, mountPayload);
       delay(5000);
       if (payload.type == 'DESTINATION') {
         return {
