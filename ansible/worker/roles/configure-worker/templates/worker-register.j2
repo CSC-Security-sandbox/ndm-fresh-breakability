@@ -49,7 +49,7 @@ log_message "Required environment variables are set."
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
-    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|REDIS_PORT)=" "$ENV_FILE" >/dev/null; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|REDIS_PORT)=" "$ENV_FILE" >/dev/null; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
@@ -59,8 +59,9 @@ fi
 log_message "Creating $ENV_FILE with necessary environment variables."
 {
     echo ""
-    echo "WORKER_CONFIG_URL=https://${CONTROL_PLANE_IP}/api/v1/work-manager"
-    echo "WORKER_JOB_SERVICE_URL=https://${CONTROL_PLANE_IP}/api/v1/job-run"
+    echo "WORKER_CONFIG_URL=https://${CONTROL_PLANE_IP}"
+    echo "WORKER_JOB_SERVICE_URL=https://${CONTROL_PLANE_IP}"
+    echo "WORKER_REPORT_SERVICE_URL=https://${CONTROL_PLANE_IP}"
     echo "TEMPORAL_ADDRESS=${CONTROL_PLANE_IP}:7233"
     echo "KEYCLOAK_BASE_URL=https://${CONTROL_PLANE_IP}/keycloak"
     echo "WORKER_ID=${WORKER_ID}"
