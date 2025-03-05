@@ -31,7 +31,6 @@ export const MigrationWorkflow = async ({
         args: [{ jobRunId: traceId }],
         workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
         taskQueue: `${workerId}-TaskQueue`,
-        ...options,
         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       })
