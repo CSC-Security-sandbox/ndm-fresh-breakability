@@ -32,6 +32,7 @@ RUN --mount=type=secret,id=git_token \
 
 # Copy application source code
 COPY ./src ./src
+COPY ./templates ./templates
 COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .

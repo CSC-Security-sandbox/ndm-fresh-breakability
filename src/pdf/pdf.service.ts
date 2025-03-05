@@ -47,17 +47,24 @@ export class PdfService {
         const reportContent = fs.readFileSync(reportPath, 'utf8');
         const report = hbs.compile(reportContent);
         const data = await this.reportsRepo.query(
-          `SELECT * FROM ${process.env.SCHEMA}.jobs_report WHERE job_run_id = $1 and job_type = $2
+          `SELECT * FROM ${process.env.SCHEMA}.reports WHERE job_run_id = $1 and report_type = $2
           order by created_at DESC
           limit 1;
           `,
           [jobRunId, 'JOBS_REPORT']
         )
-        if(!data.length) throw new Error('Report data is not generated.')
-        data.last_iteration.summary = data.summary.filter((item: any) => item.details.job_run_id === data.last_iteration.job_run_id)[0];
-        data.last_errors.summary = data.summary[0];
-        const html = report(data);
-        const browser = await puppeteer.launch();
+        const reportData = JSON.parse(data[0].report_data);
+        console.log(reportData);
+        reportData.last_iteration = reportData.last_iteration || {};
+        reportData.last_errors = reportData.last_errors || {};
+        if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
+        reportData.last_iteration.summary = reportData.summary[0];
+        reportData.last_errors.summary = reportData.summary[0];
+        const html = report(reportData);
+        const browser = await puppeteer.launch({
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+          protocolTimeout: 60000,
+        });
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
         const pdfBuffer = await page.pdf({ 
