@@ -32,7 +32,7 @@
    </changeSet>
    
    <changeSet id="9008" author="shivam6">
-      <sqlFile path="liquibase/20250215_04_procedure.sql" splitStatements="false"/>
+      <sqlFile path="liquibase/20250305_04_procedure.sql" splitStatements="false"/>
    </changeSet>
 
 </databaseChangeLog>
