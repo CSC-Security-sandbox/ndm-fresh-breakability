@@ -109,22 +109,22 @@ export class OverviewService {
                     )
                 )
             )
-            if (migrateRun?.length > 0) {
-                const migrationQueryBuilder = this.inventoryRepository
-                    .createQueryBuilder('inventory')
-                    .select('SUM(max_fileSize)', 'totalMigratedSize')
-                    .from(subQuery => {
-                        return subQuery
-                            .select('inventory.filePath', 'filePath')
-                            .addSelect('MAX(inventory.fileSize)', 'max_fileSize')
-                            .from('inventory', 'inventory')
-                            .where('inventory.job_run_id IN(:...jobRunId)', { jobRunId: migrateRun.map(run => run.id) })
-                            .groupBy('inventory.filePath');
-                    }, 'subquery');
+        if (migrateRun?.length > 0) {
+            const migrationQueryBuilder = this.inventoryRepository
+                .createQueryBuilder()
+                .select('SUM(subquery."maxFileSize")', 'totalMigratedSize')
+                .from(subQuery => {
+                    return subQuery
+                        .select('inventory.path', 'path')
+                        .addSelect('MAX(inventory.fileSize)', 'maxFileSize')
+                        .from('inventory', 'inventory')
+                        .where('inventory.job_run_id IN(:...jobRunId)', { jobRunId: migrateRun.map(run => run.id) })
+                        .groupBy('inventory.path');
+                }, 'subquery');
 
-                const migratedSize = await migrationQueryBuilder.getRawMany();
-                totalMigratedSize = (migratedSize && migratedSize.length > 0) ? migratedSize[0]?.totalMigratedSize : 0;
-            }
+            const migratedSize = await migrationQueryBuilder.getRawOne();
+            totalMigratedSize = migratedSize?.totalMigratedSize ?? 0;
+        }
 
            let totalPending = totalDiscoveredSize - totalMigratedSize;
            let totalPendingSize = covertBytes(Number(totalPending));
