@@ -39,6 +39,7 @@ export class WorkerOptionsService {
           updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
+          generateJobsReport: this.migrationTaskService.generateJobsReport.bind(this.migrationTaskService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
