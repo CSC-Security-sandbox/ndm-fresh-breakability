@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
+import * as util from 'util';
 @Injectable()
 export class SetupActivityService {
   readonly workerId: string;
@@ -124,16 +125,25 @@ export class SetupActivityService {
         protocol,
         jobRunId,
       );
-        await new Promise((resolve) => setTimeout( resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        // unmount destination path if exists
-        try{
-          if(context.jobConfig?.destinationFileServer) 
-              await this.unmountPath(context.jobConfig.destinationFileServer, protocol, jobRunId);
-        } catch(error) {
-          console.error(`[${jobRunId}] - Cleanup failed: ${error?.message}`);
-          return { jobRunId, status: 'error', workerId: this.workerId, message: `Cleanup failed: ${error?.message}` };
-        }
+      // unmount destination path if exists
+      try {
+        if (context.jobConfig?.destinationFileServer)
+          await this.unmountPath(
+            context.jobConfig.destinationFileServer,
+            protocol,
+            jobRunId,
+          );
+      } catch (error) {
+        console.error(`[${jobRunId}] - Cleanup failed: ${error?.message}`);
+        return {
+          jobRunId,
+          status: 'error',
+          workerId: this.workerId,
+          message: `Cleanup failed: ${error?.message}`,
+        };
+      }
 
       return {
         jobRunId,
@@ -192,49 +202,54 @@ export class SetupActivityService {
     }
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
-    this.logger.log(`[${traceId}] - Mounting path successful`, JSON.stringify(result));
+    this.logger.log(
+      `[${traceId}] - Mounting path successful`,
+      JSON.stringify(result),
+    );
     this.logger.log('Checking write permission');
-    this.logger.log(`[${traceId}] - Checking write permission for ${exportPathName}`);
+    this.logger.log(
+      `[${traceId}] - Checking write permission for ${exportPathName}`,
+    );
     if (checkWritePermission) {
-        const writePermission = await this.checkWritePermission(
-          payload.exportPathName,
-          payload.pathId,
-          traceId,
-          payload.mountBasePath,
-          hostname,
-          protocols?.userName,
-          protocols?.password,
-          protocol,
-          payload.type,
-        );
-        if (writePermission.status === 'failed') {
-          await protocol.unmountPath(traceId, mountPayload);
-          delay(5000);
-          if (payload.type == 'DESTINATION') {
-            return {
-              destinationId: pathId,
-              status: 'failed',
-              errors: ['DESTINATION_PATH_WRITE_PERMISSION_FAILED'],
-            };
-          } else {
-            return {
-              sourceId: pathId,
-              status: 'failed',
-              errors: ['SOURCE_PATH_WRITE_PERMISSION_FAILED'],
-            };
-          }
+      const writePermission = await this.checkWritePermission(
+        payload.exportPathName,
+        payload.pathId,
+        traceId,
+        payload.mountBasePath,
+        hostname,
+        protocols?.userName,
+        protocols?.password,
+        protocol,
+        payload.type,
+      );
+      if (writePermission.status === 'failed') {
+        await protocol.unmountPath(traceId, mountPayload);
+        delay(5000);
+        if (payload.type == 'DESTINATION') {
+          return {
+            destinationId: pathId,
+            status: 'failed',
+            errors: ['DESTINATION_PATH_WRITE_PERMISSION_FAILED'],
+          };
+        } else {
+          return {
+            sourceId: pathId,
+            status: 'failed',
+            errors: ['SOURCE_PATH_WRITE_PERMISSION_FAILED'],
+          };
         }
-        this.logger.log(
-          `[${traceId}] -Write permission`,
-          JSON.stringify(writePermission),
-        );
-        this.logger.log(
-          `[${traceId}] - Mounting path successful`,
-          JSON.stringify(result),
-        );
-        return { status: 'success' };
+      }
+      this.logger.log(
+        `[${traceId}] -Write permission`,
+        JSON.stringify(writePermission),
+      );
+      this.logger.log(
+        `[${traceId}] - Mounting path successful`,
+        JSON.stringify(result),
+      );
+      return { status: 'success' };
     } else {
-     await protocol.unmountPath(traceId, mountPayload);
+      await protocol.unmountPath(traceId, mountPayload);
       delay(5000);
       if (payload.type == 'DESTINATION') {
         return {
@@ -275,11 +290,13 @@ export class SetupActivityService {
         pathId,
         jobRunId: traceId,
       };
-      
+
       const testFile = `${mountBasePath}/${traceId}/${pathId}/test-${traceId}.txt`;
       this.logger.log(
         `[${traceId}] - Checking write permission for ${testFile}`,
       );
+      const closeAsync = util.promisify(fs.close);
+      const unlinkAsync = util.promisify(fs.unlink);
       fs.open(testFile, 'w', async (err, fd) => {
         try {
           if (err) {
@@ -293,28 +310,50 @@ export class SetupActivityService {
             });
             return;
           }
-      
           this.logger.log(`[${traceId}] - Write permission check successful`);
-          
-          // Unmount after the write test
-          const umountResult = await protocol.unmountPath(traceId, mountPayload);
-      
+
+          try {
+            await protocol.unmountPath(traceId, mountPayload);
+          } catch (umountErr) {
+            this.logger.error(
+              `[${traceId}] - Unmount failed: ${umountErr.message}`,
+            );
+          }
+
           resolve({
             traceId,
             status: 'success',
             message: `Write permission check successful`,
           });
+        } catch (error) {
+          this.logger.error(
+            `[${traceId}] - Unexpected error: ${error.message}`,
+          );
+          resolve({
+            traceId,
+            status: 'failed',
+            message: `Unexpected error: ${error.message}`,
+          });
         } finally {
-          if (fd) fs.close(fd, (closeErr) => {
-            if (closeErr) {
+          if (fd) {
+            try {
+              await closeAsync(fd);
+            } catch (closeErr) {
               this.logger.error(
                 `[${traceId}] - Error closing file descriptor: ${closeErr.message}`,
               );
             }
-          });
+          }
+        }
+        try {
+          await unlinkAsync(testFile);
+          this.logger.log(`[${traceId}] - Test file deleted successfully.`);
+        } catch (error) {
+          this.logger.error(
+            `[${traceId}] - Error deleting test file: ${error}`,
+          );
         }
       });
-      
     });
   }
 }
