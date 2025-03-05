@@ -11,6 +11,7 @@ import { ValidateConnectionActivity } from "src/activities/validate-connection/v
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
+import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
 import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 
 @Injectable()
@@ -24,6 +25,7 @@ export class WorkerOptionsService {
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
     private readonly migrationSyncService:MigrationSyncService,
+    private readonly validateWorkingDirectoryActivity: ValidateWorkingDirectoryActivity,
     private readonly precheckActivity:PrecheckActivity
   ) {}
 
@@ -64,6 +66,9 @@ export class WorkerOptionsService {
             updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
             checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
+            validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
+            isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
+            updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

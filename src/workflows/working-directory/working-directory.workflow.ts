@@ -1,0 +1,35 @@
+import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
+import { WorkFlows } from "src/work-manager/work-manager.types";
+import { ValidateWorkingDirectoryWorkerWorkflow } from "./working-directory-worker.workflow";
+
+async function log(traceId: string, message: string) {
+    console.log(`[${traceId}] ${message}`);
+}
+
+export const ValidateWorkingDirectoryWorkflow = async ({traceId, payload, options}) => {
+  log(`traceId - ${traceId}`, `Starting ValidateWorkingDirectoryWorkflow with args: ${JSON.stringify(payload)}`);
+    const responseArray = await Promise.all(
+      payload.workerIds.map((workerId: string) =>
+        executeChild(ValidateWorkingDirectoryWorkerWorkflow, {
+          args: [
+            {
+              traceId: traceId,
+              payload: payload,
+            }
+          ],
+          workflowId: `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${workerId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          ...options,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        }),
+      ),
+    );
+  
+    const result = responseArray.flat();
+    log(
+      traceId, `ValidateWorkingDirectoryWorkflow response: ${JSON.stringify(result)}`,
+    );
+    
+    return result;
+}
