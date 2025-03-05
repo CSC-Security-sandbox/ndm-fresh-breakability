@@ -1,5 +1,3 @@
-"use client";
-import { Collapse } from "@mui/material";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import Box from "@/components/container/Box";

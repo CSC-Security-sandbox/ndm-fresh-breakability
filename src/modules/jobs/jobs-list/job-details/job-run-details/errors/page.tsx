@@ -1,4 +1,3 @@
-"use client";
 import { Box } from "@components/container/index";
 import {
   Card,

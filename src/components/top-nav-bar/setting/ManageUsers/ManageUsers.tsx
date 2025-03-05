@@ -1,4 +1,3 @@
-"use client";
 import Box from "@/components/container/Box";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { notify } from "@components/notification/NotificationWrapper";

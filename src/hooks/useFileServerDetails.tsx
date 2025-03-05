@@ -1,4 +1,3 @@
-"use client";
 import { useLazyGetFileServerByIdQuery } from "@api/configApi";
 import { useCallback, useEffect, useState } from "react";
 import {

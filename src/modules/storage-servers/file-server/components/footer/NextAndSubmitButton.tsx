@@ -1,4 +1,3 @@
-"use client";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";

@@ -1,4 +1,3 @@
-"use client";
 import { useState } from "react";
 import { UserIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import {

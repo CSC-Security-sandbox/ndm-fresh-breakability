@@ -1,5 +1,3 @@
-"use client";
-
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { hasPermission } from "@auth/auth.utils";
 import { notify } from "@components/notification/NotificationWrapper";

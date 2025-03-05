@@ -1,4 +1,3 @@
-"use client";
 import CustomStepLayout from "@modules/storage-servers/file-server//components/layout/CustomStepLayout";
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";

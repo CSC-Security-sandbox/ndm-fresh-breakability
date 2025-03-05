@@ -1,4 +1,3 @@
-"use client";
 import ChartInfo from "@components/chartInfo/ChartInfo";
 import { Box } from "@components/container/index";
 import useFileServerDetails from "@hooks/useFileServerDetails";

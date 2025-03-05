@@ -1,4 +1,3 @@
-"use client";
 import { useLazyGetAllWorkersQuery } from "@api/workersApi";
 import { useEffect, useState } from "react";
 import useSelectedProjectId from "./useSelectedProjectId";

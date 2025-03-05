@@ -1,10 +1,8 @@
-"use client";
-import { Box } from "@components/container/index";
-import TableWrapper from "@components/table-wrapper/TableWrapper";
-import useWorkers from "@hooks/useWorkers";
-import WorkerInstallationContent from "@components/top-nav-bar/setting/ManageProjects/WorkerInstallationContent";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import WorkerInstallationContent from "@components/top-nav-bar/setting/ManageProjects/WorkerInstallationContent";
+import useWorkers from "@hooks/useWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 
 const Workers = () => {

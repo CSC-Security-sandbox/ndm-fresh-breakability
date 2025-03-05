@@ -1,4 +1,3 @@
-"use client";
 import { AuthProvider } from "react-oidc-context";
 import React from "react";
 
