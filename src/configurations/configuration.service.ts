@@ -15,7 +15,7 @@ import { validate as isUUID } from 'uuid';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
-import { JobType } from 'src/entities/jobconfig.entity';
+import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
 import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
@@ -210,7 +210,7 @@ export class ConfigurationService {
             fileServer.volumes.flatMap(volume =>
                 volume.jobConfig
                     .filter(jobConfig =>
-                        jobConfig.jobType === JobType.Migrate &&
+                        jobConfig.jobType === JobType.Migrate  && jobConfig.status !== JobStatus.InActive &&
                         jobConfig.jobRunDetails.some(jobRun => jobRun.status === JobRunStatus.Completed)
                     )
                     .map(job => ({
