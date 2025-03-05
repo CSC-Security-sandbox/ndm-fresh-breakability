@@ -68,7 +68,7 @@ Ensure the following tools are installed on your macOS system:
     keycloak-customizations (main)
     admin-service (temporal)
     config-service (temporal)
-    data-migrate-ui (temporal)
+    data-migrate-ui (main)
     db-writer (temporal)
     file-service (main)
     jobs-service (temporal)
