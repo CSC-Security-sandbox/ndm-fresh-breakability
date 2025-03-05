@@ -9,7 +9,7 @@ export enum ReportType {
 }
 
 export enum ReportHeaders {
-  FILE_SERVER = "File Server",
+  FILE_SERVER = "Config Name",
   PATH = "Path",
   SHARED = "Shared",
   EXPORTED = "Exported",
@@ -21,7 +21,7 @@ export enum ReportHeaders {
 
   SCAN_STATUS = "Status",
   SCAN_PROTOCOL = "Protocol",
-  SCAN_TIME = "Scan Time",
+  SCAN_TIME = "Total Time",
   SCAN_ERRORS = "Scan Errors",
   SCANNED_CAPACITY = "Scanned Capacity",
   SCANNED_ITEM_COUNT = "Scanned Item Count",
@@ -64,7 +64,7 @@ export enum ReportHeaders {
   CAPACITY_CREATION_9_10_YR = "Capacity  with Creation Time 9-10 yr",
   CAPACITY_CREATION_10_PLUS_YR = "Capacity  with Creation Time 10+ yr",
 
-  FILE_COUNT_MODIFICATION_FUTURE = "File Count with Modification Time future",
+  FILE_COUNT_MODIFICATION_FUTURE = "File Count with Modification Time: future",
   FILE_COUNT_MODIFICATION_0_1_WK = "File Count with Modification Time: 0-1 wk",
   FILE_COUNT_MODIFICATION_1_WK_1_MO = "File Count with Modification Time: 1 wk - 1 mo",
   FILE_COUNT_MODIFICATION_1_3_MO = "File Count with Modification Time: 1-3 mo",
@@ -98,7 +98,7 @@ export enum ReportHeaders {
   CAPACITY_MODIFICATION_9_10_YR = "Capacity With Modification Time: 9-10 yr",
   CAPACITY_MODIFICATION_10_PLUS_YR = "Capacity With Modification Time: 10+ yr",
 
-  FILE_COUNT_ACCESS_FUTURE = "File Count with Access Time: future",
+  FILE_COUNT_ACCESS_FUTURE = "File Count with Access Time future",
   FILE_COUNT_ACCESS_0_1_WK = "File Count with Access Time 0-1 wk",
   FILE_COUNT_ACCESS_1_WK_1_MO = "File Count with Access Time 1 wk - 1 mo",
   FILE_COUNT_ACCESS_1_3_MO = "File Count with Access Time 1-3 mo",
@@ -132,7 +132,7 @@ export enum ReportHeaders {
   CAPACITY_ACCESS_9_10_YR = "Capacity with Access Time 9-10 yr",
   CAPACITY_ACCESS_10_PLUS_YR = "Capacity with Access Time 10+ yr",
 
-  FILE_COUNT_FILE_SIZE_0_B = "File Count with File Size: 0 B",
+  FILE_COUNT_FILE_SIZE_0_B = "File Count with File Size: 0B",
   FILE_COUNT_FILE_SIZE_0_8_KiB = "File Count with File Size: <8KiB",
   FILE_COUNT_FILE_SIZE_8_64_KiB = "File Count with File Size: 8-64KiB",
   FILE_COUNT_FILE_SIZE_64_KiB_1_MiB = "File Count with File Size: 64KiB-1MiB",
@@ -141,8 +141,8 @@ export enum ReportHeaders {
   FILE_COUNT_FILE_SIZE_100_MiB_1_GiB = "File Count with File Size: 100 MiB-1GiB",
   FILE_COUNT_FILE_SIZE_1_PLUS_GiB = "File Count with File Size: 1+ GiB",
 
-  CAPACITY_FILE_SIZE_0_B = "Capacity with File Size: 0 B",
-  CAPACITY_FILE_SIZE_0_8_KiB = "Capacity with File Size: 0-8 KiB",
+  CAPACITY_FILE_SIZE_0_B = "Capacity with File Size: 0B",
+  CAPACITY_FILE_SIZE_0_8_KiB = "Capacity with File Size: <8KiB",
   CAPACITY_FILE_SIZE_8_64_KiB = "Capacity with File Size: 8-64 KiB",
   CAPACITY_FILE_SIZE_64_KiB_1_MiB = "Capacity with File Size: 64 KiB - 1 MiB",
   CAPACITY_FILE_SIZE_1_10_MiB = "Capacity with File Size: 1-10 MiB",
@@ -152,9 +152,9 @@ export enum ReportHeaders {
 
   LONGEST_FILE_NAMES = "Longest File Names",
   LONGEST_DIRECTORY_NAMES = "Longest Directory Names",
-  LONGEST_FILE_PATHS = "Longest File Paths",
-  LONGEST_DIRECTORY_PATHS = "Longest Directory Paths",
-  BIGGEST_FILES = "Biggest Files",
+  LONGEST_FILE_PATHS = "Longest File Path",
+  LONGEST_DIRECTORY_PATHS = "Longest Directory Path",
+  BIGGEST_FILES = "Biggest File Names",
   BIGGEST_DIRECTORIES_WITH_COUNT = "Biggest Directory With Count",
   BIGGEST_DIRECTORIES_WITH_CAPACITY = "Biggest Directory With Capacity",
   TOP_FILE_EXTENSIONS = "Top File Extensions (with file count and Capacity)",
