@@ -11,6 +11,6 @@ export interface ConfigStatusPayload {
 }
 
 export enum ConfigError {
-  INVALID_EXPORT_PATH = 'INVALID_EXPORT_PATH',
-  INVALID_WORKING_DIRECTORY = 'INVALID_WORKING_DIRECTORY'
+  INVALID_EXPORT_PATH = 'Invalid export path',
+  INVALID_WORKING_DIRECTORY = 'Invalid working directory'
 }
