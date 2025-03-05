@@ -68,7 +68,7 @@ export enum TaskType {
 
 export enum ReportType {
     JOB_RUN_STATS = 'JobRunStats',
-    MIGRATION_COC = 'MIGRATION_COC',
+    COC = 'COC',
     JOBS_RREPORT = 'JOBS_REPORT',
     DISCOVERY = 'DISCOVER'
 }

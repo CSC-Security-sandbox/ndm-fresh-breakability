@@ -44,8 +44,8 @@ export class DiscoveryService {
       this.logger.log("procedure started")
       const startTime = Date.now();
       await this.inventoryRepo.query(
-        `CALL ${process.env.SCHEMA}.generate_discovery_report($1)`,
-        [jobRunId]
+        `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
+        [jobRunId, process.env.SCHEMA]
       );
       this.logger.log(`procedure ended in ${Date.now() - startTime}`)
       const latestReport = await this.reportsRepo.find({
@@ -152,7 +152,8 @@ export class DiscoveryService {
     const htmlOutput = this.generateHtmlTable(reportData);
     
     const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        protocolTimeout: 60000,
     });
     const page = await browser.newPage();
     await page.setContent(htmlOutput, { waitUntil: 'networkidle0' });
@@ -162,29 +163,13 @@ export class DiscoveryService {
     return Buffer.from(pdfBuffer);
 }
 
-  async createMigrationReportFile(jobRunId: string, reportType: string): Promise<any> {
-    this.logger.log(
-      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
-    );
-    try {
-      const jobRunUUID = `${jobRunId}::UUID`;
-      await this.inventoryRepo.query(
-        `CALL ${process.env.SCHEMA}.jobs_report_data_v2($1, $2);`,
-        [jobRunUUID, `${this.reportLocation}::TEXT`]
-      );
-      return { message: "Report generated successfully" };
-    } catch (error) {
-      this.logger.log(error);
-      throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
-      );
-    }
-  }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
     this.logger.log(`Creating jobs report data for jobRunId: ${jobRunId}`);
     try {
-      await this.inventoryRepo.query("CALL jobs_report_data($1);", [jobRunId]);
+      this.logger.log(`Schema used: ${process.env.SCHEMA}`);
+      this.logger.log(`Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`);
+      await this.inventoryRepo.query(`CALL ${process.env.SCHEMA}.jobs_report_data_v2($1::UUID, $2);`, [jobRunId, process.env.SCHEMA]);
       return { message: "Report data generated successfully for jobs report" };
     } catch (error) {
       this.logger.log(`Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`);

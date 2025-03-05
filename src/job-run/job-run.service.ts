@@ -163,8 +163,8 @@ export class JobRunService {
   }
 
   async getCocReportByJobRunId(jobRunId: string) {
-    // check if this jonrunid is a migration job
     try {
+      console.log(`Generating COC report for jobRunId: ${jobRunId}`);
       const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
       if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
       if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
@@ -179,11 +179,12 @@ export class JobRunService {
     
       const fileBuffer = fs.readFileSync(filePath);
       const reportData = { filePath, size: fileBuffer.length, digest: crypto.createHash('sha256').update(fileBuffer).digest('hex') };
-      const report = this.reportsRepo.create({ jobRunId, reportData: JSON.stringify(reportData), reportType: ReportType.MIGRATION_COC });
+      const report = this.reportsRepo.create({ jobRunId, reportData: JSON.stringify(reportData), reportType: ReportType.COC });
       await this.reportsRepo.save(report);
+      console.log(`COC Report generated for jobRunId: ${jobRunId}`);
       return filePath;
     } catch (error) {
-      console.log(`Error while generating report for jobRunId: ${jobRunId} - ERROR: ${error}`);
+      console.log(`Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`);
       throw new NotFoundException(`Error while generating report for jobRunId: ${jobRunId}`);
     }
   }

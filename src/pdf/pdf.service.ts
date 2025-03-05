@@ -47,12 +47,13 @@ export class PdfService {
         const reportContent = fs.readFileSync(reportPath, 'utf8');
         const report = hbs.compile(reportContent);
         const data = await this.reportsRepo.query(
-          `SELECT * FROM jobs_report WHERE job_run_id = $1 and job_type = $2
+          `SELECT * FROM ${process.env.SCHEMA}.jobs_report WHERE job_run_id = $1 and job_type = $2
           order by created_at DESC
           limit 1;
           `,
           [jobRunId, 'JOBS_REPORT']
         )
+        if(!data.length) throw new Error('Report data is not generated.')
         data.last_iteration.summary = data.summary.filter((item: any) => item.details.job_run_id === data.last_iteration.job_run_id)[0];
         data.last_errors.summary = data.summary[0];
         const html = report(data);
