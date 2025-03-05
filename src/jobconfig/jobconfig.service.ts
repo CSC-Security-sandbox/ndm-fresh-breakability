@@ -215,7 +215,7 @@ export class JobConfigService {
       );
       const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
       const jobRunStatuses = await this.jobRunRepo.find({
-        where: { jobConfigId: In(jobConfigs.map((j) => j.id)) },
+        where: { jobConfigId: In(jobConfigs.map((j) => j.id)), status: In([JobRunStatus.Completed, JobRunStatus.Stopped]) },
         order: { endTime: "DESC" }, 
       });
 
@@ -225,7 +225,7 @@ export class JobConfigService {
       >();
 
       jobRunStatuses.forEach((jobRun) => {
-        if (!latestJobStatusMap.has(jobRun.jobConfigId)) {
+        if ((!latestJobStatusMap.has(jobRun.jobConfigId))) {
           latestJobStatusMap.set(jobRun.jobConfigId, {
             status: jobRun.status,
             endTime: jobRun.endTime,
