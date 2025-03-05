@@ -3,9 +3,9 @@
    <thead>
     <tr style="background-color:#dbdbdb;">
      <th colspan="2" style="padding: 3px 8px;">Source</th>
-     <th colspan="8" style="padding: 3px 8px;">Target</th>
+     <th colspan="7" style="padding: 3px 8px;">Target</th>
      <th colspan="2" style="padding: 3px 8px;">Scan</th>
-     <th colspan="6" style="padding: 3px 8px;">Delta</th>
+     <th colspan="4" style="padding: 3px 8px;">Delta</th>
      <th colspan="4" style="padding: 3px 8px;">Performance</th>
     </tr>
    </thead>
@@ -26,46 +26,33 @@
      <th style="padding: 3px 8px;">Operations</th>
      <th style="padding: 3px 8px;">Capacity Copied</th>
      <th style="padding: 3px 8px;">Capacity Deleted</th>
-     <th style="padding: 3px 8px;">Skipped</th>
-     <th style="padding: 3px 8px;">Capacity Skipped</th>
      <th style="padding: 3px 8px;">Source scan</th>
      <th style="padding: 3px 8px;">Target scan</th>
      <th style="padding: 3px 8px;">Bandwidth</th>
      <th style="padding: 3px 8px;">Throughput</th>
     </tr>
    </thead>
-       {{#if last_iteration}}
    <tbody>
-    <tr class="darker" style="background-color: #f0f0f0;font-weight: bold;">
-      <td style="padding: 3px 8px;">{{summary.source.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.file_server}}</td>
-      <td style="padding: 3px 8px;">{{summary.target.path}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.protocol_version}}</td>
-      <td style="padding: 3px 8px;">{{summary.source.job_type}}</td>
-     <td style="padding: 3px 8px;">{{last_iteration.job_run_id}}</td>
-     <td style="padding: 3px 8px;">{{last_iteration.s_duration}}</td>
-      <td style="padding: 3px 8px;">{{sum last_iteration.s_files last_iteration.s_directories}}</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-     <td style="padding: 3px 8px;">-</td>
-    </tr>
-    {{else}}
     <tr>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.path}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.target.file_server}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.target.path}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.protocol}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.protocol_version}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.source.job_type}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.job_run_id}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.duration}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.details.files}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.summary.details.capacity}}</td>
+      <td style="padding: 3px 8px;">{{sum last_iteration.delta_files last_iteration.delta_directories}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.delta_operations}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.capacity_copied}}</td>
+      <td style="padding: 3px 8px;">{{last_iteration.capacity_deleted}}</td>
+      <td style="padding: 3px 8px;">-</td>
+      <td style="padding: 3px 8px;">-</td>
+      <td style="padding: 3px 8px;">-</td>
       <td style="padding: 3px 8px;">-</td>
     </tr>
-    {{/if}}
     </tbody>
   </table>

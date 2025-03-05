@@ -35,4 +35,17 @@
       <sqlFile path="liquibase/20250305_04_procedure.sql" splitStatements="false"/>
    </changeSet>
 
+
+   <changeSet id="9008" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250304_02_updated_jobs_report_proc.sql" splitStatements="false"/>
+   </changeSet>
+
+   <changeSet id="9009" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250305_02_updated_jobs_report_proc_v2.sql" splitStatements="false"/>
+   </changeSet>
+
+   <changeSet id="9010" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250305_01_generate_discovery_report.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>

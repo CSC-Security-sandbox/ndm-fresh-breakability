@@ -3,25 +3,22 @@
 <head>
   <meta charset="utf-8">
   <style type="text/css">
-    table { page-break-inside:auto }
-    tr    { page-break-inside:avoid; page-break-after:auto }
-    thead { display:table-header-group }
-    tfoot { display:table-footer-group }
+    table { page-break-inside: auto; }
+    tr    { page-break-inside: auto; page-break-after: auto }
+    thead { display: table-header-group }
+    tfoot { display: table-footer-group }
+    h1 { color: green }
   </style>
 </head>
 <body style="font-family: Arial, Helvetica, 'Lucida Grande', Geneva, Tahoma, Verdana, sans-serif; font-size: 12px;">
   <h1>{{title}}</h1>
-  <body>
   <h1>{{'Jobs report'}}</h1>
+  <div style="width: 100%; overflow: auto;">
   {{> customer_info }}
-  {{> summary}}
-  {{> current_iteration}}
-  {{> last_iteration}}
-  {{> last_errors}}
-  {{> cutovers}}
-  {{> coc}}
-  {{> scan_iterations}}
-  {{> aggregated_operations}}
-</body>
+  {{> summary }}
+  {{> last_iteration }}
+  {{> last_errors }}
+  {{> cutovers }}
+  </div>
 </body>
 </html>
