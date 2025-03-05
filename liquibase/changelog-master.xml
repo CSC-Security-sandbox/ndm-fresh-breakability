@@ -30,5 +30,9 @@
    <changeSet id="9007" author="cfdineshseervi">
       <sqlFile path="liquibase/20250304_01_drop_column_is_coc_report_ready.sql" splitStatements="false"/>
    </changeSet>
+   
+   <changeSet id="9008" author="shivam6">
+      <sqlFile path="liquibase/20250305_04_procedure.sql" splitStatements="false"/>
+   </changeSet>
 
 </databaseChangeLog>
