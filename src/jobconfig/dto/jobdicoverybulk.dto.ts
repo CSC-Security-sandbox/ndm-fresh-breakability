@@ -6,11 +6,13 @@ import {
     IsArray,
     IsBoolean,
     IsDate,
+    IsNumber,
     IsObject,
     IsOptional,
     IsString,
     IsUUID,
     ValidateNested,
+    isString,
     isUUID
 } from 'class-validator';
 
@@ -109,6 +111,91 @@ export class speedTestConfigOptions{
   test: speedTests;
 }
 
+
+export class SpeedLog {
+  @ApiProperty({ description: 'Timestamp of the speed log', example: '1.00' })
+  @IsString()
+  timeStamp: string;
+
+  @ApiProperty({ description: 'Speed at the given timestamp', example: '1933.12' })
+  @IsString()
+  speed: string;
+}
+
+export class WriteReadResult {
+  @ApiProperty({ description: 'Logs of speed over time', isArray: true, type: SpeedLog })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SpeedLog)
+  speedLogs: SpeedLog[];
+
+  @ApiProperty({ description: 'Total time taken for the operation', example: 2.982695291 })
+  @IsNumber()
+  totalTimeTaken: number;
+
+  @ApiProperty({ description: 'Size of the file used in the test', example: 6442450944 })
+  @IsNumber()
+  fileSize: number;
+}
+
+export class RoundTripDelay {
+  @ApiProperty({ description: 'Minimum round trip delay' })
+  @IsNumber()
+  min: number;
+
+  @ApiProperty({ description: 'Average round trip delay' })
+  @IsNumber()
+  avg: number;
+
+  @ApiProperty({ description: 'Maximum round trip delay' })
+  @IsNumber()
+  max: number;
+
+  @ApiProperty({ description: 'Mean deviation of round trip delay'})
+  @IsNumber()
+  mdev: number;
+}
+
+export class NetworkPerformanceResult {
+  @ApiProperty({ description: 'Packet loss percentage' })
+  @IsNumber()
+  packetLoss: number;
+
+  @ApiProperty({ description: 'Round trip delay metrics' })
+  @ValidateNested({ each: true })
+  @Type(() => RoundTripDelay)
+  roundTripDelay: RoundTripDelay;
+}
+
+
+export class SpeedTestResult {
+  @ApiProperty({ description: 'UUID of traceId', required: true })
+  @IsUUID()
+  traceId: string;
+
+  @ApiProperty({ description: 'UUID of workerId', required: true })
+  @IsUUID()
+  workerId: string;
+
+  @ApiProperty({ description: 'UUID of fileServerID', required: true })
+  @IsUUID()
+  fileServerID: string;
+
+  @ApiProperty({ description: 'Write result of the speed test' })
+  @ValidateNested({ each: true })
+  @Type(() => WriteReadResult)
+  writeResult: WriteReadResult;
+
+  @ApiProperty({ description: 'Read result of the speed test' })
+  @ValidateNested({ each: true })
+  @Type(() => WriteReadResult)
+  readResult: WriteReadResult;
+
+  @ApiProperty({ description: 'Network performance result' })
+  @ValidateNested({ each: true })
+  @Type(() => NetworkPerformanceResult)
+  networkPerformanceResult: NetworkPerformanceResult;
+}
 
 
 export class JobConfigSpeedTest {

@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity , SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/jobconfig.entity';
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
@@ -26,7 +26,7 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity,OperationErrorEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity]),
         WorkerModule,
         RedisModule
     ],

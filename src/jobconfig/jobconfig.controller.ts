@@ -4,7 +4,7 @@ import { JobConfigEntity, SpeedTestConfigEntity } from '../entities/jobconfig.en
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, JobConfigSpeedTest } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, JobConfigSpeedTest, SpeedTestResult } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
@@ -37,6 +37,21 @@ export class JobConfigController {
     }
     const jobConfig = await this.jobConfigService.createSpeedTest(speedTest);
     return jobConfig;
+  }
+
+  @ApiOperation({ summary: 'Store Speed test Result' })
+  @ApiResponse({ status: 201, description: 'Speed test Result has been successfully Stored.' })
+  @Post('/store-speed-test-result')
+  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult){
+    this.jobConfigService.storeSpeedTestResult(speedTestResult);
+  }
+
+  @ApiOperation({ summary: 'Get speedtest by ID' })
+  @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
+  @ApiResponse({ status: 404, description: 'Job not found.' })
+  @Get('/speedtest/:id')
+  async getSpeedTestById(@Param('id') id: string): Promise<any> {
+    return await this.jobConfigService.getSpeedTestById(id);
   }
 
   @ApiOperation({ summary: 'Create a new migrate job' })

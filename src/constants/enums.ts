@@ -119,6 +119,7 @@ export enum WorkFlowType {
 
 export enum WorkFlows{
     DISCOVERY = 'DiscoveryWorkflow',
+    SPEED_TEST = 'SpeedTestWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
     MIGRATE = 'MigrationWorkflow',
     CUT_OVER = 'CutOverWorkFlow',
