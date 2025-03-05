@@ -18,117 +18,105 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
-    try {
-      const workerConfigServiceUrl = WorkersConfig.get('workerConfigUrl');
-      const apiUrl = `${workerConfigServiceUrl}/validate/working-directory`;
-      const accessToken = "ACCESS_TOKEN"; // TODO handle access token logic
+    const workerConfigUrl = WorkersConfig.get('workerConfigUrl');
+    const apiUrl = `${workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
+    const accessToken = "ACCESS_TOKEN"; // TODO: Handle access token logic
 
-      let configStatusPayload: ConfigStatusPayload = {
-        configId: payload.configId,
-        status: null,
-        errorMessage: null
-      }
+    const configStatusPayload: ConfigStatusPayload = {
+      configId: payload.configId,
+      status: null,
+      errorMessage: null
+    };
 
-      if (payload.exportPathPresent) {
-        this.logger.log("Provided Export Path Present");
-        this.logger.log("Started validating working directory");
+    if (!payload.exportPathPresent) {
+      this.logger.log("Invalid Export Path");
+      configStatusPayload.status = ConfigStatus.ERRORED;
+      configStatusPayload.errorMessage = ConfigError.INVALID_EXPORT_PATH;
+    } else {
+      this.logger.log("Valid Export Path");
+      this.logger.log("Started validating working directory");
 
-        const isValidDirectory = await this.isValidDirectory(payload, traceId);
-
-        if (isValidDirectory) {
-          this.logger.log("Valid working directory");
-          configStatusPayload.status = ConfigStatus.ACTIVE;
-        } else {
-          this.logger.log("InValid working directory");
-          configStatusPayload.status = ConfigStatus.ERRORED;
-          configStatusPayload.errorMessage = ConfigError.INVALID_WORKING_DIRECTORY;
-        }
-      } else {
-        this.logger.log("Invalid Export Path");
+      try {
+        const isValid = await this.isValidDirectory(payload, traceId);
+        configStatusPayload.status = isValid ? ConfigStatus.ACTIVE : ConfigStatus.ERRORED;
+        configStatusPayload.errorMessage = isValid ? null : ConfigError.INVALID_WORKING_DIRECTORY;
+      } catch (error) {
+        this.logger.error(`Working directory validation error: ${error.message}`);
         configStatusPayload.status = ConfigStatus.ERRORED;
-        configStatusPayload.errorMessage = ConfigError.INVALID_EXPORT_PATH;
+        configStatusPayload.errorMessage = error.message;
       }
-
-      await this.updateConfigStatus(apiUrl, accessToken, configStatusPayload);
-
-      return {
-        traceId: traceId,
-        status: 'success',
-        workerId: this.workerId,
-        message: `Provided export path and working directory for workerId ${this.workerId} validated successfully`,
-      };;
-    } catch (error) {
-      return {
-        traceId: traceId,
-        status: 'error',
-        workerId: this.workerId,
-        message: `Error while validating export path & working directory : ${error}`,
-      };
     }
+
+    await this.updateConfigStatus(apiUrl, accessToken, configStatusPayload);
+
+    return {
+      traceId,
+      status: configStatusPayload.status === ConfigStatus.ACTIVE ? 'success' : 'error',
+      workerId: this.workerId,
+      message: configStatusPayload.errorMessage
+        ? `Validation failed: ${configStatusPayload.errorMessage}`
+        : `Export path and Working directory validated successfully for workerId ${this.workerId}`,
+    };
   }
 
-  async updateConfigStatus(apiUrl: string, accessToken: string, payload: any) {
+  async updateConfigStatus(apiUrl: string, accessToken: string, payload: ConfigStatusPayload) {
     try {
       await axios.post(apiUrl, payload, {
         headers: {
-          // "Authorization": `Bearer ${accessToken}`, //TODO
+          // "Authorization": `Bearer ${accessToken}`, // TODO: Implement token handling
           "Content-Type": "application/json"
         }
       });
     } catch (error) {
-      console.error("Error calling API:", error?.response?.data || error.message);
-      throw error;
+      this.logger.error(`API Error: ${error?.response?.data || error.message}`);
+      throw new Error(`API Error: ${error?.response?.data || error.message}`);
     }
   }
 
-  async isValidDirectory(payload: any, traceId: string) {
+  async isValidDirectory(payload: any, traceId: string): Promise<boolean> {
+    const baseMountDir = WorkersConfig.get('baseMountDir');
+    let isDirectoryValid = false;
+
     try {
-      for (let fileServer of payload.listPathPayload) {
-        const protocolType = fileServer.type;
-        const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      for (const fileServer of payload.listPathPayload) {
+        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+
         const mountPathPayload = {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
           path: payload.exportPath,
-          workingDirectory: WorkersConfig.get('baseDirectoryToValidateWorkingDirectory'),
+          mountBasePath: baseMountDir,
           pathId: traceId,
           jobRunId: traceId
-        }
+        };
 
-        this.logger.log("Mounting export path started");
+        this.logger.log(`Mounting export path for host ${fileServer.host}`);
         await protocol.mountPath(traceId, mountPathPayload);
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("started validating the working directory");
-        const mountPoint = `${WorkersConfig.get('baseDirectoryToValidateWorkingDirectory')}/${traceId}/${traceId}`;
+        const mountPoint = path.join(baseMountDir, traceId, traceId);
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {
-          this.logger.log(`The provided working directory ${fullPath} exists.`);
-          return true;
+          this.logger.log(`Working Directory exists: ${fullPath}`);
+          isDirectoryValid = true;
         } else {
-          this.logger.log(`The provided working directory ${fullPath} does not exist.`);
+          this.logger.log(`Working Directory does not exist: ${fullPath}`);
         }
 
-        const unmountPathPayload = {
-          hostname: fileServer.host,
-          username: fileServer.username,
-          password: fileServer.password,
-          path: payload.exportPath,
-          workingDirectory: WorkersConfig.get('baseDirectoryToValidateWorkingDirectory'),
-          pathId: traceId,
-          jobRunId: traceId
-        }
+        this.logger.log(`Unmounting export path for host ${fileServer.host}`);
+        await protocol.unmountPath(traceId, mountPathPayload);
+        this.logger.log("Unmounted export path successfully");
 
-        this.logger.log("UnMounting export path started");
-        await protocol.unmountPath(traceId, unmountPathPayload);
-        this.logger.log("UnMounted export path successfully");
+        if (isDirectoryValid) break;
       }
-      return false;
     } catch (error) {
-      this.logger.log(`Error while validating given working directory - ${error.message}`);
+      this.logger.error(`Working Directory validation error: ${error.message}`);
+      throw new Error(`Working Directory validation error: ${error.message}`);
     }
-  }
 
+    return isDirectoryValid;
+  }
 }
