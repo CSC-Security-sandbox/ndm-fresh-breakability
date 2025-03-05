@@ -312,13 +312,13 @@ export class SetupActivityService {
           }
           this.logger.log(`[${traceId}] - Write permission check successful`);
 
-          try {
-            await protocol.unmountPath(traceId, mountPayload);
-          } catch (umountErr) {
-            this.logger.error(
-              `[${traceId}] - Unmount failed: ${umountErr.message}`,
-            );
-          }
+          // try {
+          //   await protocol.unmountPath(traceId, mountPayload);
+          // } catch (umountErr) {
+          //   this.logger.error(
+          //     `[${traceId}] - Unmount failed: ${umountErr.message}`,
+          //   );
+          // }
 
           resolve({
             traceId,
