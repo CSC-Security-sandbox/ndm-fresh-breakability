@@ -150,12 +150,13 @@ export class ConfigurationService {
     
         try {
             const config = await this.fetchConfigWithRelations(configId);
+            this.logger.log(`config : ${JSON.stringify(config)}`)
             const validJobConfigs = this.extractValidJobConfigs(config);
-    
+            this.logger.log(`validJobConfigs : ${JSON.stringify(validJobConfigs)}`)
             if (validJobConfigs.length === 0) return [];
     
             const volumeMap = await this.getVolumeDetailsMap(validJobConfigs);
-    
+            this.logger.log(`validJobConfigs : ${JSON.stringify(volumeMap)}`)
             return this.constructResponse(validJobConfigs, volumeMap);
         } catch (error) {
             console.error('Error fetching cutover details:', error.message);
@@ -186,7 +187,13 @@ export class ConfigurationService {
                     }
                 }
             },
-            where: { id: configId },
+            where: { id: configId, fileServers: {
+                    volumes: {
+                        jobConfig: {
+                            status: JobStatus.Active
+                        }
+                    }
+            }},
             relations: {
                 fileServers: {
                     volumes: {
