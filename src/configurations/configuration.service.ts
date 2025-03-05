@@ -17,6 +17,8 @@ import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
+import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 
 @Injectable()
 export class ConfigurationService {
@@ -52,6 +54,7 @@ export class ConfigurationService {
             createdBy: true,
             scannedDate: true,
             status: true,
+            errorMessage: true,
             fileServers:{
                 id: true,
                 host: true,
@@ -291,6 +294,7 @@ export class ConfigurationService {
     }
     
     async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
+        this.logger.log("Config creation started");        
         const credentials:Credentials[] = []
         try {
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
@@ -318,16 +322,60 @@ export class ConfigurationService {
                 });
             });
 
+            const hasPathName = createConfig?.workingDirectory?.pathName?.length > 0;
+            const hasWorkers = !createConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
+
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
+                status: (hasWorkers || hasPathName) ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
         
             const update = await this.configEntity.save(config);
+
+            const listPathPayload: ListPathDTO[] = [];
+            
+            createConfig?.fileServers?.forEach((fileServer)=>{
+                const payload: ListPathDTO = {
+                    type: fileServer?.protocol,
+                    host: fileServer?.host,
+                    username: fileServer?.userName,
+                    password: fileServer?.password
+                }
+                listPathPayload.push(payload);
+            });
+
+            const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+                exportPath: createConfig?.workingDirectory?.pathName,
+                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+                configId: update.id,
+                workerIds: [],
+                listPathPayload,
+                options: new Options()
+            }
+
+            createConfig?.fileServers?.forEach((fileServer) => {
+                fileServer?.workers?.forEach(worker => {
+                    if (!payload.workerIds.includes(worker))
+                        payload.workerIds.push(worker);
+                })
+            });
+
+            if(payload.workerIds.length > 0 && createConfig?.workingDirectory?.pathName.length > 0) {                
+                this.logger.log('starting ValidateWorkingDirectoryWorkflow');            
+                const startWorkFlowPayload: StartWorkFlowPayload = {
+                    workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
+                    taskQueue: 'ParentWorkflow-TaskQueue',
+                    args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
+                    ...payload.options
+                };
+    
+                await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY, startWorkFlowPayload);
+                this.logger.log('started ValidateWorkingDirectoryWorkflow successfully');
+            }
          
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,

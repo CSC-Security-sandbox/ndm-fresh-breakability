@@ -32,6 +32,10 @@ export class ConfigEntity extends Base {
     @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
     scannedDate: Date;
 
+    @ApiProperty({ description: 'Error message' })
+    @Column({ name: 'error_message', type: 'text', nullable: true })
+    errorMessage: string;
+
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 

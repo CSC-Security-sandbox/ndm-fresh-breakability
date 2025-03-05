@@ -5,6 +5,7 @@ import { WorkManagerService } from './work-manager.service';
 import { ClientIp } from 'src/middleware/clientip';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
+import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 
 @Controller('work-manager')
 export class WorkManagerController {
@@ -31,6 +32,14 @@ export class WorkManagerController {
       request,
       req?.trackId,
     );
+  }
+
+  @ApiOperation({ summary: 'Validating export path and working directory' })
+  @ApiResponse({ status: 201, description: 'Request created successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @Post('/validate/working-directory')
+  async validateWorkingDirectory(@Body() data: ConfigStatusPayloadDTO) {
+    return await this.workManagerService.validateWorkingDirectory(data);
   }
 
   @ApiOperation({ summary: 'Get Workflow Result' })

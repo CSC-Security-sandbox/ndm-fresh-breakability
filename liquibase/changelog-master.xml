@@ -15,4 +15,8 @@
       <sqlFile path="liquibase/20250211_01_worker_table_add_worker_number_column.sql"/>
    </changeSet>
    
+   <changeSet id="3004" author="aniketd">
+      <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
+   </changeSet>
+   
 </databaseChangeLog>
