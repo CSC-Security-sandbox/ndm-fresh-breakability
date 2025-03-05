@@ -45,6 +45,7 @@ import {
   JobConfigBulkMigrateRes
 } from "./jobconfig.types";
 import { v4 as uuidv4 } from 'uuid';
+import { run } from "node:test";
 
 @Injectable()
 export class JobConfigService {
@@ -536,10 +537,10 @@ export class JobConfigService {
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
       aggregateData: {
-        timeElapsed: 0,
-        scannedFilesCount: 0,
-        scannedDirectoriesCount: 0,
-        totalScannedSize: "0 B",
+        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => a + b,0),
+        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => a + b,0n)?.toString(),
+        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => a + b,0n)?.toString(),
+        totalScannedSize: runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => a + b,0),
       },
       errors: [],
     };
