@@ -165,6 +165,9 @@ export class JobRunInitService {
         let jobRunWorkflow: WorkflowHandleWithFirstExecutionRunId | null = null ;
         await this.buildJobContext(jobRunId,jobRunConfig);
         const options = new Options()
+        options.workflowExecutionTimeout = '120s'
+        options.workflowTaskTimeout = '120s'
+        options.workflowRunTimeout = '120s'
         switch (jobRunConfig.jobType) {  
           case JobType.DISCOVER: {
             const startWorkFlowPayload: StartWorkFlowPayload = {
