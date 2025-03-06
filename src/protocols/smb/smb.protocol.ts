@@ -66,7 +66,8 @@ export class SMBProtocol extends Protocol {
         this.getCommandPattern(CommandPattern.VALIDATE_CRED),
         'Connect SMB via Cred',
       )
-      if(result?.toLowerCase().includes("successfully.")){
+      this.logger.log(JSON.stringify(result))
+      if(result?.message?.toLowerCase().includes("successfully.")){
         const response = await this.executeCommand(
           traceId,
           ProtocolTypes.SMB,
@@ -80,6 +81,7 @@ export class SMBProtocol extends Protocol {
       }
     }
     catch(e) {
+        this.logger.log(`error: ${e}`)
         const lines = e.message.split('\n'); 
         throw new Error(lines.length > 1 ? lines.slice(1).join('\n') : '')
     }
@@ -87,6 +89,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<any> {
+    this.logger.log(`platform: ${this.platform}`)
     switch(this.platform){
       case 'darwin':
         return await this.listPathLinMac(traceId, payload)

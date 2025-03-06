@@ -39,7 +39,8 @@ export abstract class Protocol {
           ?.replace('${PASSWORD}', payload?.password)
           ?.replace('${MOUNT_PATH}', payload?.path)
           ?.replace('${DIR_PATH}', directoryPath)
-        
+        console.log(`command : ${command}`)
+        this.logger.log(`command: ${command}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
             this.logger.info(
