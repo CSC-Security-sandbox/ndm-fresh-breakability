@@ -88,7 +88,7 @@ export class NFSProtocol extends Protocol {
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,
     );
 
-    const response = this.executeCommand(
+    const response = await this.executeCommand(
       traceId,
       ProtocolTypes.NFS,
       payload,
@@ -142,7 +142,7 @@ export class NFSProtocol extends Protocol {
       }
     }
 
-    const mountResult =  await  this.executeCommand(
+    const mountResult = await this.executeCommand(
       traceId,
       ProtocolTypes.NFS,
       payload,

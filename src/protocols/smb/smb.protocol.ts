@@ -106,14 +106,24 @@ export class SMBProtocol extends Protocol {
     this.logger.info(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
-    const response = this.executeCommand(
+    const response = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
       payload,
-      // WorkersConfig.get('smbUnmountCommand'),
       this.getCommandPattern(CommandPattern.UNMOUNT_PATH),
       'SMB Unmount',
     );
+
+    if(response?.message?.toLowerCase().includes("successfully.")){
+      const response = await this.executeCommand(
+        traceId,
+        ProtocolTypes.SMB,
+        payload,
+        this.getCommandPattern(CommandPattern.UNLINK_PATH),
+        'SMB Show Shares',
+      );
+      this.logger.info(`[${traceId}] ${response.message}`);
+    }
 
     // if (response['status'] === 'success') {
     //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
