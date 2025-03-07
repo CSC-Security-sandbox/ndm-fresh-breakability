@@ -129,8 +129,12 @@ export class WorkManagerService {
   }
 
   async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
-    this.logger.log('Updating config status after validating export path and working directory');
-    await this.configRepo.update({ id: data.configId }, { status: data.status, errorMessage: data.errorMessage });
+    try {
+      this.logger.log('Updating config status after validating export path and working directory');
+      await this.configRepo.update({ id: data.configId }, { status: data.status, errorMessage: data.errorMessage });
+    } catch (error) {
+      this.logger.log(`Error while updating the status of a file server after validating export path and working directory- ${error.message}`);
+    }
   }
 
   async getChildWorkFlowRes(id: string) {

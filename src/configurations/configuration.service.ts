@@ -343,46 +343,7 @@ export class ConfigurationService {
         
             const update = await this.configEntity.save(config);
 
-            const listPathPayload: ListPathDTO[] = [];
-            
-            createConfig?.fileServers?.forEach((fileServer)=>{
-                const payload: ListPathDTO = {
-                    type: fileServer?.protocol,
-                    host: fileServer?.host,
-                    username: fileServer?.userName,
-                    password: fileServer?.password
-                }
-                listPathPayload.push(payload);
-            });
-
-            const payload: ValidateExportPathAndWorkingDirectoryDTO = {
-                exportPath: createConfig?.workingDirectory?.pathName,
-                workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-                configId: update.id,
-                workerIds: [],
-                listPathPayload,
-                options: new Options()
-            }
-
-            createConfig?.fileServers?.forEach((fileServer) => {
-                fileServer?.workers?.forEach(worker => {
-                    if (!payload.workerIds.includes(worker))
-                        payload.workerIds.push(worker);
-                })
-            });
-
-            if(payload.workerIds.length > 0 && createConfig?.workingDirectory?.pathName.length > 0) {                
-                this.logger.log('starting ValidateWorkingDirectoryWorkflow');            
-                const startWorkFlowPayload: StartWorkFlowPayload = {
-                    workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
-                    taskQueue: 'ParentWorkflow-TaskQueue',
-                    args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
-                    ...payload.options
-                };
-    
-                await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY, startWorkFlowPayload);
-                this.logger.log('started ValidateWorkingDirectoryWorkflow successfully');
-            }
+            await this.startValidateWorkingDirectoryWorkflow(createConfig, update.id, traceId);
          
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
@@ -473,7 +434,10 @@ export class ConfigurationService {
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
             config.fileServers = await Promise.all(fileServerPromises);
-            const update = await this.configEntity.save(config)
+            const update = await this.configEntity.save(config);
+
+            await this.startValidateWorkingDirectoryWorkflow(updateConfig, update.id, traceId);
+
             this.refreshConfig(update.id, traceId)
             return update
         }catch(error) {
@@ -481,7 +445,53 @@ export class ConfigurationService {
             throw new InternalServerErrorException('Error Occurred during updating Config')
         }
     }
-    
+
+    async startValidateWorkingDirectoryWorkflow(createConfig: ConfigDTO, configId: string, traceId: string) {
+       try {
+        const listPathPayload: ListPathDTO[] = [];
+            
+        createConfig?.fileServers?.forEach((fileServer)=>{
+            const payload: ListPathDTO = {
+                type: fileServer?.protocol,
+                host: fileServer?.host,
+                username: fileServer?.userName,
+                password: fileServer?.password
+            }
+            listPathPayload.push(payload);
+        });
+
+        const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+            exportPath: createConfig?.workingDirectory?.pathName,
+            workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+            configId: configId,
+            workerIds: [],
+            listPathPayload,
+            options: new Options()
+        }
+
+        createConfig?.fileServers?.forEach((fileServer) => {
+            fileServer?.workers?.forEach(worker => {
+                if (!payload.workerIds.includes(worker))
+                    payload.workerIds.push(worker);
+            })
+        });
+
+        if(payload.workerIds.length > 0 && createConfig?.workingDirectory?.pathName.length > 0) {                
+            this.logger.log('starting ValidateWorkingDirectoryWorkflow');            
+            const startWorkFlowPayload: StartWorkFlowPayload = {
+                workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
+                taskQueue: 'ParentWorkflow-TaskQueue',
+                args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
+                ...payload.options
+            };
+
+            await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY, startWorkFlowPayload);
+            this.logger.log('started ValidateWorkingDirectoryWorkflow successfully');
+        }
+       } catch (error) {
+        this.logger.error(`Error while starting ValidateWorkingDirectoryWorkflow - ${error.message}`)
+       }
+    }
 
     async remove(id: string) {
         if(!isUUID(id)) 
