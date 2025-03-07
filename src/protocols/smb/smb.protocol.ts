@@ -115,17 +115,16 @@ export class SMBProtocol extends Protocol {
       'SMB Unmount',
     );
 
-    if (response['status'] === 'success') {
-      const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
-      if (fs.existsSync(mountDir)) {
-        fs.rmdirSync(mountDir, { recursive: false });
-        this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
-      } else {
-        this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
-      }
-      
+    // if (response['status'] === 'success') {
+    //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+    //   if (fs.existsSync(mountDir)) {
+    //     fs.rmdirSync(mountDir, { recursive: false });
+    //     this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+    //   } else {
+    //     this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+    //   }
       return response;
-    }
+    // }
   }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
@@ -133,13 +132,44 @@ export class SMBProtocol extends Protocol {
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
 
-    return this.executeCommand(
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
+    if (!fs.existsSync(mountDir)) {
+      try{
+        fs.mkdirSync(mountDir,{ recursive: true });
+        this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+        } catch (error) {
+          this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: ProtocolTypes.NFS,
+            hostname: payload.hostname,
+            workerId: this.workerId,
+            message: `[${traceId}] Error creating directory: ${error.message}`,
+          }
+      }
+    }
+
+    const result = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
       payload,
       this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'SMB Mount',
     );
+    if(result?.message?.toLowerCase().includes("successfully.")){
+      const response = await this.executeCommand(
+        traceId,
+        ProtocolTypes.SMB,
+        payload,
+        this.getCommandPattern(CommandPattern.CREATE_PATH_LINK),
+        'SMB Show Shares',
+      );
+
+      this.logger.info(`[${traceId}] ${response.message}`);
+      return response;
+    }
+
   }
 
 }

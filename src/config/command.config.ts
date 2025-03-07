@@ -5,6 +5,7 @@ import { ConfigService, registerAs } from '@nestjs/config';
 export enum CommandPattern{
     VALIDATE_CRED='validateCred',
     LIST_PATHS='listPath',
+    CREATE_PATH_LINK = 'linkPath',
     CHECK_MOUNT_PATH='checkMountPath',
     UNMOUNT_PATH='unmountPath',
     MOUNT_PATH='mountPath',
@@ -29,7 +30,8 @@ export interface BaseCommands {
     mountPath?: string | undefined
     checkMountPath?: string | undefined
     unmountPath?: string | undefined
-    versionDetails?: string | undefined
+    versionDetails?: string | undefined;
+    linkPath?: string | undefined
 }
 
 export default registerAs(
@@ -64,6 +66,7 @@ export default registerAs(
                 mountPath:  process.env.SMB_WIN_MOUNT_PATH_CMD,
                 versionDetails: process.env.SMB_WIN_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_WIN_UNMOUNT_PATH_CMD,
+                linkPath: process.env.SMB_WIN_CREATE_LINK_CMD,
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
