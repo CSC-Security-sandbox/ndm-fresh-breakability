@@ -5,6 +5,7 @@ import { ConfigService, registerAs } from '@nestjs/config';
 export enum CommandPattern{
     VALIDATE_CRED='validateCred',
     LIST_PATHS='listPath',
+    CREATE_PATH_LINK = 'linkPath',
     CHECK_MOUNT_PATH='checkMountPath',
     UNMOUNT_PATH='unmountPath',
     MOUNT_PATH='mountPath',
@@ -18,7 +19,7 @@ export interface Commands{
 }
 
 export interface ProtocolCommands{
-    win: BaseCommands,
+    win32: BaseCommands,
     linux: BaseCommands,
     darwin: BaseCommands
 }
@@ -29,17 +30,18 @@ export interface BaseCommands {
     mountPath?: string | undefined
     checkMountPath?: string | undefined
     unmountPath?: string | undefined
-    versionDetails?: string | undefined
+    versionDetails?: string | undefined;
+    linkPath?: string | undefined
 }
 
 export default registerAs(
     'cmd',
     ():Commands => ({
         nfs: {
-            win: {
+            win32: {
                 listPath: process.env.NFS_WIN_LIST_PATH_CMD,
                 versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
-                mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
+                mountPath:  process.env.NFS_WIN_MOUNT_PATH_CMD,
                 unmountPath:  process.env.NFS_WIN_UNMOUNT_PATH_CMD,
             },
             linux: {
@@ -58,17 +60,18 @@ export default registerAs(
             },
         },
         smb: {
-            win: {
+            win32: {
                 validateCred: process.env.SMB_WIN_VALIDATE_CRED_CMD,
                 listPath: process.env.SMB_WIN_LIST_PATH_CMD,
-                mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
+                mountPath:  process.env.SMB_WIN_MOUNT_PATH_CMD,
+                versionDetails: process.env.SMB_WIN_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_WIN_UNMOUNT_PATH_CMD,
+                linkPath: process.env.SMB_WIN_CREATE_LINK_CMD,
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
+                versionDetails: process.env.SMB_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
             },
             darwin: {

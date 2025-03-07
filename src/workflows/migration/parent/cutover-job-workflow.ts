@@ -1,11 +1,10 @@
-import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
-import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
-import { ScanWorkflow } from "../core/scan.workflow";
 import * as wf from '@temporalio/workflow';
+import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
-import { JobRunStatus } from "src/activities/discovery/enums";
 import { CutOverStatus } from "src/activities/migrate/migrate.type";
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
+import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
+import { ScanWorkflow } from "../core/scan.workflow";
 
 
 export const unblockSignal =  wf.defineSignal<[string]>('approve');

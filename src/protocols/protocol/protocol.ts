@@ -34,12 +34,13 @@ export abstract class Protocol {
           message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
         };
         const command = commandPattern
-          ?.replace('${HOST}', payload?.hostname)
-          ?.replace('${USERNAME}', payload?.username)
-          ?.replace('${PASSWORD}', payload?.password)
-          ?.replace('${MOUNT_PATH}', payload?.path)
-          ?.replace('${DIR_PATH}', directoryPath)
-        
+          ?.replaceAll('${HOST}', payload?.hostname)
+          ?.replaceAll('${USERNAME}', payload?.username)
+          ?.replaceAll('${PASSWORD}', payload?.password)
+          ?.replaceAll('${MOUNT_PATH}', payload?.path)
+          ?.replaceAll('${DIR_PATH}', directoryPath)
+        console.log(`command : ${command}`)
+        this.logger.log(`command: ${command}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
             this.logger.info(

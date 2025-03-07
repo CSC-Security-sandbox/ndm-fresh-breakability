@@ -66,7 +66,8 @@ export class SMBProtocol extends Protocol {
         this.getCommandPattern(CommandPattern.VALIDATE_CRED),
         'Connect SMB via Cred',
       )
-      if(result?.toLowerCase().includes("successfully.")){
+      this.logger.log(JSON.stringify(result))
+      if(result?.message?.toLowerCase().includes("successfully.")){
         const response = await this.executeCommand(
           traceId,
           ProtocolTypes.SMB,
@@ -80,6 +81,7 @@ export class SMBProtocol extends Protocol {
       }
     }
     catch(e) {
+        this.logger.log(`error: ${e}`)
         const lines = e.message.split('\n'); 
         throw new Error(lines.length > 1 ? lines.slice(1).join('\n') : '')
     }
@@ -87,6 +89,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<any> {
+    this.logger.log(`platform: ${this.platform}`)
     switch(this.platform){
       case 'darwin':
         return await this.listPathLinMac(traceId, payload)
@@ -112,17 +115,16 @@ export class SMBProtocol extends Protocol {
       'SMB Unmount',
     );
 
-    if (response['status'] === 'success') {
-      const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
-      if (fs.existsSync(mountDir)) {
-        fs.rmdirSync(mountDir, { recursive: false });
-        this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
-      } else {
-        this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
-      }
-      
+    // if (response['status'] === 'success') {
+    //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+    //   if (fs.existsSync(mountDir)) {
+    //     fs.rmdirSync(mountDir, { recursive: false });
+    //     this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+    //   } else {
+    //     this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+    //   }
       return response;
-    }
+    // }
   }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
@@ -130,13 +132,44 @@ export class SMBProtocol extends Protocol {
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
 
-    return this.executeCommand(
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
+    if (!fs.existsSync(mountDir)) {
+      try{
+        fs.mkdirSync(mountDir,{ recursive: true });
+        this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+        } catch (error) {
+          this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: ProtocolTypes.NFS,
+            hostname: payload.hostname,
+            workerId: this.workerId,
+            message: `[${traceId}] Error creating directory: ${error.message}`,
+          }
+      }
+    }
+
+    const result = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
       payload,
       this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'SMB Mount',
     );
+    if(result?.message?.toLowerCase().includes("successfully.")){
+      const response = await this.executeCommand(
+        traceId,
+        ProtocolTypes.SMB,
+        payload,
+        this.getCommandPattern(CommandPattern.CREATE_PATH_LINK),
+        'SMB Show Shares',
+      );
+
+      this.logger.info(`[${traceId}] ${response.message}`);
+      return response;
+    }
+
   }
 
 }
