@@ -220,59 +220,64 @@ export class JobRunInitService {
     }
 
     // ------------------ BuildJobContext -------------------- //
-    async buildJobContext(jobRunId: string,jobRunConfig:JobRunConfig) {
-        let sourcefileServerDetails: FileServerDetails;
-        let targetfileServerDetails: FileServerDetails;
-    
-        const sourceCredential = jobRunConfig.connection.sourceCredential;
-        const targetCredential = jobRunConfig.connection.targetCredential;
-    
-        const createFileServerDetails = (credential: any) => {
-          return credential.protocol === Protocol.NFS
-            ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory)
-            : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)],credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory);
-        };
-        sourcefileServerDetails= createFileServerDetails(sourceCredential);
-    
-        if (jobRunConfig.jobType !== JobType.DISCOVER) 
-          targetfileServerDetails= createFileServerDetails(targetCredential);
-    
-          const jobConfig = new JobConfig(
-            jobRunId,
-            jobRunConfig.jobType,
-            sourcefileServerDetails,
-            jobRunConfig.connection.sourceCredential.path,
-            jobRunConfig.jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
-            jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
-            jobRunConfig.workers
-          )
-          const redisClient = await RedisUtils.getClient();
-          if(!redisClient.isOpen) await redisClient.connect();
-          const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
-          const jobContext = JobContextFactory.getProvider('redis', this.redisService.getClient())
-          .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-           (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
-          this.redisService.setJobContext(jobRunId, await jobContext);
-    }
+  async buildJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {
+    let sourcefileServerDetails: FileServerDetails;
+    let targetfileServerDetails: FileServerDetails;
+
+    const sourceCredential = jobRunConfig.connection.sourceCredential;
+    const targetCredential = jobRunConfig.connection.targetCredential;
+
+    const createFileServerDetails = (credential: any) => {
+      return credential.protocol === Protocol.NFS
+        ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory)
+        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory);
+    };
+    sourcefileServerDetails = createFileServerDetails(sourceCredential);
+
+    if (jobRunConfig.jobType !== JobType.DISCOVER)
+      targetfileServerDetails = createFileServerDetails(targetCredential);
+
+    const jobConfig = new JobConfig(
+      jobRunId,
+      jobRunConfig.jobType,
+      sourcefileServerDetails,
+      jobRunConfig.connection.sourceCredential.path,
+      jobRunConfig.jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
+      jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
+      jobRunConfig.workers
+    )
+    const redisClient = await RedisUtils.getClient();
+    if (!redisClient.isOpen) await redisClient.connect();
+    const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
+
+    const task = await this.createInitialTask(jobRunId, jobRunConfig);
+    const redisProvider = JobContextFactory.getProvider('redis', this.redisService.getClient());
+    const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
+    await jobContext.appendToTaskList(task);
+    console.debug('JobContext created and appended initial task ---> ', JSON.stringify(jobContext));
+    await this.redisService.setJobContext(jobRunId, jobContext);
+    console.debug('JobContext Saved to Redis ---> ', JSON.stringify(jobContext));
+  }
 
     // ------------------ CreateInitialTask -------------------- //
-    async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-        const commands = new Command('', {0: {cmd : OPS_CMD.COPY_DIR, status: OPS_STATUS.READY}}, uuid4())
-        const task = new Task(
-          uuid4(),
-          jobRunId,
-          TaskType.SCAN,
-          TaskStatus.PENDING,
-          jobRunConfig.workers[0],
-          `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
-          jobRunConfig.connection.sourceCredential.pathId,
-          [commands],
-          jobRunConfig.jobType !== JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
-          jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
-          jobRunConfig.excludeFilePatterns,
-        )
-        return task;
-    }
+  async createInitialTask(jobRunId: string, jobRunConfig: JobRunConfig): Promise<Task> {
+    const commands = new Command('', { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } }, uuid4())
+    const task = new Task(
+      uuid4(),
+      jobRunId,
+      TaskType.SCAN,
+      TaskStatus.PENDING,
+      jobRunConfig.workers[0],
+      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`,
+      jobRunConfig.connection.sourceCredential.pathId,
+      [commands],
+      jobRunConfig.jobType !== JobType.DISCOVER ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
+      jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId : '',
+      jobRunConfig.excludeFilePatterns,
+    )
+    console.log('Initial Task created ---> ', JSON.stringify(task));
+    return task;
+  }
 
     // ------------------ StartStreamConsumer -------------------- //
     async startStreamConsumer (jobRunId:string) {
