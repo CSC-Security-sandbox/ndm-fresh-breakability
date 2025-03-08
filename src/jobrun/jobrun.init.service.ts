@@ -257,8 +257,7 @@ export class JobRunInitService {
 
     // ------------------ CreateInitialTask -------------------- //
     async createInitialTask(jobRunId:string ,jobRunConfig:JobRunConfig):Promise<Task>{
-        const sourceBasePath =  jobRunConfig.jobType === JobType.DISCOVER ? `${this.configService.get<string>('app.paths.mountBasePath')}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`: '';
-        const commands = new Command(sourceBasePath, {0: {cmd : OPS_CMD.COPY_DIR, status: OPS_STATUS.READY}}, uuid4())
+        const commands = new Command('', {0: {cmd : OPS_CMD.COPY_DIR, status: OPS_STATUS.READY}}, uuid4())
         const task = new Task(
           uuid4(),
           jobRunId,
@@ -268,8 +267,8 @@ export class JobRunInitService {
           `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
           jobRunConfig.connection.sourceCredential.pathId,
           [commands],
-          jobRunConfig.jobType!==JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
-          jobRunConfig.jobType!==JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
+          jobRunConfig.jobType !== JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
+          jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
           jobRunConfig.excludeFilePatterns,
         )
         return task;
