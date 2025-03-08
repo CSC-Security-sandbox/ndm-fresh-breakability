@@ -2,13 +2,13 @@ import { Protocol } from "src/constants/enums";
 import { WorkflowExecutionStatus } from "src/workflow/workflow.types";
 
 export interface ListPathWorkflowStatus {
-    status:WorkflowExecutionStatus;
+    status: WorkflowExecutionStatus;
     id: string;
-    pending: any[]; 
+    pending: any[];
     completed: ListPathTask[];
-  }
-  
-  interface ListPathTask {
+}
+
+interface ListPathTask {
     traceId: string;
     status: "success";
     protocolType: Protocol;
@@ -16,8 +16,8 @@ export interface ListPathWorkflowStatus {
     workerId: string;
     paths: string[];
     message: string;
-  }
-  
+}
+
 export type UserDetails = {
     trackId?: string;
     user: {
@@ -25,7 +25,7 @@ export type UserDetails = {
         roles: Role[];
     };
 };
-   
+
 type Role = {
     role_name: string;
     projects: string[];
@@ -33,8 +33,8 @@ type Role = {
 };
 
 export interface PathsMap {
-    NFS: {workers :  number, paths: string[]},
-    SMB: {workers :  number, paths: string[]}
+    NFS: { workers: number, paths: string[] },
+    SMB: { workers: number, paths: string[] }
 }
 
 export interface Credentials {

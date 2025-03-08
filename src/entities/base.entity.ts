@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 export class Base {
-
   @ApiProperty({ description: 'createdAt' })
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;

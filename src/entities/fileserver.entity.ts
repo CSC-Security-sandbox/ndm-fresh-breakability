@@ -1,11 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
-import { Column, Entity, JoinColumn, JoinTable, OneToOne, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
+import { WorkerEntity } from "./worker.entity";
 import { VolumeEntity } from "./volume.entity";
-import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
+
 
 @Entity({name:'file_server'})
 export class FileServerEntity extends Base {

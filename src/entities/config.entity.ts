@@ -3,8 +3,8 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToOne, OneToMany, PrimaryGene
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { ProjectEntity } from "./project.entity";
-import { ConfigStatus } from "src/constants/enums";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
+import { ConfigStatus } from "src/constants/enums";
 
 @Entity({name:'config'})
 export class ConfigEntity extends Base {

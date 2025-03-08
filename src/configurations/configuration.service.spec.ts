@@ -1,26 +1,25 @@
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from 'src/constants/enums';
+import { v4 as uuidv4 } from 'uuid';
+import { ConfigurationType, Protocol, ProtocolVersion, ServerType, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { Repository } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
-import { ConfigurationService } from './configuration.service';
-import { ConfigDTO } from './dto/config.dto';
-import { WorkflowService } from 'src/workflow/workflow.service';
 import { JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { ConfigurationService } from './configuration.service';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigDTO } from './dto/config.dto';
+import { WorkflowExecutionStatus } from 'src/workflow/workflow.types';
+import { ListPathWorkflowStatus } from './configuration.types';
 
-
-// Mock data for entities
 const mockConfig = { id: uuidv4(), configName: 'Test Config', configType: 'Type1' };
 const mockFileServer = { id: uuidv4(), host: 'localhost', serverType: 'Type1', workers: [], volumes: [] };
-const mockVolume = { id: uuidv4(), volumePath: '/path', isIncluded: true };
 const mockWorker = { id: uuidv4(), workerName: 'Worker1' };
 
 const mockConfigRepository = {
@@ -67,9 +66,18 @@ describe('ConfigurationService', () => {
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
       log: jest.fn(),
+      debug: jest.fn(),
       error: jest.fn(),
       warn: jest.fn(),
     }),
+  };
+
+  const startWorkflowMock = jest.fn().mockResolvedValue({ workflowId: '123' });
+  const getWorkFlowResMock = jest.fn().mockResolvedValue({ result: 'success' });
+
+  const mockWorkflowService = {
+    startWorkflow: startWorkflowMock,
+    getWorkFlowRes: getWorkFlowResMock,
   };
 
   beforeEach(async () => {
@@ -97,9 +105,10 @@ describe('ConfigurationService', () => {
           useValue: mockMappingRepository,
         },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
-        { provide: WorkflowService, useValue : {
-          startWorkflow: jest.fn()
-        }}
+        {
+          provide: WorkflowService,
+          useValue: mockWorkflowService,
+        },
       ],
     }).compile();
 
@@ -825,70 +834,6 @@ describe('ConfigurationService', () => {
   });
 
 
-  describe('refresh', ()=>{
-    it('should throw NotFoundException if config is not found', async () => {
-      mockConfigRepository.findOne.mockResolvedValue(null);
-
-      await expect(service.refreshConfig('invalid-id', 'trace-id')).rejects.toThrow(NotFoundException);
-      expect(configRepository.findOne).toHaveBeenCalledWith({
-          where: { id: 'invalid-id' },
-          relations: { fileServers: { workers: true } },
-      });
-    });
-
-
-    it('should not proceed if no workers are found', async () => {
-      const mockConfig = {
-          id: 'config-id',
-          fileServers: [
-              {
-                  id: 'file-server-1',
-                  host: 'localhost',
-                  protocol: 'NFS',
-                  userName: 'user',
-                  password: 'pass',
-                  workers: [],
-              },
-          ],
-      };
-
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-      const result = await service.refreshConfig('config-id', 'trace-id');
-
-      expect(result).toBeUndefined();
-    });
-
-
-    it('should start workflow and update file servers', async () => {
-      const mockConfig = {
-          id: 'config-id',
-          fileServers: [
-              {
-                  id: 'file-server-1',
-                  host: 'localhost',
-                  protocol: 'NFS',
-                  userName: 'user',
-                  password: 'pass',
-                  workers: [
-                      { workerId: 'worker-1' },
-                      { workerId: 'worker-2' },
-                  ],
-              },
-          ],
-      };
-
-      const mockWorkflow = { workflowId: 'workflow-123' };
-
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-      mockFileServerRepository.update.mockResolvedValue(null)
-      jest.spyOn(workflowService, 'startWorkflow').mockResolvedValue(mockWorkflow as any);
-      jest.spyOn(service, 'updateResult').mockResolvedValue(null);
-
-      const result = await service.refreshConfig('config-id', 'trace-id');
-
-      expect(result).toEqual({ workflowId: 'workflow-123' });
-    })
-  })
 
   describe('getCutoverDetailsByConfigId', () => {
     it('should throw BadRequestException for invalid UUID', async () => {
@@ -1133,6 +1078,428 @@ describe('ConfigurationService', () => {
       await expect(service.getCutoverDetailsByConfigId(configId))
         .rejects
         .toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('startValidateWorkingDirectoryWorkflow', () => {
+    it('should start workflow when conditions are met', async () => {
+      const configId = uuidv4();
+      const traceId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir'
+        },
+        fileServers: [{
+          id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          serverType: ServerType.other,
+          host: 'test.com',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          userName: 'test',
+          password: 'pass',
+          workers: ['worker1']
+        }]
+      };
+
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, traceId);
+
+      expect(workflowService.startWorkflow).toHaveBeenCalledWith(
+        WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
+        expect.objectContaining({
+          workflowId: expect.stringContaining(traceId),
+          taskQueue: 'ParentWorkflow-TaskQueue'
+        })
+      );
+    });
+
+    it('should not start workflow when no workers', async () => {
+      const configId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir'
+        },
+        fileServers: [{
+          id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          serverType: ServerType.other,
+          host: 'test.com',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          userName: 'test',
+          password: 'pass',
+          workers: []
+        }]
+      };
+
+      startWorkflowMock.mockClear();
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace');
+      expect(startWorkflowMock).not.toHaveBeenCalled();
+    });
+
+    it('should not start workflow when no pathName', async () => {
+      const configId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '',
+          pathId: '123',
+          workingDirectory: '/working/dir'
+        },
+        fileServers: [{
+          id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          serverType: ServerType.other,
+          host: 'test.com',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          userName: 'test',
+          password: 'pass',
+          workers: ['worker1']
+        }]
+      };
+
+      startWorkflowMock.mockClear();
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace');
+      expect(startWorkflowMock).not.toHaveBeenCalled();
+    });
+
+    it('should handle workflow start error', async () => {
+      const configId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir'
+        },
+        fileServers: [{
+          id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          serverType: ServerType.other,
+          host: 'test.com',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          userName: 'test',
+          password: 'pass',
+          workers: ['worker1']
+        }]
+      };
+
+      startWorkflowMock.mockRejectedValueOnce(new Error('Workflow error'));
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace');
+      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateResult', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should handle workflow completion and update paths', async () => {
+      const workflowId = 'workflow-1';
+      const configId = 'config-1';
+      const mockWorkflowResult = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        completed: [{
+          protocolType: 'NFS',
+          paths: ['/path1']
+        }]
+      };
+
+      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
+      jest.spyOn(service, 'updatePaths').mockResolvedValue(undefined);
+
+      service.updateResult(workflowId, configId);
+      
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(getWorkFlowResMock).toHaveBeenCalledWith(workflowId);
+      expect(service.updatePaths).toHaveBeenCalledWith(configId, mockWorkflowResult);
+    }, 10000);
+
+    it('should handle missing workflow details', async () => {
+      getWorkFlowResMock.mockResolvedValueOnce(null);
+
+      service.updateResult('workflow-1', 'config-1');
+      
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
+    });
+
+    it('should handle non-completed workflow status', async () => {
+      const mockWorkflowResult = {
+        status: WorkflowExecutionStatus.RUNNING,
+        completed: []
+      };
+
+      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
+
+      service.updateResult('workflow-1', 'config-1');
+      
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
+    });
+
+    it('should handle workflow fetch error', async () => {
+      getWorkFlowResMock.mockRejectedValueOnce(new Error('Fetch error'));
+
+      service.updateResult('workflow-1', 'config-1');
+      
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+    });
+  });
+
+  describe('updatePaths', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should handle empty paths in workflow details', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [{
+          protocolType: 'NFS',
+          paths: []
+        }]
+      };
+
+      const mockConfig = {
+        fileServers: [{
+          id: 'fs-1',
+          protocol: 'NFS',
+          volumes: []
+        }],
+        updatedBy: 'test-user',
+        createdBy: 'test-user'
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockReturnValue([]);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+      
+      await service.updatePaths(configId, details as any);
+      
+      expect(mockVolumeRepository.save).toHaveBeenCalledWith([]);
+      expect(mockVolumeRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle multiple protocols in workflow details', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/path1']
+          },
+          {
+            protocolType: 'SMB',
+            paths: ['/path2']
+          }
+        ]
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: []
+          },
+          {
+            id: 'fs-2',
+            protocol: 'SMB',
+            volumes: []
+          }
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user'
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+      
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.create).toHaveBeenCalledTimes(2);
+      expect(mockVolumeRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update existing volumes with new reachable count', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [{
+          protocolType: 'NFS',
+          paths: ['/existing-path']
+        }]
+      };
+
+      const mockConfig = {
+        fileServers: [{
+          id: 'fs-1',
+          protocol: 'NFS',
+          volumes: [{
+            volumePath: '/existing-path'
+          }]
+        }]
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.update).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ reachableCount: 1 })
+      );
+    });
+
+    it('should handle database error in findOne', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockRejectedValue(new Error('Database error'));
+
+      const mockWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: []
+      };
+
+      await expect(service.updatePaths(configId, mockWorkflowStatus))
+        .rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle error in volume update', async () => {
+      const configId = uuidv4();
+      const details: ListPathWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: [{
+          protocolType: Protocol.NFS,
+          paths: ['/path1'],
+          traceId: 'trace-1',
+          status: "success",
+          hostname: 'test-host',
+          workerId: 'worker-1',
+          message: 'Success'
+        }]
+      };
+
+      const mockConfig = {
+        fileServers: [{
+          id: 'fs-1',
+          protocol: 'NFS',
+          volumes: []
+        }],
+        updatedBy: 'test-user',
+        createdBy: 'test-user'
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.update.mockRejectedValue(new Error('Update failed'));
+
+      await expect(service.updatePaths(configId, details))
+        .rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle error in volume save', async () => {
+      const configId = uuidv4();
+      const details: ListPathWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: [{
+          protocolType: Protocol.NFS,
+          paths: ['/path1'],
+          traceId: 'trace-1',
+          status: "success",
+          hostname: 'test-host',
+          workerId: 'worker-1',
+          message: 'Success'
+        }]
+      };
+
+      const mockConfig = {
+        fileServers: [{
+          id: 'fs-1',
+          protocol: 'NFS',
+          volumes: []
+        }],
+        updatedBy: 'test-user',
+        createdBy: 'test-user'
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.save.mockRejectedValue(new Error('Save failed'));
+
+      await expect(service.updatePaths(configId, details))
+        .rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('refreshConfig', () => {
+    it('should throw BadRequestException for invalid UUID', async () => {
+      await expect(service.refreshConfig('invalid-uuid', 'trace-123'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when config not found', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.refreshConfig(configId, 'trace-123'))
+        .rejects.toThrow(NotFoundException);
+    });
+
+    it('should handle empty fileServers array', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        fileServers: []
+      });
+
+      const result = await service.refreshConfig(configId, 'trace-123');
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle database error', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.refreshConfig(configId, 'trace-123'))
+        .rejects.toThrow(InternalServerErrorException);
     });
   });
 });

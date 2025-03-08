@@ -1,19 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import {
-  LoggerFactory,
-  LoggerService,
-} from '@netapp-cloud-datamigrate/logger-lib';
-import { WorkerConfiguration } from 'src/constants/types';
-import { WorkerEntity } from 'src/entities/worker.entity';
-import { IsNull, Not, Repository } from 'typeorm';
-import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
-import { CreateRequestDto } from './dto/validate-connection.dto';
-import { WorkflowService } from 'src/workflow/workflow.service';
-import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { Repository, IsNull, Not } from 'typeorm';
+import { WorkerConfiguration } from 'src/constants/types';
+import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
+import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 
 @Injectable()
@@ -105,6 +102,7 @@ export class WorkManagerService {
   ];
 
   async validateConnection(payload: CreateRequestDto, traceId: string) {
+   try {
     const startWorkFlowPayload: StartWorkFlowPayload = {
       workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
       taskQueue: 'ParentWorkflow-TaskQueue',
@@ -126,20 +124,43 @@ export class WorkManagerService {
       startWorkFlowPayload,
     );
     return { workflowId: workflow.workflowId };
+   } catch (error) {
+    this.logger.error(`Error in validateConnection: ${error.message}`);
+    throw new InternalServerErrorException(`Failed to start validate connection workflow for traceId: ${traceId}, ${error.message}`);
+   }
   }
 
   async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
     try {
-      this.logger.log('Updating config status after validating export path and working directory');
+      this.logger.debug('Updating config status after validating export path and working directory');
       await this.configRepo.update({ id: data.configId }, { status: data.status, errorMessage: data.errorMessage });
     } catch (error) {
-      this.logger.log(`Error while updating the status of a file server after validating export path and working directory- ${error.message}`);
+      this.logger.error(`Error while updating the status of a file server after validating export path and working directory- ${error.message}`);
     }
   }
 
   async getChildWorkFlowRes(id: string) {
-    return this.workFlowService.getWorkFlowRes(id);
+    try {
+      if (!id) {
+        throw new BadRequestException('Child Workflow ID is required');
+      }
+
+      const response = await this.workFlowService.getWorkFlowRes(id);
+
+      if (!response) {
+        throw new NotFoundException(`No workflow response found for ID: ${id}`);
+      }
+
+      return response;
+    } catch (error) {
+      this.logger.error(`Error in getChildWorkFlowRes: ${error.message}`);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(`Failed to retrieve child workflow response for ID: ${id}`);
+    }
   }
+
   async updateWorkerConfigurations(jobRunId: string, workerIds: string[]) {
     if (jobRunId) {
       try {
