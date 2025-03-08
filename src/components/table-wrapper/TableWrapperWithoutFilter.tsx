@@ -8,7 +8,8 @@ import {
   TableWidgets,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import { ReactNode, useEffect } from "react";
+import { useEffect } from "react";
+import { TableWrapperWithoutFilterPropsType } from "./TableWrapperWithoutFilter.types";
 
 const TableWrapperWithoutFilter = ({
   tableState,
@@ -21,18 +22,8 @@ const TableWrapperWithoutFilter = ({
   originalColumns,
   isRowDisabled,
   handleSelection,
-}: {
-  tableState: any;
-  rowMenu?: any;
-  isLoading?: any;
-  content?: ReactNode;
-  showDownload?: Boolean;
-  label?: string;
-  isTogglingColumns?: Boolean;
-  originalColumns?: any;
-  isRowDisabled?: (arg: any) => void;
-  handleSelection?: Function;
-}) => {
+  showMenu = true,
+}: TableWrapperWithoutFilterPropsType) => {
   // TABLE ATTRIBUTES
   const {
     updateTextFilter,
@@ -41,6 +32,7 @@ const TableWrapperWithoutFilter = ({
     rows,
     selectionState,
     resetFilters,
+    pagination,
   } = tableState;
 
   const getFilterCount = () => {
@@ -65,46 +57,62 @@ const TableWrapperWithoutFilter = ({
 
   return (
     <>
-      <Box className="p-2 flex gap-4 justify-between">
-        <Box className="flex gap-2 items-center">
-          <TableCounter
-            filteredCount={organizedRows.length}
-            activeFiltersCount={getFilterCount()}
-            totalCount={rows.length}
-            selectedCount={selectionState?.count}
-            pluralLabel={label || "Rows"}
-            singularLabel={label || "Row"}
-            onResetFilter={resetFilters}
+      {showMenu && (
+        <Box className="p-2 flex gap-4 justify-between">
+          <Box className="flex gap-2 items-center">
+            <TableCounter
+              filteredCount={organizedRows.length}
+              activeFiltersCount={getFilterCount()}
+              totalCount={rows.length}
+              selectedCount={selectionState?.count}
+              pluralLabel={label || "Rows"}
+              singularLabel={label || "Row"}
+              onResetFilter={resetFilters}
+            />
+          </Box>
+          <Box className="flex gap-2 items-center">
+            <TableWidgets style={{}}>
+              <SearchWidget
+                style={{ width: 360 }}
+                setFilter={updateTextFilter}
+              />
+              {showDownload && (
+                <Button
+                  variant="icon"
+                  style={{ margin: 20 }}
+                  onClick={() => alert("DOWNLOAD CALLED")}
+                >
+                  <DownloadMonochromeIcon />
+                </Button>
+              )}
+            </TableWidgets>
+            {content}
+          </Box>
+        </Box>
+      )}
+
+      <Box className={showMenu ? "" : "my-4"}>
+        <Table
+          {...tableState}
+          rows={pagination?.pageRows}
+          selectionState={selectionState}
+          isRowDisabled={isRowDisabled}
+          isLoading={isLoading}
+          rowMenu={rowMenu}
+          originalColumns={originalColumns || tableState.columns}
+          isTogglingColumns={isTogglingColumns || false}
+        />
+        {!isLoading && pagination?.pageRows && (
+          <TablePager
+            pageRows={pagination?.pageRows}
+            pageSize={10}
+            rows={organizedRows}
+            pageIndex={pagination?.pageIndex}
+            pageCount={pagination?.pageCount}
+            gotoPage={pagination?.gotoPage}
           />
-        </Box>
-
-        <Box className="flex gap-2 items-center">
-          <TableWidgets style={{}}>
-            <SearchWidget style={{ width: 360 }} setFilter={updateTextFilter} />
-            {showDownload && (
-              <Button
-                variant="icon"
-                style={{ margin: 20 }}
-                onClick={() => alert("DOWNLOAD CALLED")}
-              >
-                <DownloadMonochromeIcon />
-              </Button>
-            )}
-          </TableWidgets>
-          {content}
-        </Box>
+        )}
       </Box>
-
-      <Table
-        {...tableState}
-        rows={organizedRows}
-        selectionState={selectionState}
-        isRowDisabled={isRowDisabled}
-        isLoading={isLoading}
-        rowMenu={rowMenu}
-        originalColumns={originalColumns || tableState.columns}
-        isTogglingColumns={isTogglingColumns || false}
-      />
     </>
   );
 };

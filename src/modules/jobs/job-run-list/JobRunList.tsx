@@ -1,13 +1,10 @@
 import {
-  BlueXpFormType,
-  CutOverStatus,
   JOB_ACTION_STATUS_ENUM,
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
-  ReportENUM,
+  JOBS_TYPE,
 } from "@/types/app.type";
 import {
-  useConfirmCutOverMutation,
   useGetJobRunsQuery,
   useUpdateJobRunStatusMutation,
 } from "@api/jobsApi";
@@ -17,22 +14,11 @@ import {
 } from "@api/reportApi";
 import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
 import ActionButtons from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons";
-import {
-  Button,
-  Checkbox,
-  Modal,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Text,
-  useForm,
-} from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -63,18 +49,11 @@ const JobRunList = () => {
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
-  const [confirmCutOverApi] = useConfirmCutOverMutation();
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
   );
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
-
-  const confirmCutOverForm: BlueXpFormType<{
-    confirmCutOver: boolean;
-  }> = useForm({
-    confirmCutOver: false,
-  });
 
   const handleUpdateStatus = async (
     jobRunId: JobRunApiType["jobRunId"],
@@ -85,16 +64,6 @@ const JobRunList = () => {
       notify.success("Successfully updated the status of Job.");
     } catch (error) {
       notify.error("Failed to update Job Status.");
-      console.error(error);
-    }
-  };
-
-  const handleConfirmCutOver = async (jobRunId: string, action: string) => {
-    try {
-      await confirmCutOverApi({ jobRunId, action }).unwrap();
-      notify.success("Successfully confirmed cut over.");
-    } catch (error) {
-      notify.error("Failed to confirm cut over.");
       console.error(error);
     }
   };
@@ -119,6 +88,7 @@ const JobRunList = () => {
       : [];
 
     const enableCutOver =
+      row?.jobType === JOBS_TYPE.CUT_OVER &&
       row?.status === JOB_STATUS_TYPE_ENUM.BLOCKED
         ? [
             {
@@ -162,61 +132,10 @@ const JobRunList = () => {
   return (
     <>
       {openConfirmation && (
-        <Modal>
-          <ModalHeader>Cutover Confirmation</ModalHeader>
-          <ModalContent>
-            <>
-              <Text>
-                Are you sure you want to Approve the Cutover ?
-                <Box>
-                  <Button
-                    onClick={() =>
-                      handleDownloadReport(
-                        downloadReportApi,
-                        selectedJobRunId,
-                        ReportENUM.COC,
-                        "csv"
-                      )
-                    }
-                    variant="text"
-                  >
-                    Download CoC Report
-                  </Button>
-                </Box>
-              </Text>
-
-              <Checkbox
-                form={confirmCutOverForm}
-                name="confirmCutOver"
-                key="confirmCutOver"
-              >
-                I have reviewed and verified the COC document and all other
-                essential information.
-              </Checkbox>
-            </>
-          </ModalContent>
-          <ModalFooter>
-            <Button color="secondary" onClick={closeConfirmationBox}>
-              Close
-            </Button>
-            <Button
-              color="secondary"
-              onClick={() =>
-                handleConfirmCutOver(selectedJobRunId, CutOverStatus.REJECTED)
-              }
-            >
-              Reject
-            </Button>
-            <Button
-              disabled={!confirmCutOverForm?.formState?.confirmCutOver}
-              onClick={() =>
-                handleConfirmCutOver(selectedJobRunId, CutOverStatus.APPROVED)
-              }
-            >
-              Confirm
-            </Button>
-          </ModalFooter>
-        </Modal>
+        <CutoverConfirmationModal
+          jobRunId={selectedJobRunId}
+          closeConfirmationBox={closeConfirmationBox}
+        />
       )}
       <TableWrapper
         tableStateProps={tableStateProps}

@@ -78,3 +78,42 @@ export const generateOptionsWithRange = (size: number = 31) =>
     label: (num + 1).toString(),
     value: num + 1,
   }));
+
+export const getOptionsFromArray = (data?: string[] | number[]) => {
+  if (!data) return [];
+  return data.map((value) => ({
+    label: value,
+    value,
+  }));
+};
+
+export const convertFileToBase64 = (file: any) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result); // Base64 string
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+export const getGrafanaLogUrl = (searchParam: string) => {
+  const query = JSON.stringify({
+    datasource: "Loki",
+    queries: [
+      {
+        expr: `{namespace="datamigrator"} |~ "${searchParam}"`,
+        refId: "A",
+        queryType: "logs",
+        legendFormat: "",
+        intervalMs: 1000,
+        maxLines: 1000,
+      },
+    ],
+    range: { from: "now-1h", to: "now" },
+  });
+
+  const encodedQuery = encodeURIComponent(query);
+
+  //TODO: replace with VITE URL
+  return `${process.env.NEXT_PUBLIC_GRAFANA_URL}/explore?left=${encodedQuery}`;
+};

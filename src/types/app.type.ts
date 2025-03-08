@@ -697,9 +697,15 @@ export type TemporaryPasswordPropsType = {
 export enum ReportENUM {
   DISCOVERY = "DISCOVER",
   COC = "COC",
+  JOBS_REPORT = "JOBS_REPORT",
 }
 
 export enum CutOverStatus {
   APPROVED = "APPROVED",
   REJECTED = "REJECTED",
 }
+
+export type CutOverConfirmModalPropType = {
+  jobRunId: string;
+  closeConfirmationBox: () => void;
+};

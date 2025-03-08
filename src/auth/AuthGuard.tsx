@@ -10,7 +10,7 @@ import { useLazyGetAllProjectsQuery } from "@api/projectApi";
 import { setAllProjectList, setProject } from "@store/reducer/appSlice";
 import { useRefreshUserTokenMutation } from "@api/userApi";
 import { notify } from "@components/notification/NotificationWrapper";
-import { ProjectApiType, UserPermissionsApiType } from "src/types/app.type";
+import { ProjectApiType } from "@/types/app.type";
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const auth = useAuth();

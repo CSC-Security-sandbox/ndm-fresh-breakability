@@ -10,8 +10,9 @@ import {
   useTable,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import React, { ReactNode, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Filters from "./Filters";
+import { TableWrapperPropsType } from "./TableWrapper.types";
 
 const TableWrapper = ({
   tableStateProps,
@@ -29,23 +30,7 @@ const TableWrapper = ({
   preSelectedFilter,
   handleSelection,
   secondaryLabel,
-}: {
-  tableStateProps: any;
-  rowMenu?: any;
-  isLoading?: any;
-  content?: ReactNode;
-  showDownload?: boolean;
-  label?: string;
-  isTogglingColumns?: boolean;
-  originalColumns?: any;
-  showFilters?: boolean;
-  columnsToFilter?: { accessor: string; label: string }[];
-  isRowDisabled?: (arg: any) => void;
-  showLabel?: boolean;
-  preSelectedFilter?: any;
-  handleSelection?: Function;
-  secondaryLabel?: string;
-}) => {
+}: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
     tableStateProps.rows || []
@@ -139,8 +124,8 @@ const TableWrapper = ({
           </Box>
         )}
         <Box className="flex gap-2 items-center">
-          <TableWidgets style={{}}>
-            <SearchWidget style={{ width: 360 }} setFilter={updateTextFilter} />
+          <TableWidgets>
+            <SearchWidget setFilter={updateTextFilter} className="w-[360px]" />
             {showDownload && (
               <Button variant="icon" style={{ margin: 20 }}>
                 <DownloadMonochromeIcon />

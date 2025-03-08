@@ -21,6 +21,9 @@ const getStyleForStatus = (
     case TASK_STATUS_TYPE_ENUM.PENDING:
       return "bg-yellow-500";
 
+    case JOB_STATUS_TYPE_ENUM.BLOCKED:
+      return "bg-gray-900";
+
     case JOB_STATUS_TYPE_ENUM.COMPLETED:
     case JOB_STATUS_TYPE_ENUM.READY:
     case TASK_STATUS_TYPE_ENUM.COMPLETED:

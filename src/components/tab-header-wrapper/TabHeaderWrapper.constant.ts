@@ -1,17 +1,18 @@
 import { AppTemplateIcon } from "@netapp/bxp-design-system-react/icons/resources-services";
+import { AppIcon, WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
+import { MoveIcon } from "@netapp/bxp-style/react-icons/Action";
+
 import {
-  CommunitiesIcon,
-  ViewDashboardIcon,
-  WorkspaceIcon,
-} from "@netapp/bxp-style/react-icons/General";
-import { GcpStorageIcon } from "@netapp/bxp-style/react-icons/Storage";
+  GcpStorageIcon,
+  VirtualMachineIcon,
+} from "@netapp/bxp-style/react-icons/Storage";
 import {
   BlueXpTabHeaderPropsType,
   HeaderType,
 } from "./TabHeaderWrapper.interface";
 
 const HOME_HEADER_TAB: BlueXpTabHeaderPropsType = {
-  tabIcon: ViewDashboardIcon,
+  tabIcon: AppIcon,
   tabLabel: "Home",
   tabLinks: [],
 };
@@ -52,8 +53,14 @@ const REPORTS_HEADER_TAB: BlueXpTabHeaderPropsType = {
 };
 
 const WORKERS_HEADER_TAB: BlueXpTabHeaderPropsType = {
-  tabIcon: CommunitiesIcon,
+  tabIcon: VirtualMachineIcon,
   tabLabel: "Workers",
+  tabLinks: [],
+};
+
+const SPEED_TEST_HEADER_TAB: BlueXpTabHeaderPropsType = {
+  tabIcon: MoveIcon,
+  tabLabel: "Speed Test",
   tabLinks: [],
 };
 
@@ -64,5 +71,6 @@ export const HEADER_WITH_PATHNAME: HeaderType = {
   "/job": JOB_HEADER_TAB,
   "/reports": REPORTS_HEADER_TAB,
   "/workers": WORKERS_HEADER_TAB,
+  "/speed-test": SPEED_TEST_HEADER_TAB,
   "/home": HOME_HEADER_TAB, // MAKE SURE ITS LAST IN ARRAY
 };
