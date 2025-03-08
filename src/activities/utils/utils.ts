@@ -121,8 +121,8 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
   jobContext.jobConfig.sourceFileServer.pathId,
   commands,
-  `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}`,
-  jobContext.jobConfig.destinationFileServer.pathId,
+  jobContext.jobConfig.destinationFileServer ? `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}` : null,
+  jobContext.jobConfig.destinationFileServer ? jobContext.jobConfig.destinationFileServer.pathId: null,
   ''
 )
 
