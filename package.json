@@ -30,7 +30,8 @@
       "dist/**",
       "logs/**",
       "node_modules/tslib/**",
-      "node_modules/@netapp-cloud-datamigrate/**"
+      "node_modules/@netapp-cloud-datamigrate/**",
+      "node_modules/@temporalio/**"
     ],
     "targets": [
       "node18-linux-x64",
