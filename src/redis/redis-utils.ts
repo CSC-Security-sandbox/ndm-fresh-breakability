@@ -100,4 +100,32 @@ export class RedisUtils {
       }
     }
   }
+  private static async logRedisStats(): Promise<void> {
+    if (!this.client || !this.isConnected) return;
+
+    try {
+      const info = await this.client.info();
+      const clients = (await this.client.sendCommand(['CLIENT', 'LIST'])).toString();
+
+      const connectedClients = clients?.split('\n').length - 1; 
+      const usedMemoryMatch = info?.match(/used_memory_human:(\S+)/);
+      const opsPerSecMatch = info?.match(/instantaneous_ops_per_sec:(\d+)/);
+      const totalCommands = info?.match(/total_commands_processed:(\d+)/);
+      const keysCountMatch = info?.match(/db0:keys=(\d+)/);
+
+      logger.info(`
+         Redis Stats:
+        ------------------------------
+        🔹 Active Connections: ${connectedClients}
+        🔹 Memory Used: ${usedMemoryMatch ? usedMemoryMatch[1] : 'N/A'}
+        🔹 Ops per Sec: ${opsPerSecMatch ? opsPerSecMatch[1] : 'N/A'}
+        🔹 Total Commands Processed: ${totalCommands ? totalCommands[1] : 'N/A'}
+        🔹 Keys in DB: ${keysCountMatch ? keysCountMatch[1] : 'N/A'}
+      `);
+    } catch (error) {
+      logger.error(`Failed to fetch Redis stats: ${error.message}`);
+    }
+
+    setTimeout(() => this.logRedisStats(), 60000);
+  }
 }
