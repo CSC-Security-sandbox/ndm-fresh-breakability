@@ -267,8 +267,8 @@ export class JobRunInitService {
           `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}` ,
           jobRunConfig.connection.sourceCredential.pathId,
           [commands],
-          '',
-          '',
+          jobRunConfig.jobType !== JobType.DISCOVER  ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}` : '',
+          jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.pathId: '',
           jobRunConfig.excludeFilePatterns,
         )
         return task;
