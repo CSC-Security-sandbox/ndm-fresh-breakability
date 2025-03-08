@@ -172,7 +172,8 @@ export class SetupActivityService {
   ): Promise<any> {
     const protocolType = payload.protocols.type;
     const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-    const { hostname, pathId, exportPathName, mountBasePath, protocols } =
+    const mountBasePath = process.env.BASE_MOUNT_DIR;
+    const { hostname, pathId, exportPathName, protocols } =
       payload;
     const mountPayload = {
       hostname,
@@ -217,7 +218,7 @@ export class SetupActivityService {
         payload.exportPathName,
         payload.pathId,
         traceId,
-        payload.mountBasePath,
+        mountBasePath,
         hostname,
         protocols?.userName,
         protocols?.password,
