@@ -7,6 +7,7 @@ import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import * as util from 'util';
+
 @Injectable()
 export class SetupActivityService {
   readonly workerId: string;
@@ -172,7 +173,7 @@ export class SetupActivityService {
   ): Promise<any> {
     const protocolType = payload.protocols.type;
     const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-    const mountBasePath = process.env.BASE_MOUNT_DIR;
+    const mountBasePath = this.baseWorkingPath;
     const { hostname, pathId, exportPathName, protocols } =
       payload;
     const mountPayload = {
