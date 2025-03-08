@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 
-import { buildTask, dmError, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
+import { basePrefix, buildTask, dmError, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
 import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { error } from "console";
 
@@ -113,11 +113,13 @@ export class MigrationScanService {
 
         let isError = false;
         for (let i = 0;  i < task.commands.length; i++) {
+            const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+            const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
             const scanInput: ScanContentInput = {
                 excludePatterns: task.excludeFilePatterns ? task.excludeFilePatterns.split(",") : [],
-                sourcePath: `${task.sPath}${task.commands[i].fPath}`,
-                sourcePrefix: task.sPath,
-                targetPath: `${task.tPath}${task.commands[i].fPath}`,
+                sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
+                sourcePrefix: baseSourcePrefixPath,
+                targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
                 jobRunId: task.jobRunId,
                 command: task.commands[i],
                 jobContext

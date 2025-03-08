@@ -6,6 +6,7 @@ import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
+import { buildTask } from '../utils/utils';
 
 @Injectable()
 export class DiscoveryActivity {
@@ -47,27 +48,13 @@ export class DiscoveryActivity {
       const jobState = await this.getJobState(traceId);
       const directoryBatchSize = 500;
       let commandsBatch: Command[] = [];
-      for await (const directory of jobContext.groupReadDirs(
-        'consumer-1',
-        directoryBatchSize,
-      )) {
+      for await (const directory of jobContext.groupReadDirs(`${traceId}-worker`, directoryBatchSize)) {
         const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
         const command = new Command(directory.path, ops, `${uuid4()}`);
         commandsBatch.push(command);
         this.logger.log(`[${traceId}] Task created for publishing.`)
         if (commandsBatch && commandsBatch.length >= directoryBatchSize) {
-          const task = new Task(
-            uuid4(),
-            traceId,
-            TaskType.SCAN,
-            TaskStatus.PENDING,
-            jobContext.jobConfig.workerIds[0],
-            jobContext.jobConfig.sourceFileServer.path,
-            jobContext.jobConfig.sourceFileServer.pathId,
-            commandsBatch,
-            jobContext.jobConfig?.destinationFileServer?.pathId ?? null,
-            jobContext.jobConfig?.destinationFileServer?.pathId ?? null
-          );
+          const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;
           const newJobState = {
@@ -83,18 +70,7 @@ export class DiscoveryActivity {
       }
       if (commandsBatch.length > 0) {
         this.logger.log(`[${traceId}] Publishing tasks.`);
-        const task = new Task(
-          uuid4(),
-          traceId,
-          TaskType.SCAN,
-          TaskStatus.PENDING,
-          jobContext.jobConfig.workerIds[0],
-          jobContext.jobConfig.sourceFileServer.path,
-          jobContext.jobConfig.sourceFileServer.pathId,
-          commandsBatch,
-          jobContext.jobConfig?.destinationFileServer?.path ?? null,
-          jobContext.jobConfig?.destinationFileServer?.pathId ?? null
-        );
+        const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
         const id = await jobContext.appendToTaskList(task);
         this.logger.log(`[${traceId}] Task published.`)
         jobContext.tasksInfo.lastId = id;
