@@ -207,5 +207,9 @@ export const dmError = (type: 'TASK' | 'OPERATION', correlationId: string, error
   }
 }
 
+export const basePrefix = (jobRunId: string, pathId: string): string => {
+  if(process.platform === 'win32') return `${process.env.BASE_WORKING_PATH}\\${jobRunId}\\${pathId}`;
+  return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
+}
 
 

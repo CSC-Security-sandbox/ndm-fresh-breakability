@@ -1,14 +1,13 @@
-
-import { CommandStatus, DMError, FileInfo, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, DMError, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 // local imports
-import { DiscoveryPayload, FileEntry, FileType, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
+import { DiscoveryPayload, FileEntry, ProcessFolderReadParams, ProcessInventoryParams } from '../types/tasks';
 
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
-import { getErrorCode, getFileInfo, removePrefix, shouldExclude } from '../utils/utils';
+import { getErrorCode, getFilePermissions, getFileType, shouldExclude, removePrefix, basePrefix } from '../utils/utils';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -46,14 +45,15 @@ export class DiscoveryScanActivity {
       await Promise.all(data.data.commands.map(async cmd => {
         try {
           this.logger.log(`[${jobContext.jobRunId}] Processing command: ${JSON.stringify(cmd)}`);
-          const fPath = path.join(data.data.sPath, cmd.fPath);
+          const basePrefixPath = basePrefix(jobContext.jobRunId, jobContext.jobConfig.sourceFileServer.pathId)
+          const fPath = path.join(basePrefixPath, cmd.fPath);
           const files = await fs.promises.readdir(fPath);
           this.logger.log(`[${jobContext.jobRunId}] Inventories Discovered: ${JSON.stringify(files)}`);
           const { accumulatedResult } = await this.processFolderRead({
             files,
             chunkPath: fPath,
             jobRunId: ids.jobRunId,
-            pathId: data.data.sPath,
+            pathId: basePrefixPath,
             batchSize,
             workerId: ids.workerId,
             commandId: cmd.commandId || 'test',
@@ -111,7 +111,6 @@ export class DiscoveryScanActivity {
           if(isDirectory) discoveryStats.numDirs += 1;
           else discoveryStats.numFiles += 1;
           const relativeSourcePath = removePrefix(fullPath, pathId);
-          const fileInfo: FileInfo = await getFileInfo(file, chunkPath, relativeSourcePath);
           const entry: FileEntry = {
             taskId,
             pathId,
@@ -120,17 +119,17 @@ export class DiscoveryScanActivity {
             parentPath: chunkPath,
             jobRunId,
             isDirectory,
-            uid: fileInfo.uid.toString(),
-            gid: fileInfo.gid.toString(),
-            fileSize: fileInfo.size,
+            uid: lStat.uid.toString(),
+            gid: lStat.gid.toString(),
+            fileSize: lStat.size,
             blocks: lStat.blocks,
-            modifiedTime: new Date(fileInfo.mtime).toISOString(),
+            modifiedTime: new Date(lStat.mtime).toISOString(),
             birthTime: new Date(lStat.birthtime).toISOString(),
-            extension: path.extname(fileInfo.extension),
-            permission: fileInfo.permission,
-            accessTime: new Date(fileInfo.atime).toISOString(),
-            fileType: fileInfo.fileType,
-            depth: fileInfo.depth,
+            extension: path.extname(file),
+            permission: getFilePermissions(lStat),
+            accessTime: new Date(lStat.atime).toISOString(),
+            fileType: getFileType(lStat),
+            depth: fullPath.split('/').length - 2,
             commandId
           };
           accumulatedResult.push(entry);

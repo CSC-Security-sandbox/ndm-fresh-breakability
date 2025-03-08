@@ -7,7 +7,7 @@ import * as path from "path";
 import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 
-import { dmError, formatDate, getFileInfo } from '../utils/utils';
+import { basePrefix, dmError, formatDate, getFileInfo } from '../utils/utils';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 
@@ -178,9 +178,11 @@ export class MigrationSyncService {
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     for (let i = 0;  i < task.commands.length; i++) {
+      const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+      const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
       const scanInput: SyncOperationInput = {
-        sourcePath: `${task.sPath}${task.commands[i].fPath}`,
-        targetPath: `${task.tPath}${task.commands[i].fPath}`,
+        sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
+        targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
         ops: task.commands[i].ops,
         command: task.commands[i],
         jobContext
