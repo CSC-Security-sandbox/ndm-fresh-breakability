@@ -11,6 +11,7 @@ import * as util from 'util';
 export class SetupActivityService {
   readonly workerId: string;
   readonly workerConfigUrl: string;
+  readonly baseWorkingPath: string
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly redisService: RedisService,
@@ -18,6 +19,7 @@ export class SetupActivityService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
+    this.baseWorkingPath = this.configService.get('worker.baseWorkingPath')
   }
 
   async mountPath(
@@ -30,7 +32,7 @@ export class SetupActivityService {
       username: server.username,
       password: server.password,
       path: server.path,
-      mountBasePath: server.workingDirectory,
+      mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
     });
@@ -49,7 +51,7 @@ export class SetupActivityService {
       username: server.username,
       password: server.password,
       path: server.path,
-      mountBasePath: server.workingDirectory,
+      mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
     });
