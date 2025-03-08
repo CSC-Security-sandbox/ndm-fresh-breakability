@@ -8,7 +8,6 @@ import { RedisService } from "src/redis/redis.service";
 
 import { basePrefix, buildTask, dmError, getFileInfo, removePrefix, shouldExclude } from "../utils/utils";
 import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
-import { error } from "console";
 
 @Injectable()
 export class MigrationScanService {
@@ -64,6 +63,11 @@ export class MigrationScanService {
                     continue;
 
                 const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
+
+                this.logger.debug(`Item : ${item}`);
+                this.logger.debug(`sourceContentPath : ${sourceContentPath}`);
+                this.logger.debug(`sourcePrefix : ${sourcePrefix}`);
+                this.logger.debug(`relativeSourcePath : ${relativeSourcePath}`);
 
                 if (sourceStat.isDirectory()) {
                     syncContentOutput.directory++;
