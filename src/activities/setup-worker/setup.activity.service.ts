@@ -7,10 +7,12 @@ import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import * as util from 'util';
+
 @Injectable()
 export class SetupActivityService {
   readonly workerId: string;
   readonly workerConfigUrl: string;
+  readonly baseWorkingPath: string
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly redisService: RedisService,
@@ -18,6 +20,7 @@ export class SetupActivityService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
+    this.baseWorkingPath = this.configService.get('worker.baseWorkingPath')
   }
 
   async mountPath(
@@ -30,7 +33,7 @@ export class SetupActivityService {
       username: server.username,
       password: server.password,
       path: server.path,
-      mountBasePath: server.workingDirectory,
+      mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
     });
@@ -49,7 +52,7 @@ export class SetupActivityService {
       username: server.username,
       password: server.password,
       path: server.path,
-      mountBasePath: server.workingDirectory,
+      mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
     });
@@ -170,7 +173,7 @@ export class SetupActivityService {
   ): Promise<any> {
     const protocolType = payload.protocols.type;
     const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-    const mountBasePath = process.env.BASE_MOUNT_DIR;
+    const mountBasePath = this.baseWorkingPath;
     const { hostname, pathId, exportPathName, protocols } =
       payload;
     const mountPayload = {

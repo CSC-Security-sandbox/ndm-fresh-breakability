@@ -106,8 +106,14 @@ export class MigrationSyncService {
     }
     if(metadata?.birthtime){
       try {
-        const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${filePath}`;
-        execSync(birthtimeCommand);
+        if(process.platform == 'win32') {
+          const birthtime = new Date(metadata.birthtime).toISOString().replace(/T/, ' ').replace(/\..+/, '')
+          const birthtimeCommand = `powershell.exe -Command "(Get-Item '${filePath}').CreationTime = '${birthtime}'"`;
+          execSync(birthtimeCommand);
+        }else {
+          const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${filePath}`;
+          execSync(birthtimeCommand);
+        }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
