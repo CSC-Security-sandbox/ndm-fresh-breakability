@@ -19,7 +19,7 @@ const {
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options, workerId } = args;
-  log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(options)}`);
+  log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args)}`);
   let iteration = 0;
   try {
     await updateDiscoveryStatus(traceId, 'RUNNING');
@@ -30,6 +30,10 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         return { message: `Job status changed to ${jobState.status}` };
       }
       let tasks = await fetchTaskActivity(traceId);
+      if(iteration === 1) {
+        log(traceId, `Tasks found in first iteration in DiscoveryJobWorkflow : ${JSON.stringify(tasks)}`);
+      }
+      log(traceId, `Tasks found: ${tasks.length}`);
       if (!tasks || tasks.length === 0) {
         const jobState = await getJobState(traceId);
         const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
