@@ -216,7 +216,7 @@ export class SetupActivityService {
         payload.exportPathName,
         payload.pathId,
         traceId,
-        payload.mountBasePath,
+        mountBasePath,
         hostname,
         protocols?.userName,
         protocols?.password,
