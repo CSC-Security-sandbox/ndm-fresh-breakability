@@ -5,6 +5,8 @@ import { generateDummyFileEntry } from '../utils/utils';
 import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
 import axios from 'axios';
 import { JobRunStatus } from "../discovery/enums";
+import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
+import { JobStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class CommonActivityService{
@@ -69,5 +71,23 @@ export class CommonActivityService{
   async updateJobErrorStatus(jobRunId: string) {
     await this.updateStatus({jobRunId, status: JobRunStatus.Errored});
     await this.updateLastEntry(jobRunId);
+  }
+
+  async getJobState(traceId: string): Promise<any> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    return await jobContext.getJobState();
+  }
+
+  async setJobState(traceId: string, jobState: JobState): Promise<any> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    jobContext.jobState = new JobState(
+      jobState.workers, 
+      jobState.tasks_completed, 
+      jobState.tasks_total, 
+      jobState.workers_agreed, 
+      jobState.status as JobStatus,
+      jobState.failedWorkers
+    );;
+    await this.redisService.setJobContext(traceId, jobContext);
   }
 }

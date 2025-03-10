@@ -1,16 +1,14 @@
+import * as wf from '@temporalio/workflow';
 import {
   ChildWorkflowCancellationType,
-  ParentClosePolicy,
-  proxyActivities,
+  executeChild,
+  ParentClosePolicy
 } from '@temporalio/workflow';
-import { executeChild } from '@temporalio/workflow';
-import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
-import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
-import { DiscoveryJobWorkflow } from './discovery-job-workflow';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import * as wf from '@temporalio/workflow';
-import { ReportingWorkflow } from '../reporting/reporting.workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { ReportingWorkflow } from '../reporting/reporting.workflow';
+import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
+import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
+import { DiscoveryJobWorkflow } from './discovery-job-workflow';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -19,10 +17,11 @@ async function log(traceId: string, message: string) {
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
+  getJobState,
+  setJobState,
   updateJobErrorStatus: updateJobErrorActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
-const { getWorkerId, setJobState, getJobState } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5m' });
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
  * @param traceId Unique identifier to trace the request

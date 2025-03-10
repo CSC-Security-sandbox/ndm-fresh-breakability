@@ -7,6 +7,7 @@ import axios from 'axios';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
 import { buildTask } from '../utils/utils';
+import { CommonActivityService } from '../common/common.service';
 
 @Injectable()
 export class DiscoveryActivity {
@@ -16,6 +17,7 @@ export class DiscoveryActivity {
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
+    private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
@@ -45,7 +47,7 @@ export class DiscoveryActivity {
     try {
       const jobContext = await this.redisService.getJobContext(traceId);
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
-      const jobState = await this.getJobState(traceId);
+      const jobState = await this.commonService.getJobState(traceId);
       const directoryBatchSize = 500;
       let commandsBatch: Command[] = [];
       for await (const directory of jobContext.groupReadDirs(`${traceId}-worker`, directoryBatchSize)) {
@@ -121,24 +123,6 @@ export class DiscoveryActivity {
     }
   }
 
-  async getJobState(traceId: string): Promise<any> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    return await jobContext.getJobState();
-  }
-
-  async setJobState(traceId: string, jobState: JobState): Promise<any> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    const newjobState = new JobState(
-      jobState.workers, 
-      jobState.tasks_completed, 
-      jobState.tasks_total, 
-      jobState.workers_agreed, 
-      jobState.status as JobStatus,
-      []
-    );
-    jobContext.jobState = newjobState;
-    await this.redisService.setJobContext(traceId, jobContext);
-  }
 
 
   async generateDiscoveryReport(jobRunId: string) {

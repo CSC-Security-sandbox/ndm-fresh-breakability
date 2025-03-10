@@ -12,54 +12,61 @@ async function log(traceId: string, message: string) {
 const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ startToCloseTimeout: '5h' });
 
 const {
-
     publishScanTask: publishTaskActivity,  
     fetchScanTask: fetchTaskActivity
 } = proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
 
 const {
+    getJobState: getJobStateActivity,
     updateStatus: updateStatusActivity
-  } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
    
 interface ScanWorkflowInput {
     jobRunId: string;
 }
 
 export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any> => {
-    console.log('Starting MigrateScan ', jobRunId)
-    let iteration = 0;
-    try {
-        await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
-        while (true) {
-            let { tasks } = await fetchTaskActivity({jobRunId}); 
-            if (!tasks || tasks.length === 0)  {
-                log(jobRunId, `No tasks found.`);
-                return { message: 'Scan Completed' };
+  console.log('Starting MigrateScan ', jobRunId)
+  let iteration = 0;
+  try {
+      await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
+      while (true) {
+          iteration++;
+          const jobState = await getJobStateActivity(jobRunId);
+          if(jobState.status !== JobRunStatus.Running) {
+            return { message: `Job status changed to ${jobState.status}` };
+          }
+          let { tasks } = await fetchTaskActivity({jobRunId}); 
+          if(iteration === 1) {
+              log(jobRunId, `Tasks found in first iteration in DiscoveryJobWorkflow : ${JSON.stringify(tasks)}`);
             }
-            log(jobRunId, `task found, total -> ${tasks.length}`);
-            for(const task of tasks) {
-                log(jobRunId, `Starting SCAN for task -> ${JSON.stringify(task)}`);
-                const {isTaskCreated} = await scanActivity({task})
-                if(isTaskCreated)
-                await publishTaskActivity({jobRunId})
-                log(jobRunId, `SCAN completed for task -> ${task.id}`);
+          if (!tasks || tasks.length === 0)  {
+              log(jobRunId, `No tasks found.`);
+              return { message: 'Scan Completed' };
+          }
+          log(jobRunId, `task found, total -> ${tasks.length}`);
+          for(const task of tasks) {
+              log(jobRunId, `Starting SCAN for task -> ${JSON.stringify(task)}`);
+              const {isTaskCreated} = await scanActivity({task})
+              if(isTaskCreated)
+              await publishTaskActivity({jobRunId})
+              log(jobRunId, `SCAN completed for task -> ${task.id}`);
+          }
+          if(iteration >= 80) {
+              log(jobRunId, `Iteration limit reached. Continuing as new...`);
+              await continueAsNew({ jobRunId });
             }
-
-            if(iteration >= 80) {
-                log(jobRunId, `Iteration limit reached. Continuing as new...`);
-                await continueAsNew({ jobRunId });
-              }
-        }
-    } catch (error) {
-        if (error instanceof ContinueAsNew) {
-            log(jobRunId, `Workflow continued as new: ${error.message}`);
-            throw error; 
-          } else {
-            await updateStatusActivity({jobRunId, status: JobRunStatus.Failed})
-              .then(() => log(jobRunId, ` status updated to Failed`))
-              .catch((err) => log(jobRunId, `Failed to discovery status: ${err}`));
-            return { message: `Scan Errored ${error}` };
-        }
-    }
+      }
+  } catch (error) {
+      if (error instanceof ContinueAsNew) {
+          log(jobRunId, `Workflow continued as new: ${error.message}`);
+          throw error; 
+        } else {
+          await updateStatusActivity({jobRunId, status: JobRunStatus.Failed})
+            .then(() => log(jobRunId, ` status updated to Failed`))
+            .catch((err) => log(jobRunId, `Failed to discovery status: ${err}`));
+          return { message: `Scan Errored ${error}` };
+      }
+  }
 
 }

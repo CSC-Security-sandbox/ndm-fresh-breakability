@@ -4,6 +4,7 @@ import { ScanWorkflow } from "../core/scan.workflow";
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
+import { JobRunStatus } from "src/activities/discovery/enums";
 interface MigrationWorkflowInput {
   traceId: string;
   payload: {
@@ -19,6 +20,8 @@ async function log(traceId: string, message: string): Promise<void> {
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
+  getJobState: getJobStateActivity,
+  setJobState: setJobStateActivity,
   updateJobErrorStatus: updateJobErrorActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
@@ -69,6 +72,12 @@ export const MigrationWorkflow = async ({
 
   const scanResponse = await Promise.all(
     activeWorkerIds.map(async (workerId) => {
+      const jobState = await getJobStateActivity(traceId);
+      const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
+      const newJobState = { ...jobState, workers: uniqueWorkers, status: JobRunStatus.Running } as any;
+      await setJobStateActivity(traceId, newJobState);
+      log(traceId, `Starting ScanWorkflow for workerId: ${workerId}`);
+      
       while (true) {
         try {
           return await executeChild(ScanWorkflow, {
@@ -87,8 +96,7 @@ export const MigrationWorkflow = async ({
         }
       }
     })
-  )
-    .then((response) => {
+  ).then((response) => {
       log(traceId, `ScanWorkflow response: ${JSON.stringify(response)}`);
       return {
         traceId,
@@ -112,7 +120,7 @@ export const MigrationWorkflow = async ({
       while (true) {
         try {
           return await executeChild(SyncWorkflow, {
-            args: [{ jobRunId: traceId }],
+            args: [{ jobRunId: traceId, workerId }],
             workflowId: `SyncWorkflow-${traceId}-${workerId}`,
             taskQueue: `${workerId}-TaskQueue`,
             cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

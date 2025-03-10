@@ -33,7 +33,7 @@ export class MigrationTaskService{
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
       let commands:Command[] = [], ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
       for await (const dir of jobContext.groupReadDirs(`${jobRunId}-worker`, this.pushTaskDirSize)) {
-        const command = new Command(dir.path, ops, uuid4());
+        const command = new Command(dir.path, ops, uuid4(), 0);
         commands.push(command);
         if (commands && commands.length >= this.pushTaskDirSize) {
           const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);

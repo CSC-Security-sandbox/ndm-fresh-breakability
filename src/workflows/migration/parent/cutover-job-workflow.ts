@@ -6,6 +6,7 @@ import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
 import { ScanWorkflow } from "../core/scan.workflow";
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { JobRunStatus } from 'src/activities/discovery/enums';
 
 
 export const unblockSignal =  wf.defineSignal<[string]>('approve');
@@ -19,7 +20,9 @@ const {
 
 
 const {
-   updateJobErrorStatus: updateJobErrorActivity
+   updateJobErrorStatus: updateJobErrorActivity,
+   getJobState: getJobStateActivity,
+   setJobState: setJobStateActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -81,6 +84,11 @@ export const CutOverWorkFlow = async ({
 
   const scanResponse = await Promise.all(
     activeWorkerIds.map(async (workerId) => {
+      const jobState = await getJobStateActivity(traceId);
+      const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
+      const newJobState = { ...jobState, workers: uniqueWorkers, status: JobRunStatus.Running } as any;
+      await setJobStateActivity(traceId, newJobState);
+      log(traceId, `Starting ScanWorkflow for workerId: ${workerId}`);
       while (true) {
         try {
           return await executeChild(ScanWorkflow, {
@@ -123,7 +131,7 @@ export const CutOverWorkFlow = async ({
       while (true) {
         try {
           return await executeChild(SyncWorkflow, {
-            args: [{ jobRunId: traceId }],
+            args: [{ jobRunId: traceId, workerId }],
             workflowId: `SyncWorkflow-${traceId}-${workerId}`,
             taskQueue: `${workerId}-TaskQueue`,
             cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
@@ -178,7 +186,6 @@ export const CutOverWorkFlow = async ({
   }
 
   await log(traceId, `MigrationWorkflow response: ${JSON.stringify(result)}`);
-
   return result;
 };
 
