@@ -41,10 +41,11 @@ export class WorkerOptionsService {
           setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
           checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
           generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
-          updateStatus: this.commonActivityService.updateStatus.bind(this.migrationTaskService),
+          updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
-          generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.migrationTaskService),
+          generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.commonActivityService),
+          updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -65,14 +66,13 @@ export class WorkerOptionsService {
             publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
             fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
             fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
-            updateStatus: this.commonActivityService.updateStatus.bind(this.migrationTaskService),
+            updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
-            updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.migrationTaskService),
+            updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
             checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
             validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
             isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
-            updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -89,9 +89,11 @@ export class WorkerOptionsService {
           publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
           fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
           fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
-          updateStatus: this.commonActivityService.updateStatus.bind(this.migrationTaskService),
-          updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.migrationTaskService),
-          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
+          updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
+          updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
+          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
+          updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity),
+          updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
         });
       default:
         return undefined;
