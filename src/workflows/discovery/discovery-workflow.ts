@@ -55,6 +55,7 @@ export async function DiscoveryWorkflow({
   log(traceId, `DiscoveryWorkflow responseArray: ${JSON.stringify(responseArray)}`);
 
   let result = responseArray.flat();
+  
   result.map((r) => {
     log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
     if (r.status === 'success') {

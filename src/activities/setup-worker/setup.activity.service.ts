@@ -61,7 +61,7 @@ export class SetupActivityService {
     );
   }
 
-  async setup(jobRunId: string): Promise<any> {
+  async setup(jobRunId: string): Promise<SetupOutput> {
     console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     try {
       const context = await this.redisService.getJobContext(jobRunId);
@@ -112,7 +112,7 @@ export class SetupActivityService {
     }
   }
 
-  async cleanup(jobRunId: string): Promise<any> {
+  async cleanup(jobRunId: string): Promise<SetupOutput> {
     try {
       const context = await this.redisService.getJobContext(jobRunId);
 

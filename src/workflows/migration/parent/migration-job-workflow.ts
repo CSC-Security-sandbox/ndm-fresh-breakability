@@ -92,7 +92,7 @@ export const MigrationWorkflow = async ({
       };
     });
   console.log("scanResponse response: " + JSON.stringify(scanResponse));
-  result.push(scanResponse);
+  // result.push(scanResponse);
 
   const syncResponse = await Promise.all(
     activeWorkerIds.map(async (workerId) => {
@@ -132,7 +132,7 @@ export const MigrationWorkflow = async ({
       };
     });
   console.log("SyncResponse response: " + JSON.stringify(syncResponse));
-  result.push(syncResponse);
+  // result.push(syncResponse);
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 

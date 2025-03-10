@@ -88,20 +88,6 @@ export class MigrationTaskService{
     }
   }
 
-  async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
-    try {
-
-      this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
-      this.logger.log(`[${jobRunId}] Updating status to ${status}`);
-      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`);
-      this.logger.log(`[${jobRunId}] status updated to ${status}`);
-      return { message: 'Job status updated for job id: ' + jobRunId };
-    } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
-      return { message: 'Error while updating the status of the job id : ' + jobRunId };
-    }
-  }
-
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
@@ -115,7 +101,23 @@ export class MigrationTaskService{
       this.logger.error(`[${traceId}] Error while marking the job as completed : ${error}`);
       return { message: 'Error while marking the job as completed : ' + traceId };
     }
-  }
+}
+
+
+
+  async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
+    try {
+
+      this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
+      this.logger.log(`[${jobRunId}] Updating status to ${status}`);
+      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`);
+      this.logger.log(`[${jobRunId}] status updated to ${status}`);
+      return { message: 'Job status updated for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
+      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+    }
+}  
 
   async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
     try {

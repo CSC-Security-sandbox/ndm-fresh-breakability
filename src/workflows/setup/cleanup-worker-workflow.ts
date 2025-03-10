@@ -13,11 +13,6 @@ const {
 export async function CleanupWorkerWorkflow(
   args: any,
 ): Promise<any> {
-  try {
-    log( args.traceId,`Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`);
+    await log( args.traceId,`Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`);
     return await cleanupWorkerActivity(args.jobRunId);
-  } catch (error) {
-    log(args.traceId, `Error in CleanupWorkerWorkflow: ${error}`);
-    throw error;    
-  }
 }
