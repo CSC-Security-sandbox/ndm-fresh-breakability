@@ -44,14 +44,20 @@ export const CutOverWorkFlow = async ({
 
   const activeWorkerIds: string[] = [];
   const setupResponses = await Promise.all(
-    payload.workers.map((workerId) =>
-      executeChild(SetupWorkerWorkflow, {
-        args: [{ jobRunId: traceId }],
-        workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
-        taskQueue: `${workerId}-TaskQueue`,
-        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-        parentClosePolicy: ParentClosePolicy.TERMINATE,
-      })
+    payload.workers.map(async (workerId) => {
+      try{
+        return await executeChild(SetupWorkerWorkflow, {
+          args: [{ jobRunId: traceId }],
+          workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
+          taskQueue: `${workerId}-TaskQueue`,
+          ...options,
+          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+          parentClosePolicy: ParentClosePolicy.TERMINATE,
+        })
+      }catch(error) {
+        log(traceId, `Error in SetupWorkerWorkflow: ${error}`);
+      }
+      }
     )
   );
 

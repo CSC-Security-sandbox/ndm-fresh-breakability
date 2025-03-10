@@ -184,6 +184,8 @@ export class MigrationSyncService {
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     for (let i = 0;  i < task.commands.length; i++) {
+      if(task.commands[i].status === CommandStatus.COMPLETED) continue;
+      
       const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
       const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
       const scanInput: SyncOperationInput = {
@@ -215,11 +217,11 @@ export class MigrationSyncService {
 
     task.status = syncTask.error > 0 ? TaskStatus.ERRORED : TaskStatus.COMPLETED;
     if( syncTask.error > 0) {
-        const dmErr = dmError("TASK", task.id,  undefined, undefined, {
-            errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
-            message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
-        });
-        await jobContext.appendToErrorList(dmErr);
+      const dmErr = dmError("TASK", task.id,  undefined, undefined, {
+          errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
+          message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
+      });
+      await jobContext.appendToErrorList(dmErr);
     }
     id = await jobContext.appendToUpdatedTaskList(task);
     jobContext.migrateTask.lastId = id;

@@ -53,7 +53,6 @@ export async function DiscoveryWorkflow({
         });
       } catch (error) {
         log(traceId, `Error in SetupWorkerWorkflow: ${error}`);
-        throw error;
       }
     })
   );
@@ -67,9 +66,10 @@ export async function DiscoveryWorkflow({
       activeWorkerIds.push(r.workerId);
     }
   });  
-  if(!activeWorkerIds.length) {
+
+  if(activeWorkerIds.length === 0) {
     log(traceId, `No active workers found`);
-    updateJobErrorActivity(traceId)
+    await updateJobErrorActivity(traceId)
     return {
       traceId: traceId,
       status: 'error',
