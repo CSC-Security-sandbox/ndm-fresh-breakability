@@ -334,23 +334,8 @@ export class JobRunInitService {
         }
     }
 
-        // ------------------ BuildJobContext -------------------- //
+        // ------------------ BuildJobContext for SpeedTest -------------------- //
         async buildSpeedTestJobContext(jobRunId: string,jobRunConfig:JobRunConfig) {
-          // let sourcefileServerDetails: FileServerDetails;
-          // let targetfileServerDetails: FileServerDetails;
-      
-          // const sourceCredential = jobRunConfig.connection.sourceCredential;
-          // const targetCredential = jobRunConfig.connection.targetCredential;
-      
-          // const createFileServerDetails = (credential: any) => {
-          //   return credential.protocol === Protocol.NFS
-          //     ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory)
-          //     : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)],credential.pathId,credential.path,credential?.username,credential?.password,credential?.workingDirectory);
-          // };
-          // sourcefileServerDetails= createFileServerDetails(sourceCredential);
-      
-          // if (jobRunConfig.jobType !== JobType.DISCOVER) 
-          //   targetfileServerDetails= createFileServerDetails(targetCredential);
           const jobRun = await this.jobRunRepo.findOne({
             where: { id: jobRunId },
             relations: ['jobConfig'],
@@ -358,14 +343,6 @@ export class JobRunInitService {
           if (!jobRun) {
             throw new Error(`JobRun with id ${jobRunId} not found`);
           }
-          const jobConfigId = jobRun.jobConfigId;
-          const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
-            where: { jobId: jobConfigId },
-          });
-          console.log("!!!!!!!!!!!speedTestJobConfig!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-          
-
-          console.log(speedTestJobConfig);
           const jobConfig = new SpeedTestJobConfig(
             jobRunId,
             jobRunConfig.jobType,
@@ -376,7 +353,6 @@ export class JobRunInitService {
           const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending,[]);
           const jobContext = JobContextFactory.getSpeedTestProvider('redis', this.redisService.getClient())
           .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-            // (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
           this.redisService.setJobContext(jobRunId, await jobContext);
       }
 

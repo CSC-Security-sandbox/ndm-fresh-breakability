@@ -72,7 +72,7 @@ export class JobConfigEntity extends Base {
 }
 
 
-@Entity({ name: 'speedtestconfig' })
+@Entity({ name: 'speed_test_config' })
 export class SpeedTestConfigEntity {
   @ApiProperty({ description: 'Job UUID of the speed test config' })
   @PrimaryGeneratedColumn('uuid')
@@ -116,7 +116,7 @@ export class SpeedTestConfigEntity {
 }
 
 
-@Entity({ name: 'speedtestworkers' })
+@Entity({ name: 'speed_test_workers' })
 export class SpeedTestConfigWorkerEntity {
   @ApiProperty({ description: 'Primary key for speedtestworkers' })
   @PrimaryGeneratedColumn('uuid')

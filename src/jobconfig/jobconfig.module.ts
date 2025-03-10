@@ -13,11 +13,12 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity]),
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]

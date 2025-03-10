@@ -46,6 +46,8 @@ import {
   JobConfigBulkMigrateRes
 } from "./jobconfig.types";
 import { run } from "node:test";
+import { FileServerEntity } from "src/entities/fileserver.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -64,8 +66,12 @@ export class JobConfigService {
     private speedTestResultRepo: Repository<SpeedTestResultEntity>,
     @InjectRepository(SpeedLogEntryEntity)
     private SpeedLogEntryRepo: Repository<SpeedLogEntryEntity>,
+    @InjectRepository(FileServerEntity)
+    private fileServerEntityRepo: Repository<FileServerEntity>,
     @InjectRepository(SpeedTestConfigWorkerEntity)
     private SpeedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>,
+    @InjectRepository(WorkerEntity)
+    private workeRepo: Repository<WorkerEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(JobRunEntity)
@@ -132,246 +138,249 @@ export class JobConfigService {
     return await this.jobConfigRepo.save(entries);
   }
 
+  // ------------ Speed Test ---------------- //
+  async getAllSpeedTestJobRuns(): Promise<any[]> {
+    try {
+      const jobConfigs = await this.jobConfigRepo.find({
+        where: { jobType: JobType.SPEED_TEST },
+        relations: ['jobRuns', 'speedTestConfigs', 'speedTestConfigs.workerEntities'],
+      });
 
+      const result = jobConfigs.flatMap(jobConfig => {
+        return jobConfig.jobRuns.map(jobRun => {
+          const fileServerCount = jobConfig.speedTestConfigs.length;
+          const workers = jobConfig.speedTestConfigs.flatMap(config => config.workerEntities);
+          const workerCount = new Set(workers.map(worker => worker.workersId)).size;
+          return {
+            jobRunId: jobRun.id,
+            jobConfigId: jobConfig.id,
+            startTime: jobRun.startTime,
+            endTime: jobRun.endTime,
+            fileServerCount: fileServerCount,
+            workers: workerCount,
+            status: jobRun.status,
+          };
+        });
+      });
 
-  async storeSpeedTestResult(speedTest: SpeedTestResult) {
-    const writeLog = new SpeedLogEntity();
-    writeLog.totalTimeTaken = speedTest.writeResult.totalTimeTaken;
-    writeLog.fileSize = speedTest.writeResult.fileSize;
-    const writeResult = await this.speedLogRepo.save(writeLog);
-
-    for (const log of speedTest.writeResult.speedLogs) {
-      const writeLogEntry = new SpeedLogEntryEntity();
-      writeLogEntry.speedLogId = writeResult.id;
-      writeLogEntry.timeStamp = log.timeStamp;
-      writeLogEntry.speed = Number(log.speed);
-      await this.SpeedLogEntryRepo.save(writeLogEntry);
+      this.logger.log('Fetched all speed test job runs successfully');
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to fetch speed test job runs', error.stack);
+      throw new HttpException(
+        {
+          status: "failed",
+          message:
+            error.message ||
+            "Failed to fetch speed test job runs",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
+  }
 
-    // Store readResult
-    const readLog = new SpeedLogEntity();
-    readLog.totalTimeTaken = speedTest.readResult.totalTimeTaken;
-    readLog.fileSize = speedTest.readResult.fileSize;
-    const readResult = await this.speedLogRepo.save(readLog);
+  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<void> {
+    try {
+      const writeLog = new SpeedLogEntity();
+      writeLog.totalTimeTaken = speedTest.writeResult.totalTimeTaken;
+      writeLog.fileSize = speedTest.writeResult.fileSize;
+      const writeResult = await this.speedLogRepo.save(writeLog);
 
-    for (const log of speedTest.readResult.speedLogs) {
-      const readLogEntry = new SpeedLogEntryEntity();
-      readLogEntry.speedLogId = readResult.id;
-      readLogEntry.timeStamp = log.timeStamp;
-      readLogEntry.speed = Number(log.speed);
-      await this.SpeedLogEntryRepo.save(readLogEntry);
+      for (const log of speedTest.writeResult.speedLogs) {
+        const writeLogEntry = new SpeedLogEntryEntity();
+        writeLogEntry.speedLogId = writeResult.id;
+        writeLogEntry.timeStamp = log.timeStamp;
+        writeLogEntry.speed = Number(log.speed);
+        await this.SpeedLogEntryRepo.save(writeLogEntry);
+      }
+
+      // Store readResult
+      const readLog = new SpeedLogEntity();
+      readLog.totalTimeTaken = speedTest.readResult.totalTimeTaken;
+      readLog.fileSize = speedTest.readResult.fileSize;
+      const readResult = await this.speedLogRepo.save(readLog);
+
+      for (const log of speedTest.readResult.speedLogs) {
+        const readLogEntry = new SpeedLogEntryEntity();
+        readLogEntry.speedLogId = readResult.id;
+        readLogEntry.timeStamp = log.timeStamp;
+        readLogEntry.speed = Number(log.speed);
+        await this.SpeedLogEntryRepo.save(readLogEntry);
+      }
+
+      // Store networkPerformanceResult
+      const networkPerformanceResult = new NetworkPerformanceResultEntity();
+      networkPerformanceResult.packetLoss = speedTest.networkPerformanceResult.packetLoss;
+      networkPerformanceResult.roundTripDelayMin = speedTest.networkPerformanceResult.roundTripDelay.min;
+      networkPerformanceResult.roundTripDelayAvg = speedTest.networkPerformanceResult.roundTripDelay.avg;
+      networkPerformanceResult.roundTripDelayMax = speedTest.networkPerformanceResult.roundTripDelay.max;
+      networkPerformanceResult.roundTripDelayMdev = speedTest.networkPerformanceResult.roundTripDelay.mdev;
+      const networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
+
+      // Store speedTestResult
+      const speedTestResult = new SpeedTestResultEntity();
+      speedTestResult.traceId = speedTest.traceId;
+      speedTestResult.workerId = speedTest.workerId;
+      speedTestResult.fileServerId = speedTest.fileServerID;
+      speedTestResult.writeResult = writeResult;
+      speedTestResult.readResult = readResult;
+      speedTestResult.networkPerformanceResult = networkResult;
+
+      await this.speedTestResultRepo.save(speedTestResult);
+
+      this.logger.log('Speed test result stored successfully');
+    } catch (error) {
+      this.logger.error('Failed to store speed test result', error.stack);
+      throw new HttpException(
+        {
+          status: 'failed',
+          message: error.message || 'Failed to store speed test result',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
-
-    // Store networkPerformanceResult
-    const networkPerformanceResult = new NetworkPerformanceResultEntity();
-    networkPerformanceResult.packetLoss = speedTest.networkPerformanceResult.packetLoss;
-    networkPerformanceResult.roundTripDelayMin = speedTest.networkPerformanceResult.roundTripDelay.min;
-    networkPerformanceResult.roundTripDelayAvg = speedTest.networkPerformanceResult.roundTripDelay.avg;
-    networkPerformanceResult.roundTripDelayMax = speedTest.networkPerformanceResult.roundTripDelay.max;
-    networkPerformanceResult.roundTripDelayMdev = speedTest.networkPerformanceResult.roundTripDelay.mdev;
-    const networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
-
-    // Store speedTestResult
-    const speedTestResult = new SpeedTestResultEntity();
-    speedTestResult.traceId = speedTest.traceId;
-    speedTestResult.workerId = speedTest.workerId;
-    speedTestResult.fileServerId = speedTest.fileServerID;
-    speedTestResult.writeResult = writeResult;
-    speedTestResult.readResult = readResult;
-    speedTestResult.networkPerformanceResult = networkResult;
-
-    await this.speedTestResultRepo.save(speedTestResult);
   }
 
   async getSpeedTestById(id: string): Promise<any> {
-    // Fetch speed test results by traceId
-    const speedTestResults = await this.speedTestResultRepo.find({
-      where: { traceId: id },
-      relations: ['writeResult', 'readResult', 'networkPerformanceResult', 'writeResult.speedLogEntries', 'readResult.speedLogEntries'],
-    });
+    try {
+      const speedTestResults = await this.speedTestResultRepo.find({
+        where: { traceId: id },
+        relations: ['writeResult', 'readResult', 'networkPerformanceResult', 'writeResult.speedLogEntries', 'readResult.speedLogEntries'],
+      });
 
-    if (!speedTestResults || speedTestResults.length === 0) {
-      throw new Error('Speed test result not found');
-    }
+      const fileServersMap = new Map();
 
-    // Group results by fileServerId
-    const fileServersMap = new Map();
+      const fileServerIds = speedTestResults.map(result => result.fileServerId);
+      const fileServers = await this.fileServerEntityRepo.find({
+        where: { id: In(fileServerIds) },
+        relations: ['config'],
+      });
 
-    speedTestResults.forEach(result => {
-      if (!fileServersMap.has(result.fileServerId)) {
-        fileServersMap.set(result.fileServerId, {
-          fileServerId: result.fileServerId,
-          fileServerName: "FS1", // Assuming fileServerName is not present in the database schema
-          fileServerProtocol: "NFS", // Assuming fileServerProtocol is not present in the database schema
-          workers: []
+      const workerIds = speedTestResults.map(result => result.workerId);
+      const workers = await this.workeRepo.findByIds(workerIds);
+
+      for (const result of speedTestResults) {
+        const fileServer = fileServers.find(fs => fs.id === result.fileServerId);
+
+        if (!fileServersMap.has(result.fileServerId)) {
+          fileServersMap.set(result.fileServerId, {
+            fileServerId: fileServer.id,
+            fileServerName: fileServer.config.configName,
+            fileServerProtocol: fileServer.protocol,
+            workers: [],
+          });
+        }
+
+        const writeSpeed = (result.writeResult?.speedLogEntries || []).map(entry => ({
+          timeStamp: entry.timeStamp,
+          speed: entry.speed,
+        }));
+
+        const readSpeed = (result.readResult?.speedLogEntries || []).map(entry => ({
+          timeStamp: entry.timeStamp,
+          speed: entry.speed,
+        }));
+        
+        const worker = workers.find(w => w.workerId === result.workerId);
+        fileServersMap.get(result.fileServerId).workers.push({
+          workerName: worker?.workerName || "unknown",
+          workerId: result.workerId,
+          readSpeed,
+          writeSpeed,
+          rtd: result.networkPerformanceResult?.roundTripDelayAvg,
+          packetLoss: result.networkPerformanceResult?.packetLoss,
         });
       }
 
-      const writeSpeed = result.writeResult.speedLogEntries.map(entry => ({
-        timeStamp: entry.timeStamp,
-        speed: entry.speed,
-      }));
+      const fileServersArray = Array.from(fileServersMap.values());
+      const jobRunDetails = await this.jobRunRepo.findOne({ where: { id } });
 
-      const readSpeed = result.readResult.speedLogEntries.map(entry => ({
-        timeStamp: entry.timeStamp,
-        speed: entry.speed,
-      }));
+      if (!jobRunDetails) {
+        throw new HttpException(
+          {
+            status: "failed",
+            message: "Job run details not found",
+          },
+          HttpStatus.NOT_FOUND
+        );
+      }
 
-      fileServersMap.get(result.fileServerId).workers.push({
-        workerName: "worker1", // Assuming workerName is not present in the database schema
-        workerId: result.workerId,
-        readSpeed,
-        writeSpeed,
-        rtd: result.networkPerformanceResult.roundTripDelayAvg,
-        packetLoss: result.networkPerformanceResult.packetLoss,
-      });
-    });
+      const response = {
+        jobRunId: id,
+        startTime: jobRunDetails.startTime,
+        endTime: jobRunDetails.endTime,
+        status: jobRunDetails.status,
+        totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+        fileServers: fileServersArray,
+      };
 
-    const fileServers = Array.from(fileServersMap.values());
-
-    const response = {
-      jobRunId: id,
-      startTime: new Date(),
-      endTime: new Date(),
-      status: "Running",
-      totalWorkers: fileServers.reduce((acc, server) => acc + server.workers.length, 0),
-      fileServers,
-    };
-
-    return response;
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to fetch speed test results', error.stack);
+      throw new HttpException(
+        {
+          status: "failed",
+          message: error.message || "Failed to fetch speed test results",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
-  // async getSpeedTestById(id: string): Promise<any> {
-    
-
-  //   return {
-  //     "jobRunId": "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-  //     "startTime": "01/12/2025",
-  //     "endTime": "01/12/2025",
-  //     "status": "Running",
-  //     "totalWorkers": 4,
-  //     "fileServers": [
-  //       {
-  //         "fileServerId": "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-  //         "fileServerName": "FS1",
-  //         "fileServerProtocol": "NFS",
-  //         "workers": [
-  //           {
-  //             "workerName": "worker1",
-  //             "workerId": "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-  //             "readSpeed": [
-  //               {
-  //                 "timeStamp": 0,
-  //                 "speed": 20
-  //               },
-  //               {
-  //                 "timeStamp": 5,
-  //                 "speed": 22
-  //               },
-  //               {
-  //                 "timeStamp": 10,
-  //                 "speed": 25
-  //               }
-  //             ],
-  //             "writeSpeed": [
-  //               {
-  //                 "timeStamp": 0,
-  //                 "speed": 22
-  //               },
-  //               {
-  //                 "timeStamp": 5,
-  //                 "speed": 23
-  //               },
-  //               {
-  //                 "timeStamp": 10,
-  //                 "speed": 26
-  //               }
-  //             ],
-  //             "rtd": 10,
-  //             "packetLoss": 10.1
-  //           },
-  //           {
-  //             "workerName": "worker2",
-  //             "workerId": "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-  //             "readSpeed": [
-  //               {
-  //                 "timeStamp": 0,
-  //                 "speed": 10
-  //               },
-  //               {
-  //                 "timeStamp": 5,
-  //                 "speed": 12
-  //               },
-  //               {
-  //                 "timeStamp": 10,
-  //                 "speed": 15
-  //               }
-  //             ],
-  //             "writeSpeed": [
-  //               {
-  //                 "timeStamp": 0,
-  //                 "speed": 12
-  //               },
-  //               {
-  //                 "timeStamp": 5,
-  //                 "speed": 13
-  //               },
-  //               {
-  //                 "timeStamp": 10,
-  //                 "speed": 16
-  //               }
-  //             ],
-  //             "rtd": 10,
-  //             "packetLoss": 10.1
-  //           }
-  //         ]
-  //       }
-  //     ]
-  //   };
-  // }
-
-  // ------------ Speed Test ---------------- //
   async createSpeedTest(speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
-    const firstRunAt = speedTest?.firstRunAt ?? new Date()
-    const jobConfig = this.jobConfigRepo.create({
-          status: JobStatus.Active,
-          jobType:  JobType.SPEED_TEST,
-          firstRunAt: firstRunAt,
-          scheduler: ScheduleStatus.SCHEDULING,
-          preserveAccessTime:false,
-          sourcePathId:  uuidv4(),
-          createdBy: speedTest.createdBy
-        });
-
-    await this.jobConfigRepo.save(jobConfig);
-    const speedTestJobID = jobConfig.id;
-
-    const entries: SpeedTestConfigEntity[] = [];
-    const workersEntity: SpeedTestConfigWorkerEntity[] = [];
-    for (const fileServerConfig of speedTest.speedTests) {
-      const speedTestConfig = this.SpeedTestConfigRepo.create({
-        jobId: speedTestJobID,
-        fileServer: fileServerConfig.fileServer,
-        protocol: fileServerConfig.protocol,
+    try {
+      const firstRunAt = speedTest?.firstRunAt ?? new Date();
+      const jobConfig = this.jobConfigRepo.create({
+        status: JobStatus.Active,
+        jobType: JobType.SPEED_TEST,
+        firstRunAt: firstRunAt,
+        scheduler: ScheduleStatus.SCHEDULING,
+        preserveAccessTime: false,
+        sourcePathId: uuidv4(),
+        createdBy: speedTest.createdBy,
       });
-      entries.push(speedTestConfig);
-    
-      const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
-    
-      for (const worker of fileServerConfig.workers) {
-        const workerEntity = this.SpeedTestConfigWorkerRepo.create({
-          workersId: worker,
-          jobId: savedSpeedTestConfig.id,
-          
-        });
-        workersEntity.push(workerEntity);
-      }
-    }
-    
-    this.SpeedTestConfigWorkerRepo.save(workersEntity);
 
-    return entries;
+      await this.jobConfigRepo.save(jobConfig);
+      const speedTestJobID = jobConfig.id;
+
+      const entries: SpeedTestConfigEntity[] = [];
+      const workersEntity: SpeedTestConfigWorkerEntity[] = [];
+      for (const fileServerConfig of speedTest.speedTests) {
+        const speedTestConfig = this.SpeedTestConfigRepo.create({
+          jobId: speedTestJobID,
+          fileServer: fileServerConfig.fileServer,
+          protocol: fileServerConfig.protocol,
+        });
+        entries.push(speedTestConfig);
+
+        const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
+
+        for (const worker of fileServerConfig.workers) {
+          const workerEntity = this.SpeedTestConfigWorkerRepo.create({
+            workersId: worker,
+            jobId: savedSpeedTestConfig.id,
+          });
+          workersEntity.push(workerEntity);
+        }
+      }
+
+      await this.SpeedTestConfigWorkerRepo.save(workersEntity);
+
+      this.logger.log('Speed Test job created successfully');
+      return entries;
+    } catch (error) {
+      this.logger.error('Failed to create Speed Test job', error.stack);
+      throw new HttpException(
+        {
+          status: 'failed',
+          message: error.message || 'Failed to create Speed Test job',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
+
+
   async createBulkMigrate(
     bulkMigrate: BulkMigrateJobConfig
   ): Promise<JobConfigBulkMigrateRes[]> {
