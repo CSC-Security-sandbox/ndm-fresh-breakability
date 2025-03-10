@@ -82,6 +82,7 @@ describe('JobContextProvider', () => {
       jobConfig,
       jobRunStatus: jobStatus,
       stats: new Map(),
+      jobState: jobState,
     });
 
     const retrievedContext = await provider.getJobContext(jobRunId);
