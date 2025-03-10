@@ -126,15 +126,18 @@ export class Command implements Serializable {
   ops: Record<number, CommandOperation>;
   status: CommandStatus;
   commandId: string;
+  retryCount: number = 0;
 
   constructor(
     fPath: string,
     ops: Record<number, CommandOperation>,
     commandId: string,
+    retryCount: number,
   ) {
     this.fPath = fPath;
     this.ops = ops;
     this.commandId = commandId;
+    this.retryCount = retryCount;
   }
 
   serialize(): string {
@@ -215,14 +218,22 @@ export interface TaskError{
   taskId: string;
   errorCode: string;
   errorMessage: string;
+  errorType: ErrorType;
 }
 export interface OperationError{
   operationId: string;
   errorCode: string;
   errorMessage: string;
-  errorFiles: ErroredFile;  
+  errorFiles: ErroredFile;
+  errorType: ErrorType;
 }
 export interface ErroredFile{
   fileName: string;
   filePath: string;
+}
+
+export enum ErrorType {
+    FATAL_ERROR = 'FATAL_ERROR',
+    TRANSIENT_ERROR = 'TRANSIENT_ERROR',
+    RECOVERABLE_ERROR = 'RECOVERABLE_ERROR',
 }

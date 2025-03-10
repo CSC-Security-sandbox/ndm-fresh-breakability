@@ -7,19 +7,22 @@ export class JobState implements Serializable {
     tasks_total: number;
     workers_agreed: string[];
     status: JobStatus;
+    failedWorkers: string[];
 
     constructor(
         workers: string[],
         tasks_completed: number,
         tasks_total: number,
         workers_agreed: string[],
-        status: JobStatus
+        status: JobStatus,
+        failedWorkers: string[]
     ) {
         this.workers = workers;
         this.tasks_completed = tasks_completed;
         this.tasks_total = tasks_total;
         this.workers_agreed = workers_agreed;
         this.status = status;
+        this.failedWorkers = failedWorkers;
     }
 
     serialize(): string {
@@ -33,6 +36,7 @@ export class JobState implements Serializable {
         this.tasks_total = obj.tasks_total;
         this.workers_agreed = obj.workers_agreed;
         this.status = obj.status;
+        this.failedWorkers=obj.failedWorkers;
     }
 
     toJSON() {
@@ -42,6 +46,7 @@ export class JobState implements Serializable {
             tasks_total: this.tasks_total,
             workers_agreed: this.workers_agreed,
             status: this.status,
+            failedWorkers: this.failedWorkers
         };
     }
 }
