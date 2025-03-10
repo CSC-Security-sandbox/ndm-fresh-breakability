@@ -6,8 +6,8 @@ import { Logger } from '../utils/logging';
 import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
 import { JobState } from '../types/job-state';
 import { SpeedTestJobConfig } from 'src/types/speed-test-job-config';
-import { SpeedTestJobContext } from 'src/types/speed-test-job-context';
-import { SpeedTestJobContextProvider } from 'src/speed-test-job-context-provider';
+import { SpeedTestJobContext } from '../types/speed-test-job-context';
+import { SpeedTestJobContextProvider } from '../speed-test-job-context-provider';
 import { JobContextProvider } from 'src/job-context-provider';
 
 export class RedisJobContextProvider implements JobContextProvider {

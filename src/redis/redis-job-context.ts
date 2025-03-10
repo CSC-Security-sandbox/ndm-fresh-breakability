@@ -11,8 +11,8 @@ import {
   RedisTaskStatsCollection,
 } from './redis-collections';
 import { Logger } from '../utils/logging';
-import { SpeedTestJobContext } from 'src/types/speed-test-job-context';
-import { SpeedTestJobConfig } from 'src/types/speed-test-job-config';
+import { SpeedTestJobContext } from '../types/speed-test-job-context';
+import { SpeedTestJobConfig } from '../types/speed-test-job-config';
 
 export class RedisJobContext extends JobContext {
   redisClient: RedisClientType;
