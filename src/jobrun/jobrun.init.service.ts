@@ -254,9 +254,9 @@ export class JobRunInitService {
     const redisProvider = JobContextFactory.getProvider('redis', this.redisService.getClient());
     const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
     await jobContext.appendToTaskList(task);
-    console.debug('JobContext created and appended initial task ---> ', JSON.stringify(jobContext));
+    console.debug('JobContext created and appended initial task ---> ', task);
     await this.redisService.setJobContext(jobRunId, jobContext);
-    console.debug('JobContext Saved to Redis ---> ', JSON.stringify(jobContext));
+    console.debug('JobContext Saved to Redis');
   }
 
     // ------------------ CreateInitialTask -------------------- //
