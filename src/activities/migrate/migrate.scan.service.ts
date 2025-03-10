@@ -58,7 +58,7 @@ export class MigrationScanService {
                 const sourceContentPath = path.join(sourcePath, item);
                 if (!fs.existsSync(sourceContentPath)) continue;
 
-                const sourceStat = fs.statSync(sourceContentPath);
+                const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
 
                 if (sourceStat.isSymbolicLink() || shouldExclude(sourceContentPath, excludePatterns))

@@ -154,7 +154,7 @@ export class MigrationSyncService {
           return syncOperation
         }
       }
-      if(ops[0].cmd !== OPS_CMD.COPY_DIR) {
+      if(ops[0].cmd === OPS_CMD.COPY_DIR) {
         try {
           this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
           await this.ensureDirectoryExists(targetPath);
@@ -168,7 +168,7 @@ export class MigrationSyncService {
         }
       }
     }
-    if (ops[1]?.status !== OPS_STATUS.COMPLETED) {
+    if (ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
       const result = await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
       result.errors.forEach(error => syncOperation.errors.add(error))
       ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED

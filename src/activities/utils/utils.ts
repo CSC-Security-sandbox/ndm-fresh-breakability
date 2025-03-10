@@ -118,10 +118,10 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
-  `${jobContext.jobConfig.sourceFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.sourceFileServer.pathId}`,
+  basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
   jobContext.jobConfig.sourceFileServer.pathId,
   commands,
-  jobContext.jobConfig.destinationFileServer ? `${jobContext.jobConfig.destinationFileServer.workingDirectory}/${jobRunId}/${jobContext.jobConfig.destinationFileServer.pathId}` : null,
+  jobContext.jobConfig.destinationFileServer ?  basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId) : null,
   jobContext.jobConfig.destinationFileServer ? jobContext.jobConfig.destinationFileServer.pathId: null,
   ''
 )
