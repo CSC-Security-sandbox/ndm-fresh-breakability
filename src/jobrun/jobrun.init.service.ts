@@ -373,8 +373,8 @@ export class JobRunInitService {
 
           const redisClient = await RedisUtils.getClient();
           if(!redisClient.isOpen) await redisClient.connect();
-          const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
-          const jobContext = JobContextFactory.getProvider('redis', this.redisService.getClient())
+          const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending,[]);
+          const jobContext = JobContextFactory.getSpeedTestProvider('redis', this.redisService.getClient())
           .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
             // (await jobContext).appendToTaskList(await this.createInitialTask(jobRunId, jobRunConfig));
           this.redisService.setJobContext(jobRunId, await jobContext);

@@ -45,7 +45,6 @@ import {
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateRes
 } from "./jobconfig.types";
-import { v4 as uuidv4 } from 'uuid';
 import { run } from "node:test";
 
 @Injectable()
