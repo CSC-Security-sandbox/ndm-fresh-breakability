@@ -28,9 +28,7 @@ import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 
 const CreateSMTP = () => {
   const dispatch = useDispatch();
-  const [disableSave, setDisableSave] = useState<boolean>(false);
   const { data: userData } = useGetAllUsersQuery("");
-
   const toEmailOptions : any = userData.length > 0 ? (
     userData.map((user : any) => {
       return {label: user.email, value: user.email}
@@ -62,7 +60,6 @@ const CreateSMTP = () => {
     setIsLoading(true);
     try {
       await createSmtpApi(body).unwrap();
-      setDisableSave(true);
       dispatch(setDrawerClose());
       notify.success(`SMTP details added successfully.`);
     } catch (err) {
@@ -130,7 +127,7 @@ const CreateSMTP = () => {
           <Button
             style={{ width: 150 }}
             onClick={smtpForm.handleFormSubmit(handleCreateSMTP)}
-            disabled={!(smtpForm.isValid && smtpForm.dirty) || disableSave}
+            disabled={!(smtpForm.isValid && smtpForm.dirty) || isLoading}
             isSubmitting={isCreateFormSubmitting}
           >
             Save
