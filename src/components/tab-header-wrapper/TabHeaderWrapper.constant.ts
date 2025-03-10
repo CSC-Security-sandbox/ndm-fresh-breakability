@@ -71,6 +71,6 @@ export const HEADER_WITH_PATHNAME: HeaderType = {
   "/job": JOB_HEADER_TAB,
   "/reports": REPORTS_HEADER_TAB,
   "/workers": WORKERS_HEADER_TAB,
-  "/speed-test": SPEED_TEST_HEADER_TAB,
   "/home": HOME_HEADER_TAB, // MAKE SURE ITS LAST IN ARRAY
+  "/speed-test": SPEED_TEST_HEADER_TAB,
 };
