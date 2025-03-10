@@ -33,7 +33,7 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
           throw new Error("Error creating file server");
         }
         notify.success("Configuration Successfully saved...");
-        navigate("/config/file-server");
+        navigate("/file-server");
       } catch (err) {
         notify.error("Error creating file server");
 

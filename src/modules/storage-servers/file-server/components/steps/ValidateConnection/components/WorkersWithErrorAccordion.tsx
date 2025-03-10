@@ -6,7 +6,7 @@ import {
   Text,
   Button,
 } from "@netapp/bxp-design-system-react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
 import { nanoid } from "@reduxjs/toolkit";
 

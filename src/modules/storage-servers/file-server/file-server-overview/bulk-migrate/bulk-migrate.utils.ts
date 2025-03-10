@@ -6,6 +6,7 @@ import {
   ErrorsValidateMappingStepFormType,
   MappingStepFormikFormType,
   MigrationDetailsTableConfigurationType,
+  PreCheckStatusType,
 } from "./bulk-migrate.interface";
 import { REVIEW_LIST_COLUMN_DEFS } from "./bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
@@ -32,9 +33,9 @@ export const downloadBulkMigrationCsv = async (
             ),
             "Source Path ID": detail.sourcePath.sourcePathId,
             Protocol: detail.protocol,
-            "Destination File Server":
+            Destination:
               detail.destinationFileServerDetails?.destinationFileServerName,
-            "Destination File Server ID":
+            "Destination ID":
               detail.destinationFileServerDetails?.destinationFileServerId,
             "Destination Path":
               detail.destinationPathDetails?.destinationPathName,
@@ -68,7 +69,7 @@ export const downloadBulkMigrationCsv = async (
         if (
           columnHeader === "Source File Server" ||
           columnHeader === "Source Path ID" ||
-          columnHeader === "Destination File Server ID" ||
+          columnHeader === "Destination ID" ||
           columnHeader === "Destination Path ID"
         ) {
           cell.fill = {
@@ -87,7 +88,7 @@ export const downloadBulkMigrationCsv = async (
           if (
             columnHeader === "Source File Server" ||
             columnHeader === "Source Path ID" ||
-            columnHeader === "Destination File Server ID" ||
+            columnHeader === "Destination ID" ||
             columnHeader === "Destination Path ID"
           ) {
             cell.fill = {
@@ -104,7 +105,7 @@ export const downloadBulkMigrationCsv = async (
         if (
           columnHeader === "Source File Server" ||
           columnHeader === "Source Path ID" ||
-          columnHeader === "Destination File Server ID" ||
+          columnHeader === "Destination ID" ||
           columnHeader === "Destination Path ID"
         ) {
           column.hidden = true;
@@ -116,7 +117,7 @@ export const downloadBulkMigrationCsv = async (
         if (
           columnHeader !== "Source File Server" &&
           columnHeader !== "Source Path ID" &&
-          columnHeader !== "Destination File Server ID" &&
+          columnHeader !== "Destination ID" &&
           columnHeader !== "Destination Path ID"
         ) {
           let maxLength = 0;
@@ -246,7 +247,8 @@ export const createSelectedMountPathsObject = (
 // FOR 3rd(review) STEP TABLE MAPPING
 export const structureDataForReviewList = (
   migrationDetails: MigrationDetailsTableConfigurationType[],
-  selectedMountPathsId: string[]
+  selectedMountPathsId: string[],
+  preCheckStatus: PreCheckStatusType
 ) => {
   const data: typeof REVIEW_LIST_COLUMN_DEFS = [];
   migrationDetails.forEach((detail) => {
@@ -254,12 +256,14 @@ export const structureDataForReviewList = (
     data.push({
       source: {
         path: detail.sourcePath.sourcePathName,
+        sourcePathId: detail.sourcePath.sourcePathId,
       },
       destination: {
         server: detail.destinationFileServerDetails.destinationFileServerName,
         path: detail.destinationPathDetails.destinationPathName,
         pathId: [detail.destinationPathDetails.destinationPathId],
       },
+      status: preCheckStatus,
     });
   });
 

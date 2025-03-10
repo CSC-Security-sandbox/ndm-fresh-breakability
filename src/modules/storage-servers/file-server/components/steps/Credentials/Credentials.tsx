@@ -1,11 +1,10 @@
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
-import RequiredLabel from "@/app/components/layout/RequiredLabel";
 import { FormFieldInputNew } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import FormFrame from "@modules/storage-servers/file-server//components/layout/FormFrame";
 import NFSCredentials from "./components/NFSCredentials";
 import SMBCredentials from "./components/SMBCredentials";
+import FormFrame from "../../layout/FormFrame";
 
 const Credentials = () => {
   const { hostCredentialsForm, isJobRunning } = useContext(

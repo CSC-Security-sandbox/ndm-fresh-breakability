@@ -5,7 +5,6 @@ import NotFound from "@components/404/PageNotFound";
 import HomeLayout from "@components/route-layout/HomeLayout";
 import RouteErrorBoundary from "@components/ErrorBoundary/ErrorBoundary";
 import JobTasksPage from "@pages/JobTasksPage";
-
 const WorkersPage = lazy(() => import("@pages/WorkersPage"));
 const BulkCutOverPage = lazy(() => import("@pages/BulkCutOverPage"));
 const BulkDiscoveryPage = lazy(() => import("@pages/BulkDiscoveryPage"));
@@ -36,30 +35,27 @@ const App = () => {
             <Route index element={<HomePage />} />
             <Route path="home" element={<HomePage />} />
             {/* FILE SERVER ROUTES */}
-            <Route path="config/file-server" element={<FileServerPage />} />
+            <Route path="file-server" element={<FileServerPage />} />
             <Route
-              path="config/file-server/:fileServerId"
+              path="file-server/:fileServerId"
               element={<FileServerOverViewPage />}
             />
+            <Route path="new-file-server" element={<CreateNewFileServer />} />
             <Route
-              path="config/new-file-server"
-              element={<CreateNewFileServer />}
-            />
-            <Route
-              path="config/edit-file-server/:fileServerId"
+              path="edit-file-server/:fileServerId"
               element={<EditFileServerPage />}
             />
             {/* CREATE JOBS ROUTE */}
             <Route
-              path="config/file-server/:fileServerId/bulk-discover"
+              path="file-server/:fileServerId/bulk-discover"
               element={<BulkDiscoveryPage />}
             />
             <Route
-              path="config/file-server/:fileServerId/bulk-migrate"
+              path="file-server/:fileServerId/bulk-migrate"
               element={<BulkMigratePage />}
             />
             <Route
-              path="config/file-server/:fileServerId/bulk-cutover"
+              path="file-server/:fileServerId/bulk-cutover"
               element={<BulkCutOverPage />}
             />
             {/* WORKER */}
@@ -76,7 +72,7 @@ const App = () => {
               element={<JobTasksPage />}
             />
 
-            <Route path="job-run-list" element={<JobRunListPage />} />
+            <Route path="/jobs-run-list" element={<JobRunListPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

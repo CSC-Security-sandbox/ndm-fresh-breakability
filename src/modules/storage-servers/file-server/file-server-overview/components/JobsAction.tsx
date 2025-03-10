@@ -4,7 +4,7 @@ import { Box } from "@components/container/index";
 import { ConfigListTypeApiType } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const JobsAction = ({
@@ -13,12 +13,12 @@ const JobsAction = ({
   fileServerDetails: ConfigListTypeApiType;
 }) => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
+  const pathname = window.location.pathname;
+
   const isActive = fileServerDetails?.status === FILE_SERVER_STATUS.ACTIVE;
 
   const handleEdit = () => {
-    navigate(`/config/edit-file-server/${fileServerDetails?.id}`);
+    navigate(`/edit-file-server/${fileServerDetails?.id}`);
   };
 
   return (
@@ -46,7 +46,10 @@ const JobsAction = ({
           </Button>
           <Button
             disabled={!isActive}
-            onClick={() => navigate(`${pathname}/bulk-cutover`)}
+            onClick={() => {
+              console.log("pathname", pathname);
+              navigate(`${pathname}/bulk-cutover`);
+            }}
           >
             Bulk Cutover
           </Button>

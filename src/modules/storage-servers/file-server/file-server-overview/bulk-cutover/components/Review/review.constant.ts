@@ -1,4 +1,4 @@
-import DateCellRenderer from "@components/custom-cell-renderer//DateCellRenderer";
+import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
 import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRenderer";

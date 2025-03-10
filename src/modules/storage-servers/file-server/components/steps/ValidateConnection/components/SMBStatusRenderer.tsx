@@ -1,8 +1,8 @@
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { BlueXpTableRowType, GetAllWorkersApiType } from "@/types/app.type";
 import { Popover, InlineLoader } from "@netapp/bxp-design-system-react";
 import React, { useContext } from "react";
-import { PopoverWrapperType } from "@modules/storage-servers/file-server//fileServer.interface";
+import { PopoverWrapperType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 const SMBStatusRenderer = (
   params: BlueXpTableRowType<GetAllWorkersApiType, GetAllWorkersApiType>

@@ -6,25 +6,21 @@ export const SELECT_PATH_COL_DEFS = [
     id: 1,
     header: "Source Path",
     accessor: "sourcePath.sourcePathName",
-    width: 200,
   },
   {
     id: 2,
     header: "Protocol",
     accessor: "protocol",
-    width: 20,
   },
   {
     id: 3,
     header: "Destination File Server",
     accessor: "destinationFileServer.destinationFileServerName",
-    width: 250,
   },
   {
     id: 4,
     header: "Destination Path",
     accessor: "destinationPath.destinationPathName",
-    width: 250,
   },
   {
     id: 5,
@@ -32,7 +28,6 @@ export const SELECT_PATH_COL_DEFS = [
     accessor: "jobConfig",
     popoverText: "Running / Completed / Total Job Runs",
     Renderer: DiscoveryJobsCountRenderer,
-    width: 10,
   },
   {
     id: 6,
@@ -40,7 +35,6 @@ export const SELECT_PATH_COL_DEFS = [
     popoverText: "Running / Completed / Total Job Runs",
     accessor: "jobConfig",
     Renderer: MigrationJobsCountRenderer,
-    width: 10,
   },
   {
     id: 7,
@@ -48,11 +42,10 @@ export const SELECT_PATH_COL_DEFS = [
     popoverText: "Running / Completed / Total Job Runs",
     accessor: "jobConfig",
     Renderer: DiscoveryJobsCountRenderer,
-    width: 10,
   },
 ];
 
 export const SELECT_PATH_WARNING_MESSAGE = `I understand that Cutover requires downtime for the duration of the final sync. I have stopped the applications relying on the source shares/exports and removed write access before 
 proceeding. I understand that failure to disconnect active clients may result in data-loss.`;
 
-export const REVIEW_WARNING_MESSAGE = `I am okay to initiate Bulk cutover, with current jobs running in parallel.`;
+export const REVIEW_WARNING_MESSAGE = `I am okay to initiate Bulk cutover, with current jobs running in parallel. `;

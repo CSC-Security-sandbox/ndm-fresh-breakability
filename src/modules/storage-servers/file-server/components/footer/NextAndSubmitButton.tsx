@@ -1,6 +1,7 @@
+"use client";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 const STEP_0_FILE_SERVER_NAME = 0;
 const STEP_1_CREDENTIALS = 1;
@@ -23,6 +24,7 @@ const NextAndSubmitButton = () => {
     isEditMode,
     validateConnectionLoader,
     disableNextButton,
+    nfsValidatedWorkersIds,
   } = useContext(CommonFileServerContext);
 
   const handleFinish = async () => {
@@ -75,9 +77,20 @@ const NextAndSubmitButton = () => {
     if (selectedWorkerIds?.length === 0) {
       goToNextStep();
     } else if (currentStepIndex === 2) {
-      const resp = await handleValidateConnection();
-      if (resp.errorMessageList.length === 0) {
+      const selectedSet = new Set(selectedWorkerIds);
+      const validatedSet = new Set(nfsValidatedWorkersIds);
+
+      const areIdsEqual =
+        selectedSet.size === validatedSet.size &&
+        Array.from(selectedSet).every((id) => validatedSet.has(id));
+
+      if (areIdsEqual) {
         goToNextStep();
+      } else {
+        const resp = await handleValidateConnection();
+        if (resp.errorMessageList.length === 0) {
+          goToNextStep();
+        }
       }
     } else {
       goToNextStep();

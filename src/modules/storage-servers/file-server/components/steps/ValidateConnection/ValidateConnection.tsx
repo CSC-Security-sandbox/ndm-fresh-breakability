@@ -1,4 +1,4 @@
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { useContext } from "react";

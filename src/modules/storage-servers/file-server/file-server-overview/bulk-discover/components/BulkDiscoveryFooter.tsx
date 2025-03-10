@@ -1,8 +1,7 @@
-import React from "react";
-import { Button } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container/index";
-import { BulkDiscoveryFooterType } from "../bulk-discovery.interface";
+import { Button } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
+import { BulkDiscoveryFooterType } from "../bulk-discovery.interface";
 
 const BulkDiscoveryFooter = ({
   bulkDiscoveryForm,

@@ -21,8 +21,10 @@ export const MENU_ITEMS = [
     subMenu: [
       {
         label: "File Servers",
-        icon: <></>,
-        path: "/config/file-server",
+        icon: (
+          <GcpStorageIcon size="24" color="text-main-nav-icon-text-selected" />
+        ),
+        path: "/file-server",
       },
     ],
   },
@@ -50,7 +52,7 @@ export const MENU_ITEMS = [
         label: "Job Run List",
         id: "32",
         icon: <></>,
-        path: "/jobs/run",
+        path: "/jobs-run-list",
       },
     ],
   },

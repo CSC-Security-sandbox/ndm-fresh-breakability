@@ -1,41 +1,70 @@
-import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
 import { Box } from "@components/container/index";
-import { notify } from "@components/notification/NotificationWrapper";
-import { useUpdateJobRunStatusMutation } from "@api/jobsApi";
-import { JOB_ACTION_STATUS_ENUM } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useContext } from "react";
+import { ActionButtonsPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons.types";
+import { JOB_ACTION_STATUS_ENUM } from "@/types/app.type";
+import { useJobRunStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/useJobStatus";
 
-const ActionButtons = () => {
-  const { reviewStepSelectedIds } = useContext(BulkCutOverContext);
+const ActionButtons = ({
+  selectedRowIds,
+  showResumeButton = false,
+  rows = [],
+}: ActionButtonsPropsType) => {
+  const createModalContent = () => (
+    <Box className="flex flex-col gap-10 text-gray-700 font-light">
+      Are you sure you want to Stop the running Job?
+      <Box>
+        Once stopped, it cannot be resumed and will need to be restarted.
+      </Box>
+    </Box>
+  );
 
-  const [updateStatus, { isLoading: isUpdating }] =
-    useUpdateJobRunStatusMutation();
+  const createModalFooter = (status: JOB_ACTION_STATUS_ENUM) => (
+    <>
+      <Button color="secondary" onClick={() => dispatch(setModalClose())}>
+        Cancel
+      </Button>
+      <Button onClick={() => submitAction(status)}>Stop</Button>
+    </>
+  );
 
-  const handleUpdateStatus = async (status: JOB_ACTION_STATUS_ENUM) => {
-    try {
-      await updateStatus({ ids: reviewStepSelectedIds, status }).unwrap();
-      notify.success("Successfully updated the status of Job.");
-    } catch (error) {
-      notify.error("Failed to update Job Status.");
-      console.error(error);
-    }
-  };
+  const {
+    isButtonDisabled,
+    isUpdating,
+    handleUpdateStatus,
+    submitAction,
+    dispatch,
+    setModalClose,
+  } = useJobRunStatus(
+    rows,
+    selectedRowIds,
+    createModalContent,
+    createModalFooter
+  );
 
   return (
     <Box className="flex justify-end gap-3">
+      {showResumeButton && (
+        <Button
+          disabled={isButtonDisabled.RUNNING}
+          onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.RESUME)}
+          className="w-[152px]"
+          isSubmitting={isUpdating}
+        >
+          Resume
+        </Button>
+      )}
       <Button
-        disabled={reviewStepSelectedIds?.length === 0}
+        disabled={isButtonDisabled.PAUSED}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.PAUSE)}
-        style={{ width: 152 }}
+        className="w-[152px]"
         isSubmitting={isUpdating}
       >
         Pause
       </Button>
       <Button
-        disabled={reviewStepSelectedIds?.length === 0}
+        disabled={isButtonDisabled.STOPPED}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.STOP)}
-        style={{ width: 152 }}
+        className="w-[152px]"
         isSubmitting={isUpdating}
       >
         Stop

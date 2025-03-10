@@ -23,7 +23,7 @@ const CONFIG_HEADER_TAB: BlueXpTabHeaderPropsType = {
   tabLinks: [
     {
       label: "File Servers",
-      path: "/config/file-server",
+      path: "/file-server",
       id: 0,
     },
   ],
@@ -40,7 +40,7 @@ const JOB_HEADER_TAB: BlueXpTabHeaderPropsType = {
     },
     {
       label: "Job Run List",
-      path: "/job-run-list",
+      path: "/jobs-run-list",
       id: 1,
     },
   ],
@@ -65,7 +65,7 @@ const SPEED_TEST_HEADER_TAB: BlueXpTabHeaderPropsType = {
 };
 
 export const HEADER_WITH_PATHNAME: HeaderType = {
-  "/config/file-server": CONFIG_HEADER_TAB,
+  "/file-server": CONFIG_HEADER_TAB,
   "/new-file-server": CONFIG_HEADER_TAB,
   "/config/edit-file-server": CONFIG_HEADER_TAB,
   "/job": JOB_HEADER_TAB,

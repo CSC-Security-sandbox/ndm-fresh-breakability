@@ -1,3 +1,4 @@
+"use client";
 import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import {
@@ -9,7 +10,7 @@ import { BlueXpTableStateType } from "@/types/app.type";
 import { Box, Button } from "@mui/material";
 import { SearchWidget, Table, useTable } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useState } from "react";
 import UploadMappingTableDetails from "./UploadMappingTableDetails";
 
 export const MountPathConfigurationTable = () => {
@@ -18,6 +19,7 @@ export const MountPathConfigurationTable = () => {
     setSelectedMountPathsId,
     selectedMountPathsId,
     setSelectedReviewIds,
+    protocolForm,
   } = useContext(BulkMigrateContext);
 
   const { setFieldValue } = mappingStepForm;
@@ -34,7 +36,9 @@ export const MountPathConfigurationTable = () => {
     selectionState,
   }: BlueXpTableStateType<any> = useTable({
     columns: BULK_MIGRATION_MOUNT_PATH_COL_DEFS,
-    rows: mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
+    rows: mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.filter(
+      (row) => row.protocol === protocolForm.formState.protocol.value
+    ),
     isSorting: true,
     isRowSelecting: true,
     defaultSelectionState: {

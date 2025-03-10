@@ -1,11 +1,12 @@
 import { Box } from "@components/container/index";
+import RequiredLabel from "@components/layout/RequiredLabel";
 import {
   FormFieldInputNew,
   FormFieldSelect,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
-import FormFrame from "@modules/storage-servers/file-server//components/layout/FormFrame";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
+import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const ServerType = () => {
   const { serverTypeForm, isJobRunning } = useContext(CommonFileServerContext);
@@ -21,7 +22,6 @@ const ServerType = () => {
         />
 
         <FormFieldSelect
-          placeholder=""
           form={serverTypeForm}
           name="serverType"
           label="Server Type"

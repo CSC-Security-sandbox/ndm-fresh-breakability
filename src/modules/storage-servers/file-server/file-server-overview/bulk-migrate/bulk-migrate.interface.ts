@@ -60,11 +60,21 @@ export interface DestinationPathsOptionsType {
   pathName: string;
 }
 
+export interface ProtocolFormType {
+  protocol: OptionType;
+}
+
+export interface FormFileUploadType {
+  fileName: string;
+  contents: any;
+  fileSize: number;
+}
+
 export interface OptionsFormType {
   preserve_a_time: boolean;
   exclude_file_patterns: string;
-  upload_sid_mapping: string;
-  upload_uid_mapping: string;
+  upload_sid_mapping: FormFileUploadType;
+  upload_uid_mapping: FormFileUploadType;
   migrate_file_option: MIGRATE_OPTION_ENUM;
   incremental_sync_schedule: INCREMENTAL_SYNC_SCHEDULE_ENUM;
 
@@ -107,6 +117,7 @@ export interface BulkMigrateContextType {
   selectedMountPathsId: string[];
   setSelectedMountPathsId: (arg: string[]) => void;
   optionForm: BlueXpFormType<OptionsFormType>;
+  protocolForm: BlueXpFormType<ProtocolFormType>;
   handleSubmit: Function;
   selectedReviewIds: string[];
   setSelectedReviewIds: (ids: string[]) => void;
@@ -114,6 +125,7 @@ export interface BulkMigrateContextType {
   isPrecheckSuccessful: boolean;
   reviewIdsValidated: string[];
   isFormSubmitting: boolean;
+  preCheckStatus: PreCheckStatusType;
 }
 
 export interface ErrorsValidateMappingStepFormType {
@@ -128,6 +140,15 @@ export interface ErrorsValidateMappingStepFormType {
       destinationPathId?: string;
     };
   }>;
+}
+
+export interface PreCheckStatusType {
+  success: string[];
+  failed: string[];
+  errors: {
+    sourcePathId: string;
+    errors: string[];
+  }[];
 }
 
 export interface createPathMappingApiPayload {

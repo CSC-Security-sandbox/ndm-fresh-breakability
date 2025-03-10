@@ -9,7 +9,7 @@ const Footer = ({ content }: { content?: ReactNode }) => {
   const { currentStepIndex, gotoPreviousStep } = useWizard();
 
   const handleCancel = () => {
-    navigate("/config/file-server");
+    navigate("/file-server");
   };
 
   return (

@@ -8,7 +8,7 @@ import {
   MountPathsOptionsListType,
   ServerTypeFormType,
   WorkingDirectoryDetailsType,
-} from "@modules/storage-servers/file-server//fileServer.interface";
+} from "@modules/storage-servers/file-server/fileServer.interface";
 
 interface protocolsType {
   type: string;
@@ -88,7 +88,10 @@ export const createConfigPayload = (
         jobConfigForm?.formState.pathId?.value.length === 0
           ? null
           : jobConfigForm?.formState?.pathId?.value,
-      pathName: jobConfigForm?.formState?.pathName,
+      pathName:
+        jobConfigForm?.formState.pathId?.value.length === 0
+          ? jobConfigForm?.formState?.pathName
+          : jobConfigForm?.formState?.pathId?.label,
     },
   };
   return configPayload;

@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import { CommonFileServerContextProviderType } from "@modules/storage-servers/file-server//fileServer.interface";
+import { CommonFileServerContextProviderType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 export const CommonFileServerContext =
   createContext<CommonFileServerContextProviderType>(

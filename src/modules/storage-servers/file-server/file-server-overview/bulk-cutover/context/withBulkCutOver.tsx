@@ -1,26 +1,26 @@
 import {
-  BulkCutOverContextProviderType,
-  bulkCutOverFormType,
-  CreateBulkCutOverApiPayloadType,
-} from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.interface";
-import { JOB_RUN_LIST_COLUMN_DEFS_REVIEW } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/review.constant";
-import { SELECT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
-import { notify } from "@components/notification/NotificationWrapper";
-import useFileServerDetails from "@hooks/useFileServerDetails";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { useBulkCutOverMutation, useLazyGetJobRunsQuery } from "@api/jobsApi";
-import {
   BlueXpFormType,
   BlueXpTableStateType,
   GetAllCutOverPathsApiType,
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
 } from "@/types/app.type";
-import { useForm, useTable } from "@netapp/bxp-design-system-react";
-import { useNavigate } from "react-router-dom";
-import { ComponentType, useEffect, useState } from "react";
-import { createBulkCutOverPayload } from "../bulk-cutover.utils";
 import { useLazyGetAllCutOverPathsQuery } from "@api/configApi";
+import { useBulkCutOverMutation, useLazyGetJobRunsQuery } from "@api/jobsApi";
+import { notify } from "@components/notification/NotificationWrapper";
+import useFileServerDetails from "@hooks/useFileServerDetails";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
+import {
+  BulkCutOverContextProviderType,
+  bulkCutOverFormType,
+  CreateBulkCutOverApiPayloadType,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.interface";
+import { createBulkCutOverPayload } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.utils";
+import { JOB_RUN_LIST_COLUMN_DEFS_REVIEW } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/review.constant";
+import { SELECT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
+import { useForm, useTable } from "@netapp/bxp-design-system-react";
+import { ComponentType, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const INIT_VALUE: bulkCutOverFormType = {
   isReviewConformed: false,
@@ -35,6 +35,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [reviewStepSelectedIds, setReviewStepSelectedIds] = useState<
       string[]
     >([]);
+
     // API CALLS
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
@@ -113,7 +114,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
           createBulkCutOverPayload(cutOverSelectedIds, selectPathTableState);
         await createJobCutOverApi(payload).unwrap();
         notify.success("Bulk Cut Over Job Created Successfully");
-        router.back();
+        navigate(-1);
       } catch (error) {
         notify.error("Something went wrong");
         console.error("ERROR -->", error);
