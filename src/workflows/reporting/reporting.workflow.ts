@@ -3,6 +3,7 @@ import { JobReportType } from './reporting.types';
 import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 export const isReportedQuery = wf.defineQuery<boolean>('isReported');
 
@@ -11,11 +12,19 @@ const {
     generateDiscoveryReport: generateDiscoveryReportActivity
   } = wf.proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
 
-  const {
-    generateCOCReport: generateCOCReportActivity,
-    generateJobsReport,
-    updateStatus: updateStatusActivity,
-  } = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+const {
+  generateCOCReport: generateCOCReportActivity,
+} = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+
+
+
+const {
+  updateStatus: updateStatusActivity,
+  updateJobErrorStatus: updateJobErrorActivity,
+  updateLastEntry: updateLastEntryActivity,
+  generateJobsReport: generateJobsReportActivity,
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+  
 
 export const ReportingWorkflow = async (
     traceId: string,
@@ -44,7 +53,7 @@ export const ReportingWorkflow = async (
         case JobReportType.CUT_OVER: {
             await updateStatusActivity({jobRunId: traceId, status: JobRunStatus.BLOCKED})
             await generateCOCReportActivity(traceId);
-            await generateJobsReport(traceId);
+            await generateJobsReportActivity(traceId);
             break
         }
         case JobReportType.DISCOVER: {

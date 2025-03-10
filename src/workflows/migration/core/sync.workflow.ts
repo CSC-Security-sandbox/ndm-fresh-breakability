@@ -2,16 +2,23 @@ import { ContinueAsNew, continueAsNew, proxyActivities } from "@temporalio/workf
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
-
+import * as wf from '@temporalio/workflow';
+import { CommonActivityService } from "src/activities/common/common.service";
 const {
-    updateStatus: updateStatusActivity,
     fetchMigrationTask: fetchMigrationTaskActivity,
-    updateLastEntry: updateLastEntryActivity
 } = proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
 
 const {
     syncTask: SyncContentActivity
 } = proxyActivities<MigrationSyncService>({ startToCloseTimeout: '5h' });
+
+
+const {
+    updateStatus: updateStatusActivity,
+    updateJobErrorStatus: updateJobErrorActivity,
+    updateLastEntry: updateLastEntryActivity
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+  
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);

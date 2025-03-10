@@ -61,7 +61,6 @@ export class MigrationTaskService{
     }
   }
 
-
   async fetchScanTask({ jobRunId }: FetchScanTaskInput): Promise<FetchScanTaskOutPut> {
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
@@ -88,50 +87,6 @@ export class MigrationTaskService{
     }
   }
 
-  async updateLastEntry(traceId: string): Promise<any> {
-    try {
-      this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
-      const jobContext = await this.redisService.getJobContext(traceId);
-      const id = await jobContext.appendToFileList(generateDummyFileEntry);
-      jobContext.errorsInfo.lastId = id;
-      this.redisService.setJobContext(traceId, jobContext);
-      this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
-      return { message: 'Job completed for job id: ' + traceId };
-    } catch (error) {
-      this.logger.error(`[${traceId}] Error while marking the job as completed : ${error}`);
-      return { message: 'Error while marking the job as completed : ' + traceId };
-    }
-}
-
-
-
-  async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
-    try {
-
-      this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
-      this.logger.log(`[${jobRunId}] Updating status to ${status}`);
-      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`);
-      this.logger.log(`[${jobRunId}] status updated to ${status}`);
-      return { message: 'Job status updated for job id: ' + jobRunId };
-    } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
-      return { message: 'Error while updating the status of the job id : ' + jobRunId };
-    }
-}  
-
-  async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
-    try {
-      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
-      this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
-      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`);
-      this.logger.log(`[${jobRunId}] status updated to ${status}`);
-      return { message: 'Job status updated for job id: ' + jobRunId };
-    } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
-      return { message: 'Error while updating the status of the job id : ' + jobRunId };
-    }
-  }
-
   async generateCOCReport(jobRunId: string) {
     try {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
@@ -145,17 +100,17 @@ export class MigrationTaskService{
     }
   }
 
-  async generateJobsReport(jobRunId: string) {
+  async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
     try {
-      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
-      this.logger.log(`[${jobRunId}] Triggering generateJobsReport for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
-      // API -> /api/v1/report/inventory/generate-jobs-report
-      await axios.post(`${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`, { jobRunId });
-      this.logger.log(`[${jobRunId}] Triggering generateJobsReport successful`);
-      return { message: 'Triggering generateJobsReport successful for job id: ' + jobRunId };
+      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
+      this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`);
+      this.logger.log(`[${jobRunId}] status updated to ${status}`);
+      return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to Trigger generateJobsReport: ${error} | for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
-      return { message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId };
+      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
+      return { message: 'Error while updating the status of the job id : ' + jobRunId };
     }
-  }
+  }  
+
 }

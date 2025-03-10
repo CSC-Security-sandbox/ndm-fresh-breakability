@@ -10,12 +10,17 @@ import { DiscoveryJobWorkflow } from './discovery-job-workflow';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import * as wf from '@temporalio/workflow';
 import { ReportingWorkflow } from '../reporting/reporting.workflow';
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
+
+const {
+  updateJobErrorStatus: updateJobErrorActivity
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 const { getWorkerId, setJobState, getJobState } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5m' });
 /**
@@ -64,6 +69,7 @@ export async function DiscoveryWorkflow({
   });  
   if(!activeWorkerIds.length) {
     log(traceId, `No active workers found`);
+    updateJobErrorActivity(traceId)
     return {
       traceId: traceId,
       status: 'error',
@@ -115,30 +121,30 @@ export async function DiscoveryWorkflow({
   console.log("disoovery response" + JSON.stringify(discoveryResponse));
   result.push(discoveryResponse);
 
-  const cleanupResponse = await Promise.all(
-    activeWorkerIds.map(async (workerId) => {
-      log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
-      try {
-        return await executeChild(CleanupWorkerWorkflow, {
-          args: [{ jobRunId: traceId }],
-          workflowId: `CleanupWorkerWorkflow-${traceId}`,
-          taskQueue: `${workerId}-TaskQueue`,
-          ...options,
-          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
-        });
-      } catch (error) {
-        log(traceId, `Error in CleanupWorkerWorkflow: ${error}`);
-        throw error;
-      }
-    }),
-  );
-
+  if (activeWorkerIds.length > 0) {
+    await ReportingWorkflow(traceId, reportingSignal)
+    const cleanupResponse = await Promise.all(
+      activeWorkerIds.map(async (workerId) => {
+        log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
+        try {
+          return await executeChild(CleanupWorkerWorkflow, {
+            args: [{ jobRunId: traceId }],
+            workflowId: `CleanupWorkerWorkflow-${traceId}`,
+            taskQueue: `${workerId}-TaskQueue`,
+            ...options,
+            cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+            parentClosePolicy: ParentClosePolicy.TERMINATE,
+          });
+        } catch (error) {
+          log(traceId, `Error in CleanupWorkerWorkflow: ${error}`);
+          throw error;
+        }
+      }),
+    );
     cleanupResponse.flat().map((r) =>
       result.push(r),
     );
-
-  await ReportingWorkflow(traceId, reportingSignal)
+  }
 
   log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(result)}`);
   return discoveryResponse;

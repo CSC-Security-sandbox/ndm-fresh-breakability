@@ -2,7 +2,8 @@ import { ContinueAsNew, continueAsNew, proxyActivities } from "@temporalio/workf
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
-
+import * as wf from '@temporalio/workflow';
+import { CommonActivityService } from "src/activities/common/common.service";
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
@@ -11,12 +12,15 @@ async function log(traceId: string, message: string) {
 const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ startToCloseTimeout: '5h' });
 
 const {
-    updateStatus: updateStatusActivity,
+
     publishScanTask: publishTaskActivity,  
     fetchScanTask: fetchTaskActivity
 } = proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
 
-  
+const {
+    updateStatus: updateStatusActivity
+  } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+   
 interface ScanWorkflowInput {
     jobRunId: string;
 }

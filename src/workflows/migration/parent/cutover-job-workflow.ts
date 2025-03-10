@@ -5,6 +5,7 @@ import { CutOverStatus } from "src/activities/migrate/migrate.type";
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
 import { ScanWorkflow } from "../core/scan.workflow";
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 
 export const unblockSignal =  wf.defineSignal<[string]>('approve');
@@ -13,9 +14,13 @@ export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');
 
 
 const {
-  updateStatus: updateStatusActivity,
   updateCutOverStatus: updateCutOverStatusActivity
 } = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+
+
+const {
+   updateJobErrorStatus: updateJobErrorActivity
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
 interface CutOverWorkFlowInput {
@@ -60,6 +65,7 @@ export const CutOverWorkFlow = async ({
   });
 
   if (activeWorkerIds.length === 0) {
+    updateJobErrorActivity(traceId)
     return {
       traceId,
       status: 'error',
@@ -87,8 +93,7 @@ export const CutOverWorkFlow = async ({
         }
       }
     })
-  )
-    .then((response) => {
+  ).then((response) => {
       log(traceId, `ScanWorkflow response: ${JSON.stringify(response)}`);
       return {
         traceId,
@@ -105,7 +110,7 @@ export const CutOverWorkFlow = async ({
       };
     });
   console.log("scanResponse response: " + JSON.stringify(scanResponse));
-  // result.push(scanResponse);
+  result.push(scanResponse as any);
 
   const syncResponse = await Promise.all(
     activeWorkerIds.map(async (workerId) => {
@@ -144,15 +149,14 @@ export const CutOverWorkFlow = async ({
       };
     });
   console.log("SyncResponse response: " + JSON.stringify(syncResponse));
-  // result.push(syncResponse);
+  result.push(syncResponse as any);
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 
-  await ReportingWorkflow(traceId, reportingSignal)
-  await WaitingForApproval(traceId, unblockSignal)
-
 
   if (activeWorkerIds.length > 0) {
+    await ReportingWorkflow(traceId, reportingSignal)
+    await WaitingForApproval(traceId, unblockSignal)
     const cleanupResponses = await Promise.all(
       activeWorkerIds.map((workerId) =>  executeChild(CleanupWorkerWorkflow, {
           args: [{ jobRunId: traceId }],

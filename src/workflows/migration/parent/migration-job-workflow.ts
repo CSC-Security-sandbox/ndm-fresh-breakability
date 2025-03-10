@@ -3,6 +3,7 @@ import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/wo
 import { ScanWorkflow } from "../core/scan.workflow";
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 import * as wf from '@temporalio/workflow';
+import { CommonActivityService } from "src/activities/common/common.service";
 interface MigrationWorkflowInput {
   traceId: string;
   payload: {
@@ -16,6 +17,11 @@ async function log(traceId: string, message: string): Promise<void> {
 }
 
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
+
+const {
+  updateJobErrorStatus: updateJobErrorActivity
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+
 
 export const MigrationWorkflow = async ({
   traceId,
@@ -47,6 +53,7 @@ export const MigrationWorkflow = async ({
   });
 
   if (activeWorkerIds.length === 0) {
+    updateJobErrorActivity(traceId)
     return {
       traceId,
       status: 'error',
@@ -92,7 +99,7 @@ export const MigrationWorkflow = async ({
       };
     });
   console.log("scanResponse response: " + JSON.stringify(scanResponse));
-  // result.push(scanResponse);
+  result.push(scanResponse as any);
 
   const syncResponse = await Promise.all(
     activeWorkerIds.map(async (workerId) => {
@@ -115,30 +122,29 @@ export const MigrationWorkflow = async ({
       }
     })
   )
-    .then((response) => {
-      log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
-      return {
-        traceId,
-        status: 'success',
-        message: `SyncWorkflow successfully completed for ${traceId}`,
-      };
-    })
-    .catch((error) => {
-      log(traceId, `SyncWorkflow error: ${error}`);
-      return {
-        traceId,
-        status: 'error',
-        message: `Failed to perform sync for ${traceId}: ${error}`,
-      };
-    });
+  .then((response) => {
+    log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
+    return {
+      traceId,
+      status: 'success',
+      message: `SyncWorkflow successfully completed for ${traceId}`,
+    };
+  })
+  .catch((error) => {
+    log(traceId, `SyncWorkflow error: ${error}`);
+    return {
+      traceId,
+      status: 'error',
+      message: `Failed to perform sync for ${traceId}: ${error}`,
+    };
+  });
   console.log("SyncResponse response: " + JSON.stringify(syncResponse));
-  // result.push(syncResponse);
+  result.push(syncResponse as any);
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 
-  await ReportingWorkflow(traceId, reportingSignal)
-
   if (activeWorkerIds.length > 0) {
+    await ReportingWorkflow(traceId, reportingSignal)
     const cleanupResponses = await Promise.all(
       activeWorkerIds.map((workerId) => executeChild(CleanupWorkerWorkflow, {
           args: [{ jobRunId: traceId }],
