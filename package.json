@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "type-check": "tsc --noEmit",
-    "dev": "vite --port 3111",
+    "local": "vite --port 3111",
+    "dev": "vite --host 127.0.0.1 --port 3111",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
