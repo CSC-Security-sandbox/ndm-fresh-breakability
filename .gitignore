@@ -1,6 +1,7 @@
 node_modules
 .next
-.env.development
+.env.*
 .vscode
 next.config.js
 coverage
+dist

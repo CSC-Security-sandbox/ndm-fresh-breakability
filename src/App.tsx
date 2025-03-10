@@ -1,35 +1,90 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { Suspense, lazy } from "react";
+import { Route, Routes } from "react-router-dom";
+import "@netapp/bxp-design-system-react/dist/index.css";
+import NotFound from "@components/404/PageNotFound";
+import HomeLayout from "@components/route-layout/HomeLayout";
+import RouteErrorBoundary from "@components/ErrorBoundary/ErrorBoundary";
+import JobTasksPage from "@pages/JobTasksPage";
+import SpeedTestConfig from "@modules/speed-test/components/speed-test-configuration/components/SpeedTestConfig";
+const WorkersPage = lazy(() => import("@pages/WorkersPage"));
+const BulkCutOverPage = lazy(() => import("@pages/BulkCutOverPage"));
+const BulkDiscoveryPage = lazy(() => import("@pages/BulkDiscoveryPage"));
+const BulkMigratePage = lazy(() => import("@pages/BulkMigratePage"));
+const FileServerOverViewPage = lazy(
+  () => import("@pages/FileServerOverViewPage")
+);
+const HomePage = lazy(() => import("@pages/HomePage"));
+const JobListPage = lazy(() => import("@pages/JobListPage"));
+const CreateNewFileServer = lazy(
+  () =>
+    import(
+      "@modules/storage-servers/file-server/new-file-server/CreateNewFileServer"
+    )
+);
+const EditFileServerPage = lazy(() => import("@pages/EditFileServerPage"));
+const FileServerPage = lazy(() => import("@pages/FileServerPage"));
+const JobDetailsPage = lazy(() => import("@pages/JobDetailsPage"));
+const JobRunDetailsPage = lazy(() => import("@pages/JobRunDetailsPage"));
+const JobRunListPage = lazy(() => import("@pages/JobRunListPage"));
+const SpeedTestPage = lazy(() => import("@pages/SpeedTestPage"));
 
-function App() {
-  const [count, setCount] = useState(0)
-
+const App = () => {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <div className="">
+      <Suspense fallback={<div>Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<HomeLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="home" element={<HomePage />} />
+            {/* FILE SERVER ROUTES */}
+            <Route path="file-server" element={<FileServerPage />} />
+            <Route
+              path="file-server/:fileServerId"
+              element={<FileServerOverViewPage />}
+            />
+            <Route path="new-file-server" element={<CreateNewFileServer />} />
+            <Route
+              path="edit-file-server/:fileServerId"
+              element={<EditFileServerPage />}
+            />
+            {/* CREATE JOBS ROUTE */}
+            <Route
+              path="file-server/:fileServerId/bulk-discover"
+              element={<BulkDiscoveryPage />}
+            />
+            <Route
+              path="file-server/:fileServerId/bulk-migrate"
+              element={<BulkMigratePage />}
+            />
+            <Route
+              path="file-server/:fileServerId/bulk-cutover"
+              element={<BulkCutOverPage />}
+            />
+            {/* WORKER */}
+            <Route path="workers" element={<WorkersPage />} />
+            {/* JOBS ROUTES */}
+            <Route path="jobs-list" element={<JobListPage />} />
+            <Route path="job-details/:jobId" element={<JobDetailsPage />} />
+            <Route
+              path="/job-details/:jobId/run/:jobRunId"
+              element={<JobRunDetailsPage />}
+            />
+            <Route
+              path="/job-details/:jobId/run/:jobRunId/tasks"
+              element={<JobTasksPage />}
+            />
 
-export default App
+            <Route path="/jobs-run-list" element={<JobRunListPage />} />
+            {/* SPEED TEST ROUTES */}
+            <Route path="speed-test" element={<SpeedTestPage />} />
+            <Route path="/speed-test/config" element={<SpeedTestConfig />} />
+
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </div>
+  );
+};
+
+export default App;

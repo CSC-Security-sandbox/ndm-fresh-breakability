@@ -1,0 +1,130 @@
+import Box from "@/components/container/Box";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import { notify } from "@components/notification/NotificationWrapper";
+import {
+  useGetAllUsersQuery,
+  useResetPasswordMutation,
+  useUpdateUserStatusMutation,
+} from "@api/userApi";
+import { COL_DEF_FOR_USER } from "@/constant/app.constants";
+import { Collapse } from "@mui/material";
+import { Button } from "@netapp/bxp-design-system-react";
+import { useState } from "react";
+import CreateUserForm from "./CreateUserForm";
+import PermissionAuth from "@/auth/PermissionAuth";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import { hasPermission } from "@/auth/auth.utils";
+import { useSelector } from "react-redux";
+import { RootStateType } from "@store/store";
+import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
+
+const ManageUsers = () => {
+  const [updateUserStatus] = useUpdateUserStatusMutation();
+  const [resetPasswordApi] = useResetPasswordMutation();
+  const { data: userData, isLoading } = useGetAllUsersQuery("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const permission = useSelector(
+    (state: RootStateType) => state.permissionSlice
+  );
+  const [isCreateFormVisible, setIsCreateFormVisible] =
+    useState<boolean>(false);
+
+  const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
+    updateUserStatus(body)
+      .then(() => {
+        notify.success(
+          `${body.enable ? "Enabled" : "Disabled"} access for user ${
+            body.email
+          }`
+        );
+      })
+      .catch((err) => {
+        notify.error(`Failed to update status of user ${body.email}`);
+        console.error(err);
+      });
+  };
+
+  const canManageProject: boolean = hasPermission(
+    USER_PERMISSION_TYPE_ENUM.CreateUser
+  );
+  const rowMenu = (row: any) => [
+    {
+      label: row.user_status === "active" ? "Disable Access" : "Enable Access",
+      onClick: () => {
+        const body = {
+          email: row.email,
+          enable: row.user_status !== "active",
+        };
+        updateUserStatusWraper(body);
+      },
+
+      disabled: permission?.userPermissions?.id === row.id || !canManageProject,
+    },
+    {
+      label: "Reset Password",
+      disabled: row.user_status !== "active" || !canManageProject,
+      onClick: () => {
+        const body = {
+          email: row.email,
+        };
+        resetPasswordApi(body)
+          .unwrap()
+          .then((res) => {
+            setIsCreateFormVisible(true);
+            setTemporaryPassword(res?.newPassword);
+          })
+          .catch((err) => {
+            notify.error("Failed to reset password.");
+            console.error({ err, level: "Generate Temporary Password." });
+          });
+      },
+    },
+  ];
+
+  const handleClose = () => {
+    setIsCreateFormVisible(false);
+    setTemporaryPassword("");
+  };
+
+  const tableStateProps = {
+    columns: COL_DEF_FOR_USER,
+    rows: userData,
+    isSorting: true,
+    pageSize: 10,
+    defaultColumnState: DEFAULT_COLUMN_STATE,
+    defaultSortState: { sortOrder: "desc", column: "column_created_on" },
+  };
+
+  return (
+    <Box className="h-[43.75rem] w-full p-6">
+      <Collapse in={isCreateFormVisible} mountOnEnter unmountOnExit>
+        <Box className="flex justify-around">
+          <CreateUserForm
+            closeAction={handleClose}
+            temporaryPassword={temporaryPassword}
+          />
+        </Box>
+      </Collapse>
+      <Collapse in={!isCreateFormVisible}>
+        <TableWrapper
+          tableStateProps={tableStateProps}
+          isLoading={isLoading}
+          rowMenu={rowMenu}
+          label="Users"
+          content={
+            <PermissionAuth
+              permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
+            >
+              <Button onClick={() => setIsCreateFormVisible(true)}>
+                Add User
+              </Button>
+            </PermissionAuth>
+          }
+          originalColumns={COL_DEF_FOR_USER}
+        />
+      </Collapse>
+    </Box>
+  );
+};
+
+export default ManageUsers;
