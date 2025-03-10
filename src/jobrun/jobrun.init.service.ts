@@ -246,12 +246,10 @@ export class JobRunInitService {
       jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
       jobRunConfig.workers
     )
-    const redisClient = await RedisUtils.getClient();
-    if (!redisClient.isOpen) await redisClient.connect();
     const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
 
     const task = await this.createInitialTask(jobRunId, jobRunConfig);
-    const redisProvider = JobContextFactory.getProvider('redis', this.redisService.getClient());
+    const redisProvider = JobContextFactory.getProvider('redis', await this.redisService.getClient());
     const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
     await jobContext.appendToTaskList(task);
     console.debug('JobContext created and appended initial task ---> ', task);
