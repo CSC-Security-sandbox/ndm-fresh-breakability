@@ -27,13 +27,9 @@ export class PdfService {
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, fileName);
       
-      if (reportType === ReportType.JOBS_RREPORT) {
-        const pdfBuffer = await this.generateJobsReportPdf(jobRunId);
-        fs.writeFileSync(filePath, pdfBuffer);
-        return pdfBuffer;
-      }
+      if (reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
       
-      if (fs.existsSync(filePath) && reportType==ReportType.DISCOVERY) {
+      if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
           return fs.readFileSync(filePath);
       } else {
@@ -54,29 +50,35 @@ export class PdfService {
           [jobRunId, 'JOBS_REPORT']
         )
         const reportData = JSON.parse(data[0].report_data);
-        console.log(reportData);
         reportData.last_iteration = reportData.last_iteration || {};
         reportData.last_errors = reportData.last_errors || {};
         if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
         reportData.last_iteration.summary = reportData.summary[0];
         reportData.last_errors.summary = reportData.summary[0];
         const html = report(reportData);
-        const browser = await puppeteer.launch({
-          args: ['--no-sandbox', '--disable-setuid-sandbox'],
-          protocolTimeout: 60000,
-        });
-        const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
-        const pdfBuffer = await page.pdf({ 
-          format: 'A4', 
-          printBackground: true,
-          scale: 0.6,
-          landscape: true
-        });
-        await browser.close();
-        return Buffer.from(pdfBuffer);
+        let browser;
+        try {
+          browser = await puppeteer.launch({
+            headless: true,
+            args: [
+              "--no-sandbox",
+              "--disable-setuid-sandbox",
+              "--disable-gpu",
+              "--disable-dev-shm-usage",
+              "--disable-accelerated-2d-canvas"
+            ],
+            executablePath: "/usr/bin/chromium-browser",
+            protocolTimeout: 60000,
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: 'networkidle0' });
+          const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, scale: 0.6, landscape: true });
+          return Buffer.from(pdfBuffer);
+        }finally {
+          if (browser) await browser.close();
+        }
       } catch (error) {
-        this.logger.log(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
+        this.logger.error(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
         throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);
       }
     }

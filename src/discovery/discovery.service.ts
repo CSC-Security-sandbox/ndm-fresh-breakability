@@ -152,8 +152,16 @@ export class DiscoveryService {
     const htmlOutput = this.generateHtmlTable(reportData);
     
     const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        protocolTimeout: 60000,
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas"
+      ],
+      executablePath: "/usr/bin/chromium-browser",
+      protocolTimeout: 60000,
     });
     const page = await browser.newPage();
     await page.setContent(htmlOutput, { waitUntil: 'networkidle0' });
