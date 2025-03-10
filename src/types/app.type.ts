@@ -643,7 +643,7 @@ export type NameCellRendererProps = {
 export type ColumnFilterType = {
   accessor: string;
   label: string;
-  formater?: Function;
+  formatter?: Function;
 };
 
 export type FiltersType = {

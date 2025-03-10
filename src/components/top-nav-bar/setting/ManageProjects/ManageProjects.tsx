@@ -9,6 +9,7 @@ import { useGetAllProjectsQuery } from "@api/projectApi";
 import { hasPermission } from "@/auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
+import { Collapse } from "@mui/material";
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();

@@ -1,11 +1,11 @@
 import NotFound from "@components/404/PageNotFound";
 import HomeLayout from "@components/route-layout/HomeLayout";
-import SpeedTestConfig from "@modules/speed-test/components/speed-test-configuration/components/SpeedTestConfig";
 import "@netapp/bxp-design-system-react/dist/index.css";
 import { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 
 // LAZY LOADED PAGES
+const SpeedTestConfigPage = lazy(() => import("@pages/SpeedTestConfigPage"));
 const JobTasksPage = lazy(() => import("@pages/JobTasksPage"));
 const DiscoveryPreviewPage = lazy(() => import("@pages/DiscoveryPreviewPage"));
 const WorkersPage = lazy(() => import("@pages/WorkersPage"));
@@ -83,7 +83,11 @@ const App = () => {
 
             {/* SPEED TEST ROUTES */}
             <Route path="speed-test" element={<SpeedTestPage />} />
-            <Route path="/speed-test/config" element={<SpeedTestConfig />} />
+            <Route
+              path="/speed-test/config"
+              element={<SpeedTestConfigPage />}
+            />
+
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

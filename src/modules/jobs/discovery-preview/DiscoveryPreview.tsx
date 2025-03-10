@@ -64,7 +64,7 @@ const DiscoveryPreview = () => {
     <Box>
       <Box className="flex justify-end mb-4">
         <ActionMenuButtonStyle
-          button={<DropdownButton>Discovery Report</DropdownButton>}
+          button={<DropdownButton>Download Discovery Report</DropdownButton>}
         >
           <ActionMenu.Button
             onClick={() => {

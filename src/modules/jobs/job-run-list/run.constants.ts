@@ -121,9 +121,9 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     width: 80,
   },
   {
-    header: "Protocal",
+    header: "Protocol",
     accessor: "sourceServer.protocol",
-    id: "protocal",
+    id: "protocol",
     width: 100,
   },
   {
@@ -158,7 +158,7 @@ export const defaultColumnState = {
   sourcePath: { isHidden: true },
   destinationServerName: { isHidden: true },
   destinationPath: { isHidden: true },
-  protocal: { isHidden: true },
+  protocol: { isHidden: true },
   directories: { isHidden: true },
 };
 
@@ -166,8 +166,8 @@ export const COLUMNS_TO_FILTER_DEFS: ColumnFilterType[] = [
   { accessor: "sourceServerName", label: "Source" },
   { accessor: "destinationServerName", label: "Destination" },
   { accessor: "sourceServerProtocol", label: "Protocol" },
-  { accessor: "jobType", label: "Type", formater: getJobType },
-  { accessor: "status", label: "Status", formater: toTitleCase },
+  { accessor: "jobType", label: "Type", formatter: getJobType },
+  { accessor: "status", label: "Status", formatter: toTitleCase },
 ];
 
 export { JOB_RUN_LIST_COLUMN_DEFS };
