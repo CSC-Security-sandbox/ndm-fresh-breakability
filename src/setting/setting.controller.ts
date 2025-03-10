@@ -13,7 +13,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('Global Settings')
-@Controller('setting')
+@Controller('/api/v1/setting')
 export class SettingController {
   constructor(private readonly settingService: SettingService) {}
 
@@ -48,5 +48,17 @@ export class SettingController {
   })
   async findOne(@Param('settingType') settingType: string) {
     return await this.settingService.findOne(settingType);
+  }
+
+  @Patch()
+  @Auth(Permission.ManageProject)
+  @ApiBearerAuth()
+  @ApiBody({ type: CreateSettingDto, isArray: true })
+  @ApiOperation({
+    summary: 'Update Global Settings',
+    description: 'Update global settings',
+  })
+  async updateSetting(@Body() setting: CreateSettingDto[]) {
+    return await this.settingService.updateSetting(setting);
   }
 }
