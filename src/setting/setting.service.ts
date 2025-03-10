@@ -64,24 +64,28 @@ export class SettingService {
   }
   async testSMTPConnection(createSettingDto: CreateSettingDto[]):Promise<boolean> {
     let isVerificationSuccessful:boolean = false;
-    const smtpConfig = {
+    const smtpConfig:any = {
       host: createSettingDto.find(setting => setting.settingKey === 'SMTP_HOST').settingValue, 
       port: createSettingDto.find(setting => setting.settingKey === 'SMTP_PORT').settingValue,                
       secure: false,            
-      auth: {
-        user: createSettingDto.find(setting => setting.settingKey === 'SMTP_USER').settingValue, 
-        pass: createSettingDto.find(setting => setting.settingKey === 'SMTP_PASSWORD').settingValue,          
-      },
+     
     };
+    if(createSettingDto.find(setting => setting.settingKey === 'SMTP_USER_NAME')?.settingValue
+       && createSettingDto.find(setting => setting.settingKey === 'SMTP_PASSWORD')?.settingValue){
+      smtpConfig.auth = {
+        user: createSettingDto.find(setting => setting.settingKey === 'SMTP_USER_NAME')?.settingValue,
+        pass: createSettingDto.find(setting => setting.settingKey === 'SMTP_PASSWORD')?.settingValue,
+      }
+    }
     try {
       const transporter:Transporter = nodemailer.createTransport({
         host: smtpConfig.host,
         port: parseInt(smtpConfig.port),
         secure: smtpConfig.secure,
-        // auth: {
-        //   user: smtpConfig.auth.user,
-        //   pass: smtpConfig.auth.pass,
-        // },
+        auth: smtpConfig.auth ? {
+          user: smtpConfig.auth.user,
+          pass: smtpConfig.auth.pass,
+        } : undefined,
       });
       await transporter.verify();
       isVerificationSuccessful = true;
