@@ -1,5 +1,5 @@
 import { JobType, TaskStatus, TaskType } from './enums';
-import { FileInfo, TaskStats, Command, Task, DMError, TaskStatsType, CommandOperation, ErroredFile } from './metadata-types';
+import { FileInfo, TaskStats, Command, Task, DMError, TaskStatsType, CommandOperation, ErroredFile, ErrorType } from './metadata-types';
 
 describe('Metadata Types', () => {
   it('should create and serialize FileInfo', () => {
@@ -19,14 +19,14 @@ describe('Metadata Types', () => {
 
   it('should create and serialize Command', () => {
     const commandOp = new CommandOperation();
-    const command = new Command('cmd1', { 0: commandOp }, 'cmd-001');
+    const command = new Command('cmd1', { 0: commandOp }, 'cmd-001',0);
     const serialized = command.serialize();
     const deserialized: Command = Command.deserialize(serialized);
     expect(deserialized.commandId).toBe('cmd-001');
   });
 
   it('should create and serialize Task', () => {
-    const task = new Task('task1', 'jobRunId', TaskType.SCAN, TaskStatus.RUNNING, 'worker1', '/source', 'sPathId', [ new Command('cmd1', { 0: new CommandOperation() }, 'cmd-001') ]);
+    const task = new Task('task1', 'jobRunId', TaskType.SCAN, TaskStatus.RUNNING, 'worker1', '/source', 'sPathId', [ new Command('cmd1', { 0: new CommandOperation() }, 'cmd-001',0) ]);
     const serialized = task.serialize();
     const deserialized: Task = Task.deserialize(serialized);
     expect(deserialized.id).toBe('task1');
@@ -37,12 +37,14 @@ describe('Metadata Types', () => {
       taskId: 'taskId',
       errorCode: '500',
       errorMessage: 'errorMessage',
+      errorType: ErrorType.RECOVERABLE_ERROR
     }
     const operationError={
       operationId: 'operationId',
       errorCode: '500',
       errorMessage: 'errorMessage',
       errorFiles:{} as ErroredFile,
+      errorType: ErrorType.RECOVERABLE_ERROR
     }
     const error = new DMError(taskError, operationError);
     const serialized = error.serialize();

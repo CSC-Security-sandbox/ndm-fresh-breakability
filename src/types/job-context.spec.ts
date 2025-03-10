@@ -1,9 +1,10 @@
 import { JobContext } from './job-context';
 import { JobConfig } from './job-config';
-import { FileInfo, DMError, TaskStats, Task, Command, ErroredFile } from './metadata-types';
+import { FileInfo, DMError, TaskStats, Task, Command, ErroredFile, ErrorType } from './metadata-types';
 import { FileServerDetails } from './file-server';
 import { NFS } from './protocols';
 import { OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from './enums';
+import { error } from 'winston';
 
 class TestJobContext extends JobContext {
   constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
@@ -182,7 +183,7 @@ describe('JobContext Class', () => {
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId',0)],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
@@ -199,6 +200,7 @@ describe('JobContext Class', () => {
         taskId: 'taskId',
         errorCode: '500',
         errorMessage: 'errorMessage',
+        errorType:ErrorType.FATAL_ERROR
       }
       const errorInfo: DMError = new DMError(taskError);
       jest.spyOn(jobContext.errorsInfo, 'append').mockResolvedValue('errorId');
@@ -353,7 +355,7 @@ describe('JobContext Class', () => {
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId',0)],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
@@ -376,7 +378,7 @@ describe('JobContext Class', () => {
         'workerId',
         'sPath',
         'sPathId',
-        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId')],
+        [new Command('fPath', { 1: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, 'commandId',0)],
         'tPath',
         'tPathId',
         'excludeFilePatterns',
@@ -417,6 +419,7 @@ describe('JobContext Class', () => {
         taskId: 'taskId',
         errorCode: '500',
         errorMessage: 'errorMessage',
+        errorType:ErrorType.FATAL_ERROR
       }
       const errorInfo: DMError = new DMError(taskError);
       jest.spyOn(jobContext.errorsInfo, 'read').mockReturnValue((async function* () { yield errorInfo; })());
@@ -433,12 +436,14 @@ describe('JobContext Class', () => {
         taskId: 'taskId',
         errorCode: '500',
         errorMessage: 'errorMessage',
+        errorType:ErrorType.FATAL_ERROR
       }
       const operationError={
         operationId: 'operationId',
         errorCode: '500',
         errorMessage: 'errorMessage',
         errorFiles:{} as ErroredFile,
+        errorType:ErrorType.FATAL_ERROR
       }
       const errorInfo: DMError = new DMError(taskError,operationError);
       jest.spyOn(jobContext.errorsInfo, 'groupRead').mockReturnValue((async function* () { yield errorInfo; })());
