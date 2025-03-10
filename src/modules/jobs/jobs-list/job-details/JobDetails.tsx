@@ -41,7 +41,7 @@ export default function Page() {
   const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
-      pollingInterval: Number(process.env.NEXT_PUBLIC_TIME_INTERVAL),
+      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );

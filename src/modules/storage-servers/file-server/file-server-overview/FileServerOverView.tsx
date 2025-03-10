@@ -22,7 +22,7 @@ const FileServerOverView = () => {
   } = useFileServerDetails();
   const [getFileOverviewApi, { isLoading, data }] = useLazyGetFileOverviewQuery(
     {
-      pollingInterval: Number(process.env.NEXT_PUBLIC_TIME_INTERVAL),
+      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );

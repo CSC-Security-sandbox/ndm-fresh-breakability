@@ -1,12 +1,14 @@
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
-import WorkerInstallationContent from "@components/top-nav-bar/setting/ManageProjects/WorkerInstallationContent";
+import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/WorkerInstructions";
 import useWorkers from "@hooks/useWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 const Workers = () => {
   const { workers, isLoading } = useWorkers();
+  const { selectedProjectId } = useSelectedProjectId();
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
     rows: workers,
@@ -21,7 +23,10 @@ const Workers = () => {
         <PermissionAuth
           permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}
         >
-          <WorkerInstallationContent />
+          <WorkerInstallation
+            label="View Instruction To Setup Worker"
+            project_id={selectedProjectId}
+          />
         </PermissionAuth>
       }
       isLoading={isLoading}
