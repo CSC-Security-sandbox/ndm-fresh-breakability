@@ -27,11 +27,7 @@ const JobDescriptionInnerCard = ({
   </Box>
 );
 
-export default function Page({
-  params,
-}: {
-  params: Promise<{ jobRunId: string }>;
-}) {
+const JobError = ({ params }: { params: Promise<{ jobRunId: string }> }) => {
   const [jobRunId, setJobRunId] = useState<string>("");
   const [currentTab, setCurrentTab] = useState(2);
 
@@ -107,4 +103,6 @@ export default function Page({
       </Box>
     </Box>
   );
-}
+};
+
+export default JobError;

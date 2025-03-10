@@ -15,6 +15,7 @@ import {
   Table,
   TablePager,
   useTable,
+  Text,
 } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";

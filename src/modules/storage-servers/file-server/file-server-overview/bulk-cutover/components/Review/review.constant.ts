@@ -55,7 +55,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
     width: 180,
   },
   {
-    header: "Destination Path",
+    header: "Destination",
     accessor: "destinationServer.path",
     id: "destinationPath",
     width: 180,
@@ -67,7 +67,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
     width: 80,
   },
   {
-    header: "Size",
+    header: "Data",
     accessor: "totalScannedSize",
     id: "size",
     width: 80,

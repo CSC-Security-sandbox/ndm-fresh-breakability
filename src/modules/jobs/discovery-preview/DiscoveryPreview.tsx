@@ -20,7 +20,7 @@ import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
 import { notify } from "@components/notification/NotificationWrapper";
 
-const Page = () => {
+const DiscoveryPreview = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();
   const payload: ReportDataPayloadType = {
     jobRunId: jobRunId,
@@ -106,4 +106,4 @@ const Page = () => {
   );
 };
 
-export default Page;
+export default DiscoveryPreview;
