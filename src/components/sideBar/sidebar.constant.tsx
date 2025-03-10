@@ -1,10 +1,9 @@
+import { AppIcon, WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
+import { MoveIcon } from "@netapp/bxp-style/react-icons/Action";
 import {
-  AppIcon,
-  CommunitiesIcon,
-  StatisticsIcon,
-  WorkspaceIcon,
-} from "@netapp/bxp-style/react-icons/General";
-import { GcpStorageIcon } from "@netapp/bxp-style/react-icons/Storage";
+  GcpStorageIcon,
+  VirtualMachineIcon,
+} from "@netapp/bxp-style/react-icons/Storage";
 import { Box } from "../container";
 
 export const MENU_ITEMS = [
@@ -22,9 +21,7 @@ export const MENU_ITEMS = [
     subMenu: [
       {
         label: "File Servers",
-        icon: (
-          <GcpStorageIcon size="24" color="text-main-nav-icon-text-selected" />
-        ),
+        icon: <></>,
         path: "/config/file-server",
       },
     ],
@@ -33,7 +30,7 @@ export const MENU_ITEMS = [
     id: "7",
     label: <Box className="text-sm font-semibold">Workers</Box>,
     icon: (
-      <CommunitiesIcon size="24" color="text-main-nav-icon-text-selected" />
+      <VirtualMachineIcon size="24" color="text-main-nav-icon-text-selected" />
     ),
     path: "/workers",
   },
@@ -53,14 +50,14 @@ export const MENU_ITEMS = [
         label: "Job Run List",
         id: "32",
         icon: <></>,
-        path: "/job-run-list",
+        path: "/jobs/run",
       },
     ],
   },
   {
-    id: "4",
-    label: <Box className="text-sm font-semibold">Reports</Box>,
-    icon: <StatisticsIcon size="24" color="text-main-nav-icon-text-selected" />,
-    path: "/reports",
+    id: "5",
+    label: <Box className="text-sm font-semibold">Speed Test</Box>,
+    icon: <MoveIcon size="24" color="text-main-nav-icon-text-selected" />,
+    path: "/speed-test",
   },
 ];

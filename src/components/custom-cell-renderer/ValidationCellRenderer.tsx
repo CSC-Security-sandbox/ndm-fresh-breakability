@@ -11,7 +11,7 @@ const ValidationCellRenderer = ({
   if (isLoading) return <InlineLoader />;
 
   if (status) return <Popover Trigger="success">Success</Popover>;
-  return <Popover Trigger="urgent-notice">Fail</Popover>;
+  return <Popover Trigger="error">Fail</Popover>;
 };
 
 export default ValidationCellRenderer;

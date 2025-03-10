@@ -13,6 +13,7 @@ export const jobsApi = createApi({
     "ALL_JOB_RUNS",
     "JOB_CONFIG_DETAILS",
     "ALL_MIGRATION_PATHS",
+    "SPEED_TEST_JOBS",
   ],
   baseQuery: fetchBaseQuery({
     baseUrl: import.meta.env.VITE_JOBS_SERVICE_URL,
@@ -167,10 +168,32 @@ export const jobsApi = createApi({
 
     confirmCutOver: builder.mutation({
       query: (body) => ({
-        url: "/cutover/approve",
+        url: "job-run/cutover/approve",
         method: "PUT",
         body,
       }),
+      invalidatesTags: ["ALL_JOB_RUNS"],
+    }),
+
+    //Speed Test
+    getSpeedTestJobs: builder.query<SpeedTestJobsType[], { projectId: string }>(
+      {
+        query: ({ projectId }) => `jobs/speedtest?projectId=${projectId}`,
+        providesTags: ["SPEED_TEST_JOBS"],
+      }
+    ),
+
+    getSpeedTestDetails: builder.query<SpeedTestDetailsType, string>({
+      query: (jobRunId) => `jobs/speedtest/${jobRunId}`,
+    }),
+
+    createFileServerForSpeedTest: builder.mutation({
+      query: (body) => ({
+        url: `jobs/speed-test`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["SPEED_TEST_JOBS"],
     }),
   }),
 });
@@ -191,4 +214,7 @@ export const {
   useBulkCutOverMutation,
   useLazyDownloadTemplateQuery,
   useConfirmCutOverMutation,
+  useGetSpeedTestJobsQuery,
+  useGetSpeedTestDetailsQuery,
+  useCreateFileServerForSpeedTestMutation,
 } = jobsApi;

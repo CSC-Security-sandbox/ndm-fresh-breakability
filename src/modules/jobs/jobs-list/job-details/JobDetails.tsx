@@ -16,7 +16,9 @@ import {
 import {
   JOB_ACTION_STATUS_ENUM,
   JOB_CONFIG_STATUS_ENUM,
+  JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
+  JOBS_TYPE,
 } from "@/types/app.type";
 import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
@@ -27,10 +29,14 @@ import { JOB_RUN_LIST_COLUMN_DEFS } from "./job-details.constants";
 import { useParams } from "react-router-dom";
 import { handleDownloadReport } from "../../jobs.utils";
 import { getActionMenu, getReportActions } from "../../job-run-list/run.utils";
+import { useState } from "react";
+import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
 
 export default function Page() {
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
+  const [openConfirmation, setOpenConfirmation] = useState(false);
+  const [selectedJobRunId, setSelectedJobRunId] = useState("");
 
   const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
@@ -85,6 +91,20 @@ export default function Page() {
         })
       : [];
 
+    const enableCutOver =
+      row?.jobType === JOBS_TYPE.CUT_OVER &&
+      row?.status === JOB_STATUS_TYPE_ENUM.BLOCKED
+        ? [
+            {
+              label: "Review",
+              onClick: () => {
+                setOpenConfirmation(true);
+                setSelectedJobRunId(row.jobRunId);
+              },
+            },
+          ]
+        : [];
+
     return [
       {
         label: "Details",
@@ -94,7 +114,13 @@ export default function Page() {
       },
       ...reportMenu,
       ...actionMenu,
+      ...enableCutOver,
     ];
+  };
+
+  const closeConfirmationBox = () => {
+    setOpenConfirmation(false);
+    setSelectedJobRunId("");
   };
 
   const defaultColumnState = { scannedDirectoriesCount: { isHidden: true } };
@@ -121,6 +147,12 @@ export default function Page() {
 
   return (
     <Box className="px-4 pt-2 flex flex-col gap-4">
+      {openConfirmation && (
+        <CutoverConfirmationModal
+          jobRunId={selectedJobRunId}
+          closeConfirmationBox={closeConfirmationBox}
+        />
+      )}
       <Breadcrumbs className="mb-4">
         <Button onClick={() => navigate("/jobs-list")} variant="text">
           Jobs
@@ -130,7 +162,9 @@ export default function Page() {
       <Box className="flex flex-col gap-2">
         <Box className="flex justify-between">
           <Heading level="16" bold>
-            Summary of Last Run
+            {jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
+              ? "Summary of Last Run"
+              : "Total of All Runs"}
           </Heading>
           <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
             <Button

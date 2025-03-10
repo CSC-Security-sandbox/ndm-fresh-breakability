@@ -24,7 +24,6 @@ export const getActionMenu = ({
 }: GetActionMenuPropType) => {
   switch (status) {
     case JOB_STATUS_TYPE_ENUM.RUNNING:
-    case JOB_STATUS_TYPE_ENUM.READY:
       return [
         {
           label: "Pause",
@@ -47,6 +46,12 @@ export const getActionMenu = ({
             handleUpdateStatus(jobRunId, JOB_ACTION_STATUS_ENUM.RESUME),
           disabled: isDisabled,
         },
+        {
+          label: "Stop",
+          onClick: () =>
+            handleUpdateStatus(jobRunId, JOB_ACTION_STATUS_ENUM.STOP),
+          disabled: isDisabled,
+        },
       ];
     default:
       return [];
@@ -67,7 +72,9 @@ export const getReportActions = (
   type: "rowMenu" | "button" = "rowMenu"
 ) => {
   const isReportReady =
-    row.status === JOB_STATUS_TYPE_ENUM.COMPLETED && row.isReportReady;
+    (row.status === JOB_STATUS_TYPE_ENUM.COMPLETED ||
+      row.status === JOB_STATUS_TYPE_ENUM.BLOCKED) &&
+    row.isReportReady;
   switch (row.jobType) {
     case JOBS_TYPE.DISCOVERY:
       return [
@@ -106,10 +113,7 @@ export const getReportActions = (
     case JOBS_TYPE.CUT_OVER:
       return [
         {
-          label:
-            type === "rowMenu"
-              ? "Download CoC Report as CSV"
-              : "Download as CSV",
+          label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
           onClick: () => {
             handleDownloadReport(
               downloadReportApi,
@@ -121,15 +125,12 @@ export const getReportActions = (
           disabled: !isReportReady,
         },
         {
-          label:
-            type === "rowMenu"
-              ? "Download CoC Report as PDF"
-              : "Download as PDF",
+          label: type === "rowMenu" ? "Download Jobs Report" : "Jobs Report",
           onClick: () => {
             handleDownloadReport(
               getPdfReportApi,
               row.jobRunId,
-              ReportENUM.COC,
+              ReportENUM.JOBS_REPORT,
               "pdf"
             );
           },

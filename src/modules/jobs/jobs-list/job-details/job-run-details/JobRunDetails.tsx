@@ -31,6 +31,9 @@ import JobDescription from "../components/JobDescription";
 import JobErrors from "../components/JobErrors";
 import JobRunHeader from "../components/JobRunHeader";
 import JobRunTaskCard from "../components/JobRunTaskDetails";
+import { getGrafanaLogUrl } from "@/utils/common.utils";
+import { useState } from "react";
+import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
 
 const JobRunDetails = () => {
   const navigation = useNavigate();
@@ -60,14 +63,31 @@ const JobRunDetails = () => {
     }
   };
 
+  const [openConfirmation, setOpenConfirmation] = useState<boolean>(false);
+
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
+
+  const enableCutOver =
+    jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.CUT_OVER &&
+    jobRunDetails?.status === JOB_STATUS_TYPE_ENUM.BLOCKED
+      ? [
+          {
+            label: "Review",
+            onClick: () => setOpenConfirmation(true),
+          },
+        ]
+      : [];
+
   const ActionButtons = canUpdateStatus
-    ? getActionMenu({
-        jobRunId,
-        status: jobRunDetails?.status || JOB_STATUS_TYPE_ENUM.COMPLETED,
-        handleUpdateStatus,
-        isDisabled: false,
-      })
+    ? [
+        ...getActionMenu({
+          jobRunId,
+          status: jobRunDetails?.status || JOB_STATUS_TYPE_ENUM.COMPLETED,
+          handleUpdateStatus,
+          isDisabled: false,
+        }),
+        ...enableCutOver,
+      ]
     : [];
 
   const [downloadReportApi] = useDownloadReportsMutation();
@@ -94,8 +114,16 @@ const JobRunDetails = () => {
   const isDiscoveryJob =
     jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.DISCOVERY;
 
+  const viewLogUrl = getGrafanaLogUrl(jobRunId);
+
   return (
     <Box className="px-4 pt-2 flex flex-col gap-4">
+      {openConfirmation && (
+        <CutoverConfirmationModal
+          jobRunId={jobRunId}
+          closeConfirmationBox={() => setOpenConfirmation(false)}
+        />
+      )}
       <Box className="flex justify-between">
         <Breadcrumbs className="mb-4">
           <Button onClick={() => navigation("/jobs-list")} variant="text">
@@ -130,7 +158,7 @@ const JobRunDetails = () => {
               isDisabled={!jobRunDetails?.isReportReady}
               button={
                 <DropdownButton>
-                  {isDiscoveryJob ? "Discovery" : "CoC"} Report
+                  {isDiscoveryJob ? "Discovery" : "Download"} Report
                 </DropdownButton>
               }
             >
@@ -154,7 +182,13 @@ const JobRunDetails = () => {
               ))}
             </ActionMenuButtonStyle>
           )}
-          <Button onClick={() => {}}>View Logs</Button>
+          <Button
+            onClick={() => {
+              window.open(viewLogUrl, "_blank");
+            }}
+          >
+            View Logs
+          </Button>
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />

@@ -3,7 +3,7 @@ import {
   TASK_TYPE_TYPE_ENUM,
   WorkerApiType,
 } from "@/types/app.type";
-import { toTitleCase } from "@/utils/common.utils";
+import { getGrafanaLogUrl, toTitleCase } from "@/utils/common.utils";
 import { useLazyGetJobTasksQuery } from "@api/jobsApi";
 import { useGetAllWorkersQuery } from "@api/workersApi";
 import { Box } from "@components/container/index";
@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import TaskFilters from "./TaskFilters";
 import { TASKS_COLUMN_DEFS } from "./tasks.constants";
+import { BreadcrumbsArrowIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const JobTasks = () => {
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
@@ -132,6 +133,19 @@ const JobTasks = () => {
     },
   ];
 
+  const rowMenu = (row: any) => {
+    const viewLogUrl = getGrafanaLogUrl(row.id);
+
+    return [
+      {
+        label: "View Logs",
+        onClick: () => {
+          window.open(viewLogUrl, "_blank");
+        },
+      },
+    ];
+  };
+
   return (
     <Box className="flex flex-col gap-6">
       <Breadcrumbs>
@@ -144,7 +158,15 @@ const JobTasks = () => {
         >
           Job Details
         </Button>
-        <Box>Job Run Details - Task Details</Box>
+        <Box className="flex gap-1">
+          <Text>Job Run Details</Text>
+          <BreadcrumbsArrowIcon
+            color="text"
+            size="22"
+            className="relative top-0.5"
+          />
+          <Text>Task Details</Text>
+        </Box>
       </Breadcrumbs>
       <Box>
         <TaskFilters
@@ -161,6 +183,7 @@ const JobTasks = () => {
           toggleSort={toggleSort}
           rowState={rowState}
           fixedHeight="calc(100vh - 330px)"
+          rowMenu={rowMenu}
         />
         {tableRows.length > 0 && totalCount >= tableRows.length && (
           <Box>{RenderTablePager}</Box>

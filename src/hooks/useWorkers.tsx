@@ -1,10 +1,11 @@
 import { useLazyGetAllWorkersQuery } from "@api/workersApi";
 import { useEffect, useState } from "react";
 import useSelectedProjectId from "./useSelectedProjectId";
+import { WorkerApiType } from "@/types/app.type";
 
 const useWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
-  const [workers, setWorkers] = useState([]);
+  const [workers, setWorkers] = useState<WorkerApiType[]>([]);
   const [getAllWorkers, { error, isLoading }] = useLazyGetAllWorkersQuery();
 
   useEffect(() => {
