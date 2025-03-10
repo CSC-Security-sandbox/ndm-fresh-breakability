@@ -1,6 +1,7 @@
 import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import { BlueXpTableRowType, TasksApiType } from "@/types/app.type";
+import { toTitleCase } from "@/utils/common.utils";
 
 export const TASKS_COLUMN_DEFS = [
   {
@@ -43,6 +44,10 @@ export const TASKS_COLUMN_DEFS = [
     sort: {
       enabled: false,
     },
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<TasksApiType, TasksApiType["taskType"]>) =>
+      toTitleCase(value),
   },
   {
     header: "Start Time",

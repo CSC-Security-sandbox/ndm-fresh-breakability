@@ -87,7 +87,7 @@ const JobTasks = () => {
 
     try {
       setError(undefined);
-      await taskAPIRequest.current?.abort();
+      taskAPIRequest.current && (await taskAPIRequest.current?.abort());
       taskAPIRequest.current = getJobTasks(payload);
 
       const result = await taskAPIRequest.current?.unwrap();
