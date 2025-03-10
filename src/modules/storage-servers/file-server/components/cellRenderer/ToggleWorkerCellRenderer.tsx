@@ -1,7 +1,7 @@
 import { BlueXpTableRowType } from "@/types/app.type";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Toggle } from "@netapp/bxp-design-system-react";
 import { useCallback, useContext } from "react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
 
 const ToggleWorkerCellRenderer = ({
   value,

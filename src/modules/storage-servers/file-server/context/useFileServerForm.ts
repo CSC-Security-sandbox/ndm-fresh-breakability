@@ -1,17 +1,3 @@
-import { createValidateConnectionPayload } from "@modules/storage-servers/file-server//components/add-file-server.util";
-import {
-  ErroredWorkersDetailsType,
-  MountPathsOptionsListType,
-  WorkerIdWithNameType,
-  jobConfigFormFormType,
-} from "@modules/storage-servers/file-server//fileServer.interface";
-import { notify } from "@components/notification/NotificationWrapper";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { useLazyGetAllWorkersQuery } from "@api/workersApi";
-import {
-  useLazyCheckConnectionRespQuery,
-  useValidateConnectionMutation,
-} from "@api/workerManagerApi";
 import {
   BlueXpFormType,
   GetAllWorkersApiType,
@@ -20,9 +6,22 @@ import {
   ValidateConnectionStatus,
   WorkerConnectionStatus,
 } from "@/types/app.type";
+import {
+  useLazyCheckConnectionRespQuery,
+  useValidateConnectionMutation,
+} from "@api/workerManagerApi";
+import { useLazyGetAllWorkersQuery } from "@api/workersApi";
+import { notify } from "@components/notification/NotificationWrapper";
+import { createValidateConnectionPayload } from "@modules/storage-servers/file-server/components/add-file-server.util";
+import {
+  ErroredWorkersDetailsType,
+  MountPathsOptionsListType,
+  WorkerIdWithNameType,
+  jobConfigFormFormType,
+} from "@modules/storage-servers/file-server/fileServer.interface";
 import { useForm } from "@netapp/bxp-design-system-react";
-import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   HOST_CREDENTIALS_VALIDATION_SCHEMA,
   INITIAL_VALUE_JOB_CONFIG,
@@ -35,6 +34,7 @@ import {
   SMB_CREDENTIALS_VALIDATION_SCHEMA,
   VALIDATE_CONNECTION_COLUMN_DEF,
 } from "../components/file-server.constant";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 export const useFileServerForm = () => {
   let interval: any;
@@ -86,7 +86,7 @@ export const useFileServerForm = () => {
       getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
         const allWorkersWithNameAndId: WorkerIdWithNameType = {};
         resp?.data?.forEach((worker: GetAllWorkersApiType) => {
-          const workerId = worker.workerId;
+          let workerId = worker.workerId;
           allWorkersWithNameAndId[workerId] = worker.workerName;
         });
         setWorkerIdWithName(allWorkersWithNameAndId);

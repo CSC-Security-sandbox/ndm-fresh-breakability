@@ -1,5 +1,5 @@
 import { Box } from "@components/container/index";
-import AppFooter from "@/components/layout/app-footer/AppFooter";
+import AppFooter from "@components/layout/app-footer/AppFooter";
 import { Wizard } from "@netapp/bxp-design-system-react";
 import ServiceAndProtocol from "@modules/storage-servers/file-server/components/steps/ServerType/ServerType";
 import ValidateConnection from "@modules/storage-servers/file-server/components/steps/ValidateConnection/ValidateConnection";

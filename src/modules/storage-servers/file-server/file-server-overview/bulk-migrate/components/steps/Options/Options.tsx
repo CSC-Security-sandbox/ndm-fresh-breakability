@@ -1,28 +1,29 @@
-import FormFrame from "@modules/storage-servers/file-server//components/layout/FormFrame";
+import { ProtocolType } from "@/types/app.type";
+import { useLazyDownloadTemplateQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
-import React, { useContext } from "react";
+import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
+import { SKIP_FILE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import IncrementalSyncSchedule from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/IncrementalSyncSchedule";
+import MigrateFileOption from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/MigrateFileOption";
+import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import {
+  Button,
+  FormFieldInputNew,
+  FormFieldSelect,
   FormFieldTextArea,
   FormFieldUploadFile,
   Popover,
-  Toggle,
-  Button,
   Text,
-  FormFieldInputNew,
-  FormFieldSelect,
+  Toggle,
 } from "@netapp/bxp-design-system-react";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import MigrateFileOption from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/MigrateFileOption";
-import IncrementalSyncSchedule from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/IncrementalSyncSchedule";
-import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
-import { useLazyDownloadTemplateQuery } from "@api/jobsApi";
-import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
-import { SKIP_FILE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { useContext } from "react";
 dayjs.extend(utc);
 
 const Options = () => {
-  const { optionForm } = useContext(BulkMigrateContext);
+  const { optionForm, protocolForm } = useContext(BulkMigrateContext);
   const [downloadTemplateApi] = useLazyDownloadTemplateQuery();
 
   return (
@@ -75,51 +76,53 @@ const Options = () => {
             }
           />
 
-          <FormFieldUploadFile
-            form={optionForm}
-            label="Upload SID Mapping"
-            name="upload_sid_mapping"
-            placeholder="Choose a file"
-            labelChildren={
-              <Box className="flex gap-1 items-center">
-                <Button
-                  variant="text"
-                  onClick={() =>
-                    handleDownloadTemplate(
-                      () => downloadTemplateApi("sid"),
-                      "sid-template.csv"
-                    )
-                  }
-                >
-                  Download Template
-                </Button>
-                <Popover>Download/Upload SID Mapping</Popover>
-              </Box>
-            }
-          />
-
-          <FormFieldUploadFile
-            form={optionForm}
-            label="Upload GID / UID Mapping"
-            name="upload_uid_mapping"
-            placeholder="Choose a file"
-            labelChildren={
-              <Box className="flex gap-1 items-center">
-                <Button
-                  variant="text"
-                  onClick={() =>
-                    handleDownloadTemplate(
-                      () => downloadTemplateApi("gid"),
-                      "gid-template.csv"
-                    )
-                  }
-                >
-                  Download Template
-                </Button>
-                <Popover>Download/Upload GID & UID Mapping</Popover>
-              </Box>
-            }
-          />
+          {protocolForm.formState.protocol.value === ProtocolType.NFS ? (
+            <FormFieldUploadFile
+              form={optionForm}
+              label="Upload GID / UID Mapping"
+              name="upload_uid_mapping"
+              placeholder="Choose a file"
+              labelChildren={
+                <Box className="flex gap-1 items-center">
+                  <Button
+                    variant="text"
+                    onClick={() =>
+                      handleDownloadTemplate(
+                        () => downloadTemplateApi("gid"),
+                        "gid-template.csv"
+                      )
+                    }
+                  >
+                    Download Template
+                  </Button>
+                  <Popover>Download/Upload GID & UID Mapping</Popover>
+                </Box>
+              }
+            />
+          ) : (
+            <FormFieldUploadFile
+              form={optionForm}
+              label="Upload SID Mapping"
+              name="upload_sid_mapping"
+              placeholder="Choose a file"
+              labelChildren={
+                <Box className="flex gap-1 items-center">
+                  <Button
+                    variant="text"
+                    onClick={() =>
+                      handleDownloadTemplate(
+                        () => downloadTemplateApi("sid"),
+                        "sid-template.csv"
+                      )
+                    }
+                  >
+                    Download Template
+                  </Button>
+                  <Popover>Download/Upload SID Mapping</Popover>
+                </Box>
+              }
+            />
+          )}
         </Box>
       </Box>
     </FormFrame>

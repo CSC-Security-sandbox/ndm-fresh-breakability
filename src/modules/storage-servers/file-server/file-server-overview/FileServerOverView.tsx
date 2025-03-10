@@ -1,3 +1,4 @@
+"use client";
 import ChartInfo from "@components/chartInfo/ChartInfo";
 import { Box } from "@components/container/index";
 import useFileServerDetails from "@hooks/useFileServerDetails";
@@ -21,7 +22,7 @@ const FileServerOverView = () => {
   } = useFileServerDetails();
   const [getFileOverviewApi, { isLoading, data }] = useLazyGetFileOverviewQuery(
     {
-      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(process.env.NEXT_PUBLIC_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );

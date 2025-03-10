@@ -1,12 +1,12 @@
-import { notify } from "@components/notification/NotificationWrapper";
-import { useLazyRefetchConfigExportPathsQuery } from "@api/configApi";
 import { Box } from "@components/container/index";
+import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import { EXPORT_PATHS_TABLE_COLS_DEF } from "../fileServerId.constant";
 import { ExportPathsTablePropsType } from "../overview.interface";
 import ReFreshExportPathsTime from "./ReFreshExportPathsTime";
+import { useLazyRefetchConfigExportPathsQuery } from "@api/configApi";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -14,9 +14,7 @@ const ExportPathsTable = ({
   showRefetch,
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
-  getFileServerDetails,
 }: ExportPathsTablePropsType) => {
-  let INTERVAL_ID: any = null;
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
 
@@ -30,27 +28,16 @@ const ExportPathsTable = ({
 
   // REFETCH EXPORT PATHS
   const handleRefetchExportPaths = async () => {
+    setDisableRefresh(true);
     try {
-      setDisableRefresh(true);
       await reFetchExportPathsApi({
         fileServerId: fileServerDetails.id,
       }).unwrap();
-
-      INTERVAL_ID = setInterval(async () => {
-        getFileServerDetails().then((resp) => {
-          const isAllRefreshed = resp?.fileServers.every(
-            ({ isRefreshed }) => isRefreshed
-          );
-
-          if (isAllRefreshed) {
-            clearInterval(INTERVAL_ID);
-            setDisableRefresh(false);
-          }
-        });
-      }, 2000);
+      notify.success("Please wait, the paths will be refreshed soon.");
     } catch (error) {
-      console.error("Error", error);
       notify.error("Something Went Wrong.");
+    } finally {
+      setDisableRefresh(false);
     }
   };
 

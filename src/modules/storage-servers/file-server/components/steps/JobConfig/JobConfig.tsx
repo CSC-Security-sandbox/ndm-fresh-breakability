@@ -1,11 +1,11 @@
-import FormFrame from "@modules/storage-servers/file-server//components/layout/FormFrame";
+import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 import { Box } from "@components/container/index";
 import {
   FormFieldInputNew,
   FormFieldSelect,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 const JobConfig = () => {
   const { jobConfigForm, mountPaths, isJobRunning, isEditMode } = useContext(

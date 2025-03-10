@@ -1,6 +1,6 @@
 import { BlueXpTableRowType, ConfigListTypeApiType } from "@/types/app.type";
-import { Autocomplete, TextField, FormHelperText } from "@mui/material";
-import { memo, useContext } from "react";
+import { Autocomplete, TextField } from "@mui/material";
+import { useContext, useMemo } from "react";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import { FormikErrors } from "formik";
@@ -12,7 +12,12 @@ const DestinationFileServer = ({
   MigrationDetailsTableConfigurationType
 >) => {
   const rowId = Number(row?.id);
-  const { allFileServers, mappingStepForm } = useContext(BulkMigrateContext);
+  const {
+    allFileServers,
+    mappingStepForm,
+    sourceFileServerDetails,
+    protocolForm,
+  } = useContext(BulkMigrateContext);
 
   // UPDATE FORM VALUE
   const handleChange = (event: any, newValue: ConfigListTypeApiType | null) => {
@@ -41,6 +46,20 @@ const DestinationFileServer = ({
     rowId
   ] as FormikErrors<MigrationDetailsTableConfigurationType>;
 
+  const optionsForDestination = useMemo(() => {
+    return allFileServers.filter(
+      (row) =>
+        row.id !== sourceFileServerDetails.id &&
+        row.fileServers.find(
+          (r) => r.protocol === protocolForm.formState.protocol.value
+        )
+    );
+  }, [
+    protocolForm.formState.protocol.value,
+    allFileServers,
+    sourceFileServerDetails.id,
+  ]);
+
   return (
     <>
       <Autocomplete
@@ -49,7 +68,7 @@ const DestinationFileServer = ({
             String(row.id)
           )
         }
-        options={allFileServers}
+        options={optionsForDestination}
         getOptionLabel={(option) => option?.configName || ""}
         className="w-full"
         size="small"

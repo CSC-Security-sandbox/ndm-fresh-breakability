@@ -14,7 +14,7 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
   const { isFormSubmitting } = useContext(BulkMigrateContext);
 
   const handleCancel = () => {
-    navigate(`/config/file-server/${fileServerId}`);
+    navigate(`/file-server/${fileServerId}`);
   };
 
   return (

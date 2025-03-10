@@ -11,12 +11,13 @@ const RunningJobRunTable = () => {
     BulkCutOverForm,
     jobRunList,
     jobRunListPathTableState,
+    reviewStepSelectedIds,
     setReviewStepSelectedIds,
   } = useContext(BulkCutOverContext);
 
   return (
     <Box className="px-8 mt-3">
-      <ActionButtons />
+      <ActionButtons selectedRowIds={reviewStepSelectedIds} rows={jobRunList} />
 
       <TableWrapperWithoutFilter
         tableState={jobRunListPathTableState}

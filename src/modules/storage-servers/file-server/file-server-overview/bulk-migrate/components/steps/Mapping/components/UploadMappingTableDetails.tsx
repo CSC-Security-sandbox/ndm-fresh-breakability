@@ -1,4 +1,3 @@
-import { UploadIcon } from "@netapp/bxp-style/react-icons/Action";
 import Button from "@mui/material/Button";
 import { styled } from "@mui/material/styles";
 import ExcelJS from "exceljs";
@@ -79,7 +78,7 @@ const UploadMappingTableDetails = ({
 
           const destinationFileServerId = getDestinationFileServerIdByName(
             allFileServers,
-            rowData["Destination File Server"]
+            rowData["Destination"]
           );
           if (destinationFileServerId) {
             toggleRowSelection(rowData.id)(true);
@@ -101,7 +100,7 @@ const UploadMappingTableDetails = ({
             },
             protocol: rowData["Protocol"],
             destinationFileServerDetails: {
-              destinationFileServerName: rowData["Destination File Server"],
+              destinationFileServerName: rowData["Destination"],
               destinationFileServerId,
             },
             destinationPathDetails: {
@@ -141,7 +140,7 @@ const UploadMappingTableDetails = ({
       role={undefined}
       variant="contained"
       tabIndex={-1}
-      startIcon={<UploadIcon color="white" />}
+      startIcon={<></>}
     >
       Upload files
       <VisuallyHiddenInput

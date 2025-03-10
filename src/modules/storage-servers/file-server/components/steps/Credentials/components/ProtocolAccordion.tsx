@@ -6,7 +6,7 @@ import {
   InlineNotification,
 } from "@netapp/bxp-design-system-react";
 import { ReactNode } from "react";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { useContext } from "react";
 
 interface ProtocolAccordion {

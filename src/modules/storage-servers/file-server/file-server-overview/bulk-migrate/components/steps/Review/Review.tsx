@@ -7,6 +7,7 @@ import {
   createSelectedMountPathsObject,
   structureDataForReviewList,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import PreCheckErrors from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/PrecheckErrors";
 
 const Review = () => {
   const {
@@ -14,13 +15,15 @@ const Review = () => {
     selectedReviewIds,
     setSelectedReviewIds,
     isPrecheckLoading,
+    preCheckStatus,
     isPrecheckSuccessful,
     reviewIdsValidated,
   } = useContext(BulkMigrateContext);
 
   const rows = structureDataForReviewList(
     mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
-    mappingStepForm?.values?.selectedMountPathsId
+    mappingStepForm?.values?.selectedMountPathsId,
+    preCheckStatus
   );
 
   const tableStateProps = {
@@ -46,6 +49,7 @@ const Review = () => {
 
   return (
     <Box className="h-3/5 w-9/12 mx-auto">
+      <PreCheckErrors errorData={rows} />
       <TableWrapper
         tableStateProps={tableStateProps}
         showLabel={false}

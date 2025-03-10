@@ -1,10 +1,12 @@
 import { BlueXpFormType, ConfigListTypeApiType } from "@/types/app.type";
 import { Dayjs } from "dayjs";
+import { OptionType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 
 export interface bulkDiscoveryFormType {
   excludeFilePatterns: string;
   scheduleTime: string;
   firstRunAt: Dayjs;
+  protocol: OptionType;
 }
 
 export interface TopSectionPropsType {

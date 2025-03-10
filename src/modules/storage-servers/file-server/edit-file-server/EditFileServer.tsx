@@ -1,6 +1,6 @@
-import WizardProvider from "@modules/storage-servers/file-server//components/WizardProvider";
-import CommonFileServerContextProvider from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
-import { withEditFileServer } from "@modules/storage-servers/file-server//context/withEditFileServer";
+import CommonFileServerContextProvider from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
+import { withEditFileServer } from "@modules/storage-servers/file-server/context/withEditFileServer";
+import WizardProvider from "@modules/storage-servers/file-server/components/WizardProvider";
 
 const EditFileServerContextWrapper = withEditFileServer(
   CommonFileServerContextProvider

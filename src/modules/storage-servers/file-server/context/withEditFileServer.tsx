@@ -79,6 +79,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
       fileServerForm.nfsCredentialsForm.resetForm(
         patchCredentialsFormValue({
           ...nfsCredentialsInitialValues,
+          protocol: "NFS",
           protocolVersion: {
             value: nfsCredentialsInitialValues.protocolVersion || "",
             label: nfsCredentialsInitialValues.protocolVersion || "",
@@ -89,6 +90,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
       fileServerForm.smbCredentialsForm.resetForm(
         patchCredentialsFormValue({
           ...smbCredentialsInitialValues,
+          protocol: "SMB",
           protocolVersion: {
             value: smbCredentialsInitialValues.protocolVersion || "",
             label: smbCredentialsInitialValues.protocolVersion || "",
@@ -174,7 +176,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
               throw new Error("Error creating file server");
             }
 
-            navigate("/config/file-server");
+            navigate("/file-server");
           })
           .catch((err) => {
             notify.error("Something Went wrong...");

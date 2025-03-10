@@ -1,15 +1,15 @@
-import NameCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/NameCellRenderer";
-import NfsHostCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/NfsHostCellRenderer";
-import NfsUserNameCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/NfsUserNameCellRenderer";
-import ServerTypeCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/ServerTypeCellRenderer";
-import SmbHostCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/SmbHostCellRenderer";
-import SmbUserNameCellRenderer from "@modules/storage-servers/file-server//components/cellRenderer/SmbUserNameCellRenderer";
+import NameCellRenderer from "./components/cellRenderer/NameCellRenderer";
+import NfsHostCellRenderer from "./components/cellRenderer/NfsHostCellRenderer";
+import NfsUserNameCellRenderer from "./components/cellRenderer/NfsUserNameCellRenderer";
+import ServerTypeCellRenderer from "./components/cellRenderer/ServerTypeCellRenderer";
+import SmbHostCellRenderer from "./components/cellRenderer/SmbHostCellRenderer";
+import SmbUserNameCellRenderer from "./components/cellRenderer/SmbUserNameCellRenderer";
 import FileServerStatusCellRenderer from "./components/cellRenderer/FileServerStatusCellRenderer";
 import Credentials from "./components/steps/Credentials/Credentials";
 import JobConfig from "./components/steps/JobConfig/JobConfig";
 import ServerType from "./components/steps/ServerType/ServerType";
 import ValidateConnection from "./components/steps/ValidateConnection/ValidateConnection";
-import DateCellRenderer from "@components/custom-cell-renderer//DateCellRenderer";
+import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
 import React from "react";
 import { BlueXpTableRowType, FileServerApiType } from "@/types/app.type";
 

@@ -1,8 +1,8 @@
-import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
 import { Box } from "@components/container/index";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
 import { useContext } from "react";
+import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
 
 const BulkCutOverFooter = () => {
   const {
@@ -20,7 +20,7 @@ const BulkCutOverFooter = () => {
   const { currentStepIndex, gotoPreviousStep, goToNextStep } = useWizard();
 
   const handleCancel = () => {
-    navigate("/config/file-server");
+    navigate("/file-server");
   };
 
   const handleProceed = () => {

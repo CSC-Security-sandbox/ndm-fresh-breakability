@@ -74,7 +74,7 @@ export const REVIEW_LIST_COLUMN_DEFS: any[] = [
     accessor: "source.path",
   },
   {
-    header: "Destination File Server",
+    header: "Destination",
     accessor: "destination.server",
     id: 3,
   },
@@ -91,7 +91,7 @@ export const REVIEW_LIST_COLUMN_DEFS: any[] = [
       return React.createElement(ValidationCellRenderer, {
         isValidated: value.isValidated,
         isLoading: value.isPrecheckLoading,
-        status: value.isPrecheckSuccessful,
+        status: value?.status?.success?.includes(value.source.sourcePathId),
       });
     },
   },
@@ -125,6 +125,16 @@ export const OPTIONS_FORM = Yup.object().shape({
   skipFileNum: Yup.number().required(
     "This field is required and needs to be num."
   ),
+  upload_sid_mapping: Yup.object().shape({
+    contents: Yup.string(),
+    fileName: Yup.string().matches(/^.*\.csv$/, "Only CSV file is supported."),
+    fileSize: Yup.number(),
+  }),
+  upload_uid_mapping: Yup.object().shape({
+    contents: Yup.string(),
+    fileName: Yup.string().matches(/^.*\.csv$/, "Only CSV file is supported."),
+    fileSize: Yup.number(),
+  }),
 });
 
 export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
@@ -143,7 +153,7 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
   },
   {
     id: 3,
-    header: "Destination File Server",
+    header: "Destination",
     accessor: "destination_file_server",
     Renderer: DestinationFileServer,
     width: 250,
@@ -180,3 +190,9 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
     width: 10,
   },
 ];
+
+export const PRECHECK_STATUS = {
+  success: [],
+  failed: [],
+  errors: [],
+};

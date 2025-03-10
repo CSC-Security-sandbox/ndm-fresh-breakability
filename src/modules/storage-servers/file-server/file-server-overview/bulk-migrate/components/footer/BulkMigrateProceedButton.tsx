@@ -1,6 +1,6 @@
-import React, { useContext } from "react";
-import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
+import { Button, useWizard } from "@netapp/bxp-design-system-react";
+import { useContext } from "react";
 import { useNavigate } from "react-router-dom";
 
 const BulkMigrateProceedButton = () => {
@@ -11,7 +11,7 @@ const BulkMigrateProceedButton = () => {
     useContext(BulkMigrateContext);
   const navigate = useNavigate();
   const onSuccessfulSubmit = () =>
-    navigate(`/config/file-server/${sourceFileServerDetails.id}`);
+    navigate(`/file-server/${sourceFileServerDetails.id}`);
 
   const handleNextOrSubmit = () => {
     if (currentStepIndex == 2) {

@@ -1,24 +1,17 @@
-import useFileServerDetails from "@hooks/useFileServerDetails";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import {
-  useLazyGetAllFileServersWithVolumeQuery,
-  useBulkMigrateMutation,
-  usePrecheckMutation,
-} from "@api/jobsApi";
 import {
   AllFileServerWithVolumesApiType,
   BlueXpFormType,
+  ProtocolType,
+  ValidateConnectionStatus,
 } from "@/types/app.type";
-import dayjs from "dayjs";
-import { useFormik } from "formik";
-import { ComponentType, useEffect, useState } from "react";
 import {
-  BulkMigrateContextType,
-  DestinationPathsOptionsType,
-  MappingStepFormikFormType,
-  MigrationDetailsTableConfigurationType,
-  OptionsFormType,
-} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
+  useBulkMigrateMutation,
+  useLazyGetAllFileServersWithVolumeQuery,
+  usePrecheckMutation,
+} from "@api/jobsApi";
+import { notify } from "@components/notification/NotificationWrapper";
+import useFileServerDetails from "@hooks/useFileServerDetails";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   DOW_OPTIONS,
   INCREMENTAL_SYNC_SCHEDULE_ENUM,
@@ -26,18 +19,34 @@ import {
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
   OPTIONS_FORM,
+  PRECHECK_STATUS,
   SKIP_FILE_OPTIONS,
   WEEK_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
-import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
-import { Button, useForm } from "@netapp/bxp-design-system-react";
-import { notify } from "@components/notification/NotificationWrapper";
+import {
+  BulkMigrateContextType,
+  DestinationPathsOptionsType,
+  FormFileUploadType,
+  MappingStepFormikFormType,
+  MigrationDetailsTableConfigurationType,
+  OptionsFormType,
+  PreCheckStatusType,
+  ProtocolFormType,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import {
   createPathMapping,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { Button, useForm } from "@netapp/bxp-design-system-react";
+import dayjs from "dayjs";
+import { useFormik } from "formik";
+import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
+import { getPreCheckStatus } from "../components/steps/Review/Review.utils";
+import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/constant/app.constants";
+import { getOptionsFromArray } from "@/utils/common.utils";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -48,6 +57,9 @@ export function withBulkMigrateCreateForm(
       []
     );
     const [selectedReviewIds, setSelectedReviewIds] = useState<string[]>([]);
+    const [preCheckStatus, setPreCheckStatus] = useState<PreCheckStatusType>(
+      {} as PreCheckStatusType
+    );
     const [reviewIdsValidated, setReviewIdsValidated] = useState<string[]>([]);
     const [isPrecheckLoading, setIsPrecheckLoading] = useState<boolean>(false);
     const [isPrecheckSuccessful, setIsPrecheckSuccessful] =
@@ -70,8 +82,10 @@ export function withBulkMigrateCreateForm(
 
     const { fileServerDetails, allExportPaths, allWorkersList } =
       useFileServerDetails();
-
     const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
+    const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
+
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     const mappingStepForm = useFormik<MappingStepFormikFormType>({
       initialValues: {
@@ -191,6 +205,10 @@ export function withBulkMigrateCreateForm(
       OPTIONS_FORM
     );
 
+    const protocolForm: BlueXpFormType<ProtocolFormType> = useForm({
+      protocol: getOptionsFromArray([ProtocolType.NFS])[0],
+    });
+
     const getFutureRun = () => {
       switch (optionForm.formState.incremental_sync_schedule) {
         case INCREMENTAL_SYNC_SCHEDULE_ENUM.CRON_EXPRESSION:
@@ -218,41 +236,48 @@ export function withBulkMigrateCreateForm(
     };
 
     const handlePrecheck = (onSuccessfulSubmit?: Function) => {
-      //TODO: Remove this once Precheck API is fixed.
-      // Disabled Precheck as this is impacting worker and migration is failing.
-      setIsPrecheckSuccessful(true);
-      handleSubmit(onSuccessfulSubmit);
-      return;
-      // Disabled Precheck
-
       setReviewIdsValidated(selectedReviewIds);
       setIsPrecheckLoading(true);
       setIsPrecheckSuccessful(false);
+      setPreCheckStatus(PRECHECK_STATUS);
+      setIsSubmitting(true);
       const body = {
         migrateConfigs: createPathMapping(
           mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
           mappingStepForm?.values?.selectedMountPathsId
         ),
-        preserveAccessTime: false, //TODO: There is limitation in Precheck API due to which we need to forcefully send preserveAccessTime False during precheck
+
+        preserveAccessTime: optionForm.formState?.preserve_a_time,
       };
 
+      let interval: any;
       preCheckApi(body)
         .unwrap()
-        .then(() => {
-          setIsPrecheckSuccessful(true);
-          handleSubmit(onSuccessfulSubmit);
+        .then((res) => {
+          interval = setInterval(async () => {
+            const data = await getWorkerDetails({
+              id: res?.workflowId,
+            }).unwrap();
+            if (data?.status === ValidateConnectionStatus.COMPLETED) {
+              const precheckState = getPreCheckStatus(data);
+              setPreCheckStatus(precheckState);
+              setIsPrecheckLoading(false);
+              clearInterval(interval);
+              setIsSubmitting(false);
+              if (precheckState.errors.length === 0) {
+                handleSubmit(onSuccessfulSubmit);
+              }
+            }
+          }, 2000);
         })
-        .catch((err) => {
-          notify.error("There are some errors in Precheck!");
-        })
-        .finally(() => {
-          setIsPrecheckLoading(false);
-        });
+        .catch((e) => console.error("precheck failed", e));
     };
 
-    const handleSubmit = (onSuccessfulSubmit?: Function) => {
-      const sid_mapping: any = optionForm.formState.upload_sid_mapping;
-      const uid_mapping: any = optionForm.formState.upload_uid_mapping;
+    const handleSubmit = async (onSuccessfulSubmit?: Function) => {
+      const sid_mapping: FormFileUploadType | undefined =
+        optionForm.formState.upload_sid_mapping;
+      const uid_mapping: FormFileUploadType | undefined =
+        optionForm.formState.upload_uid_mapping;
 
       const body = {
         firstRunAt:
@@ -264,12 +289,22 @@ export function withBulkMigrateCreateForm(
           mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
           mappingStepForm?.values?.selectedMountPathsId
         ),
-        sidMapping: sid_mapping
-          ? new Blob([sid_mapping], { type: sid_mapping?.type })
-          : "",
-        gidMapping: uid_mapping
-          ? new Blob([uid_mapping], { type: uid_mapping?.type })
-          : "",
+        sid_mapping:
+          protocolForm.formState.protocol.value === ProtocolType.SMB &&
+          sid_mapping &&
+          (await convertFileToBase64(
+            new Blob([sid_mapping?.contents], {
+              type: "text/csv;charset=utf-8",
+            })
+          )),
+        gidMapping:
+          protocolForm.formState.protocol.value === ProtocolType.NFS &&
+          uid_mapping &&
+          (await convertFileToBase64(
+            new Blob([uid_mapping.contents], {
+              type: "text/csv;charset=utf-8",
+            })
+          )),
         options: {
           excludeOlderThan:
             optionForm.formState?.migrate_file_option ===
@@ -286,7 +321,7 @@ export function withBulkMigrateCreateForm(
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs-list")}>
+          <Button variant="text" onClick={() => navigate("/jobs/listing")}>
             View Job Listing
           </Button>
         </>
@@ -321,8 +356,11 @@ export function withBulkMigrateCreateForm(
       setSelectedReviewIds,
       isPrecheckLoading,
       isPrecheckSuccessful,
+      preCheckStatus,
       reviewIdsValidated,
-      isFormSubmitting: isPrecheckSubmitting || isBulkMigrateSubmitting,
+      isFormSubmitting:
+        isPrecheckSubmitting || isSubmitting || isBulkMigrateSubmitting,
+      protocolForm,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

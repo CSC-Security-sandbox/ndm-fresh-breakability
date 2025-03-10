@@ -1,6 +1,6 @@
-import { Box } from "@components/container/index";
 import CustomStepLayout from "@modules/storage-servers/file-server/components/layout/CustomStepLayout";
-import AppFooter from "@/components/layout/app-footer/AppFooter";
+import { Box } from "@components/container/index";
+import AppFooter from "@components/layout/app-footer/AppFooter";
 import { Wizard } from "@netapp/bxp-design-system-react";
 import BulkMigrateContextProvider from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import BulkMigrateFooter from "./components/footer/BulkMigrateFooter";
@@ -13,10 +13,10 @@ import {
 const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
   BulkMigrateContextProvider
 );
+
 const BulkMigrate = () => {
   return (
-    <Box className="w-full h-[70vh]">
-      <Box className="font-semibold text-lg">Bulk Migrate</Box>
+    <Box className="py-5 h-[80vh]">
       <BulkMigrateContextWrapper>
         <Wizard
           stepsMap={STEPS_MAP_BULK_MIGRATION}

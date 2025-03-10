@@ -1,6 +1,6 @@
-import FormFrame from "@modules/storage-servers/file-server//components/layout/FormFrame";
-import { CommonFileServerContext } from "@modules/storage-servers/file-server//context/CommonFileServerContextProvider";
-import RequiredLabel from "@/app/components/layout/RequiredLabel";
+import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
+import RequiredLabel from "@components/layout/RequiredLabel";
 import {
   FormFieldInputNew,
   FormFieldSelect,

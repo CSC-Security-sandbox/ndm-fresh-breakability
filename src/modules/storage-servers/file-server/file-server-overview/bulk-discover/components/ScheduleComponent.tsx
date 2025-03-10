@@ -1,7 +1,7 @@
 import { Box } from "@components/container/index";
-import DateTimePickerWrapper from "@components/date-time-picker-wrapper/DateTimePickerWrapper";
 import { RadioButton, Text } from "@netapp/bxp-design-system-react";
 import { ScheduleComponentType } from "../bulk-discovery.interface";
+import DateTimePickerWrapper from "@components/date-time-picker-wrapper/DateTimePickerWrapper";
 
 const ScheduleComponent = ({ bulkDiscoveryForm }: ScheduleComponentType) => {
   return (

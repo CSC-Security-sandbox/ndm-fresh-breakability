@@ -1,9 +1,8 @@
 import { BlueXpTableRowType } from "@/types/app.type";
-import React from "react";
-import { Box } from "@components/container/index";
 import { toTitleCase } from "@/utils/common.utils";
-
-type FileServerStatus = "ACTIVE" | "DRAFT" | "ERROR";
+import { Box } from "@components/container/index";
+import { Popover } from "@netapp/bxp-design-system-react";
+type FileServerStatus = "ACTIVE" | "DRAFT" | "ERRORED";
 
 const FileServerStatusCellRenderer = ({
   row,
@@ -11,10 +10,24 @@ const FileServerStatusCellRenderer = ({
   const statusStyleMap: Record<FileServerStatus, string> = {
     ACTIVE: "bg-chart-5",
     DRAFT: "bg-chart-6",
-    ERROR: "bg-error",
+    ERRORED: "bg-error",
   };
 
   const statusStyle = statusStyleMap[row?.status as FileServerStatus] || ""; // Type assertion
+
+  if (row?.status === "ERRORED") {
+    return (
+      <Box className="flex items-center justify-between gap-2 w-full">
+        <Box className="flex items-center gap-2">
+          <span
+            className={`w-3 h-3 rounded-full inline-block ${statusStyle}`}
+          ></span>
+          <Box>{toTitleCase(row?.status)}</Box>
+        </Box>
+        <Popover>{row?.errorMessage}</Popover>
+      </Box>
+    );
+  }
 
   return (
     <Box className="flex gap-2 items-center">

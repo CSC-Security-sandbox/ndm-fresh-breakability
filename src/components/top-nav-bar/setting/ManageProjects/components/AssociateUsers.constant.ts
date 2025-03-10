@@ -1,6 +1,6 @@
 /* eslint-disable */
 import React from "react";
-import RemoveCellRenderer from "@components/custom-cell-renderer//RemoveCellRenderer";
+import RemoveCellRenderer from "@components/custom-cell-renderer/RemoveCellRenderer";
 import {
   AssociatedUsersOptionsType,
   BlueXpTableRowType,
