@@ -1,9 +1,11 @@
 export * from './types/metadata-types';
 export * from './types/job-config';
+export * from './types/speed-test-job-config';
 export * from './types/enums';
 export * from './types/file-server';
 export * from './types/protocols';
 export * from './types/job-context';
+export * from './types/speed-test-job-context';
 export * from './types/serializable';
 export * from './types/stream-collection';
 
@@ -17,6 +19,7 @@ export * from './utils/logging';
 export * from './utils/job-utils';
 
 export * from './job-context-provider';
+export * from './speed-test-job-context-provider';
 export * from './job-context-factory';
 
 
