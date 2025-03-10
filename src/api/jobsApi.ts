@@ -5,6 +5,8 @@ import {
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { prepareHeaders } from "@api/api.utils";
 import { reportApi } from "./reportApi";
+import { SpeedTestJobsType } from "@modules/speed-test/types/speed-test.types";
+import { SpeedTestDetailsType } from "@modules/speed-test/types/speed-test-details.types";
 
 export const jobsApi = createApi({
   reducerPath: "jobsApi",

@@ -1,4 +1,8 @@
-import { AppIcon, WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
+import {
+  AppIcon,
+  WorkspaceIcon,
+  CommunitiesIcon,
+} from "@netapp/bxp-style/react-icons/General";
 import { MoveIcon } from "@netapp/bxp-style/react-icons/Action";
 import {
   GcpStorageIcon,
@@ -57,7 +61,7 @@ export const MENU_ITEMS = [
     ],
   },
   {
-    id: "5",
+    id: "4",
     label: <Box className="text-sm font-semibold">Speed Test</Box>,
     icon: <MoveIcon size="24" color="text-main-nav-icon-text-selected" />,
     path: "/speed-test",

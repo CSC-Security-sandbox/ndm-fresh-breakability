@@ -8,6 +8,7 @@ declare module "@netapp/bxp-style/react-icons/General" {
 
 declare module "@netapp/bxp-style/react-icons/Storage" {
   export const GcpStorageIcon: React.FC<{ size?: string; color?: string }>;
+  export const VirtualMachineIcon: React.FC<{ size?: string; color?: string }>;
 }
 
 declare module "@netapp/bxp-design-system-react/icons/resources-services" {

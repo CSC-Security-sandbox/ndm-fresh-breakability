@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { prepareHeaders } from "@api/api.utils";
+import { SpeedTestConfigType } from "@modules/speed-test/types/speed-test.types";
 
 export const configApi = createApi({
   reducerPath: "configApi",
@@ -63,6 +64,10 @@ export const configApi = createApi({
     getAllCutOverPaths: builder.query({
       query: ({ fileServerId }) => `/servers/cutover/${fileServerId}`,
     }),
+
+    getSpeedTestFileServers: builder.query<SpeedTestConfigType[], void>({
+      query: () => "servers/file-servers",
+    }),
   }),
 });
 
@@ -76,4 +81,5 @@ export const {
   useLazyGetFileServerByIdQuery,
   useGetAllCutOverPathsQuery,
   useLazyGetAllCutOverPathsQuery,
+  useGetSpeedTestFileServersQuery,
 } = configApi;

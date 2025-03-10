@@ -5,6 +5,7 @@ import NotFound from "@components/404/PageNotFound";
 import HomeLayout from "@components/route-layout/HomeLayout";
 import RouteErrorBoundary from "@components/ErrorBoundary/ErrorBoundary";
 import JobTasksPage from "@pages/JobTasksPage";
+import SpeedTestConfig from "@modules/speed-test/components/speed-test-configuration/components/SpeedTestConfig";
 const WorkersPage = lazy(() => import("@pages/WorkersPage"));
 const BulkCutOverPage = lazy(() => import("@pages/BulkCutOverPage"));
 const BulkDiscoveryPage = lazy(() => import("@pages/BulkDiscoveryPage"));
@@ -25,6 +26,7 @@ const FileServerPage = lazy(() => import("@pages/FileServerPage"));
 const JobDetailsPage = lazy(() => import("@pages/JobDetailsPage"));
 const JobRunDetailsPage = lazy(() => import("@pages/JobRunDetailsPage"));
 const JobRunListPage = lazy(() => import("@pages/JobRunListPage"));
+const SpeedTestPage = lazy(() => import("@pages/SpeedTestPage"));
 
 const App = () => {
   return (
@@ -73,6 +75,10 @@ const App = () => {
             />
 
             <Route path="/jobs-run-list" element={<JobRunListPage />} />
+            {/* SPEED TEST ROUTES */}
+            <Route path="speed-test" element={<SpeedTestPage />} />
+            <Route path="/speed-test/config" element={<SpeedTestConfig />} />
+
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
