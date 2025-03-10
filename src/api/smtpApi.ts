@@ -7,7 +7,7 @@ export const smtpApi = createApi({
   tagTypes: ["SMTP"],
 
   baseQuery: fetchBaseQuery({
-    baseUrl: "https://192.168.64.18/",
+    baseUrl: import.meta.env.VITE_REPORTS_SERVICE_URL,
     prepareHeaders,
   }),
 
