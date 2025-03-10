@@ -9,8 +9,8 @@ import {
 } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GlobalSettings, AuthKeycloakModule])],
+  imports: [TypeOrmModule.forFeature([GlobalSettings]),AuthKeycloakModule],
   controllers: [SettingController],
-  providers: [SettingService, JwtService],
+  providers: [SettingService],
 })
 export class SettingModule {}
