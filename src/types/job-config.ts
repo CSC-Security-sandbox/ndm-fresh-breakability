@@ -1,4 +1,5 @@
 import { FileServerDetails } from './file-server';
+import { Options } from './options';
 import { Serializable } from './serializable';
 
 export class JobConfig implements Serializable {
@@ -9,6 +10,7 @@ export class JobConfig implements Serializable {
   workerIds?: string[];
   destinationFileServer?: FileServerDetails;
   destinationPath?: string;
+  options?:Options;
 
   constructor(
     jobId: string,
@@ -18,6 +20,7 @@ export class JobConfig implements Serializable {
     destinationFileServer?: FileServerDetails,
     destinationPath?: string,
     workerIds?: string[],
+    options?: Options
   ) {
     this.jobId = jobId;
     this.jobType = jobType;
@@ -26,6 +29,7 @@ export class JobConfig implements Serializable {
     this.sourcePath = sourcePath;
     this.destinationPath = destinationPath;
     this.workerIds = workerIds;
+    this.options = options;
   }
 
   serialize(): string {
@@ -41,5 +45,6 @@ export class JobConfig implements Serializable {
     this.sourcePath = obj.sourcePath;
     this.destinationPath = obj.destinationPath;
     this.workerIds = obj.workerIds;
+    this.options = obj.options;
   }
 }
