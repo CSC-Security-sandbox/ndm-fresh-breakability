@@ -1,7 +1,7 @@
 import CustomStepLayout from "@modules/storage-servers/file-server/components/layout/CustomStepLayout";
 import { Box } from "@components/container/index";
 import { Wizard } from "@netapp/bxp-design-system-react";
-import Footer from "./footer/Footer";
+import FileServerFooter from "./FileServerFooter/FileServerFooter";
 import {
   STEPS_MAP,
   STEPS_PATHS,
@@ -18,7 +18,7 @@ const WizardProvider = () => {
         initialStep="server-type"
         initialPath="default"
       >
-        <AppFooter footerContent={<Footer />} />
+        <AppFooter footerContent={<FileServerFooter />} />
         <CustomStepLayout />
       </Wizard>
     </Box>

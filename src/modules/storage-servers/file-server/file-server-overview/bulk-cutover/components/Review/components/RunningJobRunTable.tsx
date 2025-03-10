@@ -21,7 +21,7 @@ const RunningJobRunTable = () => {
 
       <TableWrapperWithoutFilter
         tableState={jobRunListPathTableState}
-        label="On Going Job Runs"
+        label="Ongoing Job Runs"
         handleSelection={setReviewStepSelectedIds}
       />
 

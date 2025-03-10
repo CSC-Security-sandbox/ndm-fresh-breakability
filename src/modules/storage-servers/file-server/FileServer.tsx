@@ -30,7 +30,7 @@ const FileServer = () => {
       {
         label: "Edit File Server",
         onClick: () => {
-          navigate(`/file-server/edit/${row?.id}`);
+          navigate(`/edit-file-server/${row?.id}`);
         },
         disabled: !canManageJob,
       },

@@ -1,4 +1,3 @@
-"use client";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
@@ -30,13 +29,8 @@ const NextAndSubmitButton = () => {
   const handleFinish = async () => {
     if (isEditMode) {
       handleEditConfiguration();
-    } else if (selectedWorkerIds?.length === 0) {
-      handleCreateConfiguration();
     } else {
-      const resp = await handleValidateConnection();
-      if (resp.errorMessageList.length === 0) {
-        handleCreateConfiguration();
-      }
+      handleCreateConfiguration();
     }
   };
 

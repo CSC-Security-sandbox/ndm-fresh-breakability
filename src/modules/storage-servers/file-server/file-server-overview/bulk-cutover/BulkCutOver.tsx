@@ -1,4 +1,3 @@
-"use client";
 import CustomStepLayout from "@modules/storage-servers/file-server/components/layout/CustomStepLayout";
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
@@ -22,7 +21,7 @@ const BulkCutOver = () => {
           stepsMap={CUT_OVER_STEPS_MAP}
           stepPaths={CUT_OVER_STEPS_PATHS}
           initialState={{}}
-          initialStep="select-path"
+          initialStep="review"
           initialPath="default"
         >
           <CustomStepLayout />

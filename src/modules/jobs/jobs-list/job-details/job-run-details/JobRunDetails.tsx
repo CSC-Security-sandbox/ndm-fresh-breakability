@@ -165,7 +165,7 @@ const JobRunDetails = () => {
               {isDiscoveryJob && (
                 <ActionMenu.Button
                   onClick={() =>
-                    void navigation(`/jobs/discovery-preview/${jobRunId}`)
+                    void navigation(`/job-discovery-preview/${jobRunId}`)
                   }
                 >
                   Preview

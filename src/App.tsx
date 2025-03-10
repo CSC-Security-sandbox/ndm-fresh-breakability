@@ -1,11 +1,13 @@
-import React, { Suspense, lazy } from "react";
-import { Route, Routes } from "react-router-dom";
-import "@netapp/bxp-design-system-react/dist/index.css";
 import NotFound from "@components/404/PageNotFound";
 import HomeLayout from "@components/route-layout/HomeLayout";
-import RouteErrorBoundary from "@components/ErrorBoundary/ErrorBoundary";
-import JobTasksPage from "@pages/JobTasksPage";
 import SpeedTestConfig from "@modules/speed-test/components/speed-test-configuration/components/SpeedTestConfig";
+import "@netapp/bxp-design-system-react/dist/index.css";
+import { Suspense, lazy } from "react";
+import { Route, Routes } from "react-router-dom";
+
+// LAZY LOADED PAGES
+const JobTasksPage = lazy(() => import("@pages/JobTasksPage"));
+const DiscoveryPreviewPage = lazy(() => import("@pages/DiscoveryPreviewPage"));
 const WorkersPage = lazy(() => import("@pages/WorkersPage"));
 const BulkCutOverPage = lazy(() => import("@pages/BulkCutOverPage"));
 const BulkDiscoveryPage = lazy(() => import("@pages/BulkDiscoveryPage"));
@@ -73,12 +75,15 @@ const App = () => {
               path="/job-details/:jobId/run/:jobRunId/tasks"
               element={<JobTasksPage />}
             />
-
             <Route path="/jobs-run-list" element={<JobRunListPage />} />
+            <Route
+              path="/job-discovery-preview/:jobRunId"
+              element={<DiscoveryPreviewPage />}
+            />
+
             {/* SPEED TEST ROUTES */}
             <Route path="speed-test" element={<SpeedTestPage />} />
             <Route path="/speed-test/config" element={<SpeedTestConfig />} />
-
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

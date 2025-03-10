@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ReactNode } from "react";
 import NextAndSubmitButton from "./NextAndSubmitButton";
 
-const Footer = ({ content }: { content?: ReactNode }) => {
+const FileServerFooter = ({ content }: { content?: ReactNode }) => {
   const navigate = useNavigate();
   const { currentStepIndex, gotoPreviousStep } = useWizard();
 
@@ -33,4 +33,4 @@ const Footer = ({ content }: { content?: ReactNode }) => {
   );
 };
 
-export default Footer;
+export default FileServerFooter;

@@ -1,4 +1,4 @@
-import JobTasks from "@modules/jobs/jobs-list/job-details/job-run-details/JobTasks/JobTasks";
+import JobTasks from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/JobTasks";
 import Box from "@components/container/Box";
 
 const JobTasksPage = () => {
