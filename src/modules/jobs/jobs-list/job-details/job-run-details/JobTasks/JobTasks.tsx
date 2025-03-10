@@ -118,13 +118,13 @@ const JobTasks = () => {
       accessor: "status",
       label: "Status",
       options: Object.values(TASK_STATUS_TYPE_ENUM),
-      formater: toTitleCase,
+      formatter: toTitleCase,
     },
     {
       accessor: "taskType",
       label: "Task Type",
       options: Object.values(TASK_TYPE_TYPE_ENUM),
-      formater: toTitleCase,
+      formatter: toTitleCase,
     },
     {
       accessor: "workerId",

@@ -171,6 +171,6 @@ export const COLUMNS_TO_FILTER_DEFS: ColumnFilterType[] = [
   { accessor: "sourceServerName", label: "Source" },
   { accessor: "destinationServerName", label: "Destination" },
   { accessor: "sourceServerProtocol", label: "Protocol" },
-  { accessor: "jobType", label: "Type", formater: getJobType },
-  { accessor: "jobStatus", label: "Status", formater: getJobStatusFormat },
+  { accessor: "jobType", label: "Type", formatter: getJobType },
+  { accessor: "jobStatus", label: "Status", formatter: getJobStatusFormat },
 ];

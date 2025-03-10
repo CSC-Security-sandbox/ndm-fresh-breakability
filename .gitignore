@@ -1,7 +1,5 @@
 node_modules
-.next
 .env.*
 .vscode
-next.config.js
 coverage
 dist
