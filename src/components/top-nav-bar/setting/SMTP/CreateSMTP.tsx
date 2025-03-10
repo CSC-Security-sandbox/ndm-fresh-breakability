@@ -23,15 +23,8 @@ import {
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { setDrawerClose } from "@store/reducer/commonComponentSlice";
-
-const initialSMTPFormState = {
-  ip_address: "",
-  port: "",
-  user_name: "",
-  password: "",
-  from_email: "",
-  to_email: [],
-};
+import { initialSMTPFormState } from "./SMTP.constants";
+import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 
 const CreateSMTP = () => {
   const dispatch = useDispatch();
@@ -44,6 +37,7 @@ const CreateSMTP = () => {
     })
   ) : [];
   const [createSmtpApi, { isLoading: isCreateFormSubmitting }] = useCreateSmtpMutation();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const smtpForm = useForm(
     initialSMTPFormState,
@@ -65,15 +59,21 @@ const CreateSMTP = () => {
       { settingKey: "SMTP_TO_EMAIL", settingValue: toEmailIds, description: "", settingType: "SMTP"}
     ];
     
+    setIsLoading(true);
     try {
       await createSmtpApi(body).unwrap();
       setDisableSave(true);
       dispatch(setDrawerClose());
       notify.success(`SMTP details added successfully.`);
     } catch (err) {
-      notify.error(err);
-      notify.error("Failed to add Details.");
+      notify.error(
+        <ErrorMessageContainer
+          title="Error occurred."
+          message={err?.message || "Failed to add SMTP Details"}
+        />
+      );
     }
+    setIsLoading(false);
   }
 
   return (

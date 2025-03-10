@@ -16,3 +16,12 @@ export const CREATE_SMTP_FORM_VALIDATION_SCHEMA = Yup.object().shape({
       })
     ),
 });
+
+export const initialSMTPFormState = {
+  ip_address: "",
+  port: "",
+  user_name: "",
+  password: "",
+  from_email: "",
+  to_email: [],
+};
