@@ -19,6 +19,7 @@ export * from './utils/logging';
 export * from './utils/job-utils';
 
 export * from './job-context-provider';
+export * from './speed-test-job-context-provider';
 export * from './job-context-factory';
 
 
