@@ -28,7 +28,7 @@ export class DiscoveryScanActivity {
     const discoveryStats = new TaskStats('SCAN');
     const result = await this.discovery(payload, jobContext, discoveryStats);
     const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
-    jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status as JobStatus);
+    jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status as JobStatus,[]);
     await this.redisService.setJobContext(traceId, jobContext);
     this.logger.log(`[${traceId}] Discovery Scan Activity Completed.`);
     return result;

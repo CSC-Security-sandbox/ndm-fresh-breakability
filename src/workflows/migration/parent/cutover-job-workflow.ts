@@ -65,7 +65,7 @@ export const CutOverWorkFlow = async ({
 
   result.forEach((r) => {
     log(traceId, `MigrationWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-    if (r.status === 'success') {
+    if (r?.status === 'success') {
       activeWorkerIds.push(r.workerId);
     }
   });

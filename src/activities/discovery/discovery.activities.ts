@@ -50,7 +50,7 @@ export class DiscoveryActivity {
       let commandsBatch: Command[] = [];
       for await (const directory of jobContext.groupReadDirs(`${traceId}-worker`, directoryBatchSize)) {
         const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-        const command = new Command(directory.path, ops, `${uuid4()}`);
+        const command = new Command(directory.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
         this.logger.log(`[${traceId}] Task created for publishing.`)
         if (commandsBatch && commandsBatch.length >= directoryBatchSize) {
@@ -62,7 +62,7 @@ export class DiscoveryActivity {
             tasks_total: jobState.tasks_total + 1,
             status: jobState.status,
           }
-          jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status);
+          jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status, []);
           await this.redisService.setJobContext(traceId, jobContext);
           this.logger.log(`[${traceId}] Task published.`);
           commandsBatch = [];
@@ -78,7 +78,7 @@ export class DiscoveryActivity {
           ...jobState,
           tasks_total: jobState.tasks_total + 1,
         }
-        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status);
+        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status, []);
         await this.redisService.setJobContext(traceId, jobContext);
         this.logger.log(`[${traceId}] Task published successfully.`)
       }
@@ -133,7 +133,8 @@ export class DiscoveryActivity {
       jobState.tasks_completed, 
       jobState.tasks_total, 
       jobState.workers_agreed, 
-      jobState.status as JobStatus
+      jobState.status as JobStatus,
+      []
     );
     jobContext.jobState = newjobState;
     await this.redisService.setJobContext(traceId, jobContext);

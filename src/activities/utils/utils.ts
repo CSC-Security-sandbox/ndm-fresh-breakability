@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -189,20 +189,20 @@ export const formatDate = (date: Date): string => {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
 };
 
-export const dmError = (type: 'TASK' | 'OPERATION', correlationId: string, error?: Error, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
+export const dmError = (type: 'TASK' | 'OPERATION', errorType: ErrorType, correlationId: string, error?: Error, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
  
   switch (type) {
     case 'OPERATION': {
       const errorCode = getErrorCode(error, type);
-      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path } })
+      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path }, errorType })
     }
     case 'TASK': {
       const errorCode = customError?.errorCode ?  customError.errorCode.map(code => getErrorCode({code}, 'TASK')).join('\n') : ''
-      return new DMError({ taskId: correlationId, errorCode, errorMessage: customError.message })
+      return new DMError({ taskId: correlationId, errorCode, errorMessage: customError.message , errorType})
     }
     default: {
       const errorCode = getErrorCode(error, type);
-      return new DMError({ taskId: correlationId, errorCode, errorMessage: error.message })
+      return new DMError({ taskId: correlationId, errorCode, errorMessage: error.message , errorType})
     }
   }
 }

@@ -62,7 +62,7 @@ export async function DiscoveryWorkflow({
   
   result.map((r) => {
     log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-    if (r.status === 'success') {
+    if (r?.status === 'success') {
       activeWorkerIds.push(r.workerId);
     }
   });  

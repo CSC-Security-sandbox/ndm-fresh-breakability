@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 
 import { basePrefix, dmError, formatDate, getFileInfo } from '../utils/utils';
@@ -17,6 +17,7 @@ export class MigrationSyncService {
   readonly fetchTaskBatch: number;
   readonly pushTaskDirSize: number;
   readonly CHUNK_SIZE: number;
+  readonly maxRetryCount: number = 3;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -24,6 +25,7 @@ export class MigrationSyncService {
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.maxRetryCount = this.configService.get('worker.maxRetryCount');
     this.fetchTaskBatch = 50;
     this.pushTaskDirSize = 500;
     this.CHUNK_SIZE = 1024 * 1024;
@@ -91,14 +93,14 @@ export class MigrationSyncService {
       fs.mkdirSync(directoryPath, { recursive: true });
     }
   }
-
+  
   async stampMetaData(filePath: string, metadata: MetaData, jobContext: JobContext, command: Command):Promise<StampMetaDataOutput> {
-    const stampMetaDataOutput : StampMetaDataOutput = {errors: []}
+    const stampMetaDataOutput : StampMetaDataOutput = {errors: [], errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR}
     if(metadata?.mode) {
       try {
         fs.chmodSync(filePath, metadata.mode);
       } catch(error) {
-        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION",stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         await jobContext.appendToErrorList(dmErr);
         stampMetaDataOutput.errors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
@@ -116,7 +118,7 @@ export class MigrationSyncService {
         }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION",stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
@@ -126,7 +128,7 @@ export class MigrationSyncService {
         fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
@@ -135,8 +137,8 @@ export class MigrationSyncService {
   }
   
   async syncOperation({ sourcePath, targetPath, ops, jobContext, command}: SyncOperationInput): Promise<SyncOperationOutput> {
-    const syncOperation: SyncOperationOutput = {errors : new Set<string>(),  ops, status: OPS_STATUS.COMPLETED }
-    if (syncOperation.ops[0].status === OPS_STATUS.READY) {
+    const syncOperation: SyncOperationOutput = {errors : new Set<string>(),  ops, status: OPS_STATUS.COMPLETED , errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
+    if (syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
@@ -145,37 +147,37 @@ export class MigrationSyncService {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
-          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          const dmErr = dmError("OPERATION", syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           syncOperation.errors.add(error.code)
           this.logger.error(`Error in SyncOperation File: ${error.message}`);
           return syncOperation
         }
       }
-      if(ops[0].cmd === OPS_CMD.COPY_DIR) {
+      if(ops[0].cmd !== OPS_CMD.COPY_DIR) {
         try {
           this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
           await this.ensureDirectoryExists(targetPath);
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
         } catch (error) {
           ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
-          const dmErr = dmError("OPERATION", command.commandId, error, {name: command.fPath, path: targetPath});
+          const dmErr = dmError("OPERATION", syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
           return syncOperation
         }
       }
     }
-    if (ops[1]?.status === OPS_STATUS.READY) {
+    if (ops[1]?.status !== OPS_STATUS.COMPLETED) {
       const result = await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
-      ops[1].status = OPS_STATUS.COMPLETED
       result.errors.forEach(error => syncOperation.errors.add(error))
+      ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
     }
     return syncOperation ;
   }
 
   async syncTask({ task }: SyncTaskInput): Promise<SyncTaskOutput> {
-    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0 };
+    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0 };
     const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
     task.status = TaskStatus.RUNNING
     task.commands.map((cmd: any) => cmd.status = OPS_STATUS.IN_PROCESS);
@@ -185,7 +187,6 @@ export class MigrationSyncService {
 
     for (let i = 0;  i < task.commands.length; i++) {
       if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-      
       const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
       const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
       const scanInput: SyncOperationInput = {
@@ -195,10 +196,10 @@ export class MigrationSyncService {
         command: task.commands[i],
         jobContext
       };
-
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
       task.commands[i].ops = syncOperationOp.ops;
       if (syncOperationOp.errors.size > 0) {
+        syncTask.retryCount = Math.max(task.commands[i].retryCount+1,  syncTask.retryCount)
         task.commands[i].status = CommandStatus.ERROR;
         syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
         syncTask.error++;
@@ -215,16 +216,26 @@ export class MigrationSyncService {
       }
     }
 
-    task.status = syncTask.error > 0 ? TaskStatus.ERRORED : TaskStatus.COMPLETED;
+    if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
+      task.status =  TaskStatus.ERRORED 
+    else if( syncTask.retryCount > 0) 
+      task.status =  TaskStatus.COMPLETED_WITH_ERROR 
+    else 
+      task.status =  TaskStatus.COMPLETED
+     
     if( syncTask.error > 0) {
-      const dmErr = dmError("TASK", task.id,  undefined, undefined, {
+      const errorType = syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+      const dmErr = dmError("TASK", errorType, task.id,  undefined, undefined, {
           errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
           message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
       });
-      await jobContext.appendToErrorList(dmErr);
+      jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
+      if(syncTask.retryCount < this.maxRetryCount) {
+        jobContext.migrateTask.lastId = await jobContext.appendToTaskList(task);
+      }
+    }else {
+      jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
     }
-    id = await jobContext.appendToUpdatedTaskList(task);
-    jobContext.migrateTask.lastId = id;
     await this.redisService.setJobContext(task.jobRunId, jobContext);
     return syncTask;
   }
