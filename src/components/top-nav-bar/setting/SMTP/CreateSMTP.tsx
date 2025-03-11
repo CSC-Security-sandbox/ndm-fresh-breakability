@@ -26,8 +26,13 @@ import { setDrawerClose } from "@store/reducer/commonComponentSlice";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 import { smtpData } from './SMTP.utils';
 import {
-  SmtpDetailsPropsType,
+  smtpValuesType,
 } from "@/types/app.type";
+
+interface SmtpDetailsPropsType {
+  isEditSmtp: boolean;
+  smtpDetails: smtpValuesType;
+}
 
 const CreateSMTP = ({isEditSmtp, smtpDetails}: SmtpDetailsPropsType) => {
   const dispatch = useDispatch();

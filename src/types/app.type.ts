@@ -732,8 +732,3 @@ export interface smtpValuesType {
   SMTP_FROM_EMAIL: string;
   SMTP_TO_EMAIL: string;
 }
-
-export interface SmtpDetailsPropsType {
-  isEditSmtp: boolean;
-  smtpDetails: smtpValuesType;
-}
