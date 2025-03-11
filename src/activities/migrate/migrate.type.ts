@@ -1,4 +1,4 @@
-import { Command, CommandOperation, CommandStatus, JobContext, JobStatus, OPS_STATUS, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, CommandOperation, CommandStatus, ErrorType, JobContext, JobStatus, OPS_STATUS, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { JobRunStatus } from "../discovery/enums";
 
 
@@ -15,7 +15,8 @@ export interface ScanContentOutput{
     files:  number,
     directory: number,
     isGeneratedTask: boolean;
-    error: string | undefined
+    error: string | undefined;
+    errorType?: ErrorType | undefined;
 }
 
 export interface FetchScanTaskInput {
@@ -33,6 +34,8 @@ export interface ScanPathOutput{
     errors: Set<string>;
     success: number;
     error: number
+    retryCount: number
+    isFatal: boolean;
 }
 
 export interface PublishScanTaskInput{
@@ -66,7 +69,10 @@ export interface SyncTaskInput {
 export interface SyncTaskOutput {
     errors: Set<string>;
     success: number;
-    error: number
+    error: number,
+    retryCount: number;
+    errorType?: ErrorType | undefined
+    isFatal : boolean
 }
 
 export interface SyncOperationInput {
@@ -75,6 +81,7 @@ export interface SyncOperationInput {
     ops: Record<number, CommandOperation>;
     jobContext: JobContext;
     command: Command;
+    errorType?: ErrorType | undefined
 }
 
 export interface SyncOperationOutput {
@@ -85,6 +92,7 @@ export interface SyncOperationOutput {
         sourceChecksum?: string,
         targetChecksum?:string
     }
+    errorType?: ErrorType | undefined;
 }
 
 export interface UpdateStatusInput{
@@ -97,7 +105,8 @@ export interface UpdateStatusOutput{
 }
 
 export interface StampMetaDataOutput{
-    errors: string[]
+    errors: string[],
+    errorType?: ErrorType | undefined
 }
 
 export interface UpdateCutOverStatusInput {

@@ -12,12 +12,7 @@ const {
 
 export async function SetupWorkerWorkflow(
   args: any,
-): Promise<any> {
-  try {
-    log(args.jobRunId, `Starting SetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
+): Promise<SetupOutput> {
+  await log( args.traceId,`Starting SetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
   return await setupWorkerActivity(args.jobRunId);
-  } catch (error) {
-    log(args.jobRunId, `Failed to setup worker: ${error}`);
-    throw error;
-  }
 }

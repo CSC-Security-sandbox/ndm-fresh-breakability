@@ -1,6 +1,7 @@
 import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import { DiscoveryScanActivity } from 'src/activities/discovery/discovery-scan-activities';
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -12,10 +13,13 @@ const {
   fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
-  publishLastEntry: updateLastEntry,
+} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
+
+const { 
+  updateLastEntry: updateLastEntry,
   getJobState,
   setJobState,
-} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
+} = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options, workerId } = args;

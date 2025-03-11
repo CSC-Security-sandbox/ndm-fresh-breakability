@@ -19,6 +19,7 @@ export default registerAs(
       'http://localhost:3006',
     platform: process.platform,
     baseWorkingPath: process.env.BASE_WORKING_PATH || '/mnt/datamigrate',
+    maxRetryCount: process.env.MAX_OPERATION_RETRY || 3
   }),
 );
 

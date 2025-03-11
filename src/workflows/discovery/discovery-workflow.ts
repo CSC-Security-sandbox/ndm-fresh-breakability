@@ -1,15 +1,14 @@
+import * as wf from '@temporalio/workflow';
 import {
   ChildWorkflowCancellationType,
-  ParentClosePolicy,
-  proxyActivities,
+  executeChild,
+  ParentClosePolicy
 } from '@temporalio/workflow';
-import { executeChild } from '@temporalio/workflow';
-import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
-import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
-import { DiscoveryJobWorkflow } from './discovery-job-workflow';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import * as wf from '@temporalio/workflow';
+import { CommonActivityService } from 'src/activities/common/common.service';
 import { ReportingWorkflow } from '../reporting/reporting.workflow';
+import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
+import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
+import { DiscoveryJobWorkflow } from './discovery-job-workflow';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -17,7 +16,12 @@ async function log(traceId: string, message: string) {
 
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
-const { getWorkerId, setJobState, getJobState } = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5m' });
+const {
+  getJobState,
+  setJobState,
+  updateJobErrorStatus: updateJobErrorActivity
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
  * @param traceId Unique identifier to trace the request
@@ -48,21 +52,23 @@ export async function DiscoveryWorkflow({
         });
       } catch (error) {
         log(traceId, `Error in SetupWorkerWorkflow: ${error}`);
-        throw error;
       }
     })
   );
   log(traceId, `DiscoveryWorkflow responseArray: ${JSON.stringify(responseArray)}`);
 
   let result = responseArray.flat();
+  
   result.map((r) => {
     log(traceId, `DiscoveryWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-    if (r.status === 'success') {
+    if (r?.status === 'success') {
       activeWorkerIds.push(r.workerId);
     }
   });  
-  if(!activeWorkerIds.length) {
+
+  if(activeWorkerIds.length === 0) {
     log(traceId, `No active workers found`);
+    await updateJobErrorActivity(traceId)
     return {
       traceId: traceId,
       status: 'error',
@@ -114,30 +120,30 @@ export async function DiscoveryWorkflow({
   console.log("disoovery response" + JSON.stringify(discoveryResponse));
   result.push(discoveryResponse);
 
-  const cleanupResponse = await Promise.all(
-    activeWorkerIds.map(async (workerId) => {
-      log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
-      try {
-        return await executeChild(CleanupWorkerWorkflow, {
-          args: [{ jobRunId: traceId }],
-          workflowId: `CleanupWorkerWorkflow-${traceId}`,
-          taskQueue: `${workerId}-TaskQueue`,
-          ...options,
-          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
-        });
-      } catch (error) {
-        log(traceId, `Error in CleanupWorkerWorkflow: ${error}`);
-        throw error;
-      }
-    }),
-  );
-
+  if (activeWorkerIds.length > 0) {
+    await ReportingWorkflow(traceId, reportingSignal)
+    const cleanupResponse = await Promise.all(
+      activeWorkerIds.map(async (workerId) => {
+        log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
+        try {
+          return await executeChild(CleanupWorkerWorkflow, {
+            args: [{ jobRunId: traceId }],
+            workflowId: `CleanupWorkerWorkflow-${traceId}`,
+            taskQueue: `${workerId}-TaskQueue`,
+            ...options,
+            cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+            parentClosePolicy: ParentClosePolicy.TERMINATE,
+          });
+        } catch (error) {
+          log(traceId, `Error in CleanupWorkerWorkflow: ${error}`);
+          throw error;
+        }
+      }),
+    );
     cleanupResponse.flat().map((r) =>
       result.push(r),
     );
-
-  await ReportingWorkflow(traceId, reportingSignal)
+  }
 
   log(traceId, `DiscoveryWorkflow response: ${JSON.stringify(result)}`);
   return discoveryResponse;

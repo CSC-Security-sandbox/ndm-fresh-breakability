@@ -1,4 +1,4 @@
-import { CommandStatus, DMError, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, DMError, ErrorType, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -28,7 +28,7 @@ export class DiscoveryScanActivity {
     const discoveryStats = new TaskStats('SCAN');
     const result = await this.discovery(payload, jobContext, discoveryStats);
     const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
-    jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status as JobStatus);
+    jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status as JobStatus,[]);
     await this.redisService.setJobContext(traceId, jobContext);
     this.logger.log(`[${traceId}] Discovery Scan Activity Completed.`);
     return result;
@@ -70,7 +70,7 @@ export class DiscoveryScanActivity {
           return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OPS_STATUS.COMPLETED } } };
         } catch (error) {
           const errorCode = getErrorCode(error, 'OPERATION');
-          await this.processErrors(new DMError(null, { operationId: cmd.commandId, errorCode, errorMessage: error.message, errorFiles: { fileName: cmd.fPath, filePath: cmd.commandId } }), jobContext, discoveryStats);
+          await this.processErrors(new DMError(null, {errorType: ErrorType.TRANSIENT_ERROR, operationId: cmd.commandId, errorCode, errorMessage: error.message, errorFiles: { fileName: cmd.fPath, filePath: cmd.commandId } }), jobContext, discoveryStats);
           return { ...cmd, ops: { 0: { ...cmd.ops[0], status: OPS_STATUS.COMPLETED } } };
         }
       }));
@@ -83,7 +83,7 @@ export class DiscoveryScanActivity {
       return discoveryStats;
     } catch (error) {
       const errorCode = getErrorCode(error, 'TASK');
-      await this.processErrors(new DMError({ taskId: ids.taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
+      await this.processErrors(new DMError({ taskId: ids.taskId, errorCode, errorMessage: error.message, errorType: ErrorType.TRANSIENT_ERROR }), jobContext, discoveryStats);
     }
   }
 
@@ -140,6 +140,7 @@ export class DiscoveryScanActivity {
         } catch (operationError) {
           const errorCode = getErrorCode(operationError, 'OPERATION');
           await this.processErrors(new DMError(null, {
+            errorType: ErrorType.TRANSIENT_ERROR,
             operationId: taskId,
             errorCode,
             errorMessage: operationError.message,
@@ -153,7 +154,7 @@ export class DiscoveryScanActivity {
       return { accumulatedResult };
     } catch (error) {
       const errorCode = getErrorCode(error, 'OPERATION');
-      await this.processErrors(new DMError(null, { operationId: commandId, errorCode: errorCode, errorMessage: error.message, errorFiles: { fileName: chunkPath, filePath: chunkPath } }), jobContext, discoveryStats);
+      await this.processErrors(new DMError(null, { errorType: ErrorType.TRANSIENT_ERROR,operationId: commandId, errorCode: errorCode, errorMessage: error.message, errorFiles: { fileName: chunkPath, filePath: chunkPath } }), jobContext, discoveryStats);
     }
   }
 
@@ -173,7 +174,7 @@ export class DiscoveryScanActivity {
               this.logger.log(`[${jobContext.jobRunId}] *************** Appending to dir list ***************`);
             } catch (error) {
               const errorCode = getErrorCode(error, 'OPERATION');
-              await this.processErrors(new DMError(null, { operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
+              await this.processErrors(new DMError(null, {  errorType: ErrorType.TRANSIENT_ERROR, operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
             }
           }
           try {
@@ -185,7 +186,7 @@ export class DiscoveryScanActivity {
             this.logger.log(`[${jobContext.jobRunId}] *************** Appending to file list ***************`);
           } catch (error) {
             const errorCode = getErrorCode(error, 'OPERATION');
-            await this.processErrors(new DMError(null, { operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
+            await this.processErrors(new DMError(null, {  errorType: ErrorType.TRANSIENT_ERROR, operationId: currentCommandId, errorCode, errorMessage: error.message, errorFiles: { fileName: item.fileName, filePath: item.parentPath } }), jobContext, discoveryStats);
           }
         })
       );
@@ -193,7 +194,7 @@ export class DiscoveryScanActivity {
       return result;
     } catch (error) {
       const errorCode = getErrorCode(error, 'TASK');
-      await this.processErrors(new DMError({ taskId: taskId, errorCode, errorMessage: error.message }), jobContext, discoveryStats);
+      await this.processErrors(new DMError({ taskId: taskId, errorCode, errorMessage: error.message, errorType: ErrorType.TRANSIENT_ERROR, }), jobContext, discoveryStats);
     }
   }
 

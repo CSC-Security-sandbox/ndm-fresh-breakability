@@ -13,6 +13,7 @@ import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
 import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
 import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
+import { CommonActivityService } from "src/activities/common/common.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -26,7 +27,9 @@ export class WorkerOptionsService {
     private readonly migrationTaskService: MigrationTaskService,
     private readonly migrationSyncService:MigrationSyncService,
     private readonly validateWorkingDirectoryActivity: ValidateWorkingDirectoryActivity,
-    private readonly precheckActivity:PrecheckActivity
+    private readonly precheckActivity:PrecheckActivity,
+    private readonly commonActivityService:CommonActivityService
+    
   ) {}
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -34,14 +37,15 @@ export class WorkerOptionsService {
       case WorkFlowType.PARENT_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'ParentWorkflow-TaskQueue', config, {
           getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
-          getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
-          setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+          getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
+          setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
           checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
           generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
-          updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+          updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
-          generateJobsReport: this.migrationTaskService.generateJobsReport.bind(this.migrationTaskService),
+          generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.commonActivityService),
+          updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -56,20 +60,19 @@ export class WorkerOptionsService {
             setup: this.setupActivityService.setup.bind(this.setupActivityService),
             cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
             mountAndCheckWritePermission: this.setupActivityService.mountAndCheckWritePermission.bind(this.setupActivityService),
-            getJobState: this.discoveryActivities.getJobState.bind(this.discoveryActivities),
-            setJobState: this.discoveryActivities.setJobState.bind(this.discoveryActivities),
+            getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
+            setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
             scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
             publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
             fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
             fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
-            updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
+            updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
-            updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
+            updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
             checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
             validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
             isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
-            updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity)
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -86,9 +89,13 @@ export class WorkerOptionsService {
           publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
           fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
           fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
-          updateStatus: this.migrationTaskService.updateStatus.bind(this.migrationTaskService),
-          updateLastEntry: this.migrationTaskService.updateLastEntry.bind(this.migrationTaskService),
-          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService)
+          updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
+          updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
+          syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
+          updateConfigStatus: this.validateWorkingDirectoryActivity.updateConfigStatus.bind(this.validateWorkingDirectoryActivity),
+          updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
+          getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
+          setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
         });
       default:
         return undefined;
