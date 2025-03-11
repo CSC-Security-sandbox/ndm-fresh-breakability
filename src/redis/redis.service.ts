@@ -54,6 +54,15 @@ async onModuleInit(): Promise<void> {
     }
   }
 
+  async getClient(): Promise<RedisClientType> {
+    if (!this.client || !this.client.isOpen) {
+      this.logger.debug('Redis client is not initialized yet. calling ensureClient again');
+      await this.ensureClient();
+      this.logger.debug('Redis client initialized from ensureClient');
+    }
+    return this.client;
+  }
+
   async getJobContext(traceId: string) {
     if (!this.redisClient) {
       this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
@@ -93,11 +102,5 @@ async onModuleInit(): Promise<void> {
     } catch (error) {
       return { message: 'Error while updating the job state : ' + traceId };
     }
-  }
-  async getClient(): Promise<RedisClientType> {
-    if (!this.client || !this.client.isOpen) {
-      throw new Error('Redis client is not initialized yet.');
-    }
-    return this.client;
   }
 }
