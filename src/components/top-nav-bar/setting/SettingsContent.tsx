@@ -15,9 +15,36 @@ import TabPanel from "@components/container/TabPanel";
 import CreateSMTP from "./SMTP/CreateSMTP";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import {
+  useGetSmtpDetailsQuery,
+} from "@api/userApi";
+import {
+  smtpValuesType,
+} from "@/types/app.type";
 
 const SettingsContent = () => {
   const [currentTab, setCurrentTab] = useState<number>(1);
+  const { data: smtpData } = useGetSmtpDetailsQuery("");
+  const [isEditSmtp, setIsEditSmtp] = useState<boolean>(false);
+  const [smtpValues, setSmtpValues] = useState<smtpValuesType>({
+                                                                SMTP_HOST: "",
+                                                                SMTP_PORT: "",
+                                                                SMTP_USER_NAME: "",
+                                                                SMTP_PASSWORD: "",
+                                                                SMTP_FROM_EMAIL: "",
+                                                                SMTP_TO_EMAIL: "",
+                                                              });
+
+  const handleSmtp = () => {
+    setCurrentTab(3);
+    if (smtpData?.data?.SMTP?.length > 0) {
+      smtpData.data.SMTP.forEach(item => {
+        smtpValues[item.settingKey] = item.settingValue;
+      });
+      setSmtpValues(smtpValues);
+      setIsEditSmtp(true);
+    }
+  }
 
   return (
     <Card className="h-full w-[70rem]">
@@ -48,7 +75,7 @@ const SettingsContent = () => {
             <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.SaveSmtp}>
               <InnerTab.Button
                 isActive={currentTab === 3}
-                onClick={() => setCurrentTab(3)}
+                onClick={() => {handleSmtp()}}
                 style={{ paddingTop: 16, paddingBottom: 16 }}
               >
                 <Span color="text-title">SMTP</Span>
@@ -65,7 +92,7 @@ const SettingsContent = () => {
             <ManageProject />
           </TabPanel>
           <TabPanel value={currentTab} index={3}>
-            <CreateSMTP />
+            <CreateSMTP isEditSmtp={isEditSmtp} smtpDetails={smtpValues}/>
           </TabPanel>
         </Layout.Content>
       </Layout.Page>

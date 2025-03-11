@@ -153,6 +153,7 @@ export const usersApi = createApi({
       }),
     }),
 
+    //smtp related api's
     getSmtpDetails: builder.query({
       query: () => {
         return `/setting`;
@@ -166,7 +167,14 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["GET_SMTP"],
+    }),
+
+    updateSmtpData: builder.mutation({
+      query: (body) => ({
+        url: `/setting`,
+        method: "PATCH",
+        body,
+      }),
     }),
   }),
 });
@@ -189,4 +197,5 @@ export const {
   useLazyGenerateSecretForWorkerQuery,
   useGetSmtpDetailsQuery,
   useCreateSmtpMutation,
+  useUpdateSmtpDataMutation,
 } = usersApi;
