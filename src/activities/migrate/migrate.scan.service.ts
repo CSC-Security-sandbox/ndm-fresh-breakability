@@ -112,9 +112,11 @@ export class MigrationScanService {
         const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false};
         const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
         task.status = TaskStatus.RUNNING;
-        task.commands.map((cmd: Command) => cmd.status = CommandStatus.IN_PROCESS);
-        let id = await jobContext.appendToUpdatedTaskList(task);
-        jobContext.updatedTaskInfo.lastId = id;
+        for (let i = 0;  i < task.commands.length; i++) 
+            if(task.commands[i].status !== CommandStatus.COMPLETED)
+                task.commands[i].status = CommandStatus.IN_PROCESS
+      
+        jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
         for (let i = 0;  i < task.commands.length; i++) {
