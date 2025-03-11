@@ -81,12 +81,12 @@ export class CommonActivityService{
   async setJobState(traceId: string, jobState: JobState): Promise<any> {
     const jobContext = await this.redisService.getJobContext(traceId);
     jobContext.jobState = new JobState(
-      jobState.workers, 
+      jobState.workers ?? [], 
       jobState.tasks_completed, 
       jobState.tasks_total, 
-      jobState.workers_agreed, 
+      jobState.workers_agreed ?? [], 
       jobState.status as JobStatus,
-      jobState.failedWorkers
+      jobState.failedWorkers ?? []
     );;
     await this.redisService.setJobContext(traceId, jobContext);
   }

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
+import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 
@@ -218,12 +218,14 @@ export const formatDate = (date: Date): string => {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
 };
 
-export const dmError = (type: 'TASK' | 'OPERATION', errorType: ErrorType, correlationId: string, error?: Error, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
- 
+export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
+  if(error && error?.code && isFatalError(error.code))
+    errorType = ErrorType.FATAL_ERROR;
+
   switch (type) {
     case 'OPERATION': {
       const errorCode = getErrorCode(error, type);
-      return new DMError(null, { operationId: correlationId, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path }, errorType })
+      return new DMError(null, { operationId: correlationId, origin, operationName, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path }, errorType })
     }
     case 'TASK': {
       const errorCode = customError?.errorCode ?  customError.errorCode.map(code => getErrorCode({code}, 'TASK')).join('\n') : ''
@@ -231,7 +233,7 @@ export const dmError = (type: 'TASK' | 'OPERATION', errorType: ErrorType, correl
     }
     default: {
       const errorCode = getErrorCode(error, type);
-      return new DMError({ taskId: correlationId, errorCode, errorMessage: error.message , errorType})
+      return new DMError({ taskId: correlationId,  errorCode, errorMessage: error.message , errorType})
     }
   }
 }
@@ -240,5 +242,9 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   if(process.platform === 'win32') return `${process.env.BASE_WORKING_PATH}\\${jobRunId}\\${pathId}`;
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
+
+const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
+
+export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 
 

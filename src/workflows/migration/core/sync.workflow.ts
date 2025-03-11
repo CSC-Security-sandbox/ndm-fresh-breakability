@@ -58,11 +58,23 @@ export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, wo
                 continue
             }
             log(jobRunId, `task found, total -> ${tasks.length}`);
+            let isFatalError = false;
             for(const task of tasks) {
                 log(jobRunId, `Starting SYNC for task -> ${task.id}`);
-                await SyncContentActivity({task})
+                const { isFatal } =await SyncContentActivity({task})
+                if(isFatal) { 
+                    isFatalError = true
+                    log(jobRunId, `SYNC Errored for task -> ${task.id}`);
+                }
+                else
                 log(jobRunId, `SYNC completed for task -> ${task.id}`);
             }
+            if(isFatalError) {
+                log(jobRunId, `Fatal Error Occurred On worker ${workerId}`)
+                const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
+                await setJobStateActivity(jobRunId, updatedJobState);
+                break
+              }
             if(iteration >= 80) {
                 log(jobRunId, `Iteration limit reached. Continuing as new...`);
                 await continueAsNew({ jobRunId });

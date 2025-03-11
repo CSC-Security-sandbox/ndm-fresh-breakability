@@ -16,6 +16,7 @@ export abstract class Protocol {
     abstract validateConnection(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract mountPath(traceId: string, payload: ProtocolPayload): Promise<any>;  
     abstract unmountPath(traceId: string, payload: ProtocolPayload): Promise<any>;
+    abstract disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any>;
 
     public async executeCommand(
         traceId: string,

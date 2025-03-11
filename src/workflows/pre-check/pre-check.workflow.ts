@@ -101,7 +101,7 @@ export const PreCheckValidationWorkflow = async ({
                         {
                           type: sourceServerCredentials.protocol,
                           password: sourceServerCredentials.password,
-                          userName: sourceServerCredentials.userName,
+                          username: sourceServerCredentials.userName,
                         },
                       ],
                     },
@@ -136,7 +136,7 @@ export const PreCheckValidationWorkflow = async ({
                             .protocol,
                           password:
                             destination.destinationServerCredentials.password,
-                          userName:
+                          username:
                             destination.destinationServerCredentials.userName,
                         },
                       ],

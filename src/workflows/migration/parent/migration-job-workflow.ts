@@ -77,11 +77,10 @@ export const MigrationWorkflow = async ({
       const newJobState = { ...jobState, workers: uniqueWorkers, status: JobRunStatus.Running } as any;
       await setJobStateActivity(traceId, newJobState);
       log(traceId, `Starting ScanWorkflow for workerId: ${workerId}`);
-      
       while (true) {
         try {
           return await executeChild(ScanWorkflow, {
-            args: [{ jobRunId: traceId }],
+            args: [{ jobRunId: traceId, workerId }],
             workflowId: `ScanWorkflow-${traceId}-${workerId}`,
             taskQueue: `${workerId}-TaskQueue`,
             cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
@@ -115,45 +114,57 @@ export const MigrationWorkflow = async ({
   console.log("scanResponse response: " + JSON.stringify(scanResponse));
   result.push(scanResponse as any);
 
-  const syncResponse = await Promise.all(
-    activeWorkerIds.map(async (workerId) => {
-      while (true) {
-        try {
-          return await executeChild(SyncWorkflow, {
-            args: [{ jobRunId: traceId, workerId }],
-            workflowId: `SyncWorkflow-${traceId}-${workerId}`,
-            taskQueue: `${workerId}-TaskQueue`,
-            cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-            parentClosePolicy: ParentClosePolicy.TERMINATE,
-          });
-        } catch (err: any) {
-          if (err.name === 'ContinueAsNew') {
-            console.log(`Child workflow continued as new: ${err.workflowId}`);
-            continue;
+  let jobState = await getJobStateActivity(traceId);
+  let errored = jobState.failedWorkers.length === activeWorkerIds.length;
+  if(!errored) {
+    const syncResponse = await Promise.all(
+      activeWorkerIds.map(async (workerId) => {
+        while (true) {
+          try {
+            return await executeChild(SyncWorkflow, {
+              args: [{ jobRunId: traceId, workerId }],
+              workflowId: `SyncWorkflow-${traceId}-${workerId}`,
+              taskQueue: `${workerId}-TaskQueue`,
+              cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+              parentClosePolicy: ParentClosePolicy.TERMINATE,
+            });
+          } catch (err: any) {
+            if (err.name === 'ContinueAsNew') {
+              console.log(`Child workflow continued as new: ${err.workflowId}`);
+              continue;
+            }
+            throw err;
           }
-          throw err;
         }
-      }
+      })
+    )
+    .then((response) => {
+      log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
+      return {
+        traceId,
+        status: 'success',
+        message: `SyncWorkflow successfully completed for ${traceId}`,
+      };
     })
-  )
-  .then((response) => {
-    log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
-    return {
-      traceId,
-      status: 'success',
-      message: `SyncWorkflow successfully completed for ${traceId}`,
-    };
-  })
-  .catch((error) => {
-    log(traceId, `SyncWorkflow error: ${error}`);
-    return {
-      traceId,
-      status: 'error',
-      message: `Failed to perform sync for ${traceId}: ${error}`,
-    };
-  });
-  console.log("SyncResponse response: " + JSON.stringify(syncResponse));
-  result.push(syncResponse as any);
+    .catch((error) => {
+      log(traceId, `SyncWorkflow error: ${error}`);
+      return {
+        traceId,
+        status: 'error',
+        message: `Failed to perform sync for ${traceId}: ${error}`,
+      };
+    });
+    console.log("SyncResponse response: " + JSON.stringify(syncResponse));
+    result.push(syncResponse as any);
+  }
+
+  jobState = await getJobStateActivity(traceId);
+  errored = jobState.failedWorkers.length === activeWorkerIds.length;
+
+  if(errored) {
+    console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
+    await updateJobErrorActivity(traceId)
+  }
 
   await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
 

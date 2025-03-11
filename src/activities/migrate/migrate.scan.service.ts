@@ -6,8 +6,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 
-import { basePrefix, buildTask, dmError, getFileInfo, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
+import { basePrefix, buildTask, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
+import { Operation, Origin } from "../utils/utils.types";
 
 @Injectable()
 export class MigrationScanService {
@@ -37,7 +38,7 @@ export class MigrationScanService {
         try {
             sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
         }catch(error) {
-            const dmErr = dmError("OPERATION",syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
             await jobContext.appendToErrorList(dmErr);
             syncContentOutput.error = error?.code || '';
             return syncContentOutput;
@@ -47,7 +48,7 @@ export class MigrationScanService {
             targetContent = new Set<string>(await this.getDirectoryContents(targetPath));           
         }
         catch(error) {
-            const dmErr = dmError("OPERATION", syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
             await jobContext.appendToErrorList(dmErr);
             syncContentOutput.error = error?.code || '';
             return syncContentOutput;
@@ -100,7 +101,7 @@ export class MigrationScanService {
                     }
                 }
             }catch(error) {
-                const dmErr = dmError("OPERATION", syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
+                const dmErr = dmError("OPERATION", Origin.SOURCE,  Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
                 jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
                 syncContentOutput.error = error?.code || '';
             }
@@ -114,12 +115,14 @@ export class MigrationScanService {
     }
 
     async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
-        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 };
+        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false};
         const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
         task.status = TaskStatus.RUNNING;
-        task.commands.map((cmd: Command) => cmd.status = CommandStatus.IN_PROCESS);
-        let id = await jobContext.appendToUpdatedTaskList(task);
-        jobContext.updatedTaskInfo.lastId = id;
+        for (let i = 0;  i < task.commands.length; i++) 
+            if(task.commands[i].status !== CommandStatus.COMPLETED)
+                task.commands[i].status = CommandStatus.IN_PROCESS
+      
+        jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
         for (let i = 0;  i < task.commands.length; i++) {
@@ -148,6 +151,7 @@ export class MigrationScanService {
             else  
                 scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
         }      
+        
         if(scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount)  
             task.status =  TaskStatus.ERRORED 
         else if( scanPath.retryCount > 0) 
@@ -156,18 +160,26 @@ export class MigrationScanService {
             task.status = TaskStatus.COMPLETED
 
         if( scanPath.error > 0) {
-            const errorType = scanPath.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
-            const dmErr = dmError("TASK", errorType, task.id,  undefined, undefined, {
+            for(const error of scanPath.errors)
+                if(isFatalError(error)) {
+                    scanPath.isFatal = true;
+                    break;
+                }
+            const errorType = scanPath.isFatal ? ErrorType.FATAL_ERROR : scanPath.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+            const dmErr = dmError("TASK", Origin.SOURCE, Operation.READ_DIR, errorType, task.id,  undefined, undefined, {
                 errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [], 
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
             await jobContext.appendToErrorList(dmErr);
-            if(scanPath.retryCount < this.maxRetryCount) 
-                jobContext.migrateTask.lastId = await jobContext.appendToTaskList(task);
+            if(scanPath.retryCount < this.maxRetryCount)  {
+                this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+                jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
+            }
         }
         else {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
+
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         return scanPath;
     }

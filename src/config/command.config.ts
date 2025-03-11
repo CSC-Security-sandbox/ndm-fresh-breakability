@@ -11,6 +11,7 @@ export enum CommandPattern{
     MOUNT_PATH='mountPath',
     UNLINK_PATH='unlinkPath',
     VERSION_DETAIL='versionDetails',
+    DISCONNECT_SESSION='disconnectSession'
 }
 
 // @types 
@@ -34,6 +35,7 @@ export interface BaseCommands {
     versionDetails?: string | undefined;
     linkPath?: string | undefined
     unlinkPath?: string | undefined
+    disconnectSession?: string | undefined
 }
 
 export default registerAs(
@@ -70,6 +72,7 @@ export default registerAs(
                 unmountPath:  process.env.SMB_WIN_UNMOUNT_PATH_CMD,
                 linkPath: process.env.SMB_WIN_CREATE_LINK_PATH_CMD,
                 unlinkPath: process.env.SMB_WIN_UNLINK_PATH_CMD,
+                disconnectSession: process.env.SMB_WIN_DISCONNECT_SESSION_CMD,
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,

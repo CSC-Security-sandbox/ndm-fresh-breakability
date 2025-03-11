@@ -18,14 +18,16 @@ const {
 
 const {
     getJobState: getJobStateActivity,
-    updateStatus: updateStatusActivity
+    updateStatus: updateStatusActivity,
+    setJobState: setJobStateActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
    
 interface ScanWorkflowInput {
     jobRunId: string;
+    workerId: string
 }
 
-export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any> => {
+export const ScanWorkflow = async ({jobRunId , workerId} : ScanWorkflowInput): Promise<any> => {
   console.log('Starting MigrateScan ', jobRunId)
   let iteration = 0;
   try {
@@ -45,12 +47,20 @@ export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any
               return { message: 'Scan Completed' };
           }
           log(jobRunId, `task found, total -> ${tasks.length}`);
+          let isFatalError = false;
           for(const task of tasks) {
               log(jobRunId, `Starting SCAN for task -> ${JSON.stringify(task)}`);
-              const {isTaskCreated} = await scanActivity({task})
+              const {isTaskCreated, isFatal} = await scanActivity({task})
+              if(isFatal) isFatalError = true
               if(isTaskCreated)
-              await publishTaskActivity({jobRunId})
+                await publishTaskActivity({jobRunId})
               log(jobRunId, `SCAN completed for task -> ${task.id}`);
+          }
+          if(isFatalError) {
+            log(jobRunId, `Fatal Error Occurred On worker ${workerId}`)
+            const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
+            await setJobStateActivity(jobRunId, updatedJobState);
+            break
           }
           if(iteration >= 80) {
               log(jobRunId, `Iteration limit reached. Continuing as new...`);

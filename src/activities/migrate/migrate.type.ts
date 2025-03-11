@@ -36,6 +36,7 @@ export interface ScanPathOutput{
     success: number;
     error: number
     retryCount: number
+    isFatal: boolean;
 }
 
 export interface PublishScanTaskInput{
@@ -72,6 +73,7 @@ export interface SyncTaskOutput {
     error: number,
     retryCount: number;
     errorType?: ErrorType | undefined
+    isFatal : boolean
 }
 
 export interface SyncOperationInput {
@@ -91,7 +93,7 @@ export interface SyncOperationOutput {
         sourceChecksum?: string,
         targetChecksum?:string
     }
-    errorType?: ErrorType | undefined
+    errorType?: ErrorType | undefined;
 }
 
 export interface UpdateStatusInput{
