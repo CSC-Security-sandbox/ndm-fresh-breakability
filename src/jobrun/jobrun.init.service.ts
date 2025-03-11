@@ -130,7 +130,8 @@ export class JobRunInitService {
               username: jobConfig?.sourcePath?.fileServer?.userName,
               password: jobConfig?.sourcePath?.fileServer?.password,
               host: jobConfig?.sourcePath?.fileServer?.host,
-              workingDirectory: this.mountBasePath
+              workingDirectory: this.mountBasePath,
+              protocolVersion: jobConfig?.sourcePath?.fileServer?.protocolVersion
             }
           },
           workers: sourceWorkers.map((worker) => worker.workerId),
@@ -153,7 +154,8 @@ export class JobRunInitService {
             username: jobConfig?.targetPath?.fileServer?.userName,
             password: jobConfig?.targetPath?.fileServer?.password,
             host: jobConfig?.targetPath?.fileServer?.host,
-            workingDirectory: this.mountBasePath
+            workingDirectory: this.mountBasePath,
+            protocolVersion: jobConfig?.targetPath?.fileServer?.protocolVersion
           }
           details['workers'] = workers
           return details;
@@ -230,8 +232,8 @@ export class JobRunInitService {
 
     const createFileServerDetails = (credential: any) => {
       return credential.protocol === Protocol.NFS
-        ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory)
-        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory);
+        ? new FileServerDetails(credential.host, [new NFS(credential.username)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory, credential.protocolVersion)
+        : new FileServerDetails(credential.host, [new SMB(credential.username, credential.password)], credential.pathId, credential.path, credential?.username, credential?.password, credential?.workingDirectory, credential.protocolVersion);
     };
     sourcefileServerDetails = createFileServerDetails(sourceCredential);
 

@@ -14,7 +14,8 @@ interface Credential {
     username: string,
     path:string,
     host: string,
-    workingDirectory:string
+    workingDirectory:string,
+    protocolVersion: string
 }
 
 export interface JobRunConfig{
