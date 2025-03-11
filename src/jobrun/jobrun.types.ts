@@ -14,7 +14,8 @@ interface Credential {
     username: string,
     path:string,
     host: string,
-    workingDirectory:string
+    workingDirectory:string,
+    protocolVersion: string
 }
 
 export interface JobRunConfig{
@@ -26,7 +27,8 @@ export interface JobRunConfig{
     excludeFilePatterns?: string,
     excludeOlderThan?: Date,
     preserveAccessTime: boolean
-    workers: string[]
+    workers: string[],
+    skipFile?: string,
 }
 
 
