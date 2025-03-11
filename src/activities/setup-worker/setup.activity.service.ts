@@ -227,7 +227,7 @@ export class SetupActivityService {
         payload.type,
       );
       if (writePermission.status === 'failed') {
-        // await protocol.unmountPath(traceId, mountPayload);
+         await protocol.unmountPath(traceId, mountPayload);
         delay(5000);
         if (payload.type == 'DESTINATION') {
           return {
@@ -253,7 +253,7 @@ export class SetupActivityService {
       );
       return { status: 'success' };
     } else {
-      // await protocol.unmountPath(traceId, mountPayload);
+       await protocol.unmountPath(traceId, mountPayload);
       delay(5000);
       if (payload.type == 'DESTINATION') {
         return {
@@ -316,13 +316,13 @@ export class SetupActivityService {
           }
           this.logger.log(`[${traceId}] - Write permission check successful`);
 
-          // try {
-          //   await protocol.unmountPath(traceId, mountPayload);
-          // } catch (umountErr) {
-          //   this.logger.error(
-          //     `[${traceId}] - Unmount failed: ${umountErr.message}`,
-          //   );
-          // }
+          try {
+            await protocol.unmountPath(traceId, mountPayload);
+          } catch (umountErr) {
+            this.logger.error(
+              `[${traceId}] - Unmount failed: ${umountErr.message}`,
+            );
+          }
 
           resolve({
             traceId,
@@ -360,4 +360,60 @@ export class SetupActivityService {
       });
     });
   }
+async disconnectActiveSession(payload: any): Promise<any> {
+  try {
+    this.logger.log(
+      payload.traceId,
+      `[DisconnectActiveSession] Disconnecting active session for ${payload.fileServer.hostname}`,
+    );
+    const protocol: Protocol = Protocols.getProtocol(
+      ProtocolTypes[payload.fileServer.protocolType],
+    );
+    const response = await protocol.disconnectSession(payload.traceId, payload);
+    this.logger.log(
+      payload.traceId,
+      `[DisconnectActiveSession] Session disconnected for ${payload.fileServer.hostname}`,
+    );
+    return response;
+  } catch (error) {
+    this.logger.log(
+      payload.traceId,
+      `[DisconnectActiveSession] Error disconnecting session for ${payload.fileServer.hostname}: ${error}`,
+    );
+    return {
+      traceId: payload.traceId,
+      status: 'error',
+      workerId: payload.workerId,
+      message: `Error disconnecting session for ${payload.fileServer.hostname}: ${error}`,
+    };
+  }
+}
+async cleanUpMountPath(payload: any): Promise<any> {
+  try {
+    this.logger.log(
+      payload.traceId,
+      `[cleanUp] Cleaning up for ${payload.fileServer.hostname}`,
+    );
+    const protocol: Protocol = Protocols.getProtocol(
+      ProtocolTypes[payload.fileServer.protocolType],
+    );
+    const response = await protocol.unmountPath(payload.traceId, payload);
+    this.logger.log(
+      payload.traceId,
+      `[cleanUp] Cleaned up for ${payload.fileServer.hostname}`,
+    );
+    return response;
+  } catch (error) {
+    this.logger.log(
+      payload.traceId,
+      `[cleanUp] Error cleaning up for ${payload.fileServer.hostname}: ${error}`,
+    );
+    return {
+      traceId: payload.traceId,
+      status: 'error',
+      workerId: payload.workerId,
+      message: `Error cleaning up for ${payload.fileServer.hostname}: ${error}`,
+    };
+  }
+}
 }

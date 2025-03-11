@@ -10,6 +10,7 @@ import * as fs from 'fs';
 // import { WorkersConfig } from 'src/config/app.config';
 
 export class NFSProtocol extends Protocol {
+ 
 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getNFSCommand(this.platform, key)
@@ -152,5 +153,8 @@ export class NFSProtocol extends Protocol {
     await new Promise((resolve) => setTimeout(resolve, 5000));
     this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
     return mountResult;
+  }
+  disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
   }
 }

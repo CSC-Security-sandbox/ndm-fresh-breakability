@@ -8,6 +8,7 @@ import * as fs from 'fs';
 
 
 export class SMBProtocol extends Protocol {
+ 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
@@ -180,6 +181,20 @@ export class SMBProtocol extends Protocol {
       return response;
     }
 
+  }
+  
+  async disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
+    this.logger.info(
+      `[${traceId}] disconnecting session  ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
+    );
+    const response  = await this.executeCommand(
+      traceId,
+      ProtocolTypes.SMB,
+      payload,
+      this.getCommandPattern(CommandPattern.DISCONNECT_SESSION),
+      'SMB Disconnect Session',
+    );
+    return response;
   }
 
 }

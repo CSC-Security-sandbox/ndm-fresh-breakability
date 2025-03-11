@@ -1,26 +1,32 @@
 import { proxyActivities } from '@temporalio/workflow';
 import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
+import { Protocol } from 'src/protocols/protocol/protocol';
+import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 
 const { mountAndCheckWritePermission: mountAndCheckWritePermissionActivity } =
   proxyActivities<SetupActivityService>({ startToCloseTimeout: '3000s' });
 
 async function log(traceId: string, message: string) {
-    console.log(`[${traceId}] ${message}`);
-  }
-  
+  console.log(`[${traceId}] ${message}`);
+}
+
 export async function PreCheckMountAndWritePermissionValidation(
   args: any,
 ): Promise<any> {
   const { traceId, fileServer, feature } = args;
-  log(traceId,
+  log(
+    traceId,
     `[PreCheckMountAndWritePermissionValidation],
     ${JSON.stringify(fileServer)}`,
   );
-  const mountResult =  await mountAndCheckWritePermissionActivity(
+  const mountResult = await mountAndCheckWritePermissionActivity(
     fileServer,
     traceId,
     feature.checkWritePermission,
   );
- log(traceId,`[PreCheckMountAndWritePermissionValidation Result]', ${JSON.stringify(mountResult)}`);
+  log(
+    traceId,
+    `[PreCheckMountAndWritePermissionValidation Result]', ${JSON.stringify(mountResult)}`,
+  );
   return mountResult;
 }
