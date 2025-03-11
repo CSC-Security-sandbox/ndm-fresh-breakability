@@ -3,13 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-
 import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
-
-import { basePrefix, dmError, formatDate, getFileInfo } from '../utils/utils';
+import { basePrefix, dmError, formatDate, getFileInfo, isFatalError } from '../utils/utils';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
+import { Operation, Origin } from '../utils/utils.types';
 
 @Injectable()
 export class MigrationSyncService {
@@ -100,7 +99,7 @@ export class MigrationSyncService {
       try {
         fs.chmodSync(filePath, metadata.mode);
       } catch(error) {
-        const dmErr = dmError("OPERATION",stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META,stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         await jobContext.appendToErrorList(dmErr);
         stampMetaDataOutput.errors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
@@ -118,7 +117,7 @@ export class MigrationSyncService {
         }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION",stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
@@ -128,7 +127,7 @@ export class MigrationSyncService {
         fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION", stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
@@ -147,7 +146,7 @@ export class MigrationSyncService {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
-          const dmErr = dmError("OPERATION", syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+          const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           syncOperation.errors.add(error.code)
           this.logger.error(`Error in SyncOperation File: ${error.message}`);
@@ -161,7 +160,7 @@ export class MigrationSyncService {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
         } catch (error) {
           ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
-          const dmErr = dmError("OPERATION", syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+          const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
           return syncOperation
@@ -177,7 +176,7 @@ export class MigrationSyncService {
   }
 
   async syncTask({ task }: SyncTaskInput): Promise<SyncTaskOutput> {
-    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0 };
+    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false };
     const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
     task.status = TaskStatus.RUNNING
     task.commands.map((cmd: any) => cmd.status = OPS_STATUS.IN_PROCESS);
@@ -224,8 +223,13 @@ export class MigrationSyncService {
       task.status =  TaskStatus.COMPLETED
      
     if( syncTask.error > 0) {
-      const errorType = syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
-      const dmErr = dmError("TASK", errorType, task.id,  undefined, undefined, {
+      for(const error of syncTask.errors)
+        if(isFatalError(error)) {
+          syncTask.isFatal = true;
+          break;
+        }
+        const errorType = syncTask.isFatal ? ErrorType.FATAL_ERROR : syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+      const dmErr = dmError("TASK", Origin.DESTINATION,  Operation.COPY_CONTENT, errorType, task.id,  undefined, undefined, {
           errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
           message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
       });
