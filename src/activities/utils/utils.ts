@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatsType, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 
@@ -43,7 +43,36 @@ export const shouldExclude = ( fullPath: string, excludePatterns: string[] ): bo
       if (fullPathSplit.includes(pattern)) return true;
     return regexPatterns.some((regex) => regex.test(normalizedPath));
 }
-  
+
+export const shouldSkipFile = (stats: fs.Stats, skipTime: string, jobType: string): boolean => {
+  if (!skipTime) return false;
+  if(jobType !== 'MIGRATE') return false;
+  const skipTimeSplit = skipTime.split('-');
+  if (skipTimeSplit.length !== 2) return false;
+  const skipValue = parseInt(skipTimeSplit[0], 10);
+  const skipType = skipTimeSplit[1]?.toUpperCase();
+  if (isNaN(skipValue) || skipValue <= 0) return false;
+  const currentTime = new Date();
+  const fileTime = stats.mtime;
+  const diff = currentTime.getTime() - fileTime.getTime();
+  switch (skipType) {
+    case 'M':
+      return diff < skipValue * 60 * 1000;
+    case 'H':
+      return diff < skipValue * 60 * 60 * 1000;
+    case 'D':
+      return diff < skipValue * 24 * 60 * 60 * 1000;
+    default:
+      return false;
+  }
+};
+
+export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolean => {
+  if (!olderThan) return false;
+  return stats.mtime < olderThan;
+}
+
+export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 
 export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promise<GetJobConnectionOutput> => {
     const redisClient = await RedisUtils.getClient();

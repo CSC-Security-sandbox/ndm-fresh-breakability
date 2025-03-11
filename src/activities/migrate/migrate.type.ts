@@ -10,6 +10,7 @@ export interface ScanContentInput{
     excludePatterns: string[];
     command : Command;
     jobContext: JobContext;
+    skipFile: string;
 }
 export interface ScanContentOutput{
     files:  number,

@@ -7,7 +7,7 @@ import * as path from "path";
 import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
 
-import { basePrefix, dmError, formatDate, getFileInfo } from '../utils/utils';
+import { basePrefix, dmError, formatDate, getFileInfo, shouldExcludeOrSkip } from '../utils/utils';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 
@@ -46,9 +46,15 @@ export class MigrationSyncService {
     });
   }
 
-  async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
+  async copyFileWithChecksum(sourceFile: string, destinationFile: string, jobContext: JobContext): Promise<{sourceChecksum: string, targetChecksum:string}> {
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
+    }
+
+    const excludePattern = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(',') : [];
+    if(shouldExcludeOrSkip({fullPath: sourceFile, stats: fs.statSync(sourceFile), excludePatterns: excludePattern, skipTime: jobContext.jobConfig.options?.skipsFilesModifiedInLast, olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan), jobType: jobContext.jobConfig.jobType})) {
+      this.logger.log(`Excluding or skip file: ${sourceFile}`);
+      return;
     }
   
     const destDir = path.dirname(destinationFile);
@@ -142,7 +148,7 @@ export class MigrationSyncService {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
-          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
+          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath, jobContext);
           syncOperation.checksums = checksum
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
