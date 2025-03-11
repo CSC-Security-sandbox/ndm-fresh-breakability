@@ -26,7 +26,8 @@ export interface JobRunConfig{
     excludeFilePatterns?: string,
     excludeOlderThan?: Date,
     preserveAccessTime: boolean
-    workers: string[]
+    workers: string[],
+    skipFile?: string,
 }
 
 

@@ -55,7 +55,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  getClient(): RedisClientType {
+  async getClient(): Promise<RedisClientType> {
     if (!this.client || !this.client.isOpen) {
       throw new Error('Redis client is not initialized yet.');
     }

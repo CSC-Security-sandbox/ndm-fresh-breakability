@@ -134,7 +134,8 @@ export class JobRunInitService {
             }
           },
           workers: sourceWorkers.map((worker) => worker.workerId),
-          jobType: jobConfig.jobType
+          jobType: jobConfig.jobType,
+          skipFile: jobConfig.skipFile
         }
     
         if (jobConfig.targetPathId) {
@@ -244,14 +245,13 @@ export class JobRunInitService {
       jobRunConfig.connection.sourceCredential.path,
       jobRunConfig.jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
       jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
-      jobRunConfig.workers
+      jobRunConfig.workers,
+      { excludeFilePattern: jobRunConfig.excludeFilePatterns, preserveAccessTime: jobRunConfig.preserveAccessTime, skipsFilesModifiedInLast: jobRunConfig?.skipFile, excludeOlderThan: jobRunConfig.excludeOlderThan.toString() },
     )
-    const redisClient = await RedisUtils.getClient();
-    if (!redisClient.isOpen) await redisClient.connect();
-    const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending);
+    const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending, []);
 
     const task = await this.createInitialTask(jobRunId, jobRunConfig);
-    const redisProvider = JobContextFactory.getProvider('redis', this.redisService.getClient());
+    const redisProvider = JobContextFactory.getProvider('redis', await this.redisService.getClient());
     const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
     await jobContext.appendToTaskList(task);
     console.debug('JobContext created and appended initial task ---> ', task);
@@ -261,7 +261,7 @@ export class JobRunInitService {
 
     // ------------------ CreateInitialTask -------------------- //
   async createInitialTask(jobRunId: string, jobRunConfig: JobRunConfig): Promise<Task> {
-    const commands = new Command('', { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } }, uuid4())
+    const commands = new Command('', { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } }, uuid4(), 0)
     const task = new Task(
       uuid4(),
       jobRunId,
