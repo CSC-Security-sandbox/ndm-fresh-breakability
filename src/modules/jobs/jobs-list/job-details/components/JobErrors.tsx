@@ -1,10 +1,10 @@
 import {
+  Button,
   Card,
-  Text,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
-  Button,
+  Text,
   Notification,
 } from "@netapp/bxp-design-system-react";
 import {
@@ -35,7 +35,7 @@ const JobErrors = () => {
           onClick={() => navigate(`errors`)}
           color="secondary"
           style={{ margin: "0 0 0 auto" }}
-          // disabled={!hasErrors}
+          disabled={!hasErrors}
         >
           View All
         </Button>

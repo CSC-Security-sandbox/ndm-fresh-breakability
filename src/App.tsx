@@ -75,6 +75,10 @@ const App = () => {
             element={<JobRunDetailsPage />}
           />
           <Route
+            path="/job-details/:jobId/run/:jobRunId/errors"
+            element={<JobTaskErrorsPage />}
+          />
+          <Route
             path="/job-details/:jobId/run/:jobRunId/tasks"
             element={<JobTasksPage />}
           />
