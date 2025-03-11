@@ -32,6 +32,7 @@ export class SetupActivityService {
       hostname: server.hostname,
       username: server.username,
       password: server.password,
+      protocolVersion: server.protocolVersion,
       path: server.path,
       mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
@@ -51,6 +52,7 @@ export class SetupActivityService {
       hostname: server.hostname,
       username: server.username,
       password: server.password,
+      protocolVersion: server.protocolVersion,
       path: server.path,
       mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
@@ -174,12 +176,13 @@ export class SetupActivityService {
     const protocolType = payload.protocols.type;
     const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
     const mountBasePath = this.baseWorkingPath;
-    const { hostname, pathId, exportPathName, protocols } =
+    const { hostname, pathId, exportPathName, protocols, protocolVersion } =
       payload;
     const mountPayload = {
       hostname,
       username: protocols?.userName,
       password: protocols?.password,
+      protocolVersion,
       path: exportPathName,
       mountBasePath: mountBasePath,
       pathId,
