@@ -182,9 +182,8 @@ export class MigrationSyncService {
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
         task.commands[i].status = CommandStatus.IN_PROCESS
-      
-    let id = await jobContext.appendToUpdatedTaskList(task);
-    jobContext.migrateTask.lastId = id;
+
+    jobContext.migrateTask.lastId = await jobContext.appendToUpdatedTaskList(task);
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
     for (let i = 0;  i < task.commands.length; i++) {
@@ -234,6 +233,7 @@ export class MigrationSyncService {
           syncTask.isFatal = true;
           break;
         }
+
       const errorType = syncTask.isFatal ? ErrorType.FATAL_ERROR : syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
       const dmErr = dmError("TASK", Origin.DESTINATION,  Operation.COPY_CONTENT, errorType, task.id,  undefined, undefined, {
           errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
@@ -244,11 +244,10 @@ export class MigrationSyncService {
         this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
         jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);
       }
-      await this.redisService.setJobContext(task.jobRunId, jobContext);
     }else {
       jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
-      await this.redisService.setJobContext(task.jobRunId, jobContext);
     }
+    await this.redisService.setJobContext(task.jobRunId, jobContext);
     return syncTask;
   }
 }

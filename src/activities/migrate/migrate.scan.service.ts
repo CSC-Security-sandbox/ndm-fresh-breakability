@@ -142,6 +142,7 @@ export class MigrationScanService {
             else  
                 scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
         }      
+        
         if(scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount)  
             task.status =  TaskStatus.ERRORED 
         else if( scanPath.retryCount > 0) 
@@ -170,7 +171,6 @@ export class MigrationScanService {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
 
-     
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         return scanPath;
     }
