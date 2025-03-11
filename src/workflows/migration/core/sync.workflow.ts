@@ -62,7 +62,11 @@ export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, wo
             for(const task of tasks) {
                 log(jobRunId, `Starting SYNC for task -> ${task.id}`);
                 const { isFatal } =await SyncContentActivity({task})
-                if(isFatal) isFatalError = true
+                if(isFatal) { 
+                    isFatalError = true
+                    log(jobRunId, `SYNC Errored for task -> ${task.id}`);
+                }
+                else
                 log(jobRunId, `SYNC completed for task -> ${task.id}`);
             }
             if(isFatalError) {

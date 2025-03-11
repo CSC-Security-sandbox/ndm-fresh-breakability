@@ -219,11 +219,11 @@ export class MigrationSyncService {
     this.logger.error(`syncTask.retryCount  : ${syncTask.retryCount }`)
 
     if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
-      task.status =  TaskStatus.ERRORED 
+      task.status = TaskStatus.ERRORED 
     else if( syncTask.retryCount > 0) 
-      task.status =  TaskStatus.COMPLETED_WITH_ERROR 
+      task.status = TaskStatus.COMPLETED_WITH_ERROR 
     else 
-      task.status =  TaskStatus.COMPLETED
+      task.status = TaskStatus.COMPLETED
      
     if( syncTask.error > 0) {
       for(const error of syncTask.errors)
