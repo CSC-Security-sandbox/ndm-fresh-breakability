@@ -88,7 +88,7 @@ export enum ConsumerType {
         await inventoryService.updateTask(task.id, { status: task.status });
         if(task.commands.length) {
           await task.commands.map(async (cmd: any) => {
-            await inventoryService.updateOperation(cmd.commandId, { status: cmd.status as OperationStatus })
+            await inventoryService.updateOperation(cmd.commandId, { status: cmd.status })
           })
         }
       },

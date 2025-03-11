@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, OperationError, TaskError } from '@netapp-cloud-datamigrate/jobs-lib';
 import { randomUUID } from 'crypto';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { OperationsEntity } from 'src/entities/operation.entity';
@@ -76,24 +76,24 @@ export class InventoryService {
   async saveTasks(data: any) {
     try {
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
-      const taskId = id ?? randomUUID();
       const task: TaskEntity = this.taskRepo.create({
-        id: taskId,
+        id,
         jobRunId,
         status,
         taskType,
         workerId
       });
       await this.taskRepo.save(task);
-      const operations: OperationsEntity[] = commands.map((command: any) => this.operationRepo.create({
+      const operations: OperationsEntity[] = commands.map((command: Command) => this.operationRepo.create({
         id: command.commandId,
         taskId: task.id,
         jobRunId,
         sPathId: sPathId,
         tPathId: tPathId ? (tPathId.length > 0 ? tPathId : null) : null,
-        status: OperationStatus.IN_PROCESS,
+        status: command.status,
         operationType: taskType,
         request: command,
+        retryCount: command.retryCount,
         fPath: command?.fPath
       }))
       if (operations.length > 0) await this.operationRepo.save(operations);
@@ -104,11 +104,14 @@ export class InventoryService {
   }
   async saveOperationError(data: OperationError) {
     try {
-      const { operationId, errorCode, errorMessage, errorFiles } = data;
+      const { operationId, errorCode, errorMessage, errorFiles, origin, operationName, errorType } = data;
       const operationError: OperationErrorEntity = this.operationErrorRepo.create({
         errorCode: errorCode,
         errorMessage: errorMessage,
         operationId,
+        origin,
+        operationType: operationName,
+        errorType,
         fileName: errorFiles.fileName,
         filePath: errorFiles.filePath,
         createdAt: new Date()
@@ -121,10 +124,11 @@ export class InventoryService {
   }
   async saveTaskError(data: TaskError) {
     try {
-      const { taskId, errorCode, errorMessage } = data;
+      const { taskId, errorCode, errorMessage, errorType } = data;
       const taskError: TaskErrorEntity = this.taskErrorRepo.create({
         errorCode: errorCode,
         errorMessage: errorMessage,
+        errorType,
         taskId,
         createdAt: new Date()
       });
