@@ -7,6 +7,7 @@ import { useDispatch, useSelector } from "react-redux";
 import SettingsContent from "./SettingsContent";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
 import Help from "@components/top-nav-bar/help/Help";
+import { IAMIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 
 const Settings = () => {
   const drawerId = "Settings";
@@ -20,13 +21,7 @@ const Settings = () => {
   return (
     <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageProject}>
       <Button onClick={showSettings} variant="icon">
-        <img
-          src={"setting.svg"}
-          alt="settings"
-          height={45}
-          width={45}
-          className="filter-white-color"
-        />
+        <IAMIcon className="filter-white-color" />
       </Button>
 
       <Button onClick={showHelp} variant="icon">

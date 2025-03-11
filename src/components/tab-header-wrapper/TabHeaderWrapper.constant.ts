@@ -1,7 +1,7 @@
 import { AppTemplateIcon } from "@netapp/bxp-design-system-react/icons/resources-services";
 import { AppIcon, WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
 import { MoveIcon } from "@netapp/bxp-style/react-icons/Action";
-
+import { NoticeTriangleIcon } from "@netapp/bxp-style/react-icons/Notification";
 import {
   GcpStorageIcon,
   VirtualMachineIcon,
@@ -64,7 +64,14 @@ const SPEED_TEST_HEADER_TAB: BlueXpTabHeaderPropsType = {
   tabLinks: [],
 };
 
+const JOB_ERRORS_HEADER_TAB: BlueXpTabHeaderPropsType = {
+  tabIcon: NoticeTriangleIcon,
+  tabLabel: "Errors",
+  tabLinks: [],
+};
+
 export const HEADER_WITH_PATHNAME: HeaderType = {
+  "/jobs-errors": JOB_ERRORS_HEADER_TAB,
   "/file-server": CONFIG_HEADER_TAB,
   "/new-file-server": CONFIG_HEADER_TAB,
   "/config/edit-file-server": CONFIG_HEADER_TAB,
