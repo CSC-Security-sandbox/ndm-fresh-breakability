@@ -4,6 +4,7 @@ import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
 import { OperationStatus, OperationType } from 'src/enum/queues.enum';
 import {  OperationErrorEntity } from './operation-error.entity';
+import { CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 
 
 @Entity({ name: 'operations'})
@@ -27,7 +28,7 @@ export class OperationsEntity {
   tPathId: string;
 
   @Column({ type: 'varchar',  name: 'status' , nullable: false})
-  status: OperationStatus;
+  status: CommandStatus;
  
   @Column({ name: 'operation_type',  type: 'varchar', nullable: false })
   operationType: OperationType;
