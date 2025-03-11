@@ -9,20 +9,51 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private redisClient: RedisClientType;
   private readonly logger = new Logger(RedisService.name);
 
-  async onModuleInit() {
-    this.redisClient = await RedisUtils.getClient();
-    if (!this.redisClient.isOpen) {
-      await this.redisClient.connect();
-      this.logger.log(`[Job-Service] Connected to Redis`);
-    }
+async onModuleInit(): Promise<void> {
+    await this.createClient();
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.redisClient && this.redisClient.isOpen) {
-      await this.redisClient.quit();
-      this.logger.log(`[Job-Service] Redis client disconnected`);
+    if (this.client && this.client.isOpen) {
+      await this.client.quit();
+      this.logger.log('Redis client disconnected');
     }
   }
+ private async createClient(): Promise<void> {
+    if (this.client && this.client.isOpen) {
+      return;
+    }
+    
+    const redisClientOptions: any = {
+      url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
+    };
+
+    if (process.env.REDIS_USERNAME && process.env.REDIS_PASSWORD) {
+      redisClientOptions.username = process.env.REDIS_USERNAME;
+      redisClientOptions.password = process.env.REDIS_PASSWORD;
+    }
+
+    this.logger.log(`Connecting to Redis at ${redisClientOptions.url}`);
+    this.client = createClient(redisClientOptions);
+
+    this.client.on('error', (error) => {
+      this.logger.error(`Redis connection error: ${error}`);
+    });
+
+    this.client.on('connect', () => {
+      this.logger.log('Connected to Redis');
+    });
+
+    await this.client.connect();
+  }
+  
+ private async ensureClient(): Promise<void> {
+    if (!this.client || !this.client.isOpen) {
+      this.logger.warn('Redis client not initialized. Attempting to reconnect...');
+      await this.createClient();
+    }
+  }
+
   async getJobContext(traceId: string) {
     if (!this.redisClient) {
       this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
@@ -64,11 +95,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
   async getClient(): Promise<RedisClientType> {
-    if (!this.redisClient) {
-      this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
-      this.redisClient = await RedisUtils.getClient();
-      this.logger.log('[Job-Service] Redis client reconnected');
+    if (!this.client || !this.client.isOpen) {
+      throw new Error('Redis client is not initialized yet.');
     }
-    return this.redisClient;
+    return this.client;
   }
 }
