@@ -1,14 +1,14 @@
 import { registerAs } from "@nestjs/config";
+import { DataSourceOptions } from "typeorm";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
-import { DataSourceOptions } from "typeorm";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
-import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {

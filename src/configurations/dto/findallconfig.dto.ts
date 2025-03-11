@@ -38,9 +38,7 @@ export class FindAllConfigPageDto {
   @IsOptional()
   @IsString()
   stage?: string;
-
 }
-
 
 export class ConfigResponseDto {
   @ApiProperty()

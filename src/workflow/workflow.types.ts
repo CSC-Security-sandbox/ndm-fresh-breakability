@@ -3,7 +3,7 @@ export interface StartWorkFlowPayload {
     taskQueue: string;
     args: any[];
     [key: string]: any;
-  }
+}
 
 export enum WorkflowExecutionStatus {
     COMPLETED = 'COMPLETED',

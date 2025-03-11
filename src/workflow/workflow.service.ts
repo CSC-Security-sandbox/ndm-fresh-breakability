@@ -1,24 +1,23 @@
-import { Injectable,OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkFlows } from 'src/constants/enums';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkflowService implements OnModuleDestroy{
-    private logger : LoggerService
+    private logger : LoggerService;
     private client: Client | null = null;
     private connection: Connection | null = null;
 
     constructor(
         private readonly configService: ConfigService,
         private loggerFactory: LoggerFactory
-        ) {
-         this.logger = this.loggerFactory.create(WorkflowService.name)
+    ) {
+        this.logger = this.loggerFactory.create(WorkflowService.name);
     }
    
-
     private async getClient(): Promise<Client> {
         if (this.client) 
         return this.client;
@@ -36,7 +35,7 @@ export class WorkflowService implements OnModuleDestroy{
     async startWorkflow(workflowName: WorkFlows, payload: StartWorkFlowPayload): Promise<WorkflowHandleWithFirstExecutionRunId> {
         try{
             const client = await this.getClient();
-            this.logger.log(`Starting workflow: ${workflowName}`);
+            this.logger.debug(`Started workflow: ${workflowName}`);
             const handle: WorkflowHandleWithFirstExecutionRunId = await client.workflow.start(workflowName, payload);
             this.logger.log(
                 `Workflow started: ${JSON.stringify(
@@ -70,5 +69,4 @@ export class WorkflowService implements OnModuleDestroy{
             this.logger.error(`Error while closing temporal connection : ${error}`)
         }
     }
-
 }

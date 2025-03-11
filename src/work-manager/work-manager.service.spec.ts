@@ -1,15 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { WorkManagerService } from './work-manager.service';
-import { WorkerEntity } from 'src/entities/worker.entity';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkflowService } from 'src/workflow/workflow.service';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { CreateRequestDto } from './dto/validate-connection.dto';
-import { ConfigService } from '@nestjs/config';
-import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Not, IsNull } from 'typeorm';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ConfigEntity } from '../entities/config.entity';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -19,6 +20,7 @@ describe('WorkManagerService', () => {
   let workflowServiceMock: Partial<WorkflowService>;
   let configServiceMock: Partial<ConfigService>;
   let loggerInstance: LoggerService;
+  let configRepo: Repository<ConfigEntity>;
 
   beforeEach(async () => {
     workerEntityMock = {
@@ -44,8 +46,8 @@ describe('WorkManagerService', () => {
     };
 
     workflowServiceMock = {
-      startWorkflow: jest.fn().mockResolvedValue({ workflowId: '123' }),
-      getWorkFlowRes: jest.fn().mockResolvedValue({ result: 'success' }),
+      startWorkflow: jest.fn().mockResolvedValue({ workflowId: '123' }) as jest.Mock,
+      getWorkFlowRes: jest.fn().mockResolvedValue({ result: 'success' }) as jest.Mock,
     };
 
     configServiceMock = {
@@ -57,6 +59,7 @@ describe('WorkManagerService', () => {
         WorkManagerService,
         { provide: getRepositoryToken(WorkerEntity), useValue: workerEntityMock },
         { provide: getRepositoryToken(JobRunEntity), useValue: jobRunEntityMock },
+        { provide: getRepositoryToken(ConfigEntity), useValue: { update: jest.fn() } },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         { provide: WorkflowService, useValue: workflowServiceMock },
         { provide: ConfigService, useValue: configServiceMock },
@@ -65,6 +68,7 @@ describe('WorkManagerService', () => {
 
     service = module.get<WorkManagerService>(WorkManagerService);
     loggerInstance = loggerFactoryMock.create!(WorkManagerService.name);
+    configRepo = module.get<Repository<ConfigEntity>>(getRepositoryToken(ConfigEntity));
   });
 
   afterEach(() => {
@@ -242,6 +246,13 @@ describe('WorkManagerService', () => {
       );
       expect(result).toEqual({ workflowId: '123' });
     });
+
+    it('should handle workflow start errors', async () => {
+      (workflowServiceMock.startWorkflow as jest.Mock).mockRejectedValue(new Error('Workflow error'));
+
+      await expect(service.validateConnection({ options: {} } as CreateRequestDto, 'trace-123'))
+        .rejects.toThrow(InternalServerErrorException);
+    });
   });
 
   describe('getChildWorkFlowRes', () => {
@@ -253,6 +264,15 @@ describe('WorkManagerService', () => {
       const result = await service.getChildWorkFlowRes(id);
       expect(workflowServiceMock.getWorkFlowRes).toHaveBeenCalledWith(id);
       expect(result).toEqual(workflowResult);
+    });
+
+    it('should throw BadRequestException when id is not provided', async () => {
+      await expect(service.getChildWorkFlowRes('')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when workflow response is not found', async () => {
+      (workflowServiceMock.getWorkFlowRes as jest.Mock).mockResolvedValue(null);
+      await expect(service.getChildWorkFlowRes('workflow-1')).rejects.toThrow(NotFoundException);
     });
   });
 

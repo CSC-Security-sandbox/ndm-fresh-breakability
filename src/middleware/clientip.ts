@@ -1,4 +1,4 @@
-import { createParamDecorator, ExecutionContext, Logger } from '@nestjs/common';
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 export const ClientIp = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): string => {

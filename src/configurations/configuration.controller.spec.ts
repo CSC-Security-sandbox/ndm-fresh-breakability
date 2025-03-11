@@ -3,9 +3,9 @@ import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import { ConfigurationType } from 'src/constants/enums';
 import { ConfigDTO } from './dto/config.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;

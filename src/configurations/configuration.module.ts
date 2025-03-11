@@ -9,9 +9,9 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { WorkflowModule } from 'src/workflow/workflow.module';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
-import { WorkflowModule } from 'src/workflow/workflow.module';
 
 @Module({
     imports: [

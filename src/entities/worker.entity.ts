@@ -1,10 +1,10 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, ManyToMany, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryColumn, ManyToOne, JoinColumn, ManyToMany, OneToMany } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { WorkerStatus } from 'src/constants/enums';
-import { ProjectEntity } from './project.entity';
-import { Base } from './base.entity';
-import { FileServerEntity } from './fileserver.entity';
 import { WorkerConfiguration } from 'src/constants/types';
+import { Base } from './base.entity';
+import { ProjectEntity } from './project.entity';
+import { FileServerEntity } from './fileserver.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 
 @Entity({name:'worker'})
@@ -45,5 +45,4 @@ export class WorkerEntity extends Base  {
 
   @OneToMany(()=>WorkerJobRunMap, jobRunMap=>jobRunMap.worker, { cascade: true,  eager: false})
   jobRunMap: WorkerJobRunMap[]
-
 }

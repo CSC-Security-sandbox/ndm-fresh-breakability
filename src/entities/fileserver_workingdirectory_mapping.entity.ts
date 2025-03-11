@@ -2,6 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
+
 @Entity({ name: 'fileserver_workingdirectory_mapping' })
 export class FileServerWorkingDirectoryMappingEntity extends Base {
     @ApiProperty({ description: 'UUID of the fileserver working directory mapping' })
@@ -28,4 +29,3 @@ export class FileServerWorkingDirectoryMappingEntity extends Base {
     @JoinColumn({ name: 'config_id' })
     config: ConfigEntity;
 }
-
