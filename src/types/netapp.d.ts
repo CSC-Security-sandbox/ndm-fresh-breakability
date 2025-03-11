@@ -4,6 +4,7 @@ declare module "@netapp/bxp-style/react-icons/General" {
   export const StatisticsIcon: React.FC<{ size?: string; color?: string }>;
   export const WorkspaceIcon: React.FC<{ size?: string; color?: string }>;
   export const ViewDashboardIcon: React.FC<{ size?: string; color?: string }>;
+  export const HelpIcon: React.FC<{ size?: string; color?: string }>;
 }
 
 declare module "@netapp/bxp-style/react-icons/Storage" {
