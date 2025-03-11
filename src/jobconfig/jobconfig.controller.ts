@@ -4,7 +4,8 @@ import { JobConfigEntity, SpeedTestConfigEntity } from '../entities/jobconfig.en
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, JobConfigSpeedTest, SpeedTestResult } from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
+import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';

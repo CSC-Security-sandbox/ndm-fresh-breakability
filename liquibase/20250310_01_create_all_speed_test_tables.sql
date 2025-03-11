@@ -47,9 +47,9 @@ CREATE TABLE IF NOT EXISTS speed_test_result (
   trace_id UUID NOT NULL,
   worker_id UUID NOT NULL,
   file_server_id UUID NOT NULL,
-  write_result_id UUID NOT NULL,
-  read_result_id UUID NOT NULL,
-  network_performance_result_id UUID NOT NULL,
+  write_result_id UUID,
+  read_result_id UUID,
+  network_performance_result_id UUID,
   FOREIGN KEY (write_result_id) REFERENCES speed_log(id) ON DELETE CASCADE,
   FOREIGN KEY (read_result_id) REFERENCES speed_log(id) ON DELETE CASCADE,
   FOREIGN KEY (network_performance_result_id) REFERENCES network_performance_result(id) ON DELETE CASCADE
