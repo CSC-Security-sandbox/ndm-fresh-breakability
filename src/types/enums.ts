@@ -53,5 +53,8 @@ export enum JobStatus {
   Errored = 'ERRORED'
 }
 
-
-
+export enum IdentityTypes {
+  SID = 'SID',
+  UID = 'UID',
+  GID = 'GID'
+}
