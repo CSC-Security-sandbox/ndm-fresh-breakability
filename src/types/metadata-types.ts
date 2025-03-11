@@ -219,6 +219,8 @@ export interface TaskError{
   errorCode: string;
   errorMessage: string;
   errorType: ErrorType;
+  taskType?: string;
+  origin?: string;
 }
 export interface OperationError{
   operationId: string;
@@ -226,6 +228,8 @@ export interface OperationError{
   errorMessage: string;
   errorFiles: ErroredFile;
   errorType: ErrorType;
+  operationName?: string;
+  origin?: string;
 }
 export interface ErroredFile{
   fileName: string;
