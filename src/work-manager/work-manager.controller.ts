@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Logger, Param, Post, Req } from '@nestjs/common';
 import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { WorkerConfiguration } from 'src/constants/types';
-import { WorkManagerService } from './work-manager.service';
-import { ClientIp } from 'src/middleware/clientip';
-import { CreateRequestDto } from './dto/validate-connection.dto';
 import { AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
+import { WorkerConfiguration } from 'src/constants/types';
+import { ClientIp } from 'src/middleware/clientip';
+import { WorkManagerService } from './work-manager.service';
+import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 
 @Controller('work-manager')

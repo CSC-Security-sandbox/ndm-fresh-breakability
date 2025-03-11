@@ -158,7 +158,6 @@ describe('WorkflowService', () => {
       expect(mockHandle.describe).toHaveBeenCalled();
     });
   });
-  
 
   it('should close client connection if client exists', () => {
     function setPrivateClient(value: any) {
