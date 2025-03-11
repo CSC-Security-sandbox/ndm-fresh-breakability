@@ -22,6 +22,8 @@ export * from './job-context-provider';
 export * from './speed-test-job-context-provider';
 export * from './job-context-factory';
 
+export * from './types/identity-mappings';
+
 
 /** For Local testing ONLY 
 import { RedisClientType } from "redis";
