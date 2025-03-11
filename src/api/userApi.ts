@@ -167,6 +167,7 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      invalidatesTags: ["GET_SMTP"],
     }),
 
     updateSmtpData: builder.mutation({
@@ -175,6 +176,7 @@ export const usersApi = createApi({
         method: "PATCH",
         body,
       }),
+      invalidatesTags: ["GET_SMTP"],
     }),
   }),
 });
