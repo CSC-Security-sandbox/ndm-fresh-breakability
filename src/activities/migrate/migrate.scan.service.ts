@@ -159,8 +159,10 @@ export class MigrationScanService {
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
             await jobContext.appendToErrorList(dmErr);
-            if(scanPath.retryCount < this.maxRetryCount) 
-                jobContext.migrateTask.lastId = await jobContext.appendToTaskList(task);
+            if(scanPath.retryCount < this.maxRetryCount)  {
+                this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+                jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
+            }
         }
         else {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);

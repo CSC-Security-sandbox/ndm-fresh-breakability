@@ -24,7 +24,7 @@ export class MigrationSyncService {
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.maxRetryCount = this.configService.get('worker.maxRetryCount');
+    this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
     this.fetchTaskBatch = 50;
     this.pushTaskDirSize = 500;
     this.CHUNK_SIZE = 1024 * 1024;
@@ -159,7 +159,7 @@ export class MigrationSyncService {
           await this.ensureDirectoryExists(targetPath);
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
         } catch (error) {
-          ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
@@ -170,7 +170,7 @@ export class MigrationSyncService {
     if (ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
       const result = await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
       result.errors.forEach(error => syncOperation.errors.add(error))
-      ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
+      syncOperation.ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
     }
     return syncOperation ;
   }
@@ -198,7 +198,8 @@ export class MigrationSyncService {
       const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
       task.commands[i].ops = syncOperationOp.ops;
       if (syncOperationOp.errors.size > 0) {
-        syncTask.retryCount = Math.max(task.commands[i].retryCount+1,  syncTask.retryCount)
+        task.commands[i].retryCount++;
+        syncTask.retryCount = Math.max(task.commands[i].retryCount,  syncTask.retryCount)
         task.commands[i].status = CommandStatus.ERROR;
         syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
         syncTask.error++;
@@ -215,6 +216,8 @@ export class MigrationSyncService {
       }
     }
 
+    this.logger.error(`syncTask.retryCount  : ${syncTask.retryCount }`)
+
     if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
       task.status =  TaskStatus.ERRORED 
     else if( syncTask.retryCount > 0) 
@@ -228,19 +231,21 @@ export class MigrationSyncService {
           syncTask.isFatal = true;
           break;
         }
-        const errorType = syncTask.isFatal ? ErrorType.FATAL_ERROR : syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+      const errorType = syncTask.isFatal ? ErrorType.FATAL_ERROR : syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
       const dmErr = dmError("TASK", Origin.DESTINATION,  Operation.COPY_CONTENT, errorType, task.id,  undefined, undefined, {
           errorCode: syncTask.errors.size > 0 ? Array.from(syncTask.errors) : [], 
           message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
       });
       jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
       if(syncTask.retryCount < this.maxRetryCount) {
-        jobContext.migrateTask.lastId = await jobContext.appendToTaskList(task);
+        this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+        jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);
       }
+      await this.redisService.setJobContext(task.jobRunId, jobContext);
     }else {
       jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
+      await this.redisService.setJobContext(task.jobRunId, jobContext);
     }
-    await this.redisService.setJobContext(task.jobRunId, jobContext);
     return syncTask;
   }
 }
