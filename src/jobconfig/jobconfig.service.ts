@@ -401,6 +401,7 @@ export class JobConfigService {
               id: destinationFileServer.id,
               host: destinationFileServer.host,
               userName: destinationFileServer.userName,
+              password:destinationFileServer.password,
               protocol: destinationFileServer.protocol,
               serverType: destinationFileServer.serverType,
               mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
