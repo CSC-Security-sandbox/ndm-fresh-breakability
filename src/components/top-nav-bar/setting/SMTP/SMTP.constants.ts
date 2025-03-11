@@ -17,7 +17,7 @@ export const CREATE_SMTP_FORM_VALIDATION_SCHEMA = Yup.object().shape({
     ),
 });
 
-export const initialSMTPFormState = {
+export const INITIAL_SMTP_FORM_STATE = {
   ip_address: "",
   port: "",
   user_name: "",

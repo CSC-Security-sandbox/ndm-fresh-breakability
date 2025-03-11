@@ -19,12 +19,12 @@ import {
 } from "@api/userApi";
 import {
   useCreateSmtpMutation,
-} from "@api/smtpApi";
-import { useState } from "react";
+} from "@api/userApi";
 import { useDispatch } from "react-redux";
 import { setDrawerClose } from "@store/reducer/commonComponentSlice";
-import { initialSMTPFormState } from "./SMTP.constants";
+import { INITIAL_SMTP_FORM_STATE } from "./SMTP.constants";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
+import { smtpData } from './SMTP.utils';
 
 const CreateSMTP = () => {
   const dispatch = useDispatch();
@@ -35,31 +35,17 @@ const CreateSMTP = () => {
     })
   ) : [];
   const [createSmtpApi, { isLoading: isCreateFormSubmitting }] = useCreateSmtpMutation();
-  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const smtpForm = useForm(
-    initialSMTPFormState,
+    INITIAL_SMTP_FORM_STATE,
     CREATE_SMTP_FORM_VALIDATION_SCHEMA
   );
 
   const handleCreateSMTP = async () => {
-    let toEmailIds = '';
-    smtpForm.formState.to_email.map((eachEmail: {label : string, value: string}, index : number) => {
-      toEmailIds = toEmailIds + (index === smtpForm.formState.to_email.length-1 ? (eachEmail.value) : (eachEmail.value + ','));
-    });
-
-    const body =     [
-      { settingKey: "SMTP_HOST", settingValue: smtpForm.formState.ip_address, description: "", settingType: "SMTP" },
-      { settingKey: "SMTP_PORT", settingValue: smtpForm.formState.port, description: "", settingType: "SMTP" },
-      { settingKey: "SMTP_USER_NAME", settingValue: smtpForm.formState.user_name, description: "", settingType: "SMTP" },
-      { settingKey: "SMTP_PASSWORD", settingValue: smtpForm.formState.password, description: "", settingType: "SMTP" },
-      { settingKey: "SMTP_FROM_EMAIL", settingValue: smtpForm.formState.from_email, description: "", settingType: "SMTP" },
-      { settingKey: "SMTP_TO_EMAIL", settingValue: toEmailIds, description: "", settingType: "SMTP"}
-    ];
+    const data = smtpData(smtpForm.formState);
     
-    setIsLoading(true);
     try {
-      await createSmtpApi(body).unwrap();
+      await createSmtpApi(data.payLoad).unwrap();
       dispatch(setDrawerClose());
       notify.success(`SMTP details added successfully.`);
     } catch (err) {
@@ -70,7 +56,6 @@ const CreateSMTP = () => {
         />
       );
     }
-    setIsLoading(false);
   }
 
   return (
@@ -127,7 +112,7 @@ const CreateSMTP = () => {
           <Button
             style={{ width: 150 }}
             onClick={smtpForm.handleFormSubmit(handleCreateSMTP)}
-            disabled={!(smtpForm.isValid && smtpForm.dirty) || isLoading}
+            disabled={!(smtpForm.isValid && smtpForm.dirty)}
             isSubmitting={isCreateFormSubmitting}
           >
             Save
