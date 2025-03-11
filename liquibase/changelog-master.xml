@@ -23,4 +23,7 @@
       <sqlFile path="liquibase/20250219_01_alter_operations_error_table.sql"/>
    </changeSet>
 
+    <changeSet id="7006" author="anarvekar">
+      <sqlFile path="liquibase/20250310_01_alter_ops_task_err_tabls.sql"/>
+   </changeSet>
 </databaseChangeLog>
