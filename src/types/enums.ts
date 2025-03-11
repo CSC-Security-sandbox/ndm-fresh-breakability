@@ -33,6 +33,7 @@ export enum TaskStatus {
   RUNNING = 'RUNNING',
   ERRORED = 'ERRORED',
   COMPLETED = 'COMPLETED',
+  COMPLETED_WITH_ERRORS = 'COMPLETED_WITH_ERRORS',
 }
 
 export enum TaskType {
