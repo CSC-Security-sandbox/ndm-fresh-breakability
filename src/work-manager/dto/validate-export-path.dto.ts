@@ -20,6 +20,10 @@ export class ListPathDTO {
     @IsString()
     @IsNotEmpty()
     host: string;
+
+    @ApiProperty({ description: 'Protocol version', example: '3' })
+    @IsString()
+    protocolVersion: string;
 }
 
 export class ConfigStatusPayloadDTO {
