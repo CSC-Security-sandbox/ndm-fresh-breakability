@@ -103,10 +103,4 @@ async onModuleInit(): Promise<void> {
       return { message: 'Error while updating the job state : ' + traceId };
     }
   }
-  async getClient(): Promise<RedisClientType> {
-    if (!this.client || !this.client.isOpen) {
-      await this.ensureClient()
-    }
-    return this.client;
-  }
 }
