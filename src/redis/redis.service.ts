@@ -6,7 +6,7 @@ import { createClient, RedisClientType } from 'redis';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private redisClient: RedisClientType;
+  private client: RedisClientType;
   private readonly logger = new Logger(RedisService.name);
 
 async onModuleInit(): Promise<void> {
@@ -64,23 +64,23 @@ async onModuleInit(): Promise<void> {
   }
 
   async getJobContext(traceId: string) {
-    if (!this.redisClient) {
+    if (!this.client) {
       this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
-      this.redisClient = await this.getClient();
+      this.client = await this.getClient();
       this.logger.log('[Job-Service] Redis client reconnected');
     }
-    const contextProvider = JobContextFactory.getProvider('redis', this.redisClient);
+    const contextProvider = JobContextFactory.getProvider('redis', this.client);
     return await contextProvider.getJobContext(traceId);
   }
 
   async setJobContext(traceId: string, jobContext: any) {
-    if (!this.redisClient) {
+    if (!this.client) {
       this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
-      this.redisClient = await this.getClient()
+      this.client = await this.getClient()
       this.logger.log('[Job-Service] Redis client reconnected');
     }
     const serializedContext = jobContext.serialize(); 
-    await this.redisClient.set(traceId, serializedContext);
+    await this.client.set(traceId, serializedContext);
     this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
   }
 
@@ -102,5 +102,11 @@ async onModuleInit(): Promise<void> {
     } catch (error) {
       return { message: 'Error while updating the job state : ' + traceId };
     }
+  }
+  async getClient(): Promise<RedisClientType> {
+    if (!this.client || !this.client.isOpen) {
+      await this.ensureClient()
+    }
+    return this.client;
   }
 }
