@@ -185,6 +185,7 @@ export class JobConfigService {
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
               futureScheduleAt: bulkMigrate?.futureRunSchedule,
+              skipFile: bulkMigrate?.options?.skipFile,
             })
           );
         }
