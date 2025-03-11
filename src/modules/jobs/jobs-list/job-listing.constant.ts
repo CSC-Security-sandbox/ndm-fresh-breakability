@@ -68,7 +68,7 @@ export const JOB_LIST_COLUMN_DEFS = [
       }),
   },
   {
-    header: "Destination Name",
+    header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
     width: 100,
