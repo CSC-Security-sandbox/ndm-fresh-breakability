@@ -1,6 +1,8 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JobConfigEntity, SpeedTestConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
+
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';

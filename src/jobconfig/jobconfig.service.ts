@@ -30,7 +30,11 @@ import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
-import { JobConfigEntity, NetworkPerformanceResultEntity, SpeedLogEntity, SpeedLogEntryEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, SpeedTestResultEntity } from "../entities/jobconfig.entity";
+import { JobConfigEntity } from "../entities/jobconfig.entity";
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
+
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import { JobConfigDto } from "./dto/jobconfig.dto";
 import {

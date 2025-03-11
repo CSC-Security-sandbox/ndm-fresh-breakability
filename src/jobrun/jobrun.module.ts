@@ -3,7 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity , SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/jobconfig.entity';
+import { JobConfigEntity} from '../entities/jobconfig.entity';
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';

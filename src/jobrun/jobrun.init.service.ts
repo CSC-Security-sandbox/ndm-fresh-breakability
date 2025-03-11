@@ -19,7 +19,9 @@ import axios from 'axios';
 import { ConsumerType, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
-import { JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/jobconfig.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -273,18 +275,6 @@ export class JobRunInitService {
           }
           case JobType.SPEED_TEST: {
             const speedTestJobConfig = await this.getFileServerDetails(jobRunId);
-            // const jobRun = await this.jobRunRepo.findOne({
-            //   where: { id: jobRunId },
-            //   relations: ['jobConfig'],
-            // });
-            // if (!jobRun) {
-            //   throw new Error(`JobRun with id ${jobRunId} not found`);
-            // }
-            // const jobConfigId = jobRun.jobConfigId;
-            // const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
-            //   where: { jobId: jobConfigId },
-            //   relations: ['workerEntities', 'jobConfig'],
-            // });
             const startWorkFlowPayload: StartWorkFlowPayload = {
                 workflowId: WorkFlows.SPEED_TEST + '-' + jobRunId,
                 taskQueue: 'ParentWorkflow-TaskQueue',

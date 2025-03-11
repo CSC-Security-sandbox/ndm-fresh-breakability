@@ -3,7 +3,9 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
-import { JobConfigEntity , SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from "src/entities/jobconfig.entity";
+import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import {SpeedTestConfigEntity , SpeedTestConfigWorkerEntity} from "src/entities/speed-test-job-config.entity"
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { DataSourceOptions } from "typeorm";

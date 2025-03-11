@@ -6,14 +6,11 @@ import {
     IsArray,
     IsBoolean,
     IsDate,
-    IsNumber,
     IsObject,
     IsOptional,
     IsString,
     IsUUID,
     ValidateNested,
-    isString,
-    isUUID
 } from 'class-validator';
 
 

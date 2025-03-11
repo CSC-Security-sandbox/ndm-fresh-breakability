@@ -1,17 +1,17 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE speed_test_config (
+CREATE TABLE IF NOT EXISTS  speed_test_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID NOT NULL,
   file_server_name UUID NOT NULL,
   protocol VARCHAR(255) NOT NULL,
-  read_test BOOLEAN DEFAULT true NOT NULL,
-  write_test BOOLEAN DEFAULT true NOT NULL,
-  packet_loss_test BOOLEAN DEFAULT true NOT NULL,
+  read_test BOOLEAN DEFAULT false NOT NULL,
+  write_test BOOLEAN DEFAULT false NOT NULL,
+  packet_loss_test BOOLEAN DEFAULT false NOT NULL,
   FOREIGN KEY (job_id) REFERENCES job_config(id) ON DELETE CASCADE
 );
 
-CREATE TABLE speed_test_workers (
+CREATE TABLE IF NOT EXISTS speed_test_workers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID NOT NULL,
   workers_id UUID NOT NULL,
