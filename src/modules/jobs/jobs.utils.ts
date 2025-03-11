@@ -6,16 +6,23 @@ export const handleDownloadReport = async (
   reportType: string = "discovery",
   fileType: string
 ) => {
+  const isFileTypePdf = fileType === "pdf";
   try {
     const response = await downloadReports({
-      jobRunId: fileType == "pdf" ? jobRunId : [jobRunId],
+      jobRunId: isFileTypePdf ? jobRunId : [jobRunId],
       "report-type": reportType,
     }).unwrap();
 
-    const blob = new Blob([response], { type: "application/zip" });
+    const appType = isFileTypePdf
+      ? "application/octetstream"
+      : "application/zip";
+
+    const blob = new Blob([response], { type: appType });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${jobRunId}-${reportType}-report.zip`;
+    link.download = `${jobRunId}-${reportType}-report.${
+      isFileTypePdf ? "pdf" : "zip"
+    }`;
     link.click();
 
     URL.revokeObjectURL(link.href);

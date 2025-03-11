@@ -31,7 +31,7 @@ const JobDescription = (props: JobDescriptionProps) => {
         {destination && destination.serverName && (
           <Box className="flex flex-col gap-4 grow">
             <JobDescriptionColumn
-              name="Destination Server"
+              name="Destination"
               value={destination.serverName}
             />
             <JobDescriptionColumn

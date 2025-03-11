@@ -110,6 +110,20 @@ export const getReportActions = (
         },
       ];
     case JOBS_TYPE.MIGRATE:
+      return [
+        {
+          label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
+          onClick: () => {
+            handleDownloadReport(
+              downloadReportApi,
+              row.jobRunId,
+              ReportENUM.COC,
+              "csv"
+            );
+          },
+          disabled: !isReportReady,
+        },
+      ];
     case JOBS_TYPE.CUT_OVER:
       return [
         {
