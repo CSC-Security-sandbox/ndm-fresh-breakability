@@ -117,7 +117,7 @@ const JobRunDetails = () => {
   const viewLogUrl = getGrafanaLogUrl(jobRunId);
 
   return (
-    <Box className="px-4 pt-2 flex flex-col gap-4">
+    <Box className="flex flex-col gap-4">
       {openConfirmation && (
         <CutoverConfirmationModal
           jobRunId={jobRunId}

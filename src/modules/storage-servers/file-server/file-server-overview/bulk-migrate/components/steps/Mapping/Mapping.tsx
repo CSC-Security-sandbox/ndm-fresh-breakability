@@ -26,7 +26,7 @@ const Mapping = () => {
         "SMB",
       ]
     );
-  }, []);
+  }, [sourceFileServerDetails?.fileServers?.length]);
 
   useEffect(() => {
     setKey(nanoid());

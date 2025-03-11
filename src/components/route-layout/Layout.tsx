@@ -1,14 +1,13 @@
-import * as React from "react";
-import { Outlet } from "react-router-dom";
+import { useGetAllProjectsQuery } from "@api/projectApi";
+import { Box } from "@components/container";
 import SideBar from "@components/sideBar/SideBar";
 import TabHeaderWrapper from "@components/tab-header-wrapper/TabHeaderWrapper";
 import TopNavBar from "@components/top-nav-bar/TopNavBar";
-import { Box } from "@components/container";
+import useAccountDetails from "@hooks/useAccountDetails";
 import CreateFirstProject from "@modules/create-first-project/CreateFirstProject";
-import useAccountDetails from "@hooks/useAccountDetails";;
-import { useGetAllProjectsQuery } from "@api/projectApi";
+import { Outlet } from "react-router-dom";
 
-const HomeLayout = () => {
+const Layout = () => {
   const { accountDetails } = useAccountDetails();
   const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
 
@@ -18,7 +17,7 @@ const HomeLayout = () => {
         <CreateFirstProject />
       ) : (
         <>
-        {/* 5rem is the height of the header */}
+          {/* 5rem is the height of the header */}
           <TopNavBar />
           <Box className="flex overflow-hidden h-[calc(100vh-5rem)]">
             <SideBar />
@@ -33,4 +32,4 @@ const HomeLayout = () => {
   );
 };
 
-export default HomeLayout;
+export default Layout;

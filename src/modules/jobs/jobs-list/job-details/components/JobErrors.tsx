@@ -5,14 +5,17 @@ import {
   CardTitle,
   CardContent,
   Button,
-  // Notification,
+  Notification,
 } from "@netapp/bxp-design-system-react";
 import {
   NoticeTriangleIcon,
   SuccessIcon,
 } from "@netapp/bxp-style/react-icons/Notification";
+import { useNavigate, useParams } from "react-router-dom";
 
 const JobErrors = () => {
+  const params = useParams<{ jobRunId: string; jobId: string }>();
+  const navigate = useNavigate();
   const errorCount: number = 0;
   const hasErrors = errorCount !== 0;
 
@@ -29,10 +32,10 @@ const JobErrors = () => {
           <Text>Errors ({errorCount})</Text>
         </CardTitle>
         <Button
-          onClick={() => {}}
+          onClick={() => navigate(`errors`)}
           color="secondary"
           style={{ margin: "0 0 0 auto" }}
-          disabled={!hasErrors}
+          // disabled={!hasErrors}
         >
           View All
         </Button>

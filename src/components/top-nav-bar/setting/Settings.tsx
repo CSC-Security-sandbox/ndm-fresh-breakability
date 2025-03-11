@@ -6,7 +6,7 @@ import { RootStateType } from "@store/store";
 import { useDispatch, useSelector } from "react-redux";
 import SettingsContent from "./SettingsContent";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
-import Help from "@components/top-nav-bar/help/help";
+import Help from "@components/top-nav-bar/help/Help";
 
 const Settings = () => {
   const drawerId = "Settings";
@@ -21,7 +21,7 @@ const Settings = () => {
     <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageProject}>
       <Button onClick={showSettings} variant="icon">
         <img
-          src={"setting.svg"}
+          src="/setting.svg"
           alt="settings"
           height={45}
           width={45}

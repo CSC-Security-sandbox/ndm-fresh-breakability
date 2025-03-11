@@ -21,7 +21,7 @@ const BulkCutOver = () => {
           stepsMap={CUT_OVER_STEPS_MAP}
           stepPaths={CUT_OVER_STEPS_PATHS}
           initialState={{}}
-          initialStep="review"
+          initialStep="select-path"
           initialPath="default"
         >
           <CustomStepLayout />

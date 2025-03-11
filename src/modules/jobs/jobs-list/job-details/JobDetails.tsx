@@ -32,7 +32,7 @@ import { getActionMenu, getReportActions } from "../../job-run-list/run.utils";
 import { useState } from "react";
 import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
 
-export default function Page() {
+const JobDetails = () => {
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
@@ -146,7 +146,7 @@ export default function Page() {
   };
 
   return (
-    <Box className="px-4 pt-2 flex flex-col gap-4">
+    <Box className="flex flex-col gap-4">
       {openConfirmation && (
         <CutoverConfirmationModal
           jobRunId={selectedJobRunId}
@@ -203,4 +203,6 @@ export default function Page() {
       />
     </Box>
   );
-}
+};
+
+export default JobDetails;
