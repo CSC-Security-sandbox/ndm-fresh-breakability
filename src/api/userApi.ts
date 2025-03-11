@@ -9,6 +9,7 @@ export const usersApi = createApi({
     "USER_ROLES",
     "CREATE_USER",
     "MY_DETAILS",
+    "GET_SMTP"
   ],
   baseQuery: fetchBaseQuery({
     baseUrl: import.meta.env.VITE_ADMIN_SERVICE_URL,
@@ -151,6 +152,22 @@ export const usersApi = createApi({
         body,
       }),
     }),
+
+    getSmtpDetails: builder.query({
+      query: () => {
+        return `/setting`;
+      },
+      providesTags: ["GET_SMTP"],
+    }),
+
+    createSmtp: builder.mutation({
+      query: (body) => ({
+        url: `/setting`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["GET_SMTP"],
+    }),
   }),
 });
 
@@ -170,4 +187,6 @@ export const {
   useAssociateUserBatchMutation,
   useResetPasswordMutation,
   useLazyGenerateSecretForWorkerQuery,
+  useGetSmtpDetailsQuery,
+  useCreateSmtpMutation,
 } = usersApi;

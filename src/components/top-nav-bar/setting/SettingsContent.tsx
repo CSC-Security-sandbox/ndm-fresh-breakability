@@ -12,6 +12,9 @@ import ManageUsers from "./ManageUsers/ManageUsers";
 
 import Box from "@/components/container/Box";
 import TabPanel from "@components/container/TabPanel";
+import CreateSMTP from "./SMTP/CreateSMTP";
+import PermissionAuth from "@/auth/PermissionAuth";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 
 const SettingsContent = () => {
   const [currentTab, setCurrentTab] = useState<number>(1);
@@ -42,6 +45,15 @@ const SettingsContent = () => {
             >
               <Span color="text-title">Projects</Span>
             </InnerTab.Button>
+            <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.SaveSmtp}>
+              <InnerTab.Button
+                isActive={currentTab === 3}
+                onClick={() => setCurrentTab(3)}
+                style={{ paddingTop: 16, paddingBottom: 16 }}
+              >
+                <Span color="text-title">SMTP</Span>
+              </InnerTab.Button>
+            </PermissionAuth>
           </InnerTab>
         </WizardHeader>
 
@@ -51,6 +63,9 @@ const SettingsContent = () => {
           </TabPanel>
           <TabPanel value={currentTab} index={2}>
             <ManageProject />
+          </TabPanel>
+          <TabPanel value={currentTab} index={3}>
+            <CreateSMTP />
           </TabPanel>
         </Layout.Content>
       </Layout.Page>
