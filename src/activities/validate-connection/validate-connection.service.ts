@@ -38,6 +38,11 @@ export class ValidateConnectionActivity {
       if (feature.enableVersionFetch) {
         response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
       }
+      if(protocolType === ProtocolTypes.SMB) {
+        this.logger.log(`[${traceId}] disconnecting session for SMB`);
+        const disconnectResponse = await protocol.disconnectSession(traceId, payload);
+        this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
+      }
       this.logger.log(`[${traceId}] Paths: ${response.paths}`);
       return response;
     } catch (error) {
