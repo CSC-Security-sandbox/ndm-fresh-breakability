@@ -17,7 +17,7 @@ export class SettingService {
     try {
       if (createSettingDto.length > 0 && createSettingDto.some(setting => setting.settingType === 'SMTP')) {
         const isSMTPConnectionSuccessful = await this.testSMTPConnection(createSettingDto);
-        console.log('isSMTPConnectionSuccessful:--->', isSMTPConnectionSuccessful);
+        console.log('isSMTPConnectionSuccessful:', isSMTPConnectionSuccessful);
         if (!isSMTPConnectionSuccessful) {
           throw new HttpException(
         {
@@ -86,6 +86,8 @@ export class SettingService {
           user: smtpConfig.auth.user,
           pass: smtpConfig.auth.pass,
         } : undefined,
+        socketTimeout: 5000,
+        connectionTimeout: 5000,
       });
       await transporter.verify();
       isVerificationSuccessful = true;
