@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
-import { basePrefix, dmError, formatDate, getFileInfo, isFatalError, shouldExcludeOrSkip } from '../utils/utils';
+import { basePrefix, dmError, formatDate, getFileInfo, isFatalError } from '../utils/utils';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 import { Operation, Origin } from '../utils/utils.types';
