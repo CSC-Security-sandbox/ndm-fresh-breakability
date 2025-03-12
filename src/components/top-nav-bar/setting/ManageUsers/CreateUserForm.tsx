@@ -71,7 +71,7 @@ const CreateUserForm = ({
       setTemporaryPassword(createUserResponse.tempPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({
-          account_id: import.meta.env.VITE_HARD_CODE_ACCOUNT_ID,
+          account_id: localStorage.getItem("account_id"),
           user_id: createUserResponse.user.id,
           role_id: roles?.find(
             (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN

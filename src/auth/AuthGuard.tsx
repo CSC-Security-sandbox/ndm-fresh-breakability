@@ -11,12 +11,14 @@ import { setAllProjectList, setProject } from "@store/reducer/appSlice";
 import { useRefreshUserTokenMutation } from "@api/userApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import { ProjectApiType } from "@/types/app.type";
+import { useLazyGetAllAccountsQuery } from "@api/accountApi";
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const auth = useAuth();
   const dispatch = useDispatch();
   const { accountDetails } = useAccountDetails();
   const [isPageReady, setIsPageReady] = useState<boolean>(false);
+  const [getAllAccounts] = useLazyGetAllAccountsQuery();
   const [getAllProjects] = useLazyGetAllProjectsQuery();
   const [getUserPermissionsApi] = useLazyGetUserPermissionsQuery();
   const refreshTimeoutRef = useRef<any>(null);
@@ -82,26 +84,41 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     }
   }, [auth]);
 
+  const getAccounts = async () => {
+    if (localStorage.getItem("account_id") === null || localStorage.getItem("account_id") === undefined) {
+      await getAllAccounts("")
+      .unwrap()
+      .then((response) => {
+        localStorage.setItem("account_id", response?.[0]?.id);
+      });
+    }
+  }
+
+  const getProjects = () => {
+    getAllProjects(localStorage.getItem("account_id"))
+    .unwrap()
+    .then((resp) => {
+      dispatch(setAllProjectList(resp));
+      let selected_project_id =
+        localStorage.getItem("selected_project_id") || undefined;
+      if (selected_project_id) {
+        const projectIdFound = resp.find(
+          (row: ProjectApiType) => row.id === selected_project_id
+        );
+        if (!projectIdFound) selected_project_id = undefined;
+      }
+      dispatch(setProject(selected_project_id || resp?.[0]?.id));
+      setIsPageReady(true);
+    });
+  }
+
   useEffect(() => {
     if (auth.isAuthenticated) {
       (async () => {
         const resp = await getUserPermissionsApi("").unwrap();
         dispatch(setUserPermissions(resp));
-        getAllProjects(accountDetails?.id)
-          .unwrap()
-          .then((resp) => {
-            dispatch(setAllProjectList(resp));
-            let selected_project_id =
-              localStorage.getItem("selected_project_id") || undefined;
-            if (selected_project_id) {
-              const projectIdFound = resp.find(
-                (row: ProjectApiType) => row.id === selected_project_id
-              );
-              if (!projectIdFound) selected_project_id = undefined;
-            }
-            dispatch(setProject(selected_project_id || resp?.[0]?.id));
-            setIsPageReady(true);
-          });
+        await getAccounts();
+        getProjects();
       })();
     }
   }, [
