@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { NativeConnection } from "@temporalio/worker";
-import { DiscoveryScanActivity } from "src/activities/discovery/discovery-scan-activities";
+import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { ListPathActivity } from "src/activities/list-path/list-path.service";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";

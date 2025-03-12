@@ -2,7 +2,7 @@ import { HttpModule } from '@nestjs/axios';
 import { Logger, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
-import { DiscoveryScanActivity } from './discovery/discovery-scan-activities';
+import { DiscoveryScanActivity } from './discovery/discovery.core.activity';
 import { DiscoveryActivity } from './discovery/discovery.activities';
 import { ListPathActivity } from './list-path/list-path.service';
 import { MigrationScanService } from './migrate/migrate.scan.service';

@@ -10,7 +10,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { getErrorCode, getFilePermissions, getFileType, removePrefix, basePrefix, shouldExcludeOrSkip } from '../utils/utils';
 
 @Injectable()
-export class DiscoveryScanActivity {
+export class DiscoveryScanActivityOld {
   constructor(
     private readonly logger: Logger,
     private readonly redisService: RedisService,

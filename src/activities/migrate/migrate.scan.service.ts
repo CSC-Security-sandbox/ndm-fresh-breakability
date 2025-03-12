@@ -125,12 +125,13 @@ export class MigrationScanService {
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
+        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+        const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
+        const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
+
         for (let i = 0;  i < task.commands.length; i++) {
             if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-            const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-            const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
-            const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
-            const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
             const scanInput: ScanContentInput = {
                 excludePatterns: excludePatterns,
                 sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
@@ -141,15 +142,18 @@ export class MigrationScanService {
                 jobContext,
                 skipFile
             };
+
             const result = await this.scanContent(scanInput);
-            scanPath.retryCount = Math.max(task.commands[i].retryCount+1,  scanPath.retryCount)
             this.logger.log(`Result of scanContent: ${JSON.stringify(result)}`);
             if (result.isGeneratedTask) 
                 scanPath.isTaskCreated = true;
-            if (result.error)  
+            if (result.error)  {
+                task.commands[i].retryCount++;
                 task.commands[i].status = CommandStatus.ERROR, scanPath.errors.add(result.error), scanPath.error++;
+            }
             else  
                 scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
+            scanPath.retryCount = Math.max(task.commands[i].retryCount,  scanPath.retryCount)
         }      
         
         if(scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount)  
