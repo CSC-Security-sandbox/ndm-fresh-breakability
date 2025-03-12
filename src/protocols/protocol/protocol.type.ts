@@ -4,6 +4,7 @@ import { ProtocolTypes } from "../protocols";
 export interface ProtocolPayload{
     hostname?: string;
     username?: string;
+    protocolVersion: string;
     password?: string;
     path?: string;
     jobRunId?: string

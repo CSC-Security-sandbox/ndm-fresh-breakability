@@ -41,9 +41,11 @@ export class ValidateWorkingDirectoryActivity {
         configStatusPayload.status = isValid ? ConfigStatus.ACTIVE : ConfigStatus.ERRORED;
         configStatusPayload.errorMessage = isValid ? null : ConfigError.INVALID_WORKING_DIRECTORY;
       } catch (error) {
-        this.logger.error(`Working directory validation error: ${error.message}`);
+      const errorMessage = error?.message.includes('RPC prog. not avail') ? `The server does not support to provided NFS version. Please use a valid version.` : error?.message;
+
+        this.logger.error(`Working directory validation error: ${error?.message}`);
         configStatusPayload.status = ConfigStatus.ERRORED;
-        configStatusPayload.errorMessage = error.message;
+        configStatusPayload.errorMessage = errorMessage;
       }
     }
 
@@ -74,7 +76,7 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async isValidDirectory(payload: any, traceId: string): Promise<boolean> {
-    const baseMountDir = WorkersConfig.get('baseMountDir');
+    const baseMountDir = WorkersConfig.get('baseWorkingPath');
     let isDirectoryValid = false;
 
     try {
@@ -85,6 +87,7 @@ export class ValidateWorkingDirectoryActivity {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
+          protocolVersion: fileServer.protocolVersion,
           path: payload.exportPath,
           mountBasePath: baseMountDir,
           pathId: traceId,
@@ -113,8 +116,8 @@ export class ValidateWorkingDirectoryActivity {
         if (isDirectoryValid) break;
       }
     } catch (error) {
-      this.logger.error(`Working Directory validation error: ${error.message}`);
-      throw new Error(`Working Directory validation error: ${error.message}`);
+      this.logger.error(`Working Directory validation error: ${error?.message}`);
+      throw new Error(error.message);
     }
 
     return isDirectoryValid;
