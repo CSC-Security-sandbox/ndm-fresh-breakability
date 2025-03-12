@@ -11,7 +11,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { FindManyOptions, In, Repository } from "typeorm";
+import { FindManyOptions, FindOptionsWhere, In, IsNull, Not, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
   JobRunDetailsDTO,
@@ -22,8 +22,13 @@ import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobru
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobRunConfig } from "./jobrun.types";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { FindOptionsSelect } from 'typeorm';
+import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
 @Injectable()
 export class JobRunService {
+ 
  
   private readonly logger = new Logger(JobRunService.name);
   private readonly mountBasePath: string 
@@ -37,6 +42,10 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(OperationsEntity)
+    private operationRepo : Repository<OperationsEntity>,
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo : Repository<OperationErrorEntity>,
     private readonly configService: ConfigService,
     private  readonly jobRunInitService: JobRunInitService,
     private readonly redisService: RedisService,
@@ -438,5 +447,85 @@ export class JobRunService {
         { status: status }
       );
     };
+  }
+
+  //  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
+  //   const { page, limit="10", sort = 'createdAt', order = 'DESC', jobRunId, ...filter } = taskQuery;
+
+  //   let where: FindOptionsWhere<OperationsEntity> = {
+  //     jobRunId,
+  //     operationErrors: { id: Not(IsNull()) }, 
+  //   };
+    
+
+  //   Object.keys(filter).forEach((k)=>{
+  //     where =  {...where, [k]: In(filter[k])}
+  //   })
+
+  //   const findOptions: FindManyOptions<OperationsEntity> = {
+  //     where, order: { operationErrors : {[sort]: order } }, 
+  //   };
+  //   let data = [], total = 0;
+  //   if (page && limit) {
+  //     findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
+  //     findOptions.take = parseInt(limit); 
+  //     data = await this.operationRepo.find(findOptions);
+  //     total = await this.operationRepo.count({ where});
+  //     data = data.map((operation) => ({
+  //       operationData: operation,
+  //       latestError: operation.operationErrors?.length ? operation.operationErrors[0] : null, 
+  //     }));
+  //   } else {
+  //     data = await this.operationRepo.find(findOptions);
+  //     total = await this.operationRepo.count({ where });
+  //     data = data.map((operation) => ({
+  //       operationData: operation,
+  //       latestError: operation.operationErrors?.length ? operation.operationErrors[0] : null, 
+  //     }));
+  //   }
+  //   return { data, total };
+  // }
+
+  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
+    const {
+      page = "1",
+      limit = "10",
+      sort = "createdAt",
+      order = "DESC",
+      jobRunId,
+      ...filter
+    } = taskQuery;
+  
+    let where: FindOptionsWhere<OperationErrorEntity> = {
+      operation: { jobRunId }, 
+    };
+  
+    Object.keys(filter).forEach((k) => {
+      where = { ...where, [k]: In(filter[k]) };
+    });
+  
+    const findOptions: FindManyOptions<OperationErrorEntity> = {
+      where,
+      relations: ["operation"], // Fetch the operation details
+      order: { [sort]: order }, // Sort errors by createdAt DESC
+      take: parseInt(limit), // Limit the number of errors fetched
+      skip: (parseInt(page) - 1) * parseInt(limit), // Apply pagination
+    };
+  
+    // Fetch data and total count
+    const [data, total] = await this.operationErrorRepo.findAndCount(findOptions);
+  
+    // Formatting the response
+    const formattedData = data.map((error) => ({
+      errorData: error,
+      operationData: error.operation, // Include operation details
+    }));
+  
+    return { data: formattedData, total };
+  }
+  
+
+  getErrorOverview(jobErrorQuery: JobErrorQueryDto) {
+    throw new Error('Method not implemented.');
   }
 }

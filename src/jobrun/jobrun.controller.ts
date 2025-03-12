@@ -9,6 +9,7 @@ import { JobRunService } from './jobrun.service';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
 import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
 import { JobRunInitService } from './jobrun.init.service';
+import { JobErrorQueryDto} from './dto/jobRunErrors.dto';
 
 @ApiTags('jobs run')
 @Controller('job-run')
@@ -81,6 +82,18 @@ export class JobRunController {
   async cutoverApproval(@Param('jobRunId') jobRunId: string, @Param('status') status: CutOverStatus) {
 
     return this.jobRunService.cutOverApproval(jobRunId, status);
+  }
+
+  @ApiOperation({ summary: 'Get Job Run Errors' })
+  @ApiResponse({ status: 200, description: 'The job run errors retrieved successfully .' })
+  @Get('/:jobRunId/errors')
+  async getJobRunErrors(@Query(new ValidationPipe({ transform: false, whitelist: true })) jobErrorQuery: JobErrorQueryDto) {
+    return  this.jobRunService.getJobRunErrors(jobErrorQuery);
+  }
+
+  @ApiOperation({ summary: 'Get Job Error Overview'})
+  async getErrorOverview(@Query(new ValidationPipe({ transform: false, whitelist: true })) jobErrorQuery: JobErrorQueryDto) {
+    return this.jobRunService.getErrorOverview(jobErrorQuery);
   }
 
 }
