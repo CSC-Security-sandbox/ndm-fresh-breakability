@@ -45,7 +45,7 @@ export class MigrationSyncService {
     });
   }
 
-  async copyFileWithChecksum(sourceFile: string, destinationFile: string, jobContext: JobContext): Promise<{sourceChecksum: string, targetChecksum:string}> {
+  async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
@@ -141,7 +141,7 @@ export class MigrationSyncService {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
-          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath, jobContext);
+          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
           syncOperation.checksums = checksum
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
         } catch (error) {
