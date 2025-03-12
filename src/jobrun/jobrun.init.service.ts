@@ -131,7 +131,7 @@ export class JobRunInitService {
               password: jobConfig?.sourcePath?.fileServer?.password,
               host: jobConfig?.sourcePath?.fileServer?.host,
               workingDirectory: this.mountBasePath,
-              protocolVersion: jobConfig?.sourcePath?.fileServer?.protocolVersion
+              protocolVersion: jobConfig?.sourcePath?.fileServer?.protocolVersion.replace(/^v/, ''),
             }
           },
           workers: sourceWorkers.map((worker) => worker.workerId),
@@ -155,7 +155,7 @@ export class JobRunInitService {
             password: jobConfig?.targetPath?.fileServer?.password,
             host: jobConfig?.targetPath?.fileServer?.host,
             workingDirectory: this.mountBasePath,
-            protocolVersion: jobConfig?.targetPath?.fileServer?.protocolVersion
+            protocolVersion: jobConfig?.targetPath?.fileServer?.protocolVersion.replace(/^v/, ''),
           }
           details['workers'] = workers
           return details;
