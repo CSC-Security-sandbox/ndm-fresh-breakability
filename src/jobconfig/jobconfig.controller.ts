@@ -107,6 +107,16 @@ export class JobConfigController {
       return await this.jobConfigService.getConfigsByProjectId(projectId);
   }
 
+  @ApiOperation({ summary: 'Get notice board details by project ID' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved notice board details' })
+  @ApiResponse({ status: 400, description: 'Invalid project ID' })
+  @ApiResponse({ status: 404, description: 'Notice board not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @Get('notice-board/:projectId')
+  async getNoticeBoardDetailsByProjectId(@Param('projectId') projectId: string) {
+    return await this.jobConfigService.getNoticeBoardDetailsByProjectId(projectId);
+  }
+
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
