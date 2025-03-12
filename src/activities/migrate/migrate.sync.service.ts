@@ -50,12 +50,6 @@ export class MigrationSyncService {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
 
-    const excludePattern = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(',') : [];
-    if(shouldExcludeOrSkip({fullPath: sourceFile, stats: fs.statSync(sourceFile), excludePatterns: excludePattern, skipTime: jobContext.jobConfig.options?.skipsFilesModifiedInLast, olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan), jobType: jobContext.jobConfig.jobType})) {
-      this.logger.log(`Excluding or skip file: ${sourceFile}`);
-      return;
-    }
-  
     const destDir = path.dirname(destinationFile);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
