@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 
-import { basePrefix, buildTask, dmError, getFileInfo, isFatalError, removePrefix, shouldExclude } from "../utils/utils";
+import { basePrefix, buildTask, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Operation, Origin } from "../utils/utils.types";
 
@@ -31,7 +31,7 @@ export class MigrationScanService {
         return  await fs.promises.readdir(directoryPath);
     }
 
-    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command }: ScanContentInput): Promise<ScanContentOutput> {
+    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
         const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
         let commands: Command[] = [], sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
 
@@ -61,9 +61,15 @@ export class MigrationScanService {
 
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-
-                if (sourceStat.isSymbolicLink() || shouldExclude(sourceContentPath, excludePatterns))
-                    continue;
+                
+                if (sourceStat.isSymbolicLink() || shouldExcludeOrSkip({
+                    fullPath: sourceContentPath,
+                    stats: sourceStat,
+                    excludePatterns,
+                    skipTime: skipFile,
+                    olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
+                    jobType: jobContext.jobConfig.jobType
+                })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
 
@@ -123,14 +129,17 @@ export class MigrationScanService {
             if(task.commands[i].status === CommandStatus.COMPLETED) continue;
             const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
             const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+            const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
+            const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
             const scanInput: ScanContentInput = {
-                excludePatterns: task.excludeFilePatterns ? task.excludeFilePatterns.split(",") : [],
+                excludePatterns: excludePatterns,
                 sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
                 sourcePrefix: baseSourcePrefixPath,
                 targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
                 jobRunId: task.jobRunId,
                 command: task.commands[i],
-                jobContext
+                jobContext,
+                skipFile
             };
             const result = await this.scanContent(scanInput);
             scanPath.retryCount = Math.max(task.commands[i].retryCount+1,  scanPath.retryCount)

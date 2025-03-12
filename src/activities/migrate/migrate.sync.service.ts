@@ -49,7 +49,7 @@ export class MigrationSyncService {
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
-  
+
     const destDir = path.dirname(destinationFile);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });

@@ -7,7 +7,7 @@ import { DiscoveryPayload, FileEntry, ProcessFolderReadParams, ProcessInventoryP
 
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
-import { getErrorCode, getFilePermissions, getFileType, shouldExclude, removePrefix, basePrefix } from '../utils/utils';
+import { getErrorCode, getFilePermissions, getFileType, removePrefix, basePrefix, shouldExcludeOrSkip } from '../utils/utils';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -57,7 +57,7 @@ export class DiscoveryScanActivity {
             batchSize,
             workerId: ids.workerId,
             commandId: cmd.commandId || 'test',
-            excludePattern: [],
+            excludePattern: jobContext.jobConfig?.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(',') : [],
             taskId: ids.taskId,
             jobContext,
             discoveryStats
@@ -106,7 +106,7 @@ export class DiscoveryScanActivity {
           const fullPath = path.join(chunkPath, file);
           const lStat = await fs.promises.lstat(fullPath);
           const isDirectory = lStat.isDirectory();
-          const shouldExcludeFile = shouldExclude(fullPath, excludePattern);
+          const shouldExcludeFile = shouldExcludeOrSkip({ fullPath, stats: lStat, excludePatterns: excludePattern, skipTime: '', olderThan: new Date(jobContext.jobConfig.options.excludeOlderThan), jobType: 'DISCOVERY' });
           if (shouldExcludeFile) continue;
           if(isDirectory) discoveryStats.numDirs += 1;
           else discoveryStats.numFiles += 1;
