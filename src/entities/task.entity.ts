@@ -1,9 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TaskStatus, TaskType } from 'src/constants/enums';
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { JobRunEntity } from './jobrun.entity';
 import { OperationsEntity } from './operation.entity';
 import { WorkerEntity } from './worker.entity';
+import { TaskErrorEntity } from './task-error.entity';
 
 
 @Entity({ name: 'tasks' })
@@ -48,5 +49,8 @@ export class TaskEntity  {
   @ManyToOne(()=> WorkerEntity, worker=>worker.tasks, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
   @JoinColumn({ name: 'worker_id' })
   worker:WorkerEntity
+
+  @OneToOne(() => TaskErrorEntity, (taskError) => taskError.task, { onDelete: 'CASCADE' ,eager: false})
+  taskErrors: TaskErrorEntity;
 
 }

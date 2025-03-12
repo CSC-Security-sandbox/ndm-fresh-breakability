@@ -26,7 +26,7 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('jobs-docs', app, document,{
+  SwaggerModule.setup('/api/v1/jobs-docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
   
