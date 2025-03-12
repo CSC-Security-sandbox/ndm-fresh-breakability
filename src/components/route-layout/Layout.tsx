@@ -19,9 +19,9 @@ const Layout = () => {
         <>
           {/* 5rem is the height of the header */}
           <TopNavBar />
-          <Box className="flex overflow-hidden h-[calc(100vh-5rem)]">
+          <Box className="relative flex overflow-hidden h-[calc(100vh-5rem)]">
             <SideBar />
-            <Box className="w-full bg-content-bg overflow-y-auto">
+            <Box className="relative left-[5rem] w-[calc(100vw-5rem)] bg-content-bg overflow-y-auto">
               <TabHeaderWrapper />
               <Outlet />
             </Box>

@@ -36,7 +36,7 @@ const SideBar = () => {
     <Box
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="h-[calc(100vh-5rem)] flex shrink-0 shadow-[5px_5px_15px_-3px_rgba(0,_0,_0,_0.15)] z-50 text-main-nav-icon-text-selected"
+      className="absolute h-[calc(100vh-5rem)] flex shrink-0 shadow-[5px_5px_15px_-3px_rgba(0,_0,_0,_0.15)] z-50 text-main-nav-icon-text-selected"
     >
       <Sidebar
         collapsed={collapseSidebar}

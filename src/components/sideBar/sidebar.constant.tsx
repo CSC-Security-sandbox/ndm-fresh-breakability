@@ -25,9 +25,7 @@ export const MENU_ITEMS = [
     subMenu: [
       {
         label: "File Servers",
-        icon: (
-          <GcpStorageIcon size="24" color="text-main-nav-icon-text-selected" />
-        ),
+        icon: <></>,
         path: "/file-server",
       },
     ],
