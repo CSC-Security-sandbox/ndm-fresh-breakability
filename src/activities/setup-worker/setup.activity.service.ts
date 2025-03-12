@@ -228,6 +228,7 @@ export class SetupActivityService {
         protocols?.password,
         protocol,
         payload.type,
+        protocolVersion
       );
       if (writePermission.status === 'failed') {
          await protocol.unmountPath(traceId, mountPayload);
@@ -281,6 +282,7 @@ export class SetupActivityService {
     password: string,
     protocol: Protocol,
     type: string,
+    protocolVersion: string
   ): Promise<any> {
     this.logger.log(
       `[${traceId}] - Checking write permission for ${exportPathName}`,
@@ -296,6 +298,7 @@ export class SetupActivityService {
         mountBasePath: mountBasePath,
         pathId,
         jobRunId: traceId,
+        protocolVersion
       };
 
       const testFile = `${mountBasePath}/${traceId}/${pathId}/test-${traceId}.txt`;
