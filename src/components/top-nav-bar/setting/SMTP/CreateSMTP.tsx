@@ -100,10 +100,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
     try {
       if (isEdit) {
         await updateSmtpDataAPi(data.payLoad).unwrap();
-        notify.success(`SMTP details updated successfully.`);
+        notify.success("SMTP details updated successfully.");
       } else {
         await createSmtpApi(data.payLoad).unwrap();
-        notify.success(`SMTP details added successfully.`);
+        notify.success("SMTP details added successfully.");
       }
       dispatch(setDrawerClose());
       handleDefaultTab();
@@ -111,7 +111,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || `Failed to ${isEdit ? 'update' : 'add'} SMTP Details`}
+          message={err?.message || "Failed to ${isEdit ? 'update' : 'add'} SMTP Details"}
         />
       );
     }
