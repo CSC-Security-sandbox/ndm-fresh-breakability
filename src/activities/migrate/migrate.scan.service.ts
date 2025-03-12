@@ -34,7 +34,7 @@ export class MigrationScanService {
     async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
         const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
         let commands: Command[] = [], sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
-
+        
         try {
             sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
         }catch(error) {
