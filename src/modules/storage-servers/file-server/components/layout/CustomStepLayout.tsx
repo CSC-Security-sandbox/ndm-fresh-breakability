@@ -12,7 +12,7 @@ const CustomStepLayout = () => {
   const { setStep, currentStepIndex, stepPaths } = useWizard();
 
   return (
-    <WizardLayout className="p-6">
+    <WizardLayout className="pt-6">
       <NoForm>
         <Box className="mx-auto pb-8">
           <WizardSteps

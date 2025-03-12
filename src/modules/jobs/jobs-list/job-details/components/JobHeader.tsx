@@ -1,7 +1,7 @@
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 import JobInfoCard from "./JobInfoCard";
 import JobInfoReverseCard from "./JobInfoReverseCard";
-import { Card } from "@netapp/bxp-design-system-react";
+import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
 import {
   JOBS_TYPE,
@@ -17,7 +17,14 @@ import {
 } from "@/utils/common.utils";
 
 const JobHeader = ({ jobConfigDetails }: JobHeaderPropType) => {
-  if (!jobConfigDetails) return <></>;
+  if (!jobConfigDetails) {
+    return (
+      <Card className="flex gap-16 p-10">
+        <CardContentLoading />
+      </Card>
+    );
+  }
+
   const jobRunLatest =
     jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
       ? [...jobConfigDetails?.jobRuns]
@@ -27,7 +34,7 @@ const JobHeader = ({ jobConfigDetails }: JobHeaderPropType) => {
   const timeElapsed = jobRunLatest?.timeElapsed || 0;
 
   return (
-    <Card className="flex gap-16" style={{ padding: 40 }}>
+    <Card className="flex gap-16 p-10">
       <JobInfoCard
         label={getJobType(jobConfigDetails.jobType)}
         value={

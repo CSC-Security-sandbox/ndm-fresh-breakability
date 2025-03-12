@@ -1,6 +1,6 @@
 import JobInfoCard from "./JobInfoCard";
 import JobInfoReverseCard from "./JobInfoReverseCard";
-import { Card } from "@netapp/bxp-design-system-react";
+import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
 import { JOBS_TYPE, JobRunHeaderPropType } from "@/types/app.type";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
@@ -12,7 +12,13 @@ import {
 } from "@/utils/common.utils";
 
 const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
-  if (!jobRunDetails) return <></>;
+  if (!jobRunDetails) {
+    return (
+      <Card className="flex h-full justify-center items-center p-10">
+        <CardContentLoading />
+      </Card>
+    );
+  }
   const { jobType } = jobRunDetails.jobConfig;
   const timeElapsed = calculateTimeDiff(
     jobRunDetails.startTime,
@@ -39,7 +45,7 @@ const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
   }
 
   return (
-    <Card className="flex gap-16" style={{ padding: 40 }}>
+    <Card className="flex gap-16 p-10">
       <JobInfoCard
         label={getJobType(jobType)}
         value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}

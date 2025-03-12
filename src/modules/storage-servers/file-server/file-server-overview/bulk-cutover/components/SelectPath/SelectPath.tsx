@@ -15,7 +15,7 @@ const SelectPath = () => {
   } = useContext(BulkCutOverContext);
 
   return (
-    <Box className="px-8">
+    <>
       <Card>
         <CardContent className="flex gap-4 flex-col">
           <Text>Source File Server</Text>
@@ -36,7 +36,7 @@ const SelectPath = () => {
         controlName="isSelectPathConformed"
         warningMessage={SELECT_PATH_WARNING_MESSAGE}
       />
-    </Box>
+    </>
   );
 };
 

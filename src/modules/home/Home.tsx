@@ -43,7 +43,7 @@ const Home = () => {
   }, [selectedProjectId]);
 
   const handleAddFileServerButton = () => {
-    navigate("/config/new-file-server");
+    navigate("/new-file-server");
   };
   return (
     <Box className="p-6">

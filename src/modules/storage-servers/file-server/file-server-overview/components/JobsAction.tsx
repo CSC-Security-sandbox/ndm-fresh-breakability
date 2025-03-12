@@ -4,7 +4,7 @@ import { Box } from "@components/container/index";
 import { ConfigListTypeApiType } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const JobsAction = ({
@@ -46,10 +46,7 @@ const JobsAction = ({
           </Button>
           <Button
             disabled={!isActive}
-            onClick={() => {
-              console.log("pathname", pathname);
-              navigate(`${pathname}/bulk-cutover`);
-            }}
+            onClick={() => navigate(`${pathname}/bulk-cutover`)}
           >
             Bulk Cutover
           </Button>

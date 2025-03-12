@@ -13,7 +13,7 @@ import "@netapp/bxp-design-system-react/dist/index.css";
 import Modal from "@components/Modal/ModalWrapper";
 import SideDrawer from "@components/SideDrawer/SideDrawer";
 import { Box } from "@components/container/index.tsx";
-import TopProgressBar from '@components/TopProgressBar/TopProgressBar.tsx'
+import TopProgressBar from "@components/TopProgressBar/TopProgressBar.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

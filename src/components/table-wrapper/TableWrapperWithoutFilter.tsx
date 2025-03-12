@@ -6,6 +6,7 @@ import {
   Table,
   TableCounter,
   TableWidgets,
+  TablePager,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useEffect } from "react";

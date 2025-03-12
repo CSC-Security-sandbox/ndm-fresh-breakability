@@ -41,17 +41,19 @@ import {
 import { Button, useForm } from "@netapp/bxp-design-system-react";
 import dayjs from "dayjs";
 import { useFormik } from "formik";
-import { ComponentType, useEffect, useState } from "react";
+import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { getPreCheckStatus } from "../components/steps/Review/Review.utils";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/constant/app.constants";
-import { getOptionsFromArray } from "@/utils/common.utils";
+import { getOptionsFromArray, convertFileToBase64 } from "@/utils/common.utils";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
 ) {
   return function withBulkMigrateCreateFormComponent(props: any) {
+    const interval = useRef<any | undefined>("");
+
     const { selectedProjectId: projectId } = useSelectedProjectId();
     const [selectedMountPathsId, setSelectedMountPathsId] = useState<string[]>(
       []
@@ -173,6 +175,10 @@ export function withBulkMigrateCreateForm(
           console.error("Error fetching file servers:", error);
         }
       })();
+
+      return () => {
+        interval.current && clearInterval(interval.current);
+      };
     }, [getAllFileServersApi, projectId, fileServerDetails.id]);
 
     const optionForm: BlueXpFormType<OptionsFormType> = useForm(
@@ -250,11 +256,10 @@ export function withBulkMigrateCreateForm(
         preserveAccessTime: optionForm.formState?.preserve_a_time,
       };
 
-      let interval: any;
       preCheckApi(body)
         .unwrap()
         .then((res) => {
-          interval = setInterval(async () => {
+          interval.current = setInterval(async () => {
             const data = await getWorkerDetails({
               id: res?.workflowId,
             }).unwrap();
@@ -262,7 +267,7 @@ export function withBulkMigrateCreateForm(
               const precheckState = getPreCheckStatus(data);
               setPreCheckStatus(precheckState);
               setIsPrecheckLoading(false);
-              clearInterval(interval);
+              interval.current && clearInterval(interval.current);
               setIsSubmitting(false);
               if (precheckState.errors.length === 0) {
                 handleSubmit(onSuccessfulSubmit);
@@ -321,7 +326,7 @@ export function withBulkMigrateCreateForm(
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs/listing")}>
+          <Button variant="text" onClick={() => navigate("/jobs-list")}>
             View Job Listing
           </Button>
         </>

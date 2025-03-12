@@ -35,7 +35,7 @@ const BulkMigrateScheduleComponent = ({
   }, [error]);
 
   return (
-    <Box className="w-4/6">
+    <Box className="w-1/2">
       <Text>Job Schedule</Text>
       <RadioGroup
         name="scheduleTime"

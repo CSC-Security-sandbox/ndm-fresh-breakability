@@ -16,8 +16,9 @@ const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
 
 const BulkMigrate = () => {
   return (
-    <Box className="py-5 h-[80vh]">
+    <Box className="h-[80vh]">
       <BulkMigrateContextWrapper>
+        <Box className="font-semibold text-lg">Bulk Migrate</Box>
         <Wizard
           stepsMap={STEPS_MAP_BULK_MIGRATION}
           stepPaths={STEPS_PATHS_BULK_MIGRATION}
@@ -25,8 +26,8 @@ const BulkMigrate = () => {
           initialStep="mapping"
           initialPath="default"
         >
-          <AppFooter footerContent={<BulkMigrateFooter />} />
           <CustomStepLayout />
+          <AppFooter footerContent={<BulkMigrateFooter />} />
         </Wizard>
       </BulkMigrateContextWrapper>
     </Box>
