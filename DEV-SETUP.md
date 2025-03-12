@@ -69,7 +69,7 @@ Ensure the following tools are installed on your macOS system:
     keycloak-customizations (main)
     admin-service (temporal)
     config-service (temporal)
-    data-migrate-ui (main)
+    datamigrator-ui (main)
     db-writer (temporal)
     file-service (main)
     jobs-service (temporal)
@@ -204,12 +204,12 @@ NOTE: All credentials are managed from vault. Replace the `IP_ADDRESS` with your
 1. Build and push the Docker image using the steps mentioned above.
 2. If no tag is specified, the default tag `latest` will be used. Replace tags with your tags. Override tags by passing variables as follows:
     ```sh
-    ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "data_migrate_ui_tag=latest config_service_tag=latest config_service_liquibase_tag=latest db_writer_service_tag=latest admin_service_liquibase_tag=latest jobs_service_tag=latest jobs_service_liquibase_tag=latest file_service_tag=latest reports_service_tag=latest reports_service_liquibase_tag=latest admin_service_tag=latest db_writer_service_liquibase_tag=latest keycloak_customizations_tag=latest"
+    ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest config_service_liquibase_tag=latest db_writer_service_tag=latest admin_service_liquibase_tag=latest jobs_service_tag=latest jobs_service_liquibase_tag=latest file_service_tag=latest reports_service_tag=latest reports_service_liquibase_tag=latest admin_service_tag=latest db_writer_service_liquibase_tag=latest keycloak_customizations_tag=latest"
     ```
 
 - For example, if you want to deploy the admin service build in the last step:
     ```sh
-    ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "data_migrate_ui_tag=latest config_service_tag=latest config_service_liquibase_tag=latest db_writer_service_tag=latest admin_service_liquibase_tag=new_tag jobs_service_tag=latest jobs_service_liquibase_tag=latest file_service_tag=latest reports_service_tag=latest reports_service_liquibase_tag=latest admin_service_tag=new_tag db_writer_service_liquibase_tag=latest keycloak_customizations_tag=latest"
+    ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest config_service_liquibase_tag=latest db_writer_service_tag=latest admin_service_liquibase_tag=new_tag jobs_service_tag=latest jobs_service_liquibase_tag=latest file_service_tag=latest reports_service_tag=latest reports_service_liquibase_tag=latest admin_service_tag=new_tag db_writer_service_liquibase_tag=latest keycloak_customizations_tag=latest"
     ```
 
 Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are changed. 

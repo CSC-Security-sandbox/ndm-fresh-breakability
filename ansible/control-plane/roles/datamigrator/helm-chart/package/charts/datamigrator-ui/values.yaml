@@ -1,9 +1,9 @@
-appName: "data-migrate-ui"
+appName: "datamigrator-ui"
 kubeApiVersion: "apps/v1"
 replicaCount: 1
 
 image:
-  repository: data-migrate-ui
+  repository: datamigrator-ui
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"
@@ -13,7 +13,7 @@ annotations:
   vault.hashicorp.com/agent-inject-status: "update"
   vault.hashicorp.com/agent-inject-template-keycloak.env: |
     {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
-    export NEXT_PUBLIC_KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
+    export VITE_KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
     {{- end }}
 
 serviceAccountName: datamigrator-vault-sa
@@ -28,69 +28,69 @@ env:
     valueFrom:
       fieldRef:
         fieldPath: status.hostIP
-  - name: NEXT_PUBLIC_PORT
+  - name: VITE_PORT
     value: "3111"
-  - name: NEXT_PUBLIC_HARD_CODE_ACCOUNT_ID
+  - name: VITE_HARD_CODE_ACCOUNT_ID
     value: "753975cb-2f97-4230-b632-6815515a7d0d"
-  - name: NEXT_PUBLIC_BASE_URL
+  - name: VITE_BASE_URL
     value: "/api/v1"
-  - name: NEXT_PUBLIC_USER_ID
+  - name: VITE_USER_ID
     value: "66d6da7b559c0a9b7077909b"
-  - name: NEXT_PUBLIC_KEYCLOAK_HOST
+  - name: VITE_KEYCLOAK_HOST
     value: "https://$(MY_HOST_IP)/keycloak"
-  - name: NEXT_PUBLIC_KEYCLOAK_REALM
+  - name: VITE_KEYCLOAK_REALM
     value: "datamigrator"
-  - name: NEXT_PUBLIC_KEYCLOAK_CLIENT
+  - name: VITE_KEYCLOAK_CLIENT
     value: "datamigrator-client"
-  - name: NEXT_PUBLIC_KEYCLOAK_AUTHORITY
+  - name: VITE_KEYCLOAK_AUTHORITY
     value: "https://$(MY_HOST_IP)/keycloak/realms/datamigrator"
-  - name: NEXT_PUBLIC_KEYCLOAK_GRANT_TYPE
+  - name: VITE_KEYCLOAK_GRANT_TYPE
     value: "authorization_code"
-  - name: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+  - name: VITE_KEYCLOAK_CLIENT_ID
     value: "datamigrator-client"
 
-  # - name: NEXT_PUBLIC_KEYCLOAK_CLIENT_SECRET
+  # - name: VITE_KEYCLOAK_CLIENT_SECRET
   #   value: ""
 
-  - name: NEXT_PUBLIC_KEYCLOAK_REDIRECT_URI
+  - name: VITE_KEYCLOAK_REDIRECT_URI
     value: "https://$(MY_HOST_IP)/home"
-  - name: NEXT_PUBLIC_KEYCLOAK_RESPONSE_TYPE
+  - name: VITE_KEYCLOAK_RESPONSE_TYPE
     value: "code"
-  - name: NEXT_PUBLIC_KEYCLOAK_POST_LOGOUT_REDIRECT_URI
+  - name: VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI
     value: "https://$(MY_HOST_IP)/home"
-  - name: NEXT_PUBLIC_SESSION_KEY
+  - name: VITE_SESSION_KEY
     value: "oidc.user:https://$(MY_HOST_IP)/keycloak/realms/datamigrator:datamigrator-client"
-  - name: NEXT_PUBLIC_APP_ADMIN_ROLE_NAME
+  - name: VITE_APP_ADMIN_ROLE_NAME
     value: "App Admin"
-  - name: NEXT_PUBLIC_API_LIMIT
+  - name: VITE_API_LIMIT
     value: "1000"
 
-  - name: NEXT_PUBLIC_ADMIN_SERVICE_ENDPOINT
+  - name: VITE_ADMIN_SERVICE_ENDPOINT
     value: "http://127.0.0.1:3000"
-  - name: NEXT_PUBLIC_CONFIG_SERVICE_ENDPOINT
+  - name: VITE_CONFIG_SERVICE_ENDPOINT
     value: "http://127.0.0.1:3000"
-  - name: NEXT_PUBLIC_JOBS_SERVICE_ENDPOINT
+  - name: VITE_JOBS_SERVICE_ENDPOINT
     value: "http://127.0.0.1:3000"
-  - name: NEXT_PUBLIC_REPORTS_SERVICE_ENDPOINT
+  - name: VITE_REPORTS_SERVICE_ENDPOINT
     value: "http://127.0.0.1:3006"
-  - name: NEXT_PUBLIC_FILE_SERVICE_ENDPOINT
+  - name: VITE_FILE_SERVICE_ENDPOINT
     value: "http://127.0.0.1:3000"
 
-  - name: NEXT_PUBLIC_ADMIN_SERVICE_URL
+  - name: VITE_ADMIN_SERVICE_URL
     value: "/api/v1"
-  - name: NEXT_PUBLIC_CONFIG_SERVICE_URL
+  - name: VITE_CONFIG_SERVICE_URL
     value: "/api/v1"
-  - name: NEXT_PUBLIC_JOBS_SERVICE_URL
+  - name: VITE_JOBS_SERVICE_URL
     value: "/api/v1"
-  - name: NEXT_PUBLIC_WORKERS_SERVICE_URL
+  - name: VITE_WORKERS_SERVICE_URL
     value: "/api/v1/workers"
-  - name: NEXT_PUBLIC_REPORTS_SERVICE_URL
+  - name: VITE_REPORTS_SERVICE_URL
     value: "/api/v1/report"
-  - name: NEXT_PUBLIC_FILE_SERVICE_URL
+  - name: VITE_FILE_SERVICE_URL
     value: "/api/v1"
-  - name: NEXT_PUBLIC_TIME_INTERVAL
+  - name: VITE_TIME_INTERVAL
     value: "30000"
-  - name: NEXT_PUBLIC_GRAFANA_URL
+  - name: VITE_GRAFANA_URL
     value: "https://$(MY_HOST_IP)/grafana"
 
 service:

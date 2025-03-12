@@ -1,5 +1,0 @@
-apiVersion: v2
-name: data-migrate-ui
-description: Helm chart to deploy data-migrate-ui service 
-version: 0.1.0
-type: application

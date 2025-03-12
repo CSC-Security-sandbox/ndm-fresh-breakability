@@ -1,7 +1,7 @@
 ---
 
 # Microservices release tags of docker images
-data_migrate_ui_tag: "latest"
+datamigrator_ui_tag: "latest"
 config_service_tag: "latest"
 config_service_liquibase_tag: "latest"
 db_writer_service_tag: "latest"
@@ -15,7 +15,7 @@ admin_service_tag: "latest"
 db_writer_service_liquibase_tag: "latest"
 keycloak_customizations_tag: "latest"
 
-# data_migrate_ui_tag: "latest-temporal"
+# datamigrator_ui_tag: "latest-temporal"
 # config_service_tag: "latest-temporal"
 # config_service_liquibase_tag: "latest-temporal"
 # db_writer_service_tag: "latest-temporal"

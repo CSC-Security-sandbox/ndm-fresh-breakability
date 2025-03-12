@@ -95,7 +95,7 @@ service:
 ingress:
   pathPrefix: api/v1/
   
-  trailingPath: "(health|admin-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects|worker-registration)/*"
+  trailingPath: "(health|admin-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects|worker-registration|setting)/*"
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"

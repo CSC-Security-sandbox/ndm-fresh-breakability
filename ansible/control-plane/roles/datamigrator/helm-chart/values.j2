@@ -49,6 +49,6 @@ reports-service:
     image:
       tag: {{ reports_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
 
-data-migrate-ui:
+datamigrator-ui:
   image:
-    tag: {{ data_migrate_ui_tag | default(common_tag) | default("latest") }}
+    tag: {{ datamigrator_ui_tag | default(common_tag) | default("latest") }}

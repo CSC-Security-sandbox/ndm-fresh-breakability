@@ -35,7 +35,7 @@ initial_build=false
 images=()
 
 # List of all services (defined once)
-services=( "keycloak-customizations" "admin-service" "config-service" "data-migrate-ui" "db-writer" "file-service" "jobs-service" "reports-service" )
+services=( "keycloak-customizations" "admin-service" "config-service" "datamigrator-ui" "db-writer" "file-service" "jobs-service" "reports-service" )
 
 # Check if "--initial-build" flag is passed
 if [[ "$1" == "--initial-build" ]]; then
@@ -91,8 +91,8 @@ for service in "${services[@]}"; do
         docker push "$image_tag"
     fi
 
-    # Build Liquibase migrations image (except for keycloak-customizations, file-service, and data-migrate-ui)
-    if [[ "$service_name" != "keycloak-customizations" && "$service_name" != "file-service" && "$service_name" != "data-migrate-ui" ]]; then
+    # Build Liquibase migrations image (except for keycloak-customizations, file-service, and datamigrator-ui)
+    if [[ "$service_name" != "keycloak-customizations" && "$service_name" != "file-service" && "$service_name" != "datamigrator-ui" ]]; then
         migration_image_tag="${repo_url}/${service_name}-migrations:${service_version}"
         
         echo -e "\nBuilding migrations image: $migration_image_tag"
