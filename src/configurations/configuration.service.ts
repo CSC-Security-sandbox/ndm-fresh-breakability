@@ -489,6 +489,7 @@ export class ConfigurationService {
         createConfig?.fileServers?.forEach((fileServer)=>{
             const payload: ListPathDTO = {
                 type: fileServer?.protocol,
+                protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
                 host: fileServer?.host,
                 username: fileServer?.userName,
                 password: fileServer?.password
