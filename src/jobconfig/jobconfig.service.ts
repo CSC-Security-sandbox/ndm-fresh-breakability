@@ -59,6 +59,8 @@ export class JobConfigService {
  
   private readonly logger = new Logger(JobConfigService.name);
   constructor(
+    @InjectRepository(FileServerEntity)
+    private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(SpeedTestConfigEntity)
@@ -256,27 +258,99 @@ export class JobConfigService {
       );
     }
   }
+
+  async getSpeedTestDetails(jobRunId: string): Promise<any> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ['jobConfig'],
+    });
+    if (!jobRun) {
+      throw new Error(`JobRun with id ${jobRunId} not found`);
+    }
+    const jobConfigId = jobRun.jobConfigId;
+  
+    const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
+      where: { jobId: jobConfigId },
+      relations: ['workerEntities', 'jobConfig'],
+    });
+  
+    const fileServers = await this.fileServerRepo.find({
+      relations: ['config', 'volumes', 'workingDirectory', 'workers']
+    });
+  
+    const workerIds = speedTestJobConfig.flatMap(config => config.workerEntities.map(worker => worker.workersId));
+    const workers = await this.workeRepo.findByIds(workerIds);
+  
+    const fileServersMap = new Map();
+  
+    speedTestJobConfig.forEach(config => {
+      const fileServer = fileServers.find(server => server.id === config.fileServer);
+  
+      if (fileServer) {
+        if (!fileServersMap.has(fileServer.id)) {
+          fileServersMap.set(fileServer.id, {
+            fileServerId: fileServer.id,
+            fileServerName: fileServer.config.configName,
+            fileServerProtocol: fileServer.protocol,
+            workers: [],
+          });
+        }
+  
+        config.workerEntities.forEach(workerEntity => {
+          const worker = workers.find(w => w.workerId === workerEntity.workersId);
+          fileServersMap.get(fileServer.id).workers.push({
+            workerName: worker?.workerName || "unknown",
+            workerId: workerEntity.workersId,
+          });
+        });
+      }
+    });
+  
+    const fileServersArray = Array.from(fileServersMap.values());
+  
+    const response = {
+      jobRunId: jobRunId,
+      startTime: jobRun.startTime,
+      endTime: jobRun.endTime,
+      status: jobRun.status,
+      totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+      fileServers: fileServersArray,
+    };
+  
+    return response;
+  }
+
   async getSpeedTestById(id: string): Promise<any> {
     try {
       const speedTestResults = await this.speedTestResultRepo.find({
         where: { traceId: id },
         relations: ['writeResult', 'readResult', 'networkPerformanceResult', 'writeResult.speedLogEntries', 'readResult.speedLogEntries'],
       });
+      
+      if(speedTestResults.length === 0){
+        return this.getSpeedTestDetails(id);
+      }
 
+      this.logger.log(`Fetched speedTestResults: ${JSON.stringify(speedTestResults)}`);
+  
       const fileServersMap = new Map();
-
+  
       const fileServerIds = speedTestResults.map(result => result.fileServerId);
       const fileServers = await this.fileServerEntityRepo.find({
         where: { id: In(fileServerIds) },
         relations: ['config'],
       });
-
+  
+      this.logger.log(`Fetched fileServers: ${JSON.stringify(fileServers)}`);
+  
       const workerIds = speedTestResults.map(result => result.workerId);
       const workers = await this.workeRepo.findByIds(workerIds);
-
+  
+      this.logger.log(`Fetched workers: ${JSON.stringify(workers)}`);
+  
       for (const result of speedTestResults) {
         const fileServer = fileServers.find(fs => fs.id === result.fileServerId);
-
+  
         if (!fileServersMap.has(result.fileServerId)) {
           fileServersMap.set(result.fileServerId, {
             fileServerId: fileServer.id,
@@ -285,31 +359,31 @@ export class JobConfigService {
             workers: [],
           });
         }
-
+  
         const writeSpeed = (result.writeResult?.speedLogEntries || []).map(entry => ({
           timeStamp: entry.timeStamp,
           speed: entry.speed,
         }));
-
+  
         const readSpeed = (result.readResult?.speedLogEntries || []).map(entry => ({
           timeStamp: entry.timeStamp,
           speed: entry.speed,
         }));
-        
+  
         const worker = workers.find(w => w.workerId === result.workerId);
         fileServersMap.get(result.fileServerId).workers.push({
           workerName: worker?.workerName || "unknown",
           workerId: result.workerId,
-          readSpeed,
-          writeSpeed,
-          rtd: result.networkPerformanceResult?.roundTripDelayAvg,
-          packetLoss: result.networkPerformanceResult?.packetLoss,
+          readSpeed: readSpeed.length ? readSpeed : null,
+          writeSpeed: writeSpeed.length ? writeSpeed : null,
+          rtd: result.networkPerformanceResult?.roundTripDelayAvg ?? null,
+          packetLoss: result.networkPerformanceResult?.packetLoss ?? null,
         });
       }
-
+  
       const fileServersArray = Array.from(fileServersMap.values());
       const jobRunDetails = await this.jobRunRepo.findOne({ where: { id } });
-
+  
       if (!jobRunDetails) {
         throw new HttpException(
           {
@@ -319,7 +393,7 @@ export class JobConfigService {
           HttpStatus.NOT_FOUND
         );
       }
-
+  
       const response = {
         jobRunId: id,
         startTime: jobRunDetails.startTime,
@@ -328,7 +402,9 @@ export class JobConfigService {
         totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
         fileServers: fileServersArray,
       };
-
+  
+      this.logger.log(`Response: ${JSON.stringify(response)}`);
+  
       return response;
     } catch (error) {
       this.logger.error('Failed to fetch speed test results', error.stack);
