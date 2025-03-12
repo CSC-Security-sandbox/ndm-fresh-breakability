@@ -185,6 +185,7 @@ export class JobConfigService {
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
               futureScheduleAt: bulkMigrate?.futureRunSchedule,
+              skipFile: bulkMigrate?.options?.skipFile,
             })
           );
         }
@@ -367,6 +368,7 @@ export class JobConfigService {
               userName: sourceFileServer.userName,
               password: sourceFileServer.password,
               protocol: sourceFileServer.protocol,
+              protocolVersion: sourceFileServer.protocolVersion.replace(/^v/, ''),
               serverType: sourceFileServer.serverType,
             },
             sourcePaths: [],
@@ -403,6 +405,7 @@ export class JobConfigService {
               userName: destinationFileServer.userName,
               password:destinationFileServer.password,
               protocol: destinationFileServer.protocol,
+              protocolVersion: destinationFileServer.protocolVersion.replace(/^v/, ''),
               serverType: destinationFileServer.serverType,
               mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
               exportPathName: destinationVolume.volumePath,
