@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS  speed_test_config (
   read_test BOOLEAN DEFAULT false NOT NULL,
   write_test BOOLEAN DEFAULT false NOT NULL,
   packet_loss_test BOOLEAN DEFAULT false NOT NULL,
-  FOREIGN KEY (job_id) REFERENCES job_config(id) ON DELETE CASCADE
+  FOREIGN KEY (job_id) REFERENCES jobconfig(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS speed_test_workers (
