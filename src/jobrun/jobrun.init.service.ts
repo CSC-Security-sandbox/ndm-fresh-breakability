@@ -248,7 +248,7 @@ export class JobRunInitService {
       jobRunConfig.jobType !== JobType.DISCOVER ? targetfileServerDetails : undefined,
       jobRunConfig.jobType !== JobType.DISCOVER ? jobRunConfig.connection.targetCredential.path : undefined,
       jobRunConfig.workers,
-      { excludeFilePattern: jobRunConfig.excludeFilePatterns, preserveAccessTime: jobRunConfig.preserveAccessTime, skipsFilesModifiedInLast: jobRunConfig?.skipFile, excludeOlderThan: jobRunConfig.excludeOlderThan.toString() },
+      { excludeFilePattern: jobRunConfig.excludeFilePatterns, preserveAccessTime: jobRunConfig.preserveAccessTime, skipsFilesModifiedInLast: jobRunConfig?.skipFile, excludeOlderThan: !!jobRunConfig.excludeOlderThan ? jobRunConfig.excludeOlderThan.toString() : '' },
     )
     const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending, []);
 
