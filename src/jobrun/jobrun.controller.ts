@@ -91,9 +91,10 @@ export class JobRunController {
     return  this.jobRunService.getJobRunErrors(jobErrorQuery);
   }
 
-  @ApiOperation({ summary: 'Get Job Error Overview'})
-  async getErrorOverview(@Query(new ValidationPipe({ transform: false, whitelist: true })) jobErrorQuery: JobErrorQueryDto) {
-    return this.jobRunService.getErrorOverview(jobErrorQuery);
+  @ApiOperation({ summary: 'Get Job Run Error Overview' })
+  @ApiResponse({ status: 200, description: 'The job run error overview retrieved successfully .' })
+  @Get('/:jobRunId/errors/overview')
+  async getErrorOverview(@Param('jobRunId') jobRunId: string){
+    return this.jobRunService.getErrorOverview(jobRunId);
   }
-
 }

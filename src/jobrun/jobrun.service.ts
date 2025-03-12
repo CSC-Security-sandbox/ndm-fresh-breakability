@@ -257,7 +257,7 @@ export class JobRunService {
       )?.toString(),
       totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
       totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? '' : '0',
-      errors: [],
+      errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
         taskType: task.taskType,
@@ -381,7 +381,7 @@ export class JobRunService {
             inventoryCounts?.totalsize || "0"
           )) : '',
           totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? '' : '0',
-          errors: [],
+          errors: await this.getErrorCounts(jobRun.jobrunid),
         };
         return response;
       })
@@ -449,83 +449,42 @@ export class JobRunService {
     };
   }
 
-  //  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
-  //   const { page, limit="10", sort = 'createdAt', order = 'DESC', jobRunId, ...filter } = taskQuery;
-
-  //   let where: FindOptionsWhere<OperationsEntity> = {
-  //     jobRunId,
-  //     operationErrors: { id: Not(IsNull()) }, 
-  //   };
-    
-
-  //   Object.keys(filter).forEach((k)=>{
-  //     where =  {...where, [k]: In(filter[k])}
-  //   })
-
-  //   const findOptions: FindManyOptions<OperationsEntity> = {
-  //     where, order: { operationErrors : {[sort]: order } }, 
-  //   };
-  //   let data = [], total = 0;
-  //   if (page && limit) {
-  //     findOptions.skip = (parseInt(page) - 1) * parseInt(limit); 
-  //     findOptions.take = parseInt(limit); 
-  //     data = await this.operationRepo.find(findOptions);
-  //     total = await this.operationRepo.count({ where});
-  //     data = data.map((operation) => ({
-  //       operationData: operation,
-  //       latestError: operation.operationErrors?.length ? operation.operationErrors[0] : null, 
-  //     }));
-  //   } else {
-  //     data = await this.operationRepo.find(findOptions);
-  //     total = await this.operationRepo.count({ where });
-  //     data = data.map((operation) => ({
-  //       operationData: operation,
-  //       latestError: operation.operationErrors?.length ? operation.operationErrors[0] : null, 
-  //     }));
-  //   }
-  //   return { data, total };
-  // }
-
   async getJobRunErrors(taskQuery: JobErrorQueryDto) {
-    const {
-      page = "1",
-      limit = "10",
-      sort = "createdAt",
-      order = "DESC",
-      jobRunId,
-      ...filter
-    } = taskQuery;
+    const { page = "1", limit = "10", sort = "createdAt", order = "DESC", jobRunId, errorType } = taskQuery;
+    const queryBuilder = this.operationErrorRepo.createQueryBuilder("oe")
+      .innerJoinAndSelect("oe.operation", "o") 
+      .where("o.jobRunId = :jobRunId", { jobRunId }) 
+      .andWhere("oe.errorType = :errorType", { errorType }) 
+      .orderBy(`oe.${sort}`, order as "ASC" | "DESC") 
+      .select([
+        "oe.id", "oe.errorMessage", "oe.errorType", "oe.createdAt","oe.fileName","oe.filePath","oe.origin","oe.operationType","oe.errorCode",
+        "o.retryCount"
+      ])
+      .limit(parseInt(limit))
+      .offset((parseInt(page) - 1) * parseInt(limit)); 
   
-    let where: FindOptionsWhere<OperationErrorEntity> = {
-      operation: { jobRunId }, 
-    };
-  
-    Object.keys(filter).forEach((k) => {
-      where = { ...where, [k]: In(filter[k]) };
-    });
-  
-    const findOptions: FindManyOptions<OperationErrorEntity> = {
-      where,
-      relations: ["operation"], // Fetch the operation details
-      order: { [sort]: order }, // Sort errors by createdAt DESC
-      take: parseInt(limit), // Limit the number of errors fetched
-      skip: (parseInt(page) - 1) * parseInt(limit), // Apply pagination
-    };
-  
-    // Fetch data and total count
-    const [data, total] = await this.operationErrorRepo.findAndCount(findOptions);
-  
-    // Formatting the response
-    const formattedData = data.map((error) => ({
-      errorData: error,
-      operationData: error.operation, // Include operation details
-    }));
-  
-    return { data: formattedData, total };
+    const [data, total] = await queryBuilder.getManyAndCount();
+    return { data, total };
   }
   
 
-  getErrorOverview(jobErrorQuery: JobErrorQueryDto) {
-    throw new Error('Method not implemented.');
+   async getErrorOverview(jobRunId: string) {
+    return this.getErrorCounts(jobRunId);
+  }
+
+  async getErrorCounts(jobRunId: string) {
+    const countQuery =  this.operationErrorRepo.createQueryBuilder("oe")
+    .innerJoin("oe.operation", "o") 
+    .where("o.jobRunId = :jobRunId", { jobRunId })
+    .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+    .groupBy("oe.errorType");
+    let errorTypeCounts;
+    try {
+      errorTypeCounts = await countQuery.getRawMany();
+    } catch (error) {
+      this.logger.error("Error occurred while fetching error type counts:", error);
+      errorTypeCounts = [];
+    }
+    return errorTypeCounts;
   }
 }

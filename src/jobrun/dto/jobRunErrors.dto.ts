@@ -41,11 +41,11 @@ export class JobErrorQueryDto {
   @ApiPropertyOptional({
     description: "Order of sorting",
     example: "asc",
-    enum: ["asc", "desc"],
+    enum: ["ASC", "DESC"],
   })
   @IsOptional()
-  @IsIn(["asc", "desc"])
-  order?: "asc" | "desc";
+  @IsIn(["ASC", "DESC"])
+  order?: "ASC" | "DESC";
 
   @ApiPropertyOptional({
     description: "Filter by task IDs",

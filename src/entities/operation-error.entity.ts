@@ -6,8 +6,10 @@ import {
   ManyToOne,
   OneToOne,
   PrimaryGeneratedColumn,
+  JoinColumn
 } from "typeorm";
 import { OperationsEntity } from "./operation.entity";
+
 
 @Entity({ name: "operation_errors" })
 export class OperationErrorEntity {
@@ -32,7 +34,7 @@ export class OperationErrorEntity {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @Column({ type: "text", name: 'origing' })
+  @Column({ type: "text", name: 'origin' })
   origin: string;
 
   @Column({ type: "text", name: 'operation_type' })
@@ -42,5 +44,6 @@ export class OperationErrorEntity {
   errorType: string;
 
   @ManyToOne(() => OperationsEntity, (operation) => operation.operationErrors, { onDelete: "CASCADE" })
+  @JoinColumn({ name: 'operation_id' })
   operation: OperationsEntity;
 }

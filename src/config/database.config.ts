@@ -14,6 +14,8 @@ import { OperationsEntity } from "src/entities/operation.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { TaskErrorEntity } from "src/entities/task-error.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -26,7 +28,7 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         schema: process.env.SCHEMA,
         synchronize: false,
         dropSchema: false,
-        logging: false,
-        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity],
+        logging: true,
+        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity,OperationErrorEntity,TaskErrorEntity],
         migrations: []
 }))
