@@ -452,13 +452,13 @@ export class JobRunService {
   async getJobRunErrors(taskQuery: JobErrorQueryDto) {
     const { page = "1", limit = "10", sort = "createdAt", order = "DESC", jobRunId, errorType } = taskQuery;
     const queryBuilder = this.operationErrorRepo.createQueryBuilder("oe")
-      .innerJoinAndSelect("oe.operation", "o") 
+     .leftJoinAndSelect("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId }) 
       .andWhere("oe.errorType = :errorType", { errorType }) 
       .orderBy(`oe.${sort}`, order as "ASC" | "DESC") 
       .select([
         "oe.id", "oe.errorMessage", "oe.errorType", "oe.createdAt","oe.fileName","oe.filePath","oe.origin","oe.operationType","oe.errorCode",
-        "o.retryCount"
+        "COALESCE(o.retryCount, 0) AS retryCount"
       ])
       .limit(parseInt(limit))
       .offset((parseInt(page) - 1) * parseInt(limit)); 
