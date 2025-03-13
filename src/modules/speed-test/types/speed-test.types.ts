@@ -1,3 +1,5 @@
+import { JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
+
 export type OptionsType = {
   label: string;
   value: string;
@@ -34,7 +36,7 @@ export type SpeedTestType = {
   startTime: string;
   endTime: string;
   workers: number;
-  status: string;
+  status: JOB_STATUS_TYPE_ENUM;
 };
 
 export type SpeedTestJobsType = SpeedTestType & {
@@ -70,4 +72,9 @@ export type configDetailsType = {
 export type ItemType = {
   protocol: OptionsType[];
   fileServer: OptionsType;
+};
+
+export type valueCellRendererPropsType = {
+  value: number;
+  unit: string;
 };

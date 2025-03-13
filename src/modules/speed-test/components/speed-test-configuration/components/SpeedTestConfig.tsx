@@ -11,7 +11,7 @@ const SpeedTestConfig = () => {
   return (
     <SpeedTestConfigurationContext.Provider value={speedTestConfig}>
       {/* FORM */}
-      <Box className="w-full h-screen p-6">
+      <Box className="w-full p-6">
         <SpeedTestConfigurationForm />
         <SpeedTestConfigurationTable />
       </Box>

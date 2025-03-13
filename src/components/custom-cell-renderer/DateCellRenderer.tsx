@@ -8,7 +8,7 @@ const DateCellRenderer = ({
   value: string;
   showSmallerDateFormat?: boolean;
 }) => {
-  if (!value) return "";
+  if (!value) return "-";
   value = value.slice(0, -1); // remove timezone from date
   const date = format(value, "dd MMM yyyy");
   const time = format(value, "hh:mm:ss aa");

@@ -1,11 +1,12 @@
 import { DetailsTilePropsType } from "@modules/speed-test/types/speed-test.types";
-import SpeedTestDetailsStatusRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/SpeedTestDetailsStatusRenderer";
 import SpeedDetailsCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/SpeedDetailsCellRenderer";
 import { Box } from "@components/container";
 import { calculateTimeDiff } from "@/utils/common.utils";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
 import { SPEED_TEST_ENUM } from "@modules/speed-test/constants/speed-test.constants";
 import { memo } from "react";
+import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
+import { JOB_STATUS_TYPE_ENUM, TASK_STATUS_TYPE_ENUM } from "@/types/app.type";
 
 const DetailsTile = ({
   title,
@@ -16,7 +17,11 @@ const DetailsTile = ({
   const renderValue = () => {
     switch (title) {
       case "status":
-        return <SpeedTestDetailsStatusRenderer status={value} />;
+        return (
+          <JobRunStatusCellRenderer
+            status={value as JOB_STATUS_TYPE_ENUM | TASK_STATUS_TYPE_ENUM}
+          />
+        );
       case "startTime":
       case "endTime":
         return <SpeedDetailsCellRenderer value={String(value)} />;

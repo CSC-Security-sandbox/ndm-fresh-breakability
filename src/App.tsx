@@ -30,6 +30,8 @@ const JobRunDetailsPage = lazy(() => import("@pages/JobRunDetailsPage"));
 const JobRunListPage = lazy(() => import("@pages/JobRunListPage"));
 const SpeedTestPage = lazy(() => import("@pages/SpeedTestPage"));
 const JobTaskErrorsPage = lazy(() => import("@pages/JobTaskErrorsPage"));
+const SpeedTestDetailsPage = lazy(() => import("@pages/SpeedTestDetailsPage"));
+
 const App = () => {
   return (
     <Suspense fallback={<div>Loading...</div>}>
@@ -91,6 +93,10 @@ const App = () => {
           {/* SPEED TEST ROUTES */}
           <Route path="speed-test" element={<SpeedTestPage />} />
           <Route path="/speed-test/config" element={<SpeedTestConfigPage />} />
+          <Route
+            path="/speed-test/:jobRunId"
+            element={<SpeedTestDetailsPage />}
+          />
 
           <Route path="*" element={<NotFound />} />
         </Route>

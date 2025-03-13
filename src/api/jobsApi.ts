@@ -180,13 +180,12 @@ export const jobsApi = createApi({
     //Speed Test
     getSpeedTestJobs: builder.query<SpeedTestJobsType[], { projectId: string }>(
       {
-        query: ({ projectId }) => `jobs/speedtest?projectId=${projectId}`,
+        query: ({ projectId }) => `jobs/speed-test?projectId=${projectId}`,
         providesTags: ["SPEED_TEST_JOBS"],
       }
     ),
-
     getSpeedTestDetails: builder.query<SpeedTestDetailsType, string>({
-      query: (jobRunId) => `jobs/speedtest/${jobRunId}`,
+      query: (jobRunId) => `jobs/speed-test/${jobRunId}`,
     }),
 
     createFileServerForSpeedTest: builder.mutation({

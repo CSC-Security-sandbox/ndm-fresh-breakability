@@ -19,7 +19,7 @@ export type SpeedTestMenuPropsType = {
 
 export type SpeedOfWorkersPropsType = {
   workerName: string;
-  averageSpeed: number;
+  averageSpeed: string;
 };
 
 export type LineGraphWrapperPropsType = {

@@ -1,9 +1,11 @@
 import { BlueXpTableRowType } from "@/types/app.type";
 import * as Yup from "yup";
-import { SpeedTestJobsType } from "@modules/speed-test/types/speed-test.types";
+import {
+  SpeedTestJobsType,
+  SpeedTestType,
+} from "@modules/speed-test/types/speed-test.types";
 import { createElement } from "react";
 import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
-import SpeedTestStatusCellRenderer from "@modules/speed-test/components/speed-test-configuration/cellRenderer/SpeedTestStatusCellRenderer";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
 import { calculateTimeDiff } from "@/utils/common.utils";
 import SpeedTestFileServerNameCellRenderer from "@modules/speed-test/components/speed-test-configuration/cellRenderer/SpeedTestFileServerNameCellRenderer";
@@ -11,10 +13,14 @@ import SpeedTestProtocolNameCellRenderer from "@modules/speed-test/components/sp
 import WorkersNameCellRenderer from "@modules/speed-test/components/speed-test-configuration/cellRenderer/WorkersNameCellRenderer";
 import TestsCellRenderer from "@modules/speed-test/components/speed-test-configuration/cellRenderer/TestsCellRenderer";
 import SpeedTestWorkerNameCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/SpeedTestWorkerNameCellRenderer";
-import { SpeedTestDetailsType } from "@modules/speed-test/types/speed-test-details.types";
+import {
+  SpeedTestDetailsType,
+  WorkerSpeedActionPropsType,
+} from "@modules/speed-test/types/speed-test-details.types";
 import OverallAverageSpeedCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/OverallAverageSpeedCellRenderer";
 import AverageSpeedCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/AverageSpeedCellRenderer";
 import SpeedTestChevronCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/SpeedTestChevronCellRenderer";
+import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 
 export const SPEED_TEST_COLUMN_DEF = [
   {
@@ -46,7 +52,7 @@ export const SPEED_TEST_COLUMN_DEF = [
   },
   {
     header: "No. of File Servers",
-    accessor: "fileServercount",
+    accessor: "fileServerCount",
     id: 4,
   },
   {
@@ -57,7 +63,12 @@ export const SPEED_TEST_COLUMN_DEF = [
   {
     header: "Status",
     accessor: "status",
-    Renderer: SpeedTestStatusCellRenderer,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<SpeedTestType, SpeedTestType["status"]>) =>
+      createElement(JobRunStatusCellRenderer, {
+        status: value,
+      }),
     id: 6,
   },
   {
@@ -159,7 +170,10 @@ export const SPEED_TEST_GRAPH_COLUMN_DEF = [
     id: 4,
     Renderer: ({
       row,
-    }: BlueXpTableRowType<SpeedTestDetailsType, SpeedTestDetailsType>) =>
+    }: BlueXpTableRowType<
+      WorkerSpeedActionPropsType,
+      WorkerSpeedActionPropsType
+    >) =>
       createElement(OverallAverageSpeedCellRenderer, {
         workers: row.workers,
         speedAction: "readSpeed",
@@ -171,7 +185,10 @@ export const SPEED_TEST_GRAPH_COLUMN_DEF = [
     id: 5,
     Renderer: ({
       row,
-    }: BlueXpTableRowType<SpeedTestDetailsType, SpeedTestDetailsType>) =>
+    }: BlueXpTableRowType<
+      WorkerSpeedActionPropsType,
+      WorkerSpeedActionPropsType
+    >) =>
       createElement(OverallAverageSpeedCellRenderer, {
         workers: row.workers,
         speedAction: "writeSpeed",
@@ -184,7 +201,10 @@ export const SPEED_TEST_GRAPH_COLUMN_DEF = [
     id: 6,
     Renderer: ({
       row,
-    }: BlueXpTableRowType<SpeedTestDetailsType, SpeedTestDetailsType>) =>
+    }: BlueXpTableRowType<
+      WorkerSpeedActionPropsType,
+      WorkerSpeedActionPropsType
+    >) =>
       createElement(AverageSpeedCellRenderer, {
         workers: row.workers,
         type: "rtd",
@@ -233,4 +253,4 @@ export const SPEED_TEST_SUCCESS =
   "New speed test has been created successfully";
 
 export const SPEED_TEST_TOOLTIP =
-  "Please note that the specified path is currently unavailable, and the file server is inactive.";
+  "Please note that scratch path is currently unavailable, and the file server is inactive.";

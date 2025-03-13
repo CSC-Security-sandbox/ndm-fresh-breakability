@@ -9,6 +9,7 @@ import {
 } from "@modules/speed-test/types/speed-test-details.types";
 import { useGetSpeedTestDetailsQuery } from "@api/jobsApi";
 import { useParams } from "react-router-dom";
+import { SPEED_TEST_GRAPH_COLUMN_DEF } from "@modules/speed-test/constants/speed-test.constants";
 
 export const useSpeedTestTableData = (): UseSpeedTestTableDataPropsType => {
   const [rowSelections, setRowSelections] = useState<{ [key: string]: number }>(
@@ -22,8 +23,8 @@ export const useSpeedTestTableData = (): UseSpeedTestTableDataPropsType => {
   const [speedDetails, setSpeedDetails] = useState<SpeedDetailsType>(
     {} as SpeedDetailsType
   );
-  const { speedTestId } = useParams<{ speedTestId: string }>();
-  const { data } = useGetSpeedTestDetailsQuery(speedTestId);
+  const { jobRunId } = useParams<{ jobRunId: string }>();
+  const { data } = useGetSpeedTestDetailsQuery(jobRunId);
 
   //Details Tile data creation
   useEffect(() => {

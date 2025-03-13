@@ -22,9 +22,10 @@ export const calculateAverageSpeedOfWorkers = ({
 }: WorkerSpeedActionPropsType) => {
   return workers.map((worker) => {
     const totalSpeedAsPerAction = calculateAverage({ worker, speedAction });
-    const averageSpeed =
+    const averageSpeed = (
       totalSpeedAsPerAction /
-      worker[speedAction as keyof SpeedActionType].length;
+      worker[speedAction as keyof SpeedActionType].length
+    ).toFixed(2);
     return {
       workerName: worker.workerName,
       averageSpeed,
@@ -41,12 +42,12 @@ export const calculateOverallAverageSpeed = ({
     speedAction,
   });
   const totalSpeedOfWorkers = averageSpeedOfWorkers.reduce(
-    (sum, worker) => sum + worker.averageSpeed,
+    (sum, worker) => sum + Number(worker.averageSpeed),
     0
   );
   const overallAverageSpeed =
     totalSpeedOfWorkers / averageSpeedOfWorkers.length;
-  return overallAverageSpeed.toFixed(2);
+  return Number(overallAverageSpeed.toFixed(2));
 };
 
 export const calculateAverageSpeed = ({
@@ -56,7 +57,7 @@ export const calculateAverageSpeed = ({
   const totalValue = workers.reduce((total, worker) => total + worker[type], 0);
   const averageValue = totalValue / workers.length;
 
-  return averageValue;
+  return Number(averageValue);
 };
 
 export const lineGraphProcessData = ({
@@ -75,7 +76,7 @@ export const lineGraphProcessData = ({
 
   const uniqueSortedTimeStamps = Array.from(new Set(allTimeStamps))
     .sort((a, b) => a - b)
-    .map((timestamp) => timestamp.toString());
+    .map((timestamp) => parseInt(timestamp.toString()).toString());
 
   // Extract speeds for the graph data
   const graphData = speedTestOptionData.map((speedArray) =>
@@ -100,4 +101,16 @@ export const generateColors = (numColors: number) => {
     "chart-10",
   ];
   return colors.slice(0, numColors);
+};
+
+export const percentageFormatter = ({
+  workers,
+  type,
+}: CalculateSpeedPropsType) => {
+  const averageValue = calculateAverageSpeed({
+    workers,
+    type,
+  });
+
+  return Number((averageValue / 100).toFixed(2));
 };

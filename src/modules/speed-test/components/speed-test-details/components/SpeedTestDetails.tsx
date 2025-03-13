@@ -10,7 +10,7 @@ const SpeedTestDetails = () => {
     useSpeedTestTableData();
 
   return (
-    <>
+    <Box className="p-6">
       <Card>
         <Box className="flex flex-col px-8 py-3">
           <Box className="grid grid-cols-4 gap-3">
@@ -26,7 +26,7 @@ const SpeedTestDetails = () => {
           </Box>
         </Box>
       </Card>
-      <Box className="w-full h-screen pt-4">
+      <Box className="w-full pt-4">
         <Table
           {...tableState}
           rows={tableState?.pagination?.pageRows}
@@ -50,7 +50,7 @@ const SpeedTestDetails = () => {
           />
         )}
       </Box>
-    </>
+    </Box>
   );
 };
 

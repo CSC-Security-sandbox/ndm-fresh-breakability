@@ -8,6 +8,7 @@ import useSelectedProjectId from "@/hooks/useSelectedProjectId";
 import { useGetSpeedTestJobsQuery, useJobAdhocRunMutation } from "@api/jobsApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useNavigate } from "react-router-dom";
+import { JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
 
 const SpeedTest = () => {
   const navigate = useNavigate();
@@ -16,6 +17,10 @@ const SpeedTest = () => {
     projectId: selectedProjectId,
   });
   const [adhocRun] = useJobAdhocRunMutation();
+  const jobStatus =
+    JOB_STATUS_TYPE_ENUM.COMPLETED ||
+    JOB_STATUS_TYPE_ENUM.ERRORED ||
+    JOB_STATUS_TYPE_ENUM.STOPPED;
 
   const tableState = useTable({
     columns: SPEED_TEST_COLUMN_DEF,
@@ -27,12 +32,14 @@ const SpeedTest = () => {
   const rowMenu = (row: any) => [
     {
       label: "Details",
+      disabled: row.status !== JOB_STATUS_TYPE_ENUM.COMPLETED,
       onClick: () => {
         navigate(`/speed-test/${row.jobRunId}`);
       },
     },
     {
       label: "Adhoc Run",
+      disabled: row.status !== jobStatus,
       onClick: () => {
         (async () => {
           try {
@@ -55,7 +62,7 @@ const SpeedTest = () => {
   );
 
   return (
-    <Box className="w-full h-screen p-6">
+    <Box className="w-full p-6">
       <TableWrapperWithoutFilter
         tableState={tableState}
         isLoading={isLoading}

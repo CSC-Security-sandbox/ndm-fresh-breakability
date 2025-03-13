@@ -61,11 +61,13 @@ const SubRowRenderer = ({
           />
         </Box>
         <Box className="text-sm">{selectedLabel} (In Mbps)</Box>
-        <LineGraphWrapper
-          timeStamp={timeStamp}
-          graphData={graphData}
-          workerLegends={workerLegends}
-        />
+        {graphData.length > 0 && (
+          <LineGraphWrapper
+            timeStamp={timeStamp}
+            graphData={graphData}
+            workerLegends={workerLegends}
+          />
+        )}
         <Box className="flex justify-center text-sm">Time (In Minutes)</Box>
       </Box>
     </Box>
