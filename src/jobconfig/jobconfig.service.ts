@@ -617,6 +617,55 @@ export class JobConfigService {
     return project;
   }
 
+  async getNoticeBoardDetailsByProjectId(projectId: string) {
+    const countErroredJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status IN (:...statuses)', { statuses: [JobRunStatus.Failed, JobRunStatus.Errored] })
+        .getCount();
+
+    const countBlockedCutoverJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status = :status', { status: JobRunStatus.Blocked })
+        .andWhere('jc.jobType = :jobType', { jobType: JobType.CUT_OVER })
+        .getCount();
+
+    const countRecentJobConfigs =
+      await this.jobConfigRepo
+        .createQueryBuilder('jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere("jc.createdAt >= NOW() - INTERVAL '1 DAY'")
+        .getCount();
+
+    const countCompletedJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status = :status', { status: JobRunStatus.Completed })
+        .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
+        .getCount();
+
+    return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
+  }
+
   // ------------ Job Config All ---------------- //
   async getAllJobConfig(projectId: string): Promise<JobListingDTO[]> {
     const allJobsDetails = await this.jobConfigRepo
