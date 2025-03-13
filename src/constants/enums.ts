@@ -40,6 +40,7 @@ export enum JobType {
     DISCOVER = 'DISCOVER',
     MIGRATE = 'MIGRATE',
     CUT_OVER = 'CUT_OVER',
+    PRECHECK = 'PRECHECK'
 }
 
 export enum JobIdMappingType {

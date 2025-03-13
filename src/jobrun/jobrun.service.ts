@@ -22,8 +22,8 @@ import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobru
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobRunConfig } from "./jobrun.types";
+import { FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 import { OperationsEntity } from "src/entities/operation.entity";
-import { FindOptionsSelect } from 'typeorm';
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 @Injectable()
@@ -137,10 +137,25 @@ export class JobRunService {
     await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
     for(const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
+      const workflowId = this.jobRunInitService.getWorkFlowId(jobRunId, jobContext.jobConfig.jobType as JobType);
+      await this.workFlowService.terminateWorkflow(workflowId);
+
       jobContext.jobState.status = JobContextStatus.Stopped;
+      // append dummy file entry to appendToFileList
+      await jobContext.appendToFileList(this.dummyFileEntry());
+      this.logger.debug(`Job Run ${jobRunId} Stopped and appended Last file entry to file list`);
       await this.redisService.setJobContext(jobRunId, jobContext);
+      // wait for 10 seconds to close consumers
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      await jobContext.cleanup();
+      this.logger.debug(`Job Run ${jobRunId} Stopped and appended Last file entry to file list`);
+      this.logger.debug(`Workflow Terminated ${workflowId}`);
     }
     return {details: 'Operation Completed Successfully'}
+  }
+
+  dummyFileEntry() {
+    return new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
   }
 
   //  ------------------- JobRun actions RESUME ------------------ //
@@ -156,6 +171,11 @@ export class JobRunService {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Pending;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
+      // append dummy file entry to appendToFileList to close consumers and then start new consumers
+      await jobContext.appendToFileList(this.dummyFileEntry());
+      // wait for 5 seconds to close consumers
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      this.logger.debug(`Resuming Job Run ${jobRunId} and appended Last file entry to file list to clone old consumers`);
       await this.redisService.setJobContext(jobRunId, jobContext);
       await this.resumeJobRun(jobRunId);
     }
@@ -163,14 +183,31 @@ export class JobRunService {
   }
 
   async resumeJobRun(jobRunId: string) {
-    const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
-    if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
-    const details:JobRunConfig = await this.jobRunInitService.getJobConfig(jobRun.jobConfigId);
-    if(details.workers.length === 0) {
-      this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
-      return
+    try {
+      const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
+      if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
+      const details:JobRunConfig = await this.jobRunInitService.getJobConfig(jobRun.jobConfigId);
+      if(details.workers.length === 0) {
+        this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
+        return;
+      }
+      // check if workflow already exists
+      const workflowId = this.jobRunInitService.getWorkFlowId(jobRunId, details.jobType);
+      const workflowStatus = await this.workFlowService.getWorkflowStatus(workflowId);
+      this.logger.debug(`Workflow Status ${workflowStatus}`)
+      if(workflowStatus === JobContextStatus.Running) {
+        this.logger.debug(`Terminating Workflow ${workflowId}`);
+        await this.workFlowService.terminateWorkflow(workflowId);
+        this.logger.debug(`Workflow Terminated ${workflowId}`);
+      }
+      this.logger.debug(`Resuming Workflow ${workflowId}`);
+      await this.jobRunInitService.initiateWorkflow(jobRunId, details);
+      this.logger.debug(`Workflow Resumed ${workflowId}`);
+      return;
+    } catch (error) {
+      this.logger.error(`Failed to resume Job Run ${jobRunId} ${error}`);
+      throw new Error(`Failed to resume Job Run ${jobRunId} ${error}`);
     }
-    await this.jobRunInitService.initiateWorkflow(jobRunId, details)
   }
 
   //  ------------------- get JobRun Details ------------------ //

@@ -72,6 +72,25 @@ export class WorkflowService {
                 payloads:  [defaultDataConverter.payloadConverter.toPayload(data.payload) ]
             }
         });
-        
+    }
+
+    // check and terminate workflow if it is still running
+    async terminateWorkflow(workflowId: string) {
+        const client = await this.getClient();
+        const handle = client.workflow.getHandle(workflowId);
+        const details: WorkflowExecutionDescription = await handle.describe();
+        if (details.status.name === WorkflowExecutionStatus.RUNNING) {
+            await handle.terminate();
+            return true;
+        }
+        return false;
+    }
+
+    // get workflow status bu workflow if
+    async getWorkflowStatus(workflowId: string) {
+        const client = await this.getClient();
+        const handle = client.workflow.getHandle(workflowId);
+        const details: WorkflowExecutionDescription = await handle.describe();
+        return details.status.name;
     }
 }
