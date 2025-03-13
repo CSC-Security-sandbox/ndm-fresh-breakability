@@ -1,7 +1,8 @@
 import { OperationStatus, OperationType } from 'src/constants/enums';
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
+import { OperationErrorEntity } from './operation-error.entity';
 
 
 @Entity({ name: 'operations' })
@@ -51,5 +52,8 @@ export class OperationsEntity extends Base {
   @ManyToOne(() => TaskEntity, task => task.operations, { onDelete:'CASCADE'})
   @JoinColumn({ name: 'task_id' }) 
   task: TaskEntity;
+  
+  @OneToMany(() => OperationErrorEntity, (operationErrors) => operationErrors.operation, { onDelete: 'CASCADE' })
+  operationErrors: OperationErrorEntity[]
 
 }

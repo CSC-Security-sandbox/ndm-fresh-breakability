@@ -11,7 +11,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { FindManyOptions, In, Repository } from "typeorm";
+import { FindManyOptions, FindOptionsWhere, In, IsNull, Not, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
   JobRunDetailsDTO,
@@ -23,8 +23,12 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobRunConfig } from "./jobrun.types";
 import { FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
 @Injectable()
 export class JobRunService {
+ 
  
   private readonly logger = new Logger(JobRunService.name);
   private readonly mountBasePath: string 
@@ -38,6 +42,10 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(OperationsEntity)
+    private operationRepo : Repository<OperationsEntity>,
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo : Repository<OperationErrorEntity>,
     private readonly configService: ConfigService,
     private  readonly jobRunInitService: JobRunInitService,
     private readonly redisService: RedisService,
@@ -286,7 +294,7 @@ export class JobRunService {
       )?.toString(),
       totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
       totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? '' : '0',
-      errors: [],
+      errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
         taskType: task.taskType,
@@ -410,7 +418,7 @@ export class JobRunService {
             inventoryCounts?.totalsize || "0"
           )) : '',
           totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? '' : '0',
-          errors: [],
+          errors: await this.getErrorCounts(jobRun.jobrunid),
         };
         return response;
       })
@@ -476,5 +484,44 @@ export class JobRunService {
         { status: status }
       );
     };
+  }
+
+  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
+    const { page = "1", limit = "10", sort = "createdAt", order = "DESC", jobRunId, errorType } = taskQuery;
+    const queryBuilder = this.operationErrorRepo.createQueryBuilder("oe")
+     .leftJoinAndSelect("oe.operation", "o")
+      .where("o.jobRunId = :jobRunId", { jobRunId }) 
+      .andWhere("oe.errorType = :errorType", { errorType }) 
+      .orderBy(`oe.${sort}`, order as "ASC" | "DESC") 
+      .select([
+        "oe.id", "oe.errorMessage", "oe.errorType", "oe.createdAt","oe.fileName","oe.filePath","oe.origin","oe.operationType","oe.errorCode",
+        "COALESCE(o.retryCount, 0) AS retryCount"
+      ])
+      .limit(parseInt(limit))
+      .offset((parseInt(page) - 1) * parseInt(limit)); 
+  
+    const [data, total] = await queryBuilder.getManyAndCount();
+    return { data, total };
+  }
+  
+
+   async getErrorOverview(jobRunId: string) {
+    return this.getErrorCounts(jobRunId);
+  }
+
+  async getErrorCounts(jobRunId: string) {
+    const countQuery =  this.operationErrorRepo.createQueryBuilder("oe")
+    .innerJoin("oe.operation", "o") 
+    .where("o.jobRunId = :jobRunId", { jobRunId })
+    .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+    .groupBy("oe.errorType");
+    let errorTypeCounts;
+    try {
+      errorTypeCounts = await countQuery.getRawMany();
+    } catch (error) {
+      this.logger.error("Error occurred while fetching error type counts:", error);
+      errorTypeCounts = [];
+    }
+    return errorTypeCounts;
   }
 }

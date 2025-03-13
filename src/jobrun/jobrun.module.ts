@@ -19,13 +19,14 @@ import { WorkerModule } from 'src/workers/workers.module';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { JobRunInitService } from './jobrun.init.service';
 import { RedisModule } from 'src/redis/redis.module';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity,OperationErrorEntity,OperationsEntity]),
         WorkerModule,
         RedisModule
     ],
