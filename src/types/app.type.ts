@@ -271,17 +271,6 @@ interface PaginationType {
   pageCount: number;
 }
 
-export interface BlueXpTableStateType<T> {
-  rows: T[];
-  columns: any[];
-  sortState: SortStateType;
-  filterState: FilterStateType;
-  tableState: Record<string, any>;
-  rowState: Record<string, any>;
-  selectionState: SelectionStateType;
-  columnState: Record<number, TableColumnStateType>;
-  pagination: PaginationType;
-}
 export interface AssociatedUsersPropsType {
   user?: string;
   role?: string;
@@ -709,6 +698,63 @@ export type CutOverConfirmModalPropType = {
   jobRunId: string;
   closeConfirmationBox: () => void;
 };
+
+export interface BlueXpTableStateType<T> {
+  rows: T;
+  organizedRows: any;
+  columns: any;
+  sortState: any;
+  filterState: any;
+  tableState: any;
+  rowState: any;
+  selectionState: any;
+  columnState: any;
+  toggleSort: ({ id }: { id: any }) => void;
+  updateFilterState: (payload: any) => void;
+  updateRowState: (id: any) => (stateOrFunc: any) => void;
+  updateTextFilter: (value: any) => void;
+  toggleRowSelection: (id: any) => (value: any) => void;
+  selectAllRows: (value: any, resetDirty?: boolean) => void;
+  resetFilters: () => void;
+  pagination: {
+    pageIndex: any;
+    pageRows: any;
+    pageCount: any;
+    gotoPage: (i: any) => void;
+  };
+  updateColumnState: (state: any) => void;
+  restoreColumnStateDefaults: () => void;
+  gotoPage: (i: any) => void;
+}
+
+export interface JobErrorType {
+  id: string;
+  errorCode: string;
+  errorMessage: string;
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  origin: string | null;
+  operationType: string | null;
+  errorType: string;
+  operation: string | null;
+}
+
+export interface JobRunErrorsApiType {
+  data: JobErrorType[];
+  total: number;
+}
+
+export interface JobRunErrorsOverviewApiType {
+  errortype: JOB_RUN_ERRORS_TYPE_KEY;
+  count: number;
+}
+
+export enum JOB_RUN_ERRORS_TYPE_KEY {
+  FATAL_ERROR = "FATAL_ERROR",
+  TRANSIENT_ERROR = "TRANSIENT_ERROR",
+  RECOVERABLE_ERROR = "RECOVERABLE_ERROR",
+}
 
 export interface ToEmailType {
   label: string;

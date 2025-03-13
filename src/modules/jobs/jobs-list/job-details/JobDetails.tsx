@@ -29,7 +29,7 @@ import { JOB_RUN_LIST_COLUMN_DEFS } from "./job-details.constants";
 import { useParams } from "react-router-dom";
 import { handleDownloadReport } from "../../jobs.utils";
 import { getActionMenu, getReportActions } from "../../job-run-list/run.utils";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
 
 const JobDetails = () => {
@@ -145,6 +145,10 @@ const JobDetails = () => {
       });
   };
 
+  const latestJobRunId = useMemo(() => {
+    return jobConfigDetails?.jobRuns?.[0].jobRunId;
+  }, [jobConfigDetails?.jobRuns]);
+
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -189,7 +193,7 @@ const JobDetails = () => {
           />
         </Box>
         <Box className="grow basis-1/2 items-stretch">
-          <JobErrors />
+          <JobErrors latestJobRunId={latestJobRunId} />
         </Box>
       </Box>
       <TableWrapper

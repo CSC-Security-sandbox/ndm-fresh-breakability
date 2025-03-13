@@ -1,57 +1,61 @@
 import {
   Button,
   Card,
-  CardContent,
   CardHeader,
   CardTitle,
   Text,
-  Notification,
 } from "@netapp/bxp-design-system-react";
 import {
   NoticeTriangleIcon,
   SuccessIcon,
 } from "@netapp/bxp-style/react-icons/Notification";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import JobErrorsContainer from "./JobErrorsContainer";
+import { JobRunErrorsOverviewApiType } from "src/types/app.type";
 
-const JobErrors = () => {
-  const params = useParams<{ jobRunId: string; jobId: string }>();
+const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
   const navigate = useNavigate();
-  const errorCount: number = 0;
-  const hasErrors = errorCount !== 0;
+  const [errorDetails, setErrorDetails] = useState<
+    JobRunErrorsOverviewApiType[]
+  >([]);
+
+  const handlerErrorNavigation = useCallback(() => {
+    if (latestJobRunId) {
+      // FOR JOB DETAILS SCREEN
+      navigate(`run/${latestJobRunId}/errors`);
+    } else {
+      // FOR JOB RUN DETAILS SCREEN
+      navigate(`errors`);
+    }
+  }, [latestJobRunId, navigate]);
 
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle className="flex gap-4">
-          {hasErrors ? (
+          {errorDetails?.length > 0 ? (
             <NoticeTriangleIcon color="error" />
           ) : (
             <SuccessIcon color="success" />
           )}
 
-          <Text>Errors ({errorCount})</Text>
+          <Text>Errors ({errorDetails?.length})</Text>
         </CardTitle>
         <Button
-          onClick={() => navigate(`errors`)}
+          onClick={handlerErrorNavigation}
           color="secondary"
           style={{ margin: "0 0 0 auto" }}
-          disabled={!hasErrors}
+          disabled={errorDetails?.length === 0}
         >
           View All
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <></>
-        {/* <Notification type="error" moreInfo="Here is some more info">
-          Fatal Errors
-        </Notification>
-        <Notification type="warning" moreInfo="Here is some more info">
-          Transient Errors
-        </Notification>
-        <Notification type="info" moreInfo="Here is some more info">
-          Recoverable Errors
-        </Notification> */}
-      </CardContent>
+      <JobErrorsContainer
+        latestJobRunId={latestJobRunId}
+        errorDetails={errorDetails}
+        setErrorDetails={setErrorDetails}
+      />
     </Card>
   );
 };
