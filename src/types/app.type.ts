@@ -709,3 +709,26 @@ export type CutOverConfirmModalPropType = {
   jobRunId: string;
   closeConfirmationBox: () => void;
 };
+
+export interface ToEmailType {
+  label: string;
+  value: string;
+}
+
+export interface SmtpDataPropsType {
+  ip_address: string;
+  port: number;
+  user_name: string;
+  password: string;
+  from_email: string;
+  to_email: ToEmailType[];
+}
+
+export interface smtpValuesType {
+  SMTP_HOST: string;
+  SMTP_PORT: string;
+  SMTP_USER_NAME: string;
+  SMTP_PASSWORD: string;
+  SMTP_FROM_EMAIL: string;
+  SMTP_TO_EMAIL: string;
+}

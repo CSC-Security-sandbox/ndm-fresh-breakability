@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import {
@@ -12,51 +13,104 @@ import {
 } from "@netapp/bxp-design-system-react";
 import {
   CREATE_SMTP_FORM_VALIDATION_SCHEMA,
+  INITIAL_SMTP_FORM_STATE
 } from "./SMTP.constants";
-import React from "react";
 import {
   useGetAllUsersQuery,
 } from "@api/userApi";
 import {
   useCreateSmtpMutation,
+  useUpdateSmtpDataMutation,
+  useGetSmtpDetailsQuery,
 } from "@api/userApi";
 import { useDispatch } from "react-redux";
 import { setDrawerClose } from "@store/reducer/commonComponentSlice";
-import { INITIAL_SMTP_FORM_STATE } from "./SMTP.constants";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 import { smtpData } from './SMTP.utils';
+import {
+  smtpValuesType,
+} from "@/types/app.type";
 
-const CreateSMTP = () => {
+interface SmtpDetailsPropsType {
+  handleDefaultTab: () => void;
+}
+
+const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   const dispatch = useDispatch();
-  const { data: userData } = useGetAllUsersQuery("");
-  const toEmailOptions : any = userData.length > 0 ? (
-    userData.map((user : any) => {
-      return {label: user.email, value: user.email}
-    })
-  ) : [];
   const [createSmtpApi, { isLoading: isCreateFormSubmitting }] = useCreateSmtpMutation();
+  const [updateSmtpDataAPi, { isLoading: isUpdateFormSubmitting }] = useUpdateSmtpDataMutation();
 
-  const smtpForm = useForm(
-    INITIAL_SMTP_FORM_STATE,
-    CREATE_SMTP_FORM_VALIDATION_SCHEMA
-  );
+  const { data: userData, isLoading: usersLoading } = useGetAllUsersQuery("");
+  const toEmailOptions = userData?.map((user) => ({ label: user.email, value: user.email })) || [];
+
+  const { data: smtpExistingData, isLoading: smtpLoading } = useGetSmtpDetailsQuery("");
+  const [isEdit, setIsEdit] = useState<boolean>(false);
+
+  const objectData: smtpValuesType = {
+    SMTP_HOST: "",
+    SMTP_PORT: "",
+    SMTP_USER_NAME: "",
+    SMTP_PASSWORD: "",
+    SMTP_FROM_EMAIL: "",
+    SMTP_TO_EMAIL: "",
+  };
+
+  const getSmtpData = (values) => {
+    values.forEach(item => {
+      objectData[item.settingKey] = item.settingValue;
+    });
+    return objectData;
+  };
+
+  const smtpValues = isEdit ? getSmtpData(smtpExistingData?.data?.SMTP) : objectData;
+
+  const getStructuredToEmails = (emailsString) => {
+    return emailsString.split(",").map((eachEmail) => ({ label: eachEmail, value: eachEmail }));
+  };
+
+  const getFormData = (data) => {
+    return {
+      ip_address: data?.SMTP_HOST,
+      port: Number(data?.SMTP_PORT),
+      user_name: data?.SMTP_USER_NAME,
+      password: data?.SMTP_PASSWORD,
+      from_email: data?.SMTP_FROM_EMAIL,
+      to_email: getStructuredToEmails(data?.SMTP_TO_EMAIL),
+    };
+  };
+
+  const FORM_DATA = isEdit ? getFormData(smtpValues) : INITIAL_SMTP_FORM_STATE;
+  const smtpForm = useForm(FORM_DATA, CREATE_SMTP_FORM_VALIDATION_SCHEMA);
+
+  useEffect(() => {
+    if (!smtpLoading && smtpExistingData?.data?.SMTP?.length > 0) {
+      setIsEdit(true);
+      smtpForm.resetForm(getFormData(smtpValues));
+    }
+  }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
-    
+
     try {
-      await createSmtpApi(data.payLoad).unwrap();
+      if (isEdit) {
+        await updateSmtpDataAPi(data.payLoad).unwrap();
+        notify.success("SMTP details updated successfully.");
+      } else {
+        await createSmtpApi(data.payLoad).unwrap();
+        notify.success("SMTP details added successfully.");
+      }
       dispatch(setDrawerClose());
-      notify.success(`SMTP details added successfully.`);
+      handleDefaultTab();
     } catch (err) {
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || "Failed to add SMTP Details"}
+          message={err?.message || "Failed to ${isEdit ? 'update' : 'add'} SMTP Details"}
         />
       );
     }
-  }
+  };
 
   return (
     <Layout.Page className="p-6">
@@ -81,7 +135,7 @@ const CreateSMTP = () => {
                 form={smtpForm}
                 name="user_name"
                 label="Username"
-                />
+              />
               <FormFieldInputNew
                 form={smtpForm}
                 name="password"
@@ -100,7 +154,7 @@ const CreateSMTP = () => {
               name="to_email"
               form={smtpForm}
               options={toEmailOptions}
-              style={{"paddingBottom": '6rem'}}
+              style={{ paddingBottom: '6rem' }}
               isCreatable={true}
               isMulti={true}
             />
@@ -113,7 +167,7 @@ const CreateSMTP = () => {
             style={{ width: 150 }}
             onClick={smtpForm.handleFormSubmit(handleCreateSMTP)}
             disabled={!(smtpForm.isValid && smtpForm.dirty)}
-            isSubmitting={isCreateFormSubmitting}
+            isSubmitting={isCreateFormSubmitting || isUpdateFormSubmitting || smtpLoading}
           >
             Save
           </Button>

@@ -20,6 +20,11 @@ import { IAMIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 const SettingsContent = () => {
   const [currentTab, setCurrentTab] = useState<number>(1);
 
+  //making active tab should be users
+  const handleDefaultTab = () => {
+    setCurrentTab(1);
+  }
+
   return (
     <Card className="h-full w-[70rem]">
       <Layout.Page>
@@ -66,7 +71,7 @@ const SettingsContent = () => {
             <ManageProject />
           </TabPanel>
           <TabPanel value={currentTab} index={3}>
-            <CreateSMTP />
+            <CreateSMTP handleDefaultTab={handleDefaultTab}/>
           </TabPanel>
         </Layout.Content>
       </Layout.Page>

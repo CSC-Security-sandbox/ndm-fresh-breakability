@@ -1,19 +1,10 @@
-interface ToEmail {
-  label: string;
-  value: string;
-}
+import {
+  SmtpDataPropsType,
+  ToEmailType
+} from "@/types/app.type";
 
-interface SmtpProps {
-  ip_address: string;
-  port: number;
-  user_name: string;
-  password: string;
-  from_email: string;
-  to_email: ToEmail[];
-}
-
-export const smtpData = (smtpProps: SmtpProps) => {
-  const toEmailIds = smtpProps.to_email.map((obj : any) => obj.value).join(',');
+export const smtpData = (smtpProps: SmtpDataPropsType) => {
+  const toEmailIds = smtpProps.to_email.map((obj : ToEmailType) => obj.value).join(',');
 
   const payLoad = [
     { settingKey: "SMTP_HOST", settingValue: smtpProps.ip_address, description: "", settingType: "SMTP" },
