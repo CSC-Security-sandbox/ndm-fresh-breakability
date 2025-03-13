@@ -84,15 +84,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
   useEffect(() => {
     if (!smtpLoading && smtpExistingData?.data?.SMTP?.length > 0) {
+      setIsEdit(true);
       smtpForm.resetForm(getFormData(smtpValues));
     }
-  }, [isEdit])
-
-  useEffect(() => {
-    if (!smtpLoading && smtpExistingData?.data?.SMTP?.length > 0) {
-      setIsEdit(true);
-    }
-  }, [smtpLoading, smtpExistingData]);
+  }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
