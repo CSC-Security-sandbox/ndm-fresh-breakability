@@ -20,7 +20,7 @@ import {
   jobConfigFormFormType,
 } from "@modules/storage-servers/file-server/fileServer.interface";
 import { useForm } from "@netapp/bxp-design-system-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   HOST_CREDENTIALS_VALIDATION_SCHEMA,
@@ -37,7 +37,7 @@ import {
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 export const useFileServerForm = () => {
-  let interval: any;
+  const interval = useRef<any | undefined>("");
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const { fileServerId } = useParams<{ fileServerId: string }>();
   const [isJobRunning, setIsJobRunning] = useState<boolean>(false);
@@ -94,7 +94,9 @@ export const useFileServerForm = () => {
       });
     })();
 
-    () => clearImmediate(interval);
+    return () => {
+      interval.current && clearInterval(interval.current);
+    };
   }, [selectedProjectId]);
 
   // Initialize forms
@@ -155,7 +157,7 @@ export const useFileServerForm = () => {
       const resp = await validateConnectionMutationApi(payload).unwrap();
 
       return new Promise((resolve) => {
-        interval = setInterval(async () => {
+        interval.current = setInterval(async () => {
           const data = await checkConnectionRespApi({
             id: resp?.workflowId,
           }).unwrap();
@@ -163,7 +165,7 @@ export const useFileServerForm = () => {
             const errorMessageList = await handleConnectionValidationComplete(
               data
             );
-            clearInterval(interval);
+            interval.current && clearInterval(interval.current);
             resolve({ errorMessageList });
             setDisableNextButton(false);
           }

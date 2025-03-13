@@ -3,7 +3,7 @@ import BulkCutOver from "@modules/storage-servers/file-server/file-server-overvi
 
 const BulkCutOverPage = () => {
   return (
-    <Box className="py-5">
+    <Box className="p-8">
       <BulkCutOver />
     </Box>
   );

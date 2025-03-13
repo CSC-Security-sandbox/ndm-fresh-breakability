@@ -37,21 +37,22 @@ const Mapping = () => {
 
   return (
     <>
-      <Card className="min-h-24 flex p-4 gap-16">
+      <Card className="min-h-24 flex p-6 justify-between">
         <Box>
-          <Text>File Server </Text>
+          <Text>Source File Server</Text>
           <Text bold>{sourceFileServerDetails?.configName}</Text>
         </Box>
         <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} />
       </Card>
-      <Card className="mt-8 p-6">
-        <Box className="w-1/2 pr-6">
+      <Card className="mt-2 p-6">
+        <Box className="w-1/2 pr-16">
           <Text>Select Protocol </Text>
           <FormFieldSelect
             name="protocol"
             form={protocolForm}
             options={options}
             disabled={!sourceFileServerDetails}
+            className="w-1/2"
           />
         </Box>
       </Card>

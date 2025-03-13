@@ -57,15 +57,13 @@ const FileServer = () => {
   };
 
   return (
-    <Box className="w-full h-screen p-6">
-      <TableWrapper
-        tableStateProps={tableStateProps}
-        isLoading={isLoading}
-        rowMenu={rowMenu}
-        content={ADD_NEW_FILE_SERVER}
-        label="File Sever List"
-      />
-    </Box>
+    <TableWrapper
+      tableStateProps={tableStateProps}
+      isLoading={isLoading}
+      rowMenu={rowMenu}
+      content={ADD_NEW_FILE_SERVER}
+      label="File Sever List"
+    />
   );
 };
 

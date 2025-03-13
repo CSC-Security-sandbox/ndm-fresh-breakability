@@ -18,7 +18,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
   const url = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunDetails?.id}/tasks`;
 
   return (
-    <Card className="flex gap-16" style={{ padding: 40 }}>
+    <Card className="flex gap-16 p-10">
       <TaskInfoCard
         label="Workers"
         value={jobRunDetails?.worker || 0}

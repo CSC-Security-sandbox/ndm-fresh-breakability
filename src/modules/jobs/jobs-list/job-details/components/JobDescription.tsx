@@ -6,13 +6,21 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
+  CardContentLoading,
 } from "@netapp/bxp-design-system-react";
 import { VolIcon } from "@netapp/bxp-style/react-icons/Storage";
 import JobDescriptionColumn from "./JobDescriptionColumn";
 
 const JobDescription = (props: JobDescriptionProps) => {
-  const { id, source, destination } = props;
-  if (!source) return <></>;
+  const { source, destination } = props;
+  if (!source) {
+    return (
+      <Card className="h-full flex p-10">
+        <CardContentLoading />
+      </Card>
+    );
+  }
+
   return (
     <Card className="h-full">
       <CardHeader>
