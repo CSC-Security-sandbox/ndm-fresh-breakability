@@ -331,8 +331,6 @@ export class JobConfigService {
         return this.getSpeedTestDetails(id);
       }
 
-      this.logger.log(`Fetched speedTestResults: ${JSON.stringify(speedTestResults)}`);
-  
       const fileServersMap = new Map();
   
       const fileServerIds = speedTestResults.map(result => result.fileServerId);
@@ -341,12 +339,8 @@ export class JobConfigService {
         relations: ['config'],
       });
   
-      this.logger.log(`Fetched fileServers: ${JSON.stringify(fileServers)}`);
-  
       const workerIds = speedTestResults.map(result => result.workerId);
       const workers = await this.workeRepo.findByIds(workerIds);
-  
-      this.logger.log(`Fetched workers: ${JSON.stringify(workers)}`);
   
       for (const result of speedTestResults) {
         const fileServer = fileServers.find(fs => fs.id === result.fileServerId);
@@ -403,7 +397,6 @@ export class JobConfigService {
         fileServers: fileServersArray,
       };
   
-      this.logger.log(`Response: ${JSON.stringify(response)}`);
   
       return response;
     } catch (error) {
@@ -437,6 +430,7 @@ export class JobConfigService {
       const entries: SpeedTestConfigEntity[] = [];
       const workersEntity: SpeedTestConfigWorkerEntity[] = [];
       for (const fileServerConfig of speedTest.speedTests) {
+
         const speedTestConfig = this.SpeedTestConfigRepo.create({
           jobId: speedTestJobID,
           fileServer: fileServerConfig.fileServer,
@@ -446,7 +440,6 @@ export class JobConfigService {
           packetLossTest:fileServerConfig.test.packetLossTest,
         });
         entries.push(speedTestConfig);
-
         const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
 
         for (const worker of fileServerConfig.workers) {
@@ -457,9 +450,7 @@ export class JobConfigService {
           workersEntity.push(workerEntity);
         }
       }
-
       await this.SpeedTestConfigWorkerRepo.save(workersEntity);
-
       this.logger.log('Speed Test job created successfully');
       return entries;
     } catch (error) {
