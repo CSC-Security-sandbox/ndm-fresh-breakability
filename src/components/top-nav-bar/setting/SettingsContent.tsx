@@ -15,15 +15,9 @@ import TabPanel from "@components/container/TabPanel";
 import CreateSMTP from "./SMTP/CreateSMTP";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import {
-  useCreateSmtpMutation,
-  useUpdateSmtpDataMutation,
-  useGetSmtpDetailsQuery,
-} from "@api/userApi";
 
 const SettingsContent = () => {
   const [currentTab, setCurrentTab] = useState<number>(1);
-  // const { data: smtpExistingData } = useGetSmtpDetailsQuery("");
 
   //making active tab should be users
   const handleDefaultTab = () => {
