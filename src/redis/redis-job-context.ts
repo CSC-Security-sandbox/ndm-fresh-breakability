@@ -80,10 +80,9 @@ export class RedisJobContext extends JobContext {
 
   async cleanup(): Promise<void> {
     if (await this.redisClient.exists(this.jobRunId)) {
-      this.logger.info(
-        `Cleaning up existing state for Job Run Id: ${this.jobRunId}`,
-      );
-      await this.redisClient.del(this.jobRunId);
+      const keys = await this.redisClient.keys(`${this.jobRunId}*`);
+      this.logger.info(`Cleaning up existing keys for: ${this.jobRunId} | keys : ${keys}`);
+      for (const key of keys) await this.redisClient.del(key);
     }
 
     for (const collection of [this.filesInfo, this.dirsInfo, this.errorsInfo]) {
