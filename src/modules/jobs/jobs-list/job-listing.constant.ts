@@ -130,18 +130,19 @@ export const JOB_LIST_COLUMN_DEFS = [
         active: value === JOB_CONFIG_STATUS_ENUM["ACTIVE"],
       }),
   },
-  {
-    header: "Errors",
-    accessor: "errors",
-    id: "errors",
-    width: 80,
-    Renderer: ({
-      value,
-    }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
-      React.createElement(ErrorNumberCellRenderer, {
-        value,
-      }),
-  },
+  // todo: API not sending this data in response
+  // {
+  //   header: "Errors",
+  //   accessor: "errors",
+  //   id: "errors",
+  //   width: 80,
+  //   Renderer: ({
+  //     value,
+  //   }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
+  //     React.createElement(ErrorNumberCellRenderer, {
+  //       value,
+  //     }),
+  // },
   {
     header: "Created On",
     accessor: "createdAt",

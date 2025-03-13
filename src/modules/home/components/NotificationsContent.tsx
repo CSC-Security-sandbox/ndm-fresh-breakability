@@ -59,35 +59,28 @@ const NotificationsContent = ({
             {noticeBoardDetails?.countErroredJobRuns > 0 && (
               <NotificationsTile
                 title={`Failed Jobs/Errors(${noticeBoardDetails?.countErroredJobRuns})`}
-                content="Needs Attention."
-                Icon={<ErrorIcon color="error" />}
-              />
-            )}
-            {noticeBoardDetails?.countErroredJobRuns > 0 && (
-              <NotificationsTile
-                title={`Failed Jobs/Errors(${noticeBoardDetails?.countErroredJobRuns})`}
-                content="Needs Attention."
+                content="Needs Attention. Not able to perform action further."
                 Icon={<ErrorIcon color="error" />}
               />
             )}
             {noticeBoardDetails?.countBlockedCutoverJobRuns > 0 && (
               <NotificationsTile
                 title={`Confirmation Pending (${noticeBoardDetails?.countBlockedCutoverJobRuns})`}
-                content="Awaiting Conformation"
+                content="Awaiting Confirmation for final Cutover."
                 Icon={<InfoIcon />}
               />
             )}
             {noticeBoardDetails?.countRecentJobConfigs > 0 && (
               <NotificationsTile
                 title={`Recently Created Jobs(${noticeBoardDetails?.countRecentJobConfigs})`}
-                content="Migration Jobs Has been created successfully"
+                content="Jobs has been created successfully."
                 Icon={<LightBulbIcon />}
               />
             )}
             {noticeBoardDetails?.countCompletedJobRuns > 0 && (
               <NotificationsTile
                 title={`Recently Completed Jobs(${noticeBoardDetails?.countCompletedJobRuns})`}
-                content="Migration Jobs Has been completed successfully"
+                content="Jobs has been completed successfully."
                 Icon={<SuccessIcon color="success" />}
               />
             )}

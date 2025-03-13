@@ -5,7 +5,7 @@ import {
 import { useLazyGetJobRunErrorsOverviewQuery } from "@api/jobsApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import { CardContent, Notification } from "@netapp/bxp-design-system-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
 
 const JobErrorsContainer = ({

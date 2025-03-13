@@ -146,7 +146,7 @@ const JobDetails = () => {
   };
 
   const latestJobRunId = useMemo(() => {
-    return jobConfigDetails?.jobRuns?.[0].jobRunId;
+    return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
   return (
