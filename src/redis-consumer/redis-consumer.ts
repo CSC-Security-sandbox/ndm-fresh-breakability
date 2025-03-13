@@ -10,7 +10,6 @@ import { AppModule } from "src/app.module";
 import { InventoryService } from "src/inventory/inventory.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { RedisConsumerService } from "./redis-consumer.service";
-import { OperationStatus, TaskStatus } from "src/enum/queues.enum";
 
 const args = process.argv.slice(2);
 const [jobRunId, readerName, consumerType] = args;
@@ -20,7 +19,8 @@ export enum ConsumerType {
   directories = "directories",
   tasks = "tasks",
   updatedTask = "updatedTask",
-  errors = 'errors'
+  errors = 'errors',
+  migrationTask = 'migrationTask',
 }
 
 (async () => {
