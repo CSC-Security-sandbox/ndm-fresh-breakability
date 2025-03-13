@@ -122,6 +122,29 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
     }
+    if(metadata.gid && metadata.uid && process.platform !== 'win32') {
+      try {
+        const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid, 'GID')
+        const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid, 'UID')
+        fs.chownSync(filePath, uid, gid);
+      } catch(error) {
+        this.logger.error(`Error setting ownership: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
+      }
+    }
+    // if(metadata?.sid && process.platform === 'win32') {
+    //   try {
+    //     const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
+    //     execSync(`icacls "${filePath}" /setowner "${sid}"`, { stdio: 'inherit' });
+    //   } catch(error) {
+    //     this.logger.error(`Error setting ownership: ${error.message}`);
+    //     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+    //     stampMetaDataOutput.errors.push(error.code)
+    //     await jobContext.appendToErrorList(dmErr);
+    //   }
+    // }
     if(metadata.mtime && metadata.atime) {
       try {
         fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
@@ -135,7 +158,7 @@ export class MigrationSyncService {
     return stampMetaDataOutput
   }
   
-  async syncOperation({ sourcePath, targetPath, ops, jobContext, command}: SyncOperationInput): Promise<SyncOperationOutput> {
+  async syncOperation({ sourcePath, targetPath, ops, jobContext, command }: SyncOperationInput): Promise<SyncOperationOutput> {
     const syncOperation: SyncOperationOutput = {errors : new Set<string>(),  ops, status: OPS_STATUS.COMPLETED , errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
     if (syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
