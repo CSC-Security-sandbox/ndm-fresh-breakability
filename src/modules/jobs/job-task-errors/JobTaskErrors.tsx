@@ -2,10 +2,7 @@ import {
   JOB_RUN_ERRORS_TYPE_KEY,
   JobConfigDetailsApiType,
 } from "@/types/app.type";
-import {
-  useLazyGetJobConfigDetailsQuery,
-  useLazyGetJobRunErrorsOverviewQuery,
-} from "@api/jobsApi";
+import { useLazyGetJobConfigDetailsQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import ErrorsListTable from "@modules/jobs/job-task-errors/components/ErrorsListTable";

@@ -200,7 +200,7 @@ export const jobsApi = createApi({
 
     getJobRunErrors: builder.mutation({
       query: (queryParams) => ({
-        url: `job-run/{jobRunId}/errors?${queryParams}`,
+        url: `job-run/errors?${queryParams}`,
         method: "GET",
       }),
       invalidatesTags: ["SPEED_TEST_JOBS"],
@@ -209,6 +209,13 @@ export const jobsApi = createApi({
     getJobRunErrorsOverview: builder.query({
       query: ({ jobRunId }) => ({
         url: `job-run/${jobRunId}/errors/overview`,
+        method: "GET",
+      }),
+    }),
+
+    getNoticeBoardDetails: builder.query({
+      query: ({ projectId }) => ({
+        url: `jobs/notice-board/${projectId}`,
         method: "GET",
       }),
     }),
@@ -237,4 +244,5 @@ export const {
   useCreateFileServerForSpeedTestMutation,
   useGetJobRunErrorsMutation,
   useLazyGetJobRunErrorsOverviewQuery,
+  useLazyGetNoticeBoardDetailsQuery,
 } = jobsApi;
