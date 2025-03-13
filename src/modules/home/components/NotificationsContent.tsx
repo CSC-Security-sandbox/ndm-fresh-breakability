@@ -56,34 +56,36 @@ const NotificationsContent = ({
           </Show.When>
 
           <Show.Else>
-            {noticeBoardDetails?.countErroredJobRuns > 0 && (
-              <NotificationsTile
-                title={`Failed Jobs/Errors(${noticeBoardDetails?.countErroredJobRuns})`}
-                content="Needs Attention. Not able to perform action further."
-                Icon={<ErrorIcon color="error" />}
-              />
-            )}
-            {noticeBoardDetails?.countBlockedCutoverJobRuns > 0 && (
-              <NotificationsTile
-                title={`Confirmation Pending (${noticeBoardDetails?.countBlockedCutoverJobRuns})`}
-                content="Awaiting Confirmation for final Cutover."
-                Icon={<InfoIcon />}
-              />
-            )}
-            {noticeBoardDetails?.countRecentJobConfigs > 0 && (
-              <NotificationsTile
-                title={`Recently Created Jobs(${noticeBoardDetails?.countRecentJobConfigs})`}
-                content="Jobs has been created successfully."
-                Icon={<LightBulbIcon />}
-              />
-            )}
-            {noticeBoardDetails?.countCompletedJobRuns > 0 && (
-              <NotificationsTile
-                title={`Recently Completed Jobs(${noticeBoardDetails?.countCompletedJobRuns})`}
-                content="Jobs has been completed successfully."
-                Icon={<SuccessIcon color="success" />}
-              />
-            )}
+            <Box className="flex flex-col gap-4">
+              {noticeBoardDetails?.countErroredJobRuns > 0 && (
+                <NotificationsTile
+                  title={`Failed Jobs/Errors(${noticeBoardDetails?.countErroredJobRuns})`}
+                  content="Needs Attention. Not able to perform action further."
+                  Icon={<ErrorIcon color="error" />}
+                />
+              )}
+              {noticeBoardDetails?.countBlockedCutoverJobRuns > 0 && (
+                <NotificationsTile
+                  title={`Confirmation Pending (${noticeBoardDetails?.countBlockedCutoverJobRuns})`}
+                  content="Awaiting Confirmation for final Cutover."
+                  Icon={<InfoIcon />}
+                />
+              )}
+              {noticeBoardDetails?.countRecentJobConfigs > 0 && (
+                <NotificationsTile
+                  title={`Recently Created Jobs(${noticeBoardDetails?.countRecentJobConfigs})`}
+                  content="Jobs has been created successfully."
+                  Icon={<LightBulbIcon />}
+                />
+              )}
+              {noticeBoardDetails?.countCompletedJobRuns > 0 && (
+                <NotificationsTile
+                  title={`Recently Completed Jobs(${noticeBoardDetails?.countCompletedJobRuns})`}
+                  content="Jobs has been completed successfully."
+                  Icon={<SuccessIcon color="success" />}
+                />
+              )}
+            </Box>
           </Show.Else>
         </Show>
       </Box>
