@@ -120,6 +120,7 @@ const SwitchProjectContent = ({ projectList, selectedProjectId }: any) => {
                   form={switchProjectForm}
                   name="selectedProjectId"
                   value={item.id}
+                  className="w-full"
                 >
                   {item?.["project_name"]}
                 </RadioButton>
