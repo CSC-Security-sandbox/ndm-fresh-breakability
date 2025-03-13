@@ -663,6 +663,8 @@ export class JobConfigService {
         .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
         .getCount();
 
+    console.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
+
     return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
   }
 
