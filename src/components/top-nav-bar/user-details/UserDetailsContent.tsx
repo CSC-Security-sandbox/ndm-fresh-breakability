@@ -8,8 +8,7 @@ import {
   WizardHeader,
   WizardFooter,
 } from "@netapp/bxp-design-system-react";
-// import { useNavigate } from "react-router-dom";
-import { useLogoutUserMutation } from "@api/userApi";
+// import { useLogoutUserMutation } from "@api/userApi";
 import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useAuth } from "react-oidc-context";
@@ -23,32 +22,32 @@ const UserDetailsContent = () => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const [logoutUser] = useLogoutUserMutation();
+  // const [logoutUser] = useLogoutUserMutation();
   const form = useForm({ email: sessionData?.profile?.email });
-  // const navigate = useNavigate();
 
   const logout = async () => {
     setIsLoading(true);
     try {
-      const refresh_token = Cookies.get("refresh_token");
-      const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-      const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+      //TODO : check if this is not needed, then delete this and remove the logout api
+      // const refresh_token = Cookies.get("refresh_token");
+      // const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+      // const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
 
-      if (!refresh_token || !client_id || !client_secret) {
-        console.error("Required parameters for logout are missing.");
-      }
+      // if (!refresh_token || !client_id || !client_secret) {
+      //   console.error("Required parameters for logout are missing.");
+      // }
 
-      const body = {
-        refresh_token,
-        client_id,
-        client_secret,
-      };
+      // const body = {
+      //   refresh_token,
+      //   client_id,
+      //   client_secret,
+      // };
 
-      await logoutUser(body).unwrap();
+      // await logoutUser(body).unwrap();
       Cookies.remove("access_token");
       Cookies.remove("refresh_token");
       sessionStorage.clear();
-      // router.replace("/");
+      await auth.signoutSilent();
     } catch (error) {
       setIsLoading(false);
       notify.error("Something went wrong while logging out.");
@@ -66,7 +65,7 @@ const UserDetailsContent = () => {
       </Layout.Content>
       <WizardFooter>
         <Button
-          onClick={() => auth.signoutSilent()}
+          onClick={logout}
           isSubmitting={isLoading}
           className="flex flex-col gap-1"
         >
