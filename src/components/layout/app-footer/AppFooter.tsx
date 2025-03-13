@@ -1,6 +1,5 @@
 import { WizardFooter } from "@netapp/bxp-design-system-react";
-import { ReactNode, useMemo } from "react";
-import { createPortal } from "react-dom";
+import { ReactNode } from "react";
 import { Box } from "@components/container";
 
 interface BlueXpWizardFooterProps {
@@ -10,30 +9,19 @@ interface BlueXpWizardFooterProps {
 
 const AppFooter = ({
   footerContent,
-  isCreateFirstProject = false,
+  isCreateFirstProject,
 }: BlueXpWizardFooterProps) => {
-  const footerElement = useMemo(() => {
-    return isCreateFirstProject
-      ? document.getElementById("step-footer-first-project")
-      : document.getElementById("step-footer");
-  }, [isCreateFirstProject]);
-
-  if (!footerElement) return <></>;
-
   return (
-    <>
-      {createPortal(
-        <Box className="fixed bottom-0 h-[70px] w-full bg-inherit">
-          <WizardFooter
-            style={{}}
-            className="absolute bottom-0 z-50 flex justify-between overflow-hidden w-[calc(100vw-5rem)]"
-          >
-            {footerContent}
-          </WizardFooter>
-        </Box>,
-        footerElement
-      )}
-    </>
+    <Box className="fixed bottom-0 h-[70px] w-full bg-inherit">
+      <WizardFooter
+        style={{}}
+        className={`absolute bottom-0 z-50 flex justify-between overflow-hidden ${
+          isCreateFirstProject ? "w-full" : "w-[calc(100vw-5rem)]"
+        }`}
+      >
+        {footerContent}
+      </WizardFooter>
+    </Box>
   );
 };
 

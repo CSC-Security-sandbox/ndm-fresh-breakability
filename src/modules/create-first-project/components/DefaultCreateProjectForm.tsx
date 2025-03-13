@@ -10,9 +10,7 @@ import {
   TabHeader,
   FormFieldTextArea,
 } from "@netapp/bxp-design-system-react";
-import {
-  BlueXpFormType,
-} from "@/types/app.type";
+import { BlueXpFormType } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 
 interface DefaultCreateProjectFormType {
@@ -27,12 +25,15 @@ const DefaultCreateProjectForm = ({
   const dispatch = useDispatch();
 
   const handleProjectCreation = async () => {
-    const response : any = await handleCreateProject();
+    const response: any = await handleCreateProject();
     dispatch(setProject(response?.id || ""));
-  }
+  };
 
   const FOOTER_CONTENT = (
-    <Button onClick={handleProjectCreation} disabled={!createProjectForm.isValid}>
+    <Button
+      onClick={handleProjectCreation}
+      disabled={!createProjectForm.isValid}
+    >
       Create
     </Button>
   );
@@ -60,7 +61,7 @@ const DefaultCreateProjectForm = ({
           </Box>
         </Card>
       </Layout.Content>
-      <AppFooter footerContent={FOOTER_CONTENT} />
+      <AppFooter footerContent={FOOTER_CONTENT} isCreateFirstProject={true} />
     </Box>
   );
 };

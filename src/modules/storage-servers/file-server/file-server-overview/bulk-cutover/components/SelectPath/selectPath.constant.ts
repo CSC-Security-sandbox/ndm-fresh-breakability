@@ -14,7 +14,7 @@ export const SELECT_PATH_COL_DEFS = [
   },
   {
     id: 3,
-    header: "Destination File Server",
+    header: "Destination",
     accessor: "destinationFileServer.destinationFileServerName",
   },
   {
