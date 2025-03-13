@@ -144,7 +144,8 @@ export class JobRunInitService {
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: this.mountBasePath
+          workingDirectory: this.mountBasePath,
+          protocolVersion: '',
         }
       },
       workers: workers,
@@ -341,9 +342,9 @@ export class JobRunInitService {
           const redisClient = await RedisUtils.getClient();
           if(!redisClient.isOpen) await redisClient.connect();
           const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending,[]);
-          const jobContext = JobContextFactory.getSpeedTestProvider('redis', this.redisService.getClient())
-          .buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
-          this.redisService.setJobContext(jobRunId, await jobContext);
+          const redisProvider = JobContextFactory.getSpeedTestProvider('redis', await this.redisService.getClient());
+          const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
+          this.redisService.setJobContext(jobRunId, jobContext);
       }
 
     // ------------------ BuildJobContext -------------------- //
