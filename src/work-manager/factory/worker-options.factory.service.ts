@@ -42,6 +42,7 @@ export class WorkerOptionsService {
           checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
           generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
           updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
+          updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
           updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
           generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.commonActivityService),

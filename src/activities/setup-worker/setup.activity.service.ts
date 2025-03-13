@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import * as fs from 'fs';
 import { Protocol } from 'src/protocols/protocol/protocol';
@@ -150,6 +151,12 @@ export class SetupActivityService {
         };
       }
 
+      const jobState: JobState = await this.redisService.getJobState(jobRunId);
+      if(jobState.status !== JobStatus.Paused) {
+        this.logger.log(`[${jobRunId}] - Cleaning up job context`);
+        await context.cleanup();
+        this.logger.log(`[${jobRunId}] - Job context cleaned up`);
+      }
       return {
         jobRunId,
         status: 'success',

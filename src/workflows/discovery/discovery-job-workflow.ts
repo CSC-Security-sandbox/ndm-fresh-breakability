@@ -72,6 +72,7 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
     } else {
       await updateDiscoveryStatus(traceId, 'FAILED')
         .then(() => log(traceId, `Discovery status updated to Failed`))
+        .then(async () => await updateLastEntry(traceId))
         .catch((err) => log(traceId, `Failed to update discovery status: ${err}`));
       return { message: 'Discovery failed' };
     }

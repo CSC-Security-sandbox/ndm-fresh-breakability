@@ -86,8 +86,9 @@ export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, wo
             throw error; 
           } else {
             await updateStatusActivity({jobRunId, status: JobRunStatus.Failed})
-              .then(() => log(jobRunId, `status updated to Failed`))
-              .catch((err) => log(jobRunId, `Failed to update status: ${err}`));
+            .then(() => log(jobRunId, `status updated to Failed`))
+            .then(async () => await updateLastEntryActivity(jobRunId))
+            .catch((err) => log(jobRunId, `Failed to update status: ${err}`));
             return { message: `Sync Errored ${error}` };
         }
     }
