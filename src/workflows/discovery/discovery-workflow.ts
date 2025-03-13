@@ -9,6 +9,7 @@ import { ReportingWorkflow } from '../reporting/reporting.workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { DiscoveryJobWorkflow } from './discovery-job-workflow';
+import { JobRunStatus } from 'src/activities/discovery/enums';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -17,8 +18,8 @@ async function log(traceId: string, message: string) {
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
-  getJobState,
-  setJobState,
+  getJobState: getJobStateActivity,
+  setJobState: setJobStateActivity,
   updateJobErrorStatus: updateJobErrorActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
@@ -78,10 +79,10 @@ export async function DiscoveryWorkflow({
   log(traceId, `DiscoveryWorkflow activeWorkerIds: ${JSON.stringify(activeWorkerIds)}`);
   
   const discoveryResponse: any = await Promise.all(activeWorkerIds.map(async (workerId) => {
-    const jobState = await getJobState(traceId);
+    const jobState = await getJobStateActivity(traceId);
     const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
-    const newJobState = { ...jobState, workers: uniqueWorkers, status: 'RUNNING' } as any;
-    await setJobState(traceId, newJobState);
+    const newJobState = { ...jobState, workers: uniqueWorkers, status: JobRunStatus.Running } as any;
+    await setJobStateActivity(traceId, newJobState);
     log(traceId, `Starting DiscoveryJobWorkflow for workerId: ${workerId}`);
     while (true) {
       try {
@@ -117,8 +118,16 @@ export async function DiscoveryWorkflow({
     };
   });;
 
-  console.log("disoovery response" + JSON.stringify(discoveryResponse));
+  console.log("discovery response" + JSON.stringify(discoveryResponse));
   result.push(discoveryResponse);
+
+  let jobState = await getJobStateActivity(traceId);
+  let errored = jobState.failedWorkers.length === activeWorkerIds.length;
+
+  if(errored) {
+    console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
+    await updateJobErrorActivity(traceId)
+  }
 
   if (activeWorkerIds.length > 0) {
     await ReportingWorkflow(traceId, reportingSignal)
