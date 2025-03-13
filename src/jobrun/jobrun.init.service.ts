@@ -98,8 +98,9 @@ export class JobRunInitService {
       options: options,
     });
     const jobRun = await this.jobRunRepo.save(jobRunRecord);
-    await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-    await this.initiateWorkflow(jobRun.id, details)
+    await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED});
+    await this.buildJobContext(jobRun.id, details);
+    await this.initiateWorkflow(jobRun.id, details);
     return jobRun
   }
 
@@ -166,7 +167,6 @@ export class JobRunInitService {
     // ------------------ InitiateWorkflow -------------------- //
     async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
         let jobRunWorkflow: WorkflowHandleWithFirstExecutionRunId | null = null ;
-        await this.buildJobContext(jobRunId,jobRunConfig);
         const options = new Options()
         options.workflowExecutionTimeout = '120s'
         options.workflowTaskTimeout = '120s'
@@ -298,4 +298,11 @@ export class JobRunInitService {
           }
         }
     }
+
+  getWorkFlowId(jobRunId: string, jobType: JobType): string {
+    if(jobType === JobType.DISCOVER) return `${WorkFlows.DISCOVERY}-${jobRunId}`;
+    if(jobType === JobType.CUT_OVER) return `${WorkFlows.CUT_OVER}-${jobRunId}`;
+    if(jobType === JobType.PRECHECK) return `${WorkFlows.PRECHECK}-${jobRunId}`;
+    return `${WorkFlows.MIGRATE}-${jobRunId}`
+  }
 }
