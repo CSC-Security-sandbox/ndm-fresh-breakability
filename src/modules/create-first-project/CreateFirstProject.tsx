@@ -5,7 +5,6 @@ import EmptyNavBar from "./components/EmptyNavBar";
 import DefaultCreateProjectForm from "./components/DefaultCreateProjectForm";
 import { useDispatch } from "react-redux";
 import { setProject } from "@store/reducer/appSlice";
-import { Box } from "@components/container";
 
 const CreateFirstProject = () => {
   const dispatch = useDispatch();
@@ -26,7 +25,6 @@ const CreateFirstProject = () => {
           setShowCreateProject={setShowCreateProject}
         />
       </Collapse>
-      <Box id="step-footer-first-project" className="fixed bottom-0"></Box>
     </>
   );
 };
