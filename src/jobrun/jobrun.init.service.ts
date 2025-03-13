@@ -81,7 +81,6 @@ export class JobRunInitService {
    // ------------------ Create job run  -------------------- //
    async createJobRun(jobConfigId: string , currentTime: Date) {
     const details:JobRunConfig = await this.getJobConfig(jobConfigId)
-    console.log('details--->', JSON.stringify(details)) 
     
     if(details.workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)

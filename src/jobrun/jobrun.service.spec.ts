@@ -4,16 +4,14 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import { WorkerJobRunMap } from "../entities/workerjobrun.entity";
-import { JobRunStatus, JobStatus, JobType } from "src/constants/enums";
-import { EmitterEvents } from "src/constants/events";
+import { JobRunStatus, JobStatus, JobType, Protocol } from "src/constants/enums";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { Repository } from "typeorm";
+import { Any, Repository } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { ConfigService } from "@nestjs/config";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { WorkManager } from "src/events/workmanager/workmanager.service";
 import { Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { TaskEntity } from "src/entities/task.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
@@ -22,13 +20,18 @@ import {
   LoggerFactory,
   LoggerService,
 } from "@netapp-cloud-datamigrate/logger-lib";
+import { JobRunInitService } from "./jobrun.init.service";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { RedisService } from "src/redis/redis.service";
+import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity";
+import { FileServerEntity } from "src/entities/fileserver.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
+  let initService: JobRunInitService;
   let jobRunRepo: Repository<JobRunEntity>;
   let jobConfigRepo: Repository<JobConfigEntity>;
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
-  let eventEmitter: EventEmitter2;
   let inventoryRepo: Repository<InventoryEntity>;
   let jobOptions: Repository<JobOptionsEntity>;
   let configService: ConfigService;
@@ -45,9 +48,65 @@ describe("JobRunService", () => {
       providers: [
         JobRunService,
         WorkflowService,
-        WorkManager,
+        JobRunInitService,
+        RedisService,
         {
           provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OperationErrorEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+            innerJoin: jest.fn(),
+            where: jest.fn(),
+            select: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SpeedTestConfigEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(FileServerEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SpeedTestConfigWorkerEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
@@ -153,6 +212,7 @@ describe("JobRunService", () => {
     }).compile();
 
     service = module.get<JobRunService>(JobRunService);
+    initService = module.get<JobRunInitService>(JobRunInitService);
     configService = module.get<ConfigService>(ConfigService);
     jobRunRepo = module.get<Repository<JobRunEntity>>(
       getRepositoryToken(JobRunEntity)
@@ -166,7 +226,6 @@ describe("JobRunService", () => {
     inventoryRepo = module.get<Repository<InventoryEntity>>(
       getRepositoryToken(InventoryEntity)
     );
-    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });
 
   describe("scheduleAJob", () => {
@@ -177,10 +236,10 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "find").mockReturnValue(mockJobs as any);
 
       const createJobRunSpy = jest
-        .spyOn(service, "createJobRun")
+        .spyOn(initService, "createJobRun")
         .mockResolvedValue(undefined);
 
-      const result = await service.scheduleAJob();
+      const result = await initService.scheduleAJob();
 
       expect(result).toEqual(mockJobs);
       expect(createJobRunSpy).toHaveBeenCalledWith(
@@ -192,7 +251,7 @@ describe("JobRunService", () => {
     it("should return an empty array if no jobs match", async () => {
       jest.spyOn(jobConfigRepo, "find").mockReturnValue([] as any);
 
-      const result = await service.scheduleAJob();
+      const result = await initService.scheduleAJob();
 
       expect(result).toEqual([]);
     });
@@ -200,13 +259,6 @@ describe("JobRunService", () => {
 
   describe("jobRunUpdateStatus", () => {
     it("should update endTime and status to Completed, and call auxiliary methods for Completed status", async () => {
-      const payload = {
-        jobRunId: "123",
-        status: JobRunStatus.Completed,
-        jobConfig: {
-          firstRunAt: "undefined",
-        },
-      };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({
         jobConfigId: "4567",
@@ -215,19 +267,19 @@ describe("JobRunService", () => {
         },
       } as any);
 
-      await service.jobRunStatusUpdate(payload);
+      await service.updateJobRunStatus("123", JobRunStatus.Completed);
     });
 
     it("should update status for non-Completed statuses", async () => {
-      const payload = {
-        jobRunId: "456",
-        status: JobRunStatus.Failed,
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({
+        jobConfigId: "4567",
         jobConfig: {
           firstRunAt: "undefined",
         },
-      };
+      } as any);
 
-      await service.jobRunStatusUpdate(payload);
+      await service.updateJobRunStatus("123", JobRunStatus.Failed);
+
     });
   });
 
@@ -245,6 +297,7 @@ describe("JobRunService", () => {
             host: "source-host",
             config: { workingDirectory: "/source/working" },
             workers: [{ workerId: "worker-1" }, { workerId: "worker-2" }],
+            protocolVersion: "2",
           },
         },
         targetPath: null,
@@ -255,7 +308,7 @@ describe("JobRunService", () => {
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
 
-      const result = await service.getJobConfig("123");
+      const result = await initService.getJobConfig("123");
 
       expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
         where: { id: "123" },
@@ -279,8 +332,13 @@ describe("JobRunService", () => {
             password: "source-pass",
             host: "source-host",
             workingDirectory: undefined,
+            protocolVersion: "2",
           },
         },
+        preserveAccessTime: undefined,
+        skipFile: undefined,
+        excludeFilePatterns: undefined,
+        excludeOlderThan: undefined,
         workers: ["worker-1", "worker-2"],
         jobType: "DATA_TRANSFER",
       });
@@ -299,6 +357,7 @@ describe("JobRunService", () => {
             host: "source-host",
             config: { workingDirectory: "/source/working" },
             workers: [{ workerId: "worker-1" }, { workerId: "worker-2" }],
+            protocolVersion: "2",
           },
         },
         targetPath: {
@@ -311,6 +370,7 @@ describe("JobRunService", () => {
             host: "target-host",
             config: { workingDirectory: "/target/working" },
             workers: [{ workerId: "worker-2" }, { workerId: "worker-3" }],
+            protocolVersion: "2",
           },
         },
         targetPathId: "target-id",
@@ -321,7 +381,7 @@ describe("JobRunService", () => {
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
 
-      const result = await service.getJobConfig("123");
+      const result = await initService.getJobConfig("123");
 
       expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
         where: { id: "123" },
@@ -345,6 +405,7 @@ describe("JobRunService", () => {
             password: "source-pass",
             host: "source-host",
             workingDirectory: undefined,
+            protocolVersion: "2",
           },
           targetCredential: {
             path: "/target/path",
@@ -354,10 +415,15 @@ describe("JobRunService", () => {
             password: "target-pass",
             host: "target-host",
             workingDirectory: undefined,
+            protocolVersion: "2",
           },
         },
         workers: ["worker-2"],
         jobType: "DATA_TRANSFER",
+        preserveAccessTime: undefined,
+        skipFile: undefined,
+        excludeFilePatterns: undefined,
+        excludeOlderThan: undefined,
       });
     });
   });
@@ -372,13 +438,30 @@ describe("JobRunService", () => {
       const mockWorkers = {
         connection: {
           sourceCredential: {
-            path: "asdfghjk",
+            protocol: Protocol.NFS,
+            host: "source-host",
+            pathId: "source-path-id",
+            path: "/source/path",
+            username: "source-user",
+            password: "source-pass",
+            workingDirectory: "/source/working",
+            protocolVersion: "2",
+          },
+          targetCredential: {
+            protocol: Protocol.SMB,
+            host: "target-host",
+            pathId: "target-path-id",
+            path: "/target/path",
+            username: "target-user",
+            password: "target-pass",
+            workingDirectory: "/target/working",
+            protocolVersion: "2",
           },
         },
         workers: ["worker1", "worker2"],
       };
 
-      jest.spyOn(service, "getJobConfig").mockResolvedValue(mockWorkers as any);
+      jest.spyOn(initService, "getJobConfig").mockResolvedValue(mockWorkers as any);
       jest
         .spyOn(workerJobRunMapRepo, "create")
         .mockImplementation((data) => data as any);
@@ -386,27 +469,21 @@ describe("JobRunService", () => {
         .spyOn(jobRunRepo, "create")
         .mockImplementation((data) => data as any);
       jest.spyOn(jobRunRepo, "save").mockResolvedValue({ id: "1" } as any);
-
-      const emitSpy = jest.spyOn(eventEmitter, "emit");
-
-      await service.createJobRun(mockJob, new Date());
-
-      expect(emitSpy).toHaveBeenCalledWith(
-        EmitterEvents.CREATE_TASK,
-        expect.any(Object)
-      );
+      jest.spyOn(initService, "buildJobContext").mockImplementation()
+      const result = await initService.createJobRun(mockJob, new Date());
+      expect(result).toEqual({ "id": "1"});
     });
 
     it("should log a warning if no workers exist", async () => {
       const mockJob = "1" as any;
 
       jest
-        .spyOn(service, "getJobConfig")
+        .spyOn(initService, "getJobConfig")
         .mockResolvedValue({ workers: [] } as any);
 
-      const loggerSpy = jest.spyOn(service["logger"], "warn");
+      const loggerSpy = jest.spyOn(initService["logger"], "warn");
 
-      await service.createJobRun(mockJob, new Date());
+      await initService.createJobRun(mockJob, new Date());
 
       expect(loggerSpy).toHaveBeenCalledWith(
         `Unable to create Job Run for Job Config ${mockJob} does not has workers`
@@ -609,6 +686,8 @@ describe("JobRunService", () => {
       getRawOne: jest.fn().mockResolvedValue(mockInventoryStats),
     } as any);
 
+    jest.spyOn( service,'getErrorCounts').mockImplementation().mockReturnValue([] as any)
+
     const result = await service.getJobAllRuns(filter);
 
     expect(result).toMatchObject([
@@ -672,6 +751,8 @@ describe("JobRunService", () => {
       where: jest.fn().mockReturnThis(),
       getRawOne: jest.fn().mockResolvedValue(mockInventoryStats),
     } as any);
+
+    jest.spyOn( service,'getErrorCounts').mockImplementation().mockReturnValue([] as any)
 
     const result = await service.getJobAllRuns(filter);
 
@@ -753,6 +834,7 @@ describe("JobRunService", () => {
       where: jest.fn().mockReturnThis(),
       getRawOne: jest.fn().mockResolvedValue(null),
     } as any);
+    jest.spyOn( service,'getErrorCounts').mockImplementation().mockReturnValue([] as any)
 
     const result = await service.getJobAllRuns(filter);
 
@@ -833,6 +915,8 @@ describe("JobRunService", () => {
             totalSize,
           }),
         } as any);
+      jest.spyOn( service,'getErrorCounts').mockImplementation().mockReturnValue([] as any)
+      
       const result = await service.getJobRun(jobId);
 
       expect(service["jobConfigRepo"].findOne).toHaveBeenCalledWith({
@@ -950,6 +1034,17 @@ describe("JobRunService", () => {
             totalSize,
           }),
         } as any);
+
+        jest.spyOn( service,'getErrorCounts').mockImplementation().mockReturnValue([] as any)
+      
+
+
+      // jest.spyOn(service["OperationErrorEntity"], "createQueryBuilder").mockReturnValue({
+      // innerJoin: jest.fn().mockReturnThis(),
+      // select: jest.fn().mockReturnThis(),
+      // where: jest.fn().mockReturnThis(),
+      // } as any);
+
       const result = await service.getJobRun(jobId);
 
       expect(service["jobConfigRepo"].findOne).toHaveBeenCalledWith({

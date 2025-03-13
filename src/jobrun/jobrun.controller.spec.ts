@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
 import { JobRunPageDto } from './dto/jobrunpage.dto';
+import { JobRunInitService } from './jobrun.init.service';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
@@ -13,6 +14,15 @@ describe('JobRunController', () => {
     scheduleAJob: jest.fn(),
     getJobAllRuns: jest.fn()
   };
+  
+
+  const mockJobRunInitService = {
+    findAllJobRuns: jest.fn(),
+    getJobRun: jest.fn(),
+    scheduleAJob: jest.fn(),
+    getJobAllRuns: jest.fn()
+  };
+  
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -22,6 +32,11 @@ describe('JobRunController', () => {
           provide: JobRunService,
           useValue: mockJobRunService,
         },
+        {
+          provide: JobRunInitService,
+          useValue: mockJobRunInitService,
+        },
+
       ],
     }).compile();
 
@@ -60,7 +75,7 @@ describe('JobRunController', () => {
 
       await controller.handleCron();
 
-      expect(mockJobRunService.scheduleAJob).toHaveBeenCalled();
+      expect(mockJobRunInitService.scheduleAJob).toHaveBeenCalled();
     });
   });
 
