@@ -17,7 +17,7 @@ const useAccountDetails = () => {
   // }, [fetchAllAccounts]);
 
   return {
-    accountDetails: { id: import.meta.env.VITE_HARD_CODE_ACCOUNT_ID },
+    accountDetails: { id: localStorage.getItem("account_id") },
     isLoading: false,
     error: null,
   };

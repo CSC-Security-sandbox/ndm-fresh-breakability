@@ -3,7 +3,7 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import Cookies from "js-cookie";
 
 const prepareHeaders = (headers: any) => {
-  const token = Cookies.get("token");
+  const token = Cookies.get("access_token");
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
