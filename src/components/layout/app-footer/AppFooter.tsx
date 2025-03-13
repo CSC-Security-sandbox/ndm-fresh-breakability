@@ -1,6 +1,7 @@
 import { WizardFooter } from "@netapp/bxp-design-system-react";
 import { ReactNode, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { Box } from "@components/container";
 
 interface BlueXpWizardFooterProps {
   footerContent: ReactNode;
@@ -18,15 +19,18 @@ const AppFooter = ({
   }, [isCreateFirstProject]);
 
   if (!footerElement) return <></>;
+
   return (
     <>
       {createPortal(
-        <WizardFooter
-          style={{}}
-          className="absolute bottom-0 z-50 flex justify-between overflow-hidden w-[calc(100vw-5rem)]"
-        >
-          {footerContent}
-        </WizardFooter>,
+        <Box className="fixed bottom-0 h-[70px] w-full bg-inherit">
+          <WizardFooter
+            style={{}}
+            className="absolute bottom-0 z-50 flex justify-between overflow-hidden w-[calc(100vw-5rem)]"
+          >
+            {footerContent}
+          </WizardFooter>
+        </Box>,
         footerElement
       )}
     </>

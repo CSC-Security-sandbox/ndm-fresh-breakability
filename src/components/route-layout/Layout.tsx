@@ -24,10 +24,7 @@ const Layout = () => {
             <Box className="relative left-[5rem] w-[calc(100vw-5rem)] bg-content-bg overflow-y-auto">
               <TabHeaderWrapper />
               <Outlet />
-              <Box
-                id="step-footer"
-                className="fixed bottom-0 h-[70px] w-full bg-inherit"
-              ></Box>
+              <Box id="step-footer" />
             </Box>
           </Box>
         </>
