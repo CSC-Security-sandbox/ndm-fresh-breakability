@@ -40,6 +40,7 @@ const JobTasks = () => {
   }>({
     projectId: selectedProjectId,
   });
+
   const taskAPIRequest = useRef<any | undefined>(""); // instead we should use this but its failing and not returning result QueryActionCreatorResult<any>
 
   const [searchParams] = useSearchParams();
@@ -62,7 +63,7 @@ const JobTasks = () => {
 
   useEffect(() => {
     fetchRecords();
-  }, [pagination.pageIndex, sortState, currentFilters, taskType]);
+  }, [pagination.pageIndex, sortState, currentFilters, taskType, workers]);
 
   const fetchRecords = async () => {
     let payload: any = {
@@ -91,7 +92,18 @@ const JobTasks = () => {
       taskAPIRequest.current = getJobTasks(payload);
 
       const result = await taskAPIRequest.current?.unwrap();
-      setTableRows(result.data);
+
+      //Adding workerName to the tasks data
+      const allTasks = result.data.map((eachTask) => {
+        workers?.map((eachWorker) => {
+          if (eachTask.workerId === eachWorker.workerId) {
+            eachTask = { ...eachTask, workerName: eachWorker.workerName };
+          }
+        })
+        return eachTask;
+      })
+
+      setTableRows(allTasks);
       setTotalCount(result.total || 0);
     } catch (error) {
       console.error({ error, level: "Task listing" });
