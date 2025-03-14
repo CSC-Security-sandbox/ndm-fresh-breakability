@@ -20,7 +20,7 @@
    <changeSet id="5005" author="adityav2">
       <sqlFile path="liquibase/20250310_01_create_all_speed_test_tables.sql"/>
    </changeSet>
-      <changeSet id="5005" author="adityav2">
+      <changeSet id="5006" author="adityav2">
       <sqlFile path="liquibase/20250314_01_update_speed_test_result_tables.sql"/>
    </changeSet>
 </databaseChangeLog>
