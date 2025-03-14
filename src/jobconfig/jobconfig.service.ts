@@ -48,7 +48,9 @@ import { JobListingDTO } from "./dto/joblisting.dto";
 import {
   FlattenedCutoverConfig,
   JobConfigBulkCutoverRes,
-  JobConfigBulkMigrateRes
+  JobConfigBulkMigrateRes,
+  SpeedTestEntry,
+  SpeedTestJobRun
 } from "./jobconfig.types";
 import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
@@ -146,7 +148,7 @@ export class JobConfigService {
   }
 
   // ------------ Speed Test ---------------- //
-  async getAllSpeedTestJobRuns(): Promise<any[]> {
+  async getAllSpeedTestJobRuns(): Promise<SpeedTestJobRun[]> {
     try {
       const jobConfigs = await this.jobConfigRepo.find({
         where: { jobType: JobType.SPEED_TEST },
@@ -158,7 +160,7 @@ export class JobConfigService {
           const fileServerCount = jobConfig.speedTestConfigs.length;
           const workers = jobConfig.speedTestConfigs.flatMap(config => config.workerEntities);
           const workerCount = new Set(workers.map(worker => worker.workersId)).size;
-          return {
+          const jobRunResponse: SpeedTestJobRun = {
             jobRunId: jobRun.id,
             jobConfigId: jobConfig.id,
             startTime: jobRun.startTime,
@@ -167,6 +169,8 @@ export class JobConfigService {
             workers: workerCount,
             status: jobRun.status,
           };
+
+          return jobRunResponse;
         });
       });
 
@@ -197,6 +201,7 @@ export class JobConfigService {
         const writeLog = new SpeedLogEntity();
         writeLog.totalTimeTaken = speedTest.writeResult.totalTimeTaken;
         writeLog.fileSize = speedTest.writeResult.fileSize;
+        writeLog.error = speedTest.writeResult.error;
         writeResult = await this.speedLogRepo.save(writeLog);
 
         for (const log of speedTest.writeResult.speedLogs) {
@@ -213,6 +218,7 @@ export class JobConfigService {
         const readLog = new SpeedLogEntity();
         readLog.totalTimeTaken = speedTest.readResult.totalTimeTaken;
         readLog.fileSize = speedTest.readResult.fileSize;
+        readLog.error = speedTest.readResult.error;
         readResult = await this.speedLogRepo.save(readLog);
 
         for (const log of speedTest.readResult.speedLogs) {
@@ -232,6 +238,7 @@ export class JobConfigService {
         networkPerformanceResult.roundTripDelayAvg = speedTest.networkPerformanceResult.roundTripDelay.avg;
         networkPerformanceResult.roundTripDelayMax = speedTest.networkPerformanceResult.roundTripDelay.max;
         networkPerformanceResult.roundTripDelayMdev = speedTest.networkPerformanceResult.roundTripDelay.mdev;
+        networkPerformanceResult.error = speedTest.networkPerformanceResult.error;
         networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
       }
 
@@ -320,7 +327,7 @@ export class JobConfigService {
     return response;
   }
 
-  async getSpeedTestById(id: string): Promise<any> {
+  async getSpeedTestById(id: string): Promise<SpeedTestEntry> {
     try {
       const speedTestResults = await this.speedTestResultRepo.find({
         where: { traceId: id },
@@ -388,7 +395,7 @@ export class JobConfigService {
         );
       }
   
-      const response = {
+      const response : SpeedTestEntry = {
         jobRunId: id,
         startTime: jobRunDetails.startTime,
         endTime: jobRunDetails.endTime,

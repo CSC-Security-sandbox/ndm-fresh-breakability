@@ -16,6 +16,10 @@ export class SpeedLogEntity {
   @Column({ name: 'file_size', type: 'bigint', nullable: false })
   fileSize: number;
 
+  @ApiProperty({ description: 'Error for read/write test' })
+  @Column({ name: 'error', type: 'text' })
+  error: string;
+
   @OneToMany(() => SpeedLogEntryEntity, speedLogEntry => speedLogEntry.speedLog, { cascade: true })
   speedLogEntries: SpeedLogEntryEntity[];
 }
@@ -46,6 +50,11 @@ export class NetworkPerformanceResultEntity {
   @ApiProperty({ description: 'Mean deviation of round trip delay' })
   @Column({ name: 'round_trip_delay_mdev', type: 'float', nullable: false })
   roundTripDelayMdev: number;
+
+
+  @ApiProperty({ description: 'Error for read/write test' })
+  @Column({ name: 'error', type: 'text' })
+  error: string;
 }
 
 

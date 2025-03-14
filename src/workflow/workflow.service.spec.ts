@@ -181,14 +181,6 @@ describe('WorkflowService', () => {
       const result = await service.sendSignal(mockPayload);
 
       expect((service as any).getClient).toHaveBeenCalled();
-      // expect(mockClient.workflowService.signalWorkflowExecution).toHaveBeenCalledWith({
-      //   namespace: 'default',
-      //   workflowExecution: { workflowId: mockPayload.workflowId },
-      //   signalName: mockPayload.signalName,
-      //   input: {
-      //     payloads: ['mock-payload'],
-      //   },
-      // });
       expect(result).toBe('Signal sent successfully');
     });
 
@@ -209,14 +201,6 @@ describe('WorkflowService', () => {
 
       await expect(service.sendSignal(mockPayload)).rejects.toThrow('Signal failed');
       expect(jest.spyOn(service as any, 'getClient')).toHaveBeenCalled();
-      // expect(mockClient.workflowService.signalWorkflowExecution).toHaveBeenCalledWith({
-      //   namespace: 'default',
-      //   workflowExecution: { workflowId: mockPayload.workflowId },
-      //   signalName: mockPayload.signalName,
-      //   input: {
-      //     payloads: ['mock-payload'],
-      //   },
-      // });
     });
   });
 

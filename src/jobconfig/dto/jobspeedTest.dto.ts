@@ -73,6 +73,10 @@ export class WriteReadResult {
   @IsNumber()
   totalTimeTaken: number;
 
+  @ApiProperty({ description: 'Error in write test' })
+  @IsString()
+  error: string;
+
   @ApiProperty({ description: 'Size of the file used in the test', example: 6442450944 })
   @IsNumber()
   fileSize: number;
@@ -101,6 +105,10 @@ export class NetworkPerformanceResult {
   @IsNumber()
   packetLoss: number;
 
+  @ApiProperty({ description: 'Error in NetworkPerformance test' })
+  @IsString()
+  error: string;
+
   @ApiProperty({ description: 'Round trip delay metrics' })
   @ValidateNested({ each: true })
   @Type(() => RoundTripDelay)
@@ -116,6 +124,10 @@ export class SpeedTestResult {
   @ApiProperty({ description: 'UUID of workerId', required: true })
   @IsUUID()
   workerId: string;
+
+  @ApiProperty({ description: 'Error in Read test' })
+  @IsString()
+  error: string;
 
   @ApiProperty({ description: 'UUID of fileServerID', required: true })
   @IsUUID()

@@ -8,7 +8,7 @@ import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
-import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
@@ -45,7 +45,7 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get all Speed test jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all Speed jobs Runs.' })
   @Get('/speed-test')
-  async getAllSpeedTestJobConfig(): Promise<any[]> {
+  async getAllSpeedTestJobConfig(): Promise<SpeedTestJobRun[]> {
     return await this.jobConfigService.getAllSpeedTestJobRuns();
   }
 
@@ -60,7 +60,7 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get('/speed-test/:id')
-  async getSpeedTestById(@Param('id') id: string): Promise<any> {
+  async getSpeedTestById(@Param('id') id: string): Promise<SpeedTestEntry> {
     return await this.jobConfigService.getSpeedTestById(id);
   }
 

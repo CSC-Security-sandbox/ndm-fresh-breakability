@@ -197,42 +197,5 @@ describe('JobConfigController', () => {
     });
   });
 });
-// it('should return project configs for a valid project ID', async () => {
-//   const mockProjectId = 'valid-uuid';
-//   const mockProject = {
-//     id: mockProjectId,
-//     projectName: 'Test Project',
-//     startDate :"",
-//     projectDescription : "",
-//     accountId : "",
-//     configs: [
-//       {
-//         id: 'configId1',
-//         configName: 'Config 1',
-//         fileServers: [
-//           {
-//             id: 'fileServerId1',
-//             protocol: 'NFS',
-//             volumes: [
-//               {
-//                 id: 'volumeId1',
-//                 volumePath: '/path/to/volume1',
-//               },
-//             ],
-//           },
-//         ],
-//     ProjectEntity: {workers:'', createdAt:'', updatedAt:'', createdBy:'', updatedBy:''},
-
-//       },
-//     ],
-//   };
-
-//   jest.spyOn(service, 'getConfigsByProjectId').mockResolvedValue(mockProject);
-
-//   const result = await service.getConfigsByProjectId(mockProjectId);
-
-//   expect(result).toEqual(mockProject);
-//   expect(service.getConfigsByProjectId).toHaveBeenCalledWith(mockProjectId);
-// });
 });
 
