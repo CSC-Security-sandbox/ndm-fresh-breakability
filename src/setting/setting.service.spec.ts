@@ -1,10 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SettingService } from './setting.service';
-import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
-import { CreateSettingDto, SettingType } from './dto/create-setting.dto';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { HttpStatus } from '@nestjs/common';
+import { GlobalSettings } from 'src/entities/global-setting.entity';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import { SettingType } from './dto/create-setting.dto';
+import { CreateSettingDto } from './dto/create-setting.dto';
+
+const mockSettingsRepo = {
+  find: jest.fn(),
+  findOne: jest.fn(),
+  save: jest.fn(),
+  create: jest.fn(),
+};
 
 describe('SettingService', () => {
   let service: SettingService;
@@ -13,11 +22,11 @@ describe('SettingService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-      SettingService,
-      {
-        provide: getRepositoryToken(GlobalSettings),
-        useClass: Repository,
-      },
+        SettingService,
+        {
+          provide: getRepositoryToken(GlobalSettings),
+          useValue: mockSettingsRepo,
+        },
       ],
     }).compile();
 
@@ -25,60 +34,103 @@ describe('SettingService', () => {
     settingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
   });
 
-   
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-
-  describe('findAll', () => {
-    it('should return all settings', async () => {
-      const allSettings: GlobalSettings[] = [
-        { id: '1', settingKey: 'Setting 1', settingValue: 'Value 1' ,description: 'Description 1', settingType: SettingType.SMTP,created_at: new Date(),updated_at: new Date(),created_by: 'admin',updated_by: 'admin',populateWhoColumns: jest.fn()},
-        { id: '1', settingKey: 'Setting 1', settingValue: 'Value 1' ,description: 'Description 1', settingType: SettingType.SMTP,created_at: new Date(),updated_at: new Date(),created_by: 'admin',updated_by: 'admin',populateWhoColumns: jest.fn()},
-      ];
-
-      jest.spyOn(settingsRepo, 'find').mockResolvedValue(allSettings);
-      const expected ={"data": {"SMTP": [{"description": "Description 1", "id": "1", "settingKey": "Setting 1", "settingType": "SMTP", "settingValue": "Value 1"}, {"description": "Description 1", "id": "1", "settingKey": "Setting 1", "settingType": "SMTP", "settingValue": "Value 1"}]}, "message": "Settings retrieved successfully", "statusCode": 200}
-
-      const result = await service.findAll();
-
-      expect(result).toEqual(expected);
-      expect(settingsRepo.find).toHaveBeenCalled();
-    });
-  });
-
-  describe('findOne', () => {
-    it('should return a setting by settingType', async () => {
-      const settingType = 'Setting 1';
-      const setting: GlobalSettings[] = [{ id: "1", settingKey: 'Setting 1', settingValue: 'Value 1', description: 'Description 1', settingType: SettingType.SMTP,created_at: new Date(),updated_at: new Date(),created_by: 'admin',updated_by: 'admin',populateWhoColumns: jest.fn()}];
-
-      jest.spyOn(settingsRepo, 'find').mockResolvedValue(setting);
-
-      const result = await service.findOne(settingType);
-
-      expect(result).toEqual(setting);
-    });
-  });
   describe('create', () => {
-    it('should create settings', async () => {
-      const createSettingDto: CreateSettingDto[] = [
-        { settingKey: 'Setting 1', settingValue: 'Value 1', description: 'Description 1', settingType: SettingType.SMTP },
+    it('should create settings successfully', async () => {
+      const dto: CreateSettingDto[] = [
+        { settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com', settingType: SettingType.SMTP, description: 'SMTP Host' },
       ];
-      const savedSettings: GlobalSettings[] = [
-        { id: '1', settingKey: 'Setting 1', settingValue: 'Value 1' ,description: 'Description 1', settingType: SettingType.SMTP,created_at: new Date(),updated_at: new Date(),created_by: 'admin',updated_by: 'admin',populateWhoColumns: jest.fn()},
-      ] as GlobalSettings[];
-  
-      jest.spyOn(settingsRepo, 'save').mockResolvedValue(savedSettings as any);
-      jest.spyOn(settingsRepo, 'create').mockReturnValue(savedSettings[0]);
-  
-  
-      const result = await service.create(createSettingDto);
-  
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
+      mockSettingsRepo.find.mockResolvedValue([]);
+      mockSettingsRepo.create.mockImplementation((data) => data);
+      mockSettingsRepo.save.mockResolvedValue(dto[0]);
+
+      const result = await service.create(dto);
       expect(result).toEqual({
         message: 'Settings created successfully',
         statusCode: HttpStatus.CREATED,
       });
     });
+
+    it('should throw error if SMTP connection fails', async () => {
+      const dto = [
+        { settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com', settingType: SettingType.SMTP, description: 'SMTP Host' },
+        { settingKey: 'SMTP_PORT', settingValue: '587', settingType: SettingType.SMTP, description: 'SMTP Port' },
+        {settingKey: 'SMTP_USER_NAME', settingValue: 'user', settingType: SettingType.SMTP, description: 'SMTP User Name'},
+        {settingKey: 'SMTP_PASSWORD', settingValue: 'password', settingType: SettingType.SMTP, description: 'SMTP Password'},
+      ];
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(false);
+
+      await expect(service.create(dto)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw error if setting key already exists', async () => {
+      const dto = [{ settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com', settingType: SettingType.SMTP, description: 'SMTP Host' },];
+      mockSettingsRepo.find.mockResolvedValue([dto]);
+
+      await expect(service.create(dto)).rejects.toThrow(HttpException);
+    });
+  });
+  describe('findAll', () => {
+    it('should return all settings grouped by settingType', async () => {
+      const mockData = [
+        { id: 1, settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com', settingType: 'SMTP' },
+        { id: 2, settingKey: 'SMTP_PORT', settingValue: '587', settingType: 'SMTP' },
+      ];
+      mockSettingsRepo.find.mockResolvedValue(mockData);
+
+      const result = await service.findAll();
+      expect(result.statusCode).toBe(HttpStatus.OK);
+      expect(result.data).toHaveProperty('SMTP');
+    });
+
+    it('should throw an error if retrieval fails', async () => {
+      mockSettingsRepo.find.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.findAll()).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return settings of a given type', async () => {
+      const settingType = 'SMTP';
+      const mockData = [{ id: 1, settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com', settingType: 'SMTP' }];
+      mockSettingsRepo.find.mockResolvedValue(mockData);
+
+      const result = await service.findOne(settingType);
+      expect(result).toEqual(mockData);
+    });
+
+    it('should return an empty array if no settings found', async () => {
+      mockSettingsRepo.find.mockResolvedValue([]);
+
+      const result = await service.findOne('UNKNOWN_TYPE');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('updateSetting', () => {
+    it('should update a setting successfully', async () => {
+      const dto = [{ settingKey: 'SMTP_HOST', settingValue: 'smtp.new.com', settingType: SettingType.SMTP, description: 'New SMTP Host' }];
+      const existingSetting = { id: 1, settingKey: 'SMTP_HOST', settingValue: 'smtp.old.com', settingType: 'SMTP' };
+      mockSettingsRepo.findOne.mockResolvedValue(existingSetting);
+      mockSettingsRepo.save.mockResolvedValue({ ...existingSetting, settingValue: dto[0].settingValue });
+
+      const result = await service.updateSetting(dto);
+      expect(result).toEqual({ message: 'Setting updated successfully', statusCode: HttpStatus.OK });
+    });
+
+    it('should throw error if setting does not exist', async () => {
+      mockSettingsRepo.findOne.mockResolvedValue(null);
+      const dto = [{ settingKey: 'UNKNOW_KEY', settingValue: 'smtp.new.com', settingType: SettingType.SMTP, description: 'New SMTP Host' }];
+
+      await expect(service.updateSetting(dto)).rejects.toThrow(HttpException);
+    });
   });
 });
+
+  

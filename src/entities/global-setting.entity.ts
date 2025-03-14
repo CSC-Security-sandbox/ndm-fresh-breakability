@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { Base } from './base.entity';
 
 @Entity('global_settings')
-export class GlobalSettings extends Base {
+export class GlobalSettings {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

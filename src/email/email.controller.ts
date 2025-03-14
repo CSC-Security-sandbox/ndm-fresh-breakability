@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
 import { EmailService } from './email.service';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import  {EmailDto} from './dto/emailDto';
 
 @Controller('/api/v1/email')
 export class EmailController {
@@ -10,7 +11,9 @@ export class EmailController {
     summary: 'Send Email',
     description: 'Send Email',
   })
-  create(@Body() emailContent: any) {
-    return this.emailService.sendEmail(emailContent);
+  @ApiBody({ type:  EmailDto })
+  @ApiTags('Email')
+  create(@Body() emailContent: EmailDto) {
+    return this.emailService.setupAndSendMail(emailContent);
   }
 }
