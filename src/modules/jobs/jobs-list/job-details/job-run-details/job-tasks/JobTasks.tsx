@@ -40,7 +40,6 @@ const JobTasks = () => {
   }>({
     projectId: selectedProjectId,
   });
-
   const taskAPIRequest = useRef<any | undefined>(""); // instead we should use this but its failing and not returning result QueryActionCreatorResult<any>
 
   const [searchParams] = useSearchParams();
