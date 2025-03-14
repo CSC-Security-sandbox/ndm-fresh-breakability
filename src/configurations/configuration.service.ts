@@ -13,8 +13,8 @@ import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
-import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
+import { FindAllConfigPageDto, FileServerInfo } from './dto/findallconfig.dto';
 import { CreateRequestDto, Options } from 'src/work-manager/dto/validate-connection.dto';
 import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
@@ -39,6 +39,49 @@ export class ConfigurationService {
     ) {
         this.logger = this.loggerFactory.create(ConfigurationService.name)
     }
+    
+    async getAllFileServers(): Promise<any[]>  {
+        const fileServers = await this.fileServerEntity.createQueryBuilder('fileServer')
+        .leftJoinAndSelect('fileServer.workers', 'worker')
+        .leftJoinAndSelect('fileServer.config', 'config')
+        .leftJoinAndSelect('config.workingDirectory', 'workingDirectory')
+        .select([
+            'fileServer.id',
+            'fileServer.protocol',
+            'worker.workerId',
+            'worker.workerName',
+            'config.id',
+            'config.configName',
+            'config.status',
+            'workingDirectory.workingDirectory'
+        ])
+        .getMany();
+
+    const groupedByConfig = fileServers.reduce((acc, fileServer) => {
+        const configId = fileServer.config.id;
+        if (!acc[configId]) {
+            acc[configId] = {
+                id: configId,
+                serverName: fileServer.config.configName,
+                hasScratchPath: fileServer.config.workingDirectory && fileServer.config.workingDirectory.workingDirectory !== '' ? true : false,
+                status: fileServer.config.status,
+                fileServers: []
+            };
+        }
+        acc[configId].fileServers.push({
+            id: fileServer.id,
+            protocol: fileServer.protocol,
+            workers: fileServer.workers ? fileServer.workers.map(worker => ({
+                id: worker.workerId,
+                workerName: worker.workerName,
+            })) : []
+        });
+        return acc;
+    }, {});
+
+    return Object.values(groupedByConfig);
+    }
+
 
     async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
       try {
