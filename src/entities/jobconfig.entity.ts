@@ -1,10 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { JobStatus, JobType } from 'src/constants/enums';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { JobStatus, JobType, Protocol } from 'src/constants/enums';
+import { Column, Entity, JoinColumn, ManyToOne,OneToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
+
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
-
+import { Exclude } from 'class-transformer';
+import { SpeedTestConfigEntity } from './speed-test-job-config.entity';
 
 
 @Entity({ name: 'jobconfig' })
@@ -59,6 +61,9 @@ export class JobConfigEntity extends Base {
   @ManyToOne(() => VolumeEntity, volume => volume.targetPath, { onDelete:'CASCADE'})
   @JoinColumn({ name: 'target_path_id' }) 
   targetPath: VolumeEntity;
+
+  @OneToMany(() => SpeedTestConfigEntity, speedTestConfig => speedTestConfig.jobConfig, { cascade: true })
+  speedTestConfigs: SpeedTestConfigEntity[];
 
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;

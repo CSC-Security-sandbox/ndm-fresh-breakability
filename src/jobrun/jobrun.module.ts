@@ -3,7 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity} from '../entities/jobconfig.entity';
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
@@ -20,17 +23,18 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { JobRunInitService } from './jobrun.init.service';
 import { RedisModule } from 'src/redis/redis.module';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity,FileServerEntity,OperationErrorEntity,OperationsEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity]),
         WorkerModule,
         RedisModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

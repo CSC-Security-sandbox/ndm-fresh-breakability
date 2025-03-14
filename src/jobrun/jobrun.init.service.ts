@@ -5,6 +5,7 @@ import {
   Command,
   FileServerDetails,
   JobConfig,
+  SpeedTestJobConfig,
   JobContextFactory,
   NFS,
   RedisUtils,
@@ -19,6 +20,8 @@ import { ConsumerType, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } f
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -28,6 +31,7 @@ import { v4 as uuid4 } from 'uuid';
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
 import { RedisService } from "src/redis/redis.service";
+import { FileServerEntity } from "src/entities/fileserver.entity";
 
 @Injectable()
 export class JobRunInitService { 
@@ -37,8 +41,14 @@ export class JobRunInitService {
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
+    @InjectRepository(SpeedTestConfigEntity)
+    private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
+    @InjectRepository(SpeedTestConfigWorkerEntity)
+    private SpeedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
+    @InjectRepository(FileServerEntity)
+    private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(JobOptionsEntity)
@@ -71,7 +81,6 @@ export class JobRunInitService {
    // ------------------ Create job run  -------------------- //
    async createJobRun(jobConfigId: string , currentTime: Date) {
     const details:JobRunConfig = await this.getJobConfig(jobConfigId)
-    console.log('details--->', JSON.stringify(details)) 
     
     if(details.workers.length === 0) {
       this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)
@@ -99,9 +108,49 @@ export class JobRunInitService {
     });
     const jobRun = await this.jobRunRepo.save(jobRunRecord);
     await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED});
-    await this.buildJobContext(jobRun.id, details);
+    if (details.jobType == JobType.SPEED_TEST){
+      await this.buildSpeedTestJobContext(jobRun.id, details);
+    }
+    else{
+      await this.buildJobContext(jobRun.id, details);
+    }
     await this.initiateWorkflow(jobRun.id, details);
     return jobRun
+  }
+
+  async getJobConfigSpeedTest(
+    jobConfigId
+  ): Promise<JobRunConfig> {
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where : {id: jobConfigId},
+      relations: {
+        speedTestConfigs: {
+          workerEntities: true
+        },
+      },
+    })
+    const workers = jobConfig?.speedTestConfigs?.flatMap((config) => config.workerEntities.map(worker => worker.workersId)) || [];
+
+    const details : JobRunConfig = {
+      preserveAccessTime: jobConfig.preserveAccessTime,
+      excludeFilePatterns: jobConfig.excludeFilePatterns,
+      excludeOlderThan: jobConfig.excludeOlderThan,
+      connection: {
+        sourceCredential: {
+          path: jobConfig?.sourcePath?.volumePath ,
+          pathId : jobConfig?.sourcePath?.id ,
+          protocol: jobConfig?.sourcePath?.fileServer?.protocol,
+          username: jobConfig?.sourcePath?.fileServer?.userName,
+          password: jobConfig?.sourcePath?.fileServer?.password,
+          host: jobConfig?.sourcePath?.fileServer?.host,
+          workingDirectory: this.mountBasePath,
+          protocolVersion: '',
+        }
+      },
+      workers: workers,
+      jobType: jobConfig.jobType
+    }
+    return details
   }
 
     // ------------------ Get list of workers -------------------- //
@@ -115,7 +164,9 @@ export class JobRunInitService {
             targetPath: { fileServer: { config: true, workers:true } }
           },
         })
-    
+        if (jobConfig.jobType===JobType.SPEED_TEST) {
+          return  this.getJobConfigSpeedTest(jobConfigId)
+        }
         const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
         const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
     
@@ -163,9 +214,49 @@ export class JobRunInitService {
         }
         return details
     }
+    async getFileServerDetails(jobRunId): Promise<any> {
+      const jobRun = await this.jobRunRepo.findOne({
+        where: { id: jobRunId },
+        relations: ['jobConfig'],
+      });
+      if (!jobRun) {
+        throw new Error(`JobRun with id ${jobRunId} not found`);
+      }
+      const jobConfigId = jobRun.jobConfigId;
 
+      const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
+        where: { jobId: jobConfigId },
+        relations: ['workerEntities', 'jobConfig'],
+      });
+
+      const fileServers = await this.fileServerRepo.find({
+        relations: ['config', 'volumes', 'workingDirectory', 'workers']
+      });
+     
+      const mergedResults = speedTestJobConfig.map(config => {
+        const fileServer = fileServers.find(server => server.id === config.fileServer);
+  
+        return {
+          ...config,
+          fileServerDetails: fileServer ? {
+            fileServerId: fileServer.id,
+            host: fileServer.host,
+            userName: fileServer.userName,
+            password: fileServer.password,
+            fileServerProtocol: fileServer.protocol,
+            fileServerName: fileServer.config.configName,
+            volumes: fileServer.volumes[0],
+            workingDirectory: fileServer.workingDirectory,
+            workers: fileServer.workers
+          } : null
+        };
+      });
+
+     return mergedResults
+    }
     // ------------------ InitiateWorkflow -------------------- //
     async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
+
         let jobRunWorkflow: WorkflowHandleWithFirstExecutionRunId | null = null ;
         const options = new Options()
         options.workflowExecutionTimeout = '120s'
@@ -180,6 +271,17 @@ export class JobRunInitService {
                 options:options
               }
             jobRunWorkflow = await this.workFlowService.startWorkflow(WorkFlows.DISCOVERY, startWorkFlowPayload)
+            break;
+          }
+          case JobType.SPEED_TEST: {
+            const speedTestJobConfig = await this.getFileServerDetails(jobRunId);
+            const startWorkFlowPayload: StartWorkFlowPayload = {
+                workflowId: WorkFlows.SPEED_TEST + '-' + jobRunId,
+                taskQueue: 'ParentWorkflow-TaskQueue',
+                args: [{ traceId: jobRunId, payload: speedTestJobConfig, options: options }],
+                options:options
+              }
+            jobRunWorkflow = await this.workFlowService.startWorkflow(WorkFlows.SPEED_TEST, startWorkFlowPayload)
             break;
           }
 
@@ -221,6 +323,28 @@ export class JobRunInitService {
           );
         }
     }
+
+        // ------------------ BuildJobContext for SpeedTest -------------------- //
+        async buildSpeedTestJobContext(jobRunId: string,jobRunConfig:JobRunConfig) {
+          const jobRun = await this.jobRunRepo.findOne({
+            where: { id: jobRunId },
+            relations: ['jobConfig'],
+          });
+          if (!jobRun) {
+            throw new Error(`JobRun with id ${jobRunId} not found`);
+          }
+          const jobConfig = new SpeedTestJobConfig(
+            jobRunId,
+            jobRunConfig.jobType,
+          )
+
+          const redisClient = await RedisUtils.getClient();
+          if(!redisClient.isOpen) await redisClient.connect();
+          const jobState: JobState = new JobState([], 0, 1, [], JobContextStatus.Pending,[]);
+          const redisProvider = JobContextFactory.getSpeedTestProvider('redis', await this.redisService.getClient());
+          const jobContext = await redisProvider.buildContext(jobRunId, jobConfig, JobRunStatus.Ready, jobState);
+          this.redisService.setJobContext(jobRunId, jobContext);
+      }
 
     // ------------------ BuildJobContext -------------------- //
   async buildJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {

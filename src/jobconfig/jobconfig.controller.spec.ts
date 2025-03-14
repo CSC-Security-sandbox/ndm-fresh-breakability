@@ -72,6 +72,7 @@ describe('JobConfigController', () => {
           excludeOlderThan: new Date('2023-01-01'),
           excludeFilePatterns: '.*.tmp',
           preserveAccessTime: true,
+          skipFile:''
         },
         sidMapping: undefined,
         gidMapping: undefined
@@ -108,6 +109,7 @@ describe('JobConfigController', () => {
           excludeOlderThan: new Date('2023-01-01'),
           excludeFilePatterns: '.*.tmp',
           preserveAccessTime: true,
+          skipFile:''
         },
         sidMapping: undefined,
         gidMapping: undefined

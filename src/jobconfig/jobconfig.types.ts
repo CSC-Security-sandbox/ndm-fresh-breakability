@@ -29,6 +29,25 @@ export type FlattenedCutoverConfig = {
     destinationPathId: string;
 };
 
+export type SpeedTestJobRun = {
+  jobRunId: string;
+  jobConfigId: string;
+  startTime: Date;
+  endTime: Date;
+  fileServerCount: number;
+  workers: number;
+  status: string;
+}
+
+export type SpeedTestEntry = {
+  jobRunId: string;
+  startTime: Date;
+  endTime: Date;
+  totalWorkers: number;
+  fileServers: any[];
+  status: string;
+}
+
 export interface JobConfigPrecheckRes {
   status: string;
   sourcePathId: string;

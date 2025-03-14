@@ -67,5 +67,6 @@ export class FileServerEntity extends Base {
 
      
     @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.fileServer)
+    @JoinColumn({ name: 'config_id' })
     workingDirectory: FileServerWorkingDirectoryMappingEntity;
 }

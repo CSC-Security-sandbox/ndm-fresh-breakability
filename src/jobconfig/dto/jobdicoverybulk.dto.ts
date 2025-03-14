@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {  Protocol } from 'src/constants/enums';
 import { Type } from 'class-transformer';
 import {
     ArrayUnique,
@@ -10,7 +11,6 @@ import {
     IsString,
     IsUUID,
     ValidateNested,
-    isUUID
 } from 'class-validator';
 
 
@@ -77,7 +77,6 @@ export class JobConfigDiscoverBulk {
   @IsOptional()
   options: WorkFlowOptions = new WorkFlowOptions();
 }
-
 
 export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Exclude files older than this date', required: false })

@@ -4,6 +4,8 @@ import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import {SpeedTestConfigEntity , SpeedTestConfigWorkerEntity} from "src/entities/speed-test-job-config.entity"
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { DataSourceOptions } from "typeorm";
@@ -29,6 +31,6 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         synchronize: false,
         dropSchema: false,
         logging: true,
-        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity,OperationErrorEntity,TaskErrorEntity],
+        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity, SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity,TaskErrorEntity],
         migrations: []
 }))
