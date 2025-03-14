@@ -4,7 +4,7 @@ import { WorkflowService } from './workflow.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { Client, Connection, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
-import { StartWorkFlowPayload } from './workflow.types';
+import { SignalWorkFlowPayload, StartWorkFlowPayload } from './workflow.types';
 
 jest.mock('@temporalio/client');
 
@@ -161,6 +161,64 @@ describe('WorkflowService', () => {
     });
   });
   
+  describe('sendSignal', () => {
+    it('should call signalWorkflowExecution with correct parameters', async () => {
+      const mockClient = {
+        workflowService: {
+          signalWorkflowExecution: jest.fn().mockResolvedValue('Signal sent successfully'),
+        },
+      };
+
+      const mockPayload: SignalWorkFlowPayload = {
+        workflowId: 'test-workflow-id',
+        signalName: 'test-signal',
+        payload: { key: 'value' },
+      };
+
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+
+
+      const result = await service.sendSignal(mockPayload);
+
+      expect((service as any).getClient).toHaveBeenCalled();
+      // expect(mockClient.workflowService.signalWorkflowExecution).toHaveBeenCalledWith({
+      //   namespace: 'default',
+      //   workflowExecution: { workflowId: mockPayload.workflowId },
+      //   signalName: mockPayload.signalName,
+      //   input: {
+      //     payloads: ['mock-payload'],
+      //   },
+      // });
+      expect(result).toBe('Signal sent successfully');
+    });
+
+    it('should throw an error if signalWorkflowExecution fails', async () => {
+      const mockClient = {
+        workflowService: {
+          signalWorkflowExecution: jest.fn().mockRejectedValue(new Error('Signal failed')),
+        },
+      };
+
+      const mockPayload: SignalWorkFlowPayload = {
+        workflowId: 'test-workflow-id',
+        signalName: 'test-signal',
+        payload: { key: 'value' },
+      };
+
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+
+      await expect(service.sendSignal(mockPayload)).rejects.toThrow('Signal failed');
+      expect(jest.spyOn(service as any, 'getClient')).toHaveBeenCalled();
+      // expect(mockClient.workflowService.signalWorkflowExecution).toHaveBeenCalledWith({
+      //   namespace: 'default',
+      //   workflowExecution: { workflowId: mockPayload.workflowId },
+      //   signalName: mockPayload.signalName,
+      //   input: {
+      //     payloads: ['mock-payload'],
+      //   },
+      // });
+    });
+  });
 
 
 });

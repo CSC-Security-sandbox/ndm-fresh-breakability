@@ -1646,5 +1646,42 @@ describe("JobRunService", () => {
       expect(mockQueryBuilder.getManyAndCount).toHaveBeenCalled();
     });
   });
+ 
+  
+  it('should throw NotFoundException if jobRunId is not found', async () => {
+    const mockJobRunId = 'nonexistent-jobRunId';
+  
+    jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+  
+    await expect(service.getJobRun(mockJobRunId)).rejects.toThrow(Error);
+    expect(jobRunRepo.findOne).toHaveBeenCalledWith({  
+      where:{
+        id: mockJobRunId,
 
+      },
+      relations:  [
+         "tasks",
+         "tasks.worker",
+       ],
+       "select":  {
+         "endTime": true,
+         "id": true,
+         "jobConfigId": true,
+         "startTime": true,
+         "status": true,
+         "tasks":  {
+           "createdAt": true,
+           "id": true,
+           "status": true,
+           "taskType": true,
+           "updatedAt": true,
+           "worker":  {
+             "workerName": true,
+           },
+           "workerId": true,
+         },
+       },
+     } );
+  });
+  
 });

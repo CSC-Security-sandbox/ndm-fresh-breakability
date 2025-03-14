@@ -3,6 +3,8 @@ import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
 import { JobRunPageDto } from './dto/jobrunpage.dto';
 import { JobRunInitService } from './jobrun.init.service';
+import { BadRequestException } from '@nestjs/common';
+import { CutOverStatus } from 'src/constants/enums';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
@@ -12,7 +14,9 @@ describe('JobRunController', () => {
     findAllJobRuns: jest.fn(),
     getJobRun: jest.fn(),
     scheduleAJob: jest.fn(),
-    getJobAllRuns: jest.fn()
+    getJobAllRuns: jest.fn(),
+    cutOverApproval: jest.fn(),
+    getErrorOverview: jest.fn()
   };
   
 
@@ -81,5 +85,39 @@ describe('JobRunController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+  describe('cutoverApproval', () => {
+    it('should handle errors thrown by jobRunService.cutOverApproval', async () => {
+      const mockJobRunId = 'jobRunId';
+      const mockStatus = CutOverStatus.REJECTED;
+
+      jest.spyOn(service, 'cutOverApproval').mockRejectedValue(new Error('Test error'));
+
+      await expect(controller.cutoverApproval(mockJobRunId, mockStatus)).rejects.toThrow('Test error');
+      expect(service.cutOverApproval).toHaveBeenCalledWith(mockJobRunId, mockStatus);
+    });
+  });
+
+  describe('getErrorOverview', () => {
+    it('should call jobRunService.getErrorOverview with correct parameters', async () => {
+      const mockJobRunId = 'jobRunId';
+      const mockErrorOverview = { errorType: 'TypeError', count: 5 };
+
+      jest.spyOn(service, 'getErrorOverview').mockResolvedValue(mockErrorOverview);
+
+      const result = await controller.getErrorOverview(mockJobRunId);
+
+      expect(result).toEqual(mockErrorOverview);
+      expect(service.getErrorOverview).toHaveBeenCalledWith(mockJobRunId);
+    });
+
+    it('should handle errors thrown by jobRunService.getErrorOverview', async () => {
+      const mockJobRunId = 'jobRunId';
+
+      jest.spyOn(service, 'getErrorOverview').mockRejectedValue(new Error('Test error'));
+
+      await expect(controller.getErrorOverview(mockJobRunId)).rejects.toThrow('Test error');
+      expect(service.getErrorOverview).toHaveBeenCalledWith(mockJobRunId);
+    });
   });
 });

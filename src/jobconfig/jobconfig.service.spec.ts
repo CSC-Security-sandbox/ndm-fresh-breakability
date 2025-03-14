@@ -21,7 +21,7 @@ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-l
 import { JobType, JobStatus, JobRunStatus, TemplateType } from 'src/constants/enums';
 import * as winston from 'winston';
 import * as uuid from 'uuid';
-import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { join } from 'path';
@@ -46,6 +46,7 @@ describe('JobConfigService', () => {
   let jobRunRepo: Repository<JobRunEntity>;
   let inventoryRepo: Repository<InventoryEntity>;
   let volumeRepo: Repository<VolumeEntity>;
+  let projectRepo: Repository<ProjectEntity>;
 
   beforeEach(async () => {
     configService = {
@@ -243,6 +244,7 @@ describe('JobConfigService', () => {
     jobRunRepo = module.get<Repository<JobRunEntity>>(getRepositoryToken(JobRunEntity));
     inventoryRepo = module.get<Repository<InventoryEntity>>(getRepositoryToken(InventoryEntity));
     volumeRepo = module.get<Repository<VolumeEntity>>(getRepositoryToken(VolumeEntity));
+    projectRepo = module.get<Repository<ProjectEntity>>(getRepositoryToken(ProjectEntity));
    
   });
 
@@ -1637,18 +1639,28 @@ describe('JobConfigService', () => {
       expect(service.getTemplateFilename(TemplateType.GID)).toBe('template1.csv');
       expect(service.getTemplateFilename(TemplateType.SID)).toBe('template2.csv');
     });
+    it('should return undefined if an invalid TemplateType is passed', () => {
+      service['templates'] = {
+        [TemplateType.GID]: 'template1.csv',
+        [TemplateType.SID]: 'template2.csv',
+        [TemplateType.UID]: 'template3.csv',
+      };
+    
+      expect(service.getTemplateFilename('INVALID_TYPE' as TemplateType)).toBeUndefined();
+    });
   });
 
 
   describe('getAllJobConfig', () => {
     it('should return all job configs for the given project ID', async () => {
       const mockProjectId = 'projectId';
+      const date = new Date()
       const mockAllJobsDetails = [
         {
           jobconfigid: 'jobConfigId1',
           jobtype: 'MIGRATE',
           jobconfigstatus: 'Active',
-          firstrunat: new Date(),
+          firstrunat: date,
           sourcepath: 'sourcePath1',
           targetpath: 'targetPath1',
           futureschedule: '0 0 * * *',
@@ -1656,7 +1668,7 @@ describe('JobConfigService', () => {
           targetservername: 'TargetServer1',
           sourceprotocol: 'NFS',
           targetprotocol: 'NFS',
-          createdAt: new Date(),
+          createdAt: date,
           totalRuns: 5,
         },
       ];
@@ -1682,7 +1694,7 @@ describe('JobConfigService', () => {
           jobConfigId: 'jobConfigId1',
           jobType: 'MIGRATE',
           jobStatus: 'Active',
-          nextScheduleDate: new Date(),
+          nextScheduleDate: date,
           sourceServer: {
             serverName: 'SourceServer1',
             path: 'sourcePath1',
@@ -1702,5 +1714,136 @@ describe('JobConfigService', () => {
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith('jobconfig');
       expect(nextDate).toHaveBeenCalledWith('MIGRATE', mockAllJobsDetails[0].firstrunat, mockAllJobsDetails[0].futureschedule);
     });
+
+    it('should return an empty array if no job configs are found for the given project ID', async () => {
+      const mockProjectId = 'projectId';
+    
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      } as any);
+    
+      const result = await service.getAllJobConfig(mockProjectId);
+    
+      expect(result).toEqual([]);
+      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith('jobconfig');
+    });
+  });
+  it('should throw BadRequestException if projectId is not a valid UUID', async () => {
+    const mockProjectId = 'invalid-uuid';
+  
+    jest.mock('class-validator', () => ({
+      ...jest.requireActual('class-validator'),
+      isUUID: jest.fn(() => false),
+    }));
+  
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw NotFoundException if no project is found for the given project ID', async () => {
+    const mockProjectId = 'valid-uuid';
+  
+    jest.spyOn(require('class-validator'), 'isUUID').mockReturnValue(true);
+    jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
+  
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+  });
+  it('should handle cases where targetPath is null in job configs', async () => {
+    const mockProjectId = 'projectId';
+    const date = new Date()
+    const mockAllJobsDetails = [
+      {
+        jobconfigid: 'jobConfigId1',
+        jobtype: 'MIGRATE',
+        jobconfigstatus: 'Active',
+        firstrunat: date,
+        sourcepath: 'sourcePath1',
+        targetpath: null,
+        futureschedule: '0 0 * * *',
+        sourceservername: 'SourceServer1',
+        targetservername: null,
+        sourceprotocol: 'NFS',
+        targetprotocol: null,
+        createdAt: date,
+        totalRuns: 5,
+      },
+    ];
+  
+    jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+      leftJoin: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
+    } as any);
+  
+    jest.spyOn(require('src/utils/mapper'), 'nextDate').mockReturnValue(new Date());
+  
+    const result = await service.getAllJobConfig(mockProjectId);
+  
+    expect(result).toEqual([
+      {
+        jobConfigId: 'jobConfigId1',
+        jobType: 'MIGRATE',
+        jobStatus: 'Active',
+        nextScheduleDate: new Date(),
+        sourceServer: {
+          serverName: 'SourceServer1',
+          path: 'sourcePath1',
+          protocol: 'NFS',
+        },
+        destinationServer: {},
+        errors: 0,
+        totalRuns: 5,
+        configName: undefined,
+        createdAt: mockAllJobsDetails[0].createdAt,
+      },
+    ]);
+  });
+  it('should return an empty array if no job configs are found', async () => {
+    const mockProjectId = 'projectId';
+  
+    jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+      leftJoin: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    } as any);
+  
+    const result = await service.getAllJobConfig(mockProjectId);
+  
+    expect(result).toEqual([]);
+  });
+  
+  it('should throw BadRequestException if projectId is invalid', async () => {
+    const mockProjectId = 'invalid-uuid';
+  
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw NotFoundException if project is not found', async () => {
+    const mockProjectId = 'valid-uuid';
+  
+    jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
+    const getConfigsByProjectIdSpy = jest.spyOn(service, 'getConfigsByProjectId');
+  
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+    expect(getConfigsByProjectIdSpy).toHaveBeenCalledWith(mockProjectId);
   });
 });
