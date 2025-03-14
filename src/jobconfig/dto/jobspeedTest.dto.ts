@@ -73,7 +73,7 @@ export class WriteReadResult {
   @IsNumber()
   totalTimeTaken: number;
 
-  @ApiProperty({ description: 'Error in write test' })
+  @ApiProperty({ description: 'Error in Read write test' })
   @IsString()
   error: string;
 
@@ -124,10 +124,6 @@ export class SpeedTestResult {
   @ApiProperty({ description: 'UUID of workerId', required: true })
   @IsUUID()
   workerId: string;
-
-  @ApiProperty({ description: 'Error in Read test' })
-  @IsString()
-  error: string;
 
   @ApiProperty({ description: 'UUID of fileServerID', required: true })
   @IsUUID()
