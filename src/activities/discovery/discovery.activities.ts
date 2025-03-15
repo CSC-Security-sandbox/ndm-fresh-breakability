@@ -6,7 +6,7 @@ import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
-import { buildTask } from '../utils/utils';
+import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import { CommonActivityService } from '../common/common.service';
 
 @Injectable()
@@ -140,5 +140,5 @@ export class DiscoveryActivity {
   }
 
 }
-const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+// const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
 

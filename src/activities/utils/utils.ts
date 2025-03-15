@@ -114,13 +114,12 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
   }
 ): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
+
     const obj = new FileInfo(
         name,
         relativePath,
         relativePath,
         lStat.isDirectory(),
-        lStat.uid,
-        lStat.gid,
         lStat.size,
         !lStat.isDirectory(),
         lStat.birthtime,
@@ -130,16 +129,15 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         getFilePermissions(lStat),
         getFileType(lStat),
         relativePath.split('/').length - 2,
+        lStat.uid,
+        lStat.gid,
       );
     return {
       ...obj,
-      uid: lStat.uid.toString(),
-      gid: lStat.gid.toString(),
-      fileSize: lStat.size,
-      blocks: lStat.blocks,
-      modifiedTime: new Date(lStat.mtime).toISOString(),
-      birthTime: new Date(lStat.birthtime).toISOString(),
-      accessTime: new Date(lStat.atime).toISOString(),
+
+      // modifiedTime: new Date(lStat.mtime).toISOString(),
+      // birthTime: new Date(lStat.birthtime).toISOString(),
+      // accessTime: new Date(lStat.atime).toISOString(),
       ...checksums
     }
 }
@@ -155,7 +153,12 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => (dFile && sFile &&  (sFile.size === dFile.size) && (sFile.mtime.toISOString() === dFile.mtime.toISOString())) && (
+  (sFile.gid != dFile.gid) ||   (sFile.uid != dFile.uid) ||  (sFile.atime != dFile.atime) || (sFile.mode != dFile.mode)
+)
+
+export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
   if (error.code) {

@@ -96,6 +96,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getOwnerIdentity(jobContext: JobContext, id: number, type: 'SID' | 'UID' | 'GID') {
-    return id
+    return this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
+    // return id.toString()
   }
 }

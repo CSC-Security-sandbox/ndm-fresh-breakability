@@ -93,13 +93,13 @@ export class MigrationSyncService {
     }
   }
   
-  async stampMetaData(filePath: string, metadata: MetaData, jobContext: JobContext, command: Command):Promise<StampMetaDataOutput> {
+  async stampMetaData(targetPath: string, sourcePath: string,  metadata: MetaData, jobContext: JobContext, command: Command):Promise<StampMetaDataOutput> {
     const stampMetaDataOutput : StampMetaDataOutput = {errors: [], errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR}
     if(metadata?.mode) {
       try {
-        fs.chmodSync(filePath, metadata.mode);
+        fs.chmodSync(targetPath, metadata.mode);
       } catch(error) {
-        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META,stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META,stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         await jobContext.appendToErrorList(dmErr);
         stampMetaDataOutput.errors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
@@ -109,48 +109,65 @@ export class MigrationSyncService {
       try {
         if(process.platform == 'win32') {
           const birthtime = new Date(metadata.birthtime).toISOString().replace(/T/, ' ').replace(/\..+/, '')
-          const birthtimeCommand = `powershell.exe -Command "(Get-Item '${filePath}').CreationTime = '${birthtime}'"`;
+          const birthtimeCommand = `powershell.exe -Command "(Get-Item '${targetPath}').CreationTime = '${birthtime}'"`;
           execSync(birthtimeCommand);
         }else {
-          const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${filePath}`;
+          const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
           execSync(birthtimeCommand);
         }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
     }
     if(metadata.gid && metadata.uid && process.platform !== 'win32') {
-      try {
-        const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid, 'GID')
-        const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid, 'UID')
-        fs.chownSync(filePath, uid, gid);
-      } catch(error) {
-        this.logger.error(`Error setting ownership: ${error.message}`);
-        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
-        stampMetaDataOutput.errors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+      if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
+        try {
+          const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid, 'GID')
+          const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid, 'UID')
+          this.logger.debug(`UID : ${metadata.uid} -> ${uid}`)
+          this.logger.debug(`GID : ${metadata.gid} -> ${gid}`)
+          if(gid && uid)
+            fs.chownSync(targetPath, parseInt(uid), parseInt(gid));
+        } catch(error) {
+          this.logger.error(`Error setting ownership: ${error.message}`);
+          const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+          stampMetaDataOutput.errors.push(error.code)
+          await jobContext.appendToErrorList(dmErr);
+        }
       }
+      else this.logger.debug(`KeyNotFound ${jobContext.jobConfig.options.isIdentityMappingAvailable}`)
     }
     // if(metadata?.sid && process.platform === 'win32') {
     //   try {
     //     const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-    //     execSync(`icacls "${filePath}" /setowner "${sid}"`, { stdio: 'inherit' });
+    //     execSync(`icacls "${targetPath}" /setowner "${sid}"`, { stdio: 'inherit' });
     //   } catch(error) {
     //     this.logger.error(`Error setting ownership: ${error.message}`);
-    //     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+    //     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
     //     stampMetaDataOutput.errors.push(error.code)
     //     await jobContext.appendToErrorList(dmErr);
     //   }
     // }
     if(metadata.mtime && metadata.atime) {
       try {
-        fs.utimesSync(filePath, new Date(metadata.atime), new Date(metadata.mtime));
+        fs.utimesSync(targetPath, new Date(metadata.atime), new Date(metadata.mtime));
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
-        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: filePath});
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
+      }
+    }
+
+    if(metadata.mtime && metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
+      try {
+        fs.utimesSync(sourcePath, new Date(metadata.atime), new Date(metadata.mtime));
+      } catch(error) {
+        this.logger.error(`Error preserving file timestamps: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
@@ -160,7 +177,7 @@ export class MigrationSyncService {
   
   async syncOperation({ sourcePath, targetPath, ops, jobContext, command }: SyncOperationInput): Promise<SyncOperationOutput> {
     const syncOperation: SyncOperationOutput = {errors : new Set<string>(),  ops, status: OPS_STATUS.COMPLETED , errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
-    if (syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
+    if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
@@ -176,7 +193,7 @@ export class MigrationSyncService {
           return syncOperation
         }
       }
-      if(ops[0].cmd === OPS_CMD.COPY_DIR) {
+      if(syncOperation.ops[0].cmd === OPS_CMD.COPY_DIR) {
         try {
           this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
           await this.ensureDirectoryExists(targetPath);
@@ -190,8 +207,9 @@ export class MigrationSyncService {
         }
       }
     }
-    if (ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
-      const result = await this.stampMetaData(targetPath, ops[1].metadata, jobContext, command)
+    if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
+      this.logger.debug(`Meta Data Updating from ${sourcePath} to ${targetPath} : ${JSON.stringify(ops[1])}`);
+      const result = await this.stampMetaData(targetPath, sourcePath, ops[1].metadata, jobContext, command)
       result.errors.forEach(error => syncOperation.errors.add(error))
       syncOperation.ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
     }
