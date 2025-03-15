@@ -3,7 +3,7 @@ import { FileInfo, TaskStats, Command, Task, DMError, TaskStatsType, CommandOper
 
 describe('Metadata Types', () => {
   it('should create and serialize FileInfo', () => {
-    const fileInfo = new FileInfo('file', '/path', '/parent', false, 1, 1, 100, true, new Date(), new Date(), new Date(), 'txt', 'rw', 'file', 1);
+    const fileInfo = new FileInfo('file', '/path', '/parent', false, 1, true, new Date(), new Date(), new Date(), 'txt', 'rw', 'file', 1, 1);
     const serialized = fileInfo.serialize();
     const deserialized: FileInfo = FileInfo.deserialize(serialized);
     expect(deserialized.fileName).toBe('file');
