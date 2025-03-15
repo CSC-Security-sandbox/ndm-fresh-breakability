@@ -18,6 +18,8 @@ import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { TaskErrorEntity } from "src/entities/task-error.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -30,7 +32,7 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         schema: process.env.SCHEMA,
         synchronize: false,
         dropSchema: false,
-        logging: true,
-        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity, SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity,TaskErrorEntity],
+        logging: false,
+        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity, SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity,TaskErrorEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity],
         migrations: []
 }))

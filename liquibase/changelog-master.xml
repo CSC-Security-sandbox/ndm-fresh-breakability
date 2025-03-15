@@ -23,4 +23,7 @@
       <changeSet id="5006" author="adityav2">
       <sqlFile path="liquibase/20250314_01_update_speed_test_result_tables.sql"/>
    </changeSet>
+   <changeSet id="5017" author="shivam6">
+      <sqlFile path="liquibase/20250315_01_create_identity_mapping_tables.sql"/>
+   </changeSet>
 </databaseChangeLog>

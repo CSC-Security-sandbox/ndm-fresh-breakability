@@ -155,7 +155,7 @@ export class JobRunService {
   }
 
   dummyFileEntry() {
-    return new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+    return new FileInfo("LAST_FILE", "", "", false, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0,1001,1001);
   }
 
   //  ------------------- JobRun actions RESUME ------------------ //

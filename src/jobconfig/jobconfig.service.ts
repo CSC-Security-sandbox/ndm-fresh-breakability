@@ -55,6 +55,9 @@ import {
 import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { ParsedMapping } from "src/utils/indentity-mapping.type";
 
 @Injectable()
 export class JobConfigService {
@@ -90,7 +93,11 @@ export class JobConfigService {
     @InjectRepository(VolumeEntity)
     private readonly volumeRepo: Repository<VolumeEntity>,
     private readonly workFlowService: WorkflowService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    @InjectRepository(IdentityMappingEntity)
+    private identityMappingRepo: Repository<IdentityMappingEntity>,
+    @InjectRepository(IdentityConfigCrossMappingEntity)
+    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -489,10 +496,27 @@ export class JobConfigService {
   ): Promise<JobConfigBulkMigrateRes[]> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
+    let parsedMappings: ParsedMapping[] = [];
+    let templateType ;
+    const identityMap = uuidv4();
+    const jobConfigIdsToUpdate: any[] = [];
 
     if (!bulkMigrate?.migrateConfigs) {
       return [];
     }
+    if (bulkMigrate?.sidMapping) {
+      templateType = TemplateType.SID;
+      const sidMapping = await this.decodeBase64(bulkMigrate.sidMapping);
+      parsedMappings = await this.parseBlobData(sidMapping, templateType);
+    }
+ 
+    if (bulkMigrate?.gidMapping) {
+      templateType = TemplateType.GID;
+      const gidMapping = await this.decodeBase64(bulkMigrate.gidMapping);
+      parsedMappings = await this.parseBlobData(gidMapping, templateType);
+    }
+ 
+ 
 
     for (const config of bulkMigrate.migrateConfigs) {
       if (!config?.destinationPathId) {
@@ -506,7 +530,7 @@ export class JobConfigService {
             sourcePathId: config?.sourcePathId,
             targetPathId: destinationPath,
           },
-          select: { sourcePathId: true, targetPathId: true, scheduler: true },
+          select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true },
         });
 
         const existingSet = new Set(
@@ -536,6 +560,11 @@ export class JobConfigService {
               scheduler: ScheduleStatus.SCHEDULING,
             }
           );
+          if (parsedMappings.length > 0) {
+            const jobConfigIds = existingJobConfigs.map((jobConfig) => jobConfig.id);
+            this.logger.log("id pushed", ...jobConfigIds)
+            jobConfigIdsToUpdate.push(...jobConfigIds);
+          }
         } else {
           jobConfigs.push(
             this.jobConfigRepo.create({
@@ -557,6 +586,11 @@ export class JobConfigService {
     }
 
     if (jobConfigs.length > 0) {
+      const savedJobConfigs = await this.jobConfigRepo.save(jobConfigs);
+      const jobConfigIds = savedJobConfigs.map((jobConfig) => jobConfig.id);
+      if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
+        await this.saveIdentityMappingsWithMap(jobConfigIds, parsedMappings, identityMap, templateType);
+      }
       return (await this.jobConfigRepo.save(jobConfigs)).map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
@@ -566,7 +600,11 @@ export class JobConfigService {
           targetPathId,
         })
       );
+      
     } else {
+      if (jobConfigIdsToUpdate.length > 0) {
+        await this.updateMappingsWithMap(jobConfigIdsToUpdate, parsedMappings, identityMap, templateType);
+      }
       return [];
     }
   }
@@ -1303,5 +1341,154 @@ export class JobConfigService {
       this.logger.log("results",JSON.stringify(results));
       return Array.from(results.values()).flatMap((it) => it);
     }
-      
+  
+    async decodeBase64(base64String: string): Promise<string> {
+      try {
+        const base64Data = base64String.split(",")[1];
+        if (!base64Data) {
+          throw new Error("Invalid Base64 format");
+        }
+        return Buffer.from(base64Data, "base64").toString("utf-8");
+      } catch (error) {
+        console.error("Error decoding Base64:", error);
+        throw error;
+      }
+    }
+  
+    async parseBlobData(
+      blobData: string,
+      templateType: TemplateType
+    ): Promise<ParsedMapping[]> {
+      return blobData
+        ?.trim()
+        ?.split("\n")
+        ?.map((line) => line.split(","))
+        ?.map((columns) => {
+          if (templateType === TemplateType.SID) {
+            const [sourceMapping, targetMapping] = columns;
+            return { sourceMapping, targetMapping };
+          } else if (templateType === TemplateType.GID) {
+            const [sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid] = columns;
+            return { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid };
+          }
+        });
+    }
+  
+    async saveIdentityMappingsWithMap(
+      jobConfigIds: string[],
+      parsedData: ParsedMapping[],
+      identityMap: string,
+      templateType: TemplateType
+    ) {
+      console.log("reached for saving mappings");
+  
+      for (const mapping of parsedData) {
+        if (templateType === TemplateType.SID) {
+          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
+          const identityMappingEntity = this.identityMappingRepo.create({
+            identityType: templateType,
+            identityMap: identityMap,
+            sourceMapping: sourceMapping,
+            targetMapping: targetMapping,
+          });
+          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
+          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+        } else if (templateType === TemplateType.GID) {
+          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
+  
+          const gidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.GID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingGid,
+            targetMapping: targetMappingGid,
+          });
+          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
+          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+  
+          const uidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.UID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingUid,
+            targetMapping: targetMappingUid,
+          });
+          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
+          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+        }
+      }
+  
+      for (const jobConfigId of jobConfigIds) {
+        const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
+          identityMappingId: identityMap,
+          jobConfigId: jobConfigId,
+        });
+  
+        await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
+      }
+    }
+  
+    async updateMappingsWithMap(
+      jobConfigIds: any[],
+      parsedData: ParsedMapping[],
+      identityMap: string,
+      templateType: TemplateType
+    ) {
+      this.logger.log("reached for updating mappings");
+      this.logger.log("jobCIDs", jobConfigIds);
+      this.logger.log("parsedData", parsedData);
+  
+      for (const mapping of parsedData) {
+        if (templateType === TemplateType.SID) {
+          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
+          const identityMappingEntity = this.identityMappingRepo.create({
+            identityType: templateType,
+            identityMap: identityMap,
+            sourceMapping: sourceMapping,
+            targetMapping: targetMapping,
+          });
+          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
+          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+        } else if (templateType === TemplateType.GID) {
+          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
+  
+          const gidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.GID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingGid,
+            targetMapping: targetMappingGid,
+          });
+          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
+          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+  
+          const uidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.UID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingUid,
+            targetMapping: targetMappingUid,
+          });
+          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
+          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+        }
+      }
+  
+      for (const jobConfigId of jobConfigIds) {
+        const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
+          where: {
+            jobConfigId: jobConfigId,
+          },
+        });
+  
+        if (existingCrossMapping) {
+          existingCrossMapping.identityMappingId = identityMap;
+          await this.identityCrossMappingRepo.save(existingCrossMapping);
+          console.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
+        } else {
+          const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
+            identityMappingId: identityMap,
+            jobConfigId: jobConfigId,
+          });
+  
+          await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
+        }
+      }
+    }
 }
