@@ -75,10 +75,12 @@ const BulkDiscover = () => {
       );
       await createBulkDiscoveryApi(payload).unwrap();
       navigate(`/file-server/${fileServerDetails?.id}`);
+
+      const configName = fileServerDetails?.configName;
       const successMessage = (
         <>
           Bulk Discover Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs-list")}>
+          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${'discover'}`)}>
             View Job Listing
           </Button>
         </>

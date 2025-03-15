@@ -323,10 +323,11 @@ export function withBulkMigrateCreateForm(
         },
       };
 
+      const configName = fileServerDetails?.configName;
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs-list")}>
+          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${'migrate'}`)}>
             View Job Listing
           </Button>
         </>

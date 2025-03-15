@@ -29,7 +29,7 @@ const JobsList = () => {
   const jobType = searchParams.get("type");
   let preSelectedFilter: preSelectedFilterType = {};
   if (source) preSelectedFilter.sourceServerName = source;
-  if (jobType) preSelectedFilter.jobType = jobType;
+  if (jobType) preSelectedFilter.jobType = jobType.toUpperCase();
 
   const { selectedProjectId } = useSelectedProjectId();
   const {
