@@ -6,14 +6,14 @@ const onSigninCallback = (): void => {
 };
 
 const oidcConfig = {
-  authority: import.meta.env.VITE_KEYCLOAK_AUTHORITY || "",
-  grant_type: import.meta.env.VITE_KEYCLOAK_GRANT_TYPE || "",
-  client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "",
-  client_secret: import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET || "",
-  redirect_uri: import.meta.env.VITE_KEYCLOAK_REDIRECT_URI || "",
-  response_type: import.meta.env.VITE_KEYCLOAK_RESPONSE_TYPE || "",
+  authority: window?.env?.VITE_KEYCLOAK_AUTHORITY || import.meta.env.VITE_KEYCLOAK_AUTHORITY || "",
+  grant_type: window?.env?.VITE_KEYCLOAK_GRANT_TYPE || import.meta.env.VITE_KEYCLOAK_GRANT_TYPE || "",
+  client_id: window?.env?.VITE_KEYCLOAK_CLIENT_ID || import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "",
+  client_secret: window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET || "",
+  redirect_uri: window?.env?.VITE_KEYCLOAK_REDIRECT_URI || import.meta.env.VITE_KEYCLOAK_REDIRECT_URI || "",
+  response_type: window?.env?.VITE_KEYCLOAK_RESPONSE_TYPE || import.meta.env.VITE_KEYCLOAK_RESPONSE_TYPE || "",
   postLogoutRedirectUri:
-    import.meta.env.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || "",
+    window?.env?.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || import.meta.env.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || "",
   onSigninCallback,
 };
 

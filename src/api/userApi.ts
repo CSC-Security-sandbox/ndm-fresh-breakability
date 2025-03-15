@@ -12,7 +12,7 @@ export const usersApi = createApi({
     "GET_SMTP"
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_ADMIN_SERVICE_URL,
+    baseUrl: window?.env?.VITE_ADMIN_SERVICE_URL || import.meta.env.VITE_ADMIN_SERVICE_URL,
     prepareHeaders: (headers, { endpoint }) => {
       const token = Cookies.get("access_token");
       const projectId = localStorage.getItem("selected_project_id");
