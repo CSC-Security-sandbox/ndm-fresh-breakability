@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OverviewDTO } from 'src/overview/overview.dto';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -9,6 +9,7 @@ import { covertBytes } from 'src/utils/mapper';
 
 @Injectable()
 export class OverviewService {
+    private logger: Logger = new Logger(OverviewService.name);
     constructor(@InjectRepository(InventoryEntity) private readonly inventoryRepository: Repository<InventoryEntity>,
         @InjectRepository(ProjectEntity) private readonly projectRepository: Repository<ProjectEntity>) { }
 
@@ -52,9 +53,15 @@ export class OverviewService {
                     'configs.fileServers.volumes.sourceConfig.jobRuns',
                 ],
             });
+
+            this.logger.log(`projectDetails - ${JSON.stringify(projectDetails)}`);
+            
             let totalDiscoveredSize = 0;
             let totalMigratedSize = 0;
             let totalFileServers = projectDetails?.flatMap(project => project?.configs ?? []).length;
+
+            this.logger.log(`totalFileServers - ${totalFileServers}`);
+
             let totalDiscoverJobs = 0;
             const scanRunDetails = projectDetails?.flatMap(project =>
                 project.configs.flatMap(config =>
@@ -74,6 +81,8 @@ export class OverviewService {
                 return acc;
             }, []);
 
+            this.logger.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
+
             totalDiscoverJobs = scanRunDetails?.length ?? 0;
 
             const completedJobRunDetails = scanRunDetails?.filter(jobRun => jobRun.status === JobRunStatus.Completed);
@@ -86,6 +95,8 @@ export class OverviewService {
 
             const discoveredSize = await inventoryQueryBuilder.getRawMany();
             totalDiscoveredSize = discoveredSize[0]?.totalSize ?? 0;
+
+            this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
 
             const migrateRun = projectDetails?.flatMap(project =>
                 project?.configs?.flatMap(config =>
@@ -131,7 +142,15 @@ export class OverviewService {
            
            let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
            let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
-          
+
+           this.logger.log(`totalDiscoveredSize - ${totalDiscoveredSize}`);
+           this.logger.log(`totalMigratedSize - ${totalMigratedSize}`);
+           this.logger.log(`totalPending - ${totalPending}`);
+
+           this.logger.log(`updateTotalDiscoveredSize - ${updateTotalDiscoveredSize}`);
+           this.logger.log(`updateTotalMigratedSize - ${updateTotalMigratedSize}`);
+           this.logger.log(`totalPendingSize - ${totalPendingSize}`);
+
            const overViewData: OverviewDTO = {
             storageDetails: {
                 totalDiscoveredSize: updateTotalDiscoveredSize,
