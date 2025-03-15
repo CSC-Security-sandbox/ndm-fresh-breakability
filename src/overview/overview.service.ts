@@ -52,9 +52,15 @@ export class OverviewService {
                     'configs.fileServers.volumes.sourceConfig.jobRuns',
                 ],
             });
+
+            console.log(`projectDetails - ${JSON.stringify(projectDetails)}`);
+            
             let totalDiscoveredSize = 0;
             let totalMigratedSize = 0;
             let totalFileServers = projectDetails?.flatMap(project => project?.configs ?? []).length;
+
+            console.log(`totalFileServers - ${JSON.stringify(totalFileServers)}`);
+
             let totalDiscoverJobs = 0;
             const scanRunDetails = projectDetails?.flatMap(project =>
                 project.configs.flatMap(config =>
@@ -74,6 +80,8 @@ export class OverviewService {
                 return acc;
             }, []);
 
+            console.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
+
             totalDiscoverJobs = scanRunDetails?.length ?? 0;
 
             const completedJobRunDetails = scanRunDetails?.filter(jobRun => jobRun.status === JobRunStatus.Completed);
@@ -86,6 +94,8 @@ export class OverviewService {
 
             const discoveredSize = await inventoryQueryBuilder.getRawMany();
             totalDiscoveredSize = discoveredSize[0]?.totalSize ?? 0;
+
+            console.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
 
             const migrateRun = projectDetails?.flatMap(project =>
                 project?.configs?.flatMap(config =>
@@ -131,7 +141,15 @@ export class OverviewService {
            
            let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
            let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
-          
+
+           console.log(`totalDiscoveredSize - ${totalDiscoveredSize}`);
+           console.log(`totalMigratedSize - ${totalMigratedSize}`);
+           console.log(`totalPending - ${totalPending}`);
+
+           console.log(`updateTotalDiscoveredSize - ${updateTotalDiscoveredSize}`);
+           console.log(`updateTotalMigratedSize - ${updateTotalMigratedSize}`);
+           console.log(`totalPendingSize - ${totalPendingSize}`);
+           
            const overViewData: OverviewDTO = {
             storageDetails: {
                 totalDiscoveredSize: updateTotalDiscoveredSize,
