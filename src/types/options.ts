@@ -3,4 +3,5 @@ preserveAccessTime?: boolean;
 excludeOlderThan?: string;
 excludeFilePattern?: string;
 skipsFilesModifiedInLast?: string;
+isIdentityMappingAvailable?: boolean;
 }

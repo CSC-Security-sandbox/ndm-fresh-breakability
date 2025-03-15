@@ -6,50 +6,53 @@ export class FileInfo implements Serializable {
   path: string;
   parentPath: string;
   isDirectory: boolean;
-  uid: number;
-  gid: number;
-  size: number;
+  fileSize: number;
   isFile: boolean;
-  ctime: Date;
-  mtime: Date;
-  atime: Date;
+  birthTime: Date;
+  modifiedTime: Date;
+  accessTime: Date;
   extension: string;
   permission: string;
   fileType: string;
   depth: number;
+  uid?: number;
+  gid?: number;
+  sid?: string;
 
   constructor(
     fileName: string,
     path: string,
     parentPath: string,
     isDirectory: boolean,
-    uid: number,
-    gid: number,
-    size: number,
+    fileSize: number,
     isFile: boolean,
-    ctime: Date,
-    mtime: Date,
-    atime: Date,
+    birthTime: Date,
+    modifiedTime: Date,
+    accessTime: Date,
     extension: string,
     permission: string,
     fileType: string,
     depth: number,
+    uid?: number,
+    gid?: number,
+    sid?: string,
   ) {
     this.fileName = fileName;
     this.path = path;
     this.parentPath = parentPath;
     this.isDirectory = isDirectory;
-    this.uid = uid;
-    this.gid = gid;
-    this.size = size;
+    this.fileSize = fileSize;
     this.isFile = isFile;
-    this.ctime = ctime;
-    this.mtime = mtime;
-    this.atime = atime;
+    this.birthTime = birthTime;
+    this.modifiedTime = modifiedTime;
+    this.accessTime = accessTime;
     this.extension = extension;
     this.permission = permission;
     this.fileType = fileType;
     this.depth = depth;
+    this.uid = uid;
+    this.gid = gid;
+    this.sid = sid;
   }
 
   serialize(): string {
@@ -111,6 +114,7 @@ export class MetaData{
   mode: number;
   uid: number;
   gid: number;
+  sid: string;
 }
 
 export class CommandOperation {
