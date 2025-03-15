@@ -6,7 +6,7 @@ import {
   Popover,
 } from "@netapp/bxp-design-system-react";
 import React from "react";
-import { TopSectionPropsType } from "../bulk-discovery.interface";
+import { TopSectionPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 import ScheduleComponent from "./ScheduleComponent";
 
 const TopSection = ({

@@ -10,10 +10,10 @@ import { _persistedStore, store } from "./store/store.ts";
 import AuthGuard from "./auth/AuthGuard.tsx";
 import AuthenticationProvider from "@/auth/AuthenticationProvider";
 import "@netapp/bxp-design-system-react/dist/index.css";
-import Modal from "@components/Modal/ModalWrapper";
-import SideDrawer from "@components/SideDrawer/SideDrawer";
+import Modal from "@components/modal/ModalWrapper.tsx";
+import SideDrawer from "@components/side-drawer/SideDrawer.tsx";
 import { Box } from "@components/container/index.tsx";
-import TopProgressBar from "@components/TopProgressBar/TopProgressBar.tsx";
+import TopProgressBar from "@components/top-progress-bar/TopProgressBar.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

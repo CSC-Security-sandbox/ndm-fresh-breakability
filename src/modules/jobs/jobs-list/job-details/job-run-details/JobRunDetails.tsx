@@ -4,13 +4,27 @@ import {
   JobRunApiType,
   JOBS_TYPE,
 } from "@/types/app.type";
+import { getGrafanaLogUrl } from "@/utils/common.utils";
+import { useUpdateJobRunStatusMutation } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
   useGetJobRunDetailsQuery,
   useGetPdfReportMutation,
 } from "@api/reportApi";
+import { hasPermission } from "@auth/auth.utils";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
+import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import { notify } from "@components/notification/NotificationWrapper";
+import {
+  getActionMenu,
+  getReportActions,
+} from "@modules/jobs/job-run-list/run.utils";
+import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
+import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import JobRunHeader from "@modules/jobs/jobs-list/job-details/components/JobRunHeader";
+import JobRunTaskCard from "@modules/jobs/jobs-list/job-details/components/JobRunTaskDetails";
+import { handleDownloadReport } from "@modules/jobs/jobs.utils";
 import {
   ActionMenu,
   ActionMenuButtonStyle,
@@ -18,22 +32,8 @@ import {
   Button,
   DropdownButton,
 } from "@netapp/bxp-design-system-react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useUpdateJobRunStatusMutation } from "@api/jobsApi";
-import { hasPermission } from "@auth/auth.utils";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import {
-  getActionMenu,
-  getReportActions,
-} from "@modules/jobs/job-run-list/run.utils";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
-import JobDescription from "../components/JobDescription";
-import JobErrors from "../components/JobErrors";
-import JobRunHeader from "../components/JobRunHeader";
-import JobRunTaskCard from "../components/JobRunTaskDetails";
-import { getGrafanaLogUrl } from "@/utils/common.utils";
 import { useState } from "react";
-import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
+import { useNavigate, useParams } from "react-router-dom";
 
 const JobRunDetails = () => {
   const navigation = useNavigate();

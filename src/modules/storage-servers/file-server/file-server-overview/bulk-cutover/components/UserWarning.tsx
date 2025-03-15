@@ -1,5 +1,5 @@
 import { Card, CardContent, Checkbox } from "@netapp/bxp-design-system-react";
-import { UserWarningPropsType } from "../bulk-cutover.interface";
+import { UserWarningPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.interface";
 
 const UserWarning = ({
   form,

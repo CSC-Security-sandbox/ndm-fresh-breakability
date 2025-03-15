@@ -8,7 +8,7 @@ import {
   GcpStorageIcon,
   VirtualMachineIcon,
 } from "@netapp/bxp-style/react-icons/Storage";
-import { Box } from "../container";
+import { Box } from "@components/container/index";
 
 export const MENU_ITEMS = [
   {

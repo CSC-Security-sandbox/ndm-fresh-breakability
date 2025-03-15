@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu, MenuItem, Sidebar, SubMenu } from "react-pro-sidebar";
 import { useNavigate } from "react-router-dom";
-import { Box } from "../container";
+import { Box } from "@components/container/index";
 import { MENU_ITEMS } from "./sidebar.constant";
 
 const SideBar = () => {

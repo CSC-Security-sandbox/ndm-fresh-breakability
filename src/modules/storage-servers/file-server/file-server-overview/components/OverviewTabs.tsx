@@ -1,7 +1,7 @@
-import { Box } from "@components/container/index";
-import { InnerTab } from "@netapp/bxp-design-system-react";
-import { OverviewTabsPropsType } from "../overview.interface";
 import { formatLength } from "@/utils/common.utils";
+import { Box } from "@components/container/index";
+import { OverviewTabsPropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
+import { InnerTab } from "@netapp/bxp-design-system-react";
 
 const OverviewTabs = ({
   currentTab,
