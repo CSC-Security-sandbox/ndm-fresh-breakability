@@ -42,8 +42,11 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
       log(traceId, `Tasks found: ${tasks.length}`);
       if (!tasks || tasks.length === 0) {
         const jobState = await getJobStateActivity(traceId);
+        log(traceId, `No tasks found. total -> ${jobState.tasks_total}, completed -> ${jobState.tasks_completed}`);
         const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
+        log(traceId, `Agreed workers: ${uniqueAgreedWorkers}`);
         const newJobState = { ...jobState, workers_agreed: uniqueAgreedWorkers };
+        log(traceId, `Updating job state with agreed workers: ${JSON.stringify(newJobState)}`);
         await setJobStateActivity(traceId, newJobState);
         const isJobCompleted = newJobState.workers_agreed.length === newJobState.workers.length && newJobState.tasks_completed >= newJobState.tasks_total;
         if (isJobCompleted) {
@@ -51,7 +54,7 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
           await updateLastEntry(traceId);
           await setJobStateActivity(traceId, { ...newJobState, status: JobRunStatus.Completed });
           const finalJobState = await getJobStateActivity(traceId);
-          log(traceId, `Discovery completed with finalJobState: ${JSON.stringify(finalJobState)}`);
+        //  log(traceId, `Discovery completed with finalJobState: ${JSON.stringify(finalJobState)}`);
           return { message: 'Discovery completed' };
         } continue;
       }

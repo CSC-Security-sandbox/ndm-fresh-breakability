@@ -99,8 +99,8 @@ export class NFSProtocol extends Protocol {
 
     if (response['status'] === 'success') {
       const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
-      if (fs.existsSync(mountDir)) {
-        fs.rmdirSync(mountDir, { recursive: false });
+      if (fs.existsSync(mountDir) && mountDir.startsWith(payload.mountBasePath)) {
+        fs.rmdirSync(mountDir, { recursive: true });
         this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
       } else {
         this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
