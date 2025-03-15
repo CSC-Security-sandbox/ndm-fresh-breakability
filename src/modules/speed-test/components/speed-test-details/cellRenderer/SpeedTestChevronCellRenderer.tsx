@@ -2,7 +2,7 @@ import { TransitionChevron } from "@netapp/bxp-design-system-react";
 import { memo, useMemo } from "react";
 import { Box } from "@components/container";
 import { percentageFormatter } from "@modules/speed-test/utils/speed-test-details.utils";
-import ValueCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/valueCellRenderer";
+import DataCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/DataCellRenderer";
 
 const SpeedTestChevronCellRenderer = ({ row, rowState, type }: any) => {
   const averageSpeed: number = useMemo(() => {
@@ -14,7 +14,7 @@ const SpeedTestChevronCellRenderer = ({ row, rowState, type }: any) => {
 
   return (
     <Box className="flex flex-row w-full">
-      <ValueCellRenderer value={averageSpeed} unit={"%"} />
+      <DataCellRenderer value={averageSpeed} unit={"%"} />
       <TransitionChevron
         className="ml-auto pr-4"
         isActive={rowState.isExpanded}

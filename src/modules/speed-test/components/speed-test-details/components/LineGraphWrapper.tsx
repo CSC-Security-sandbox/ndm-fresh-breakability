@@ -3,8 +3,8 @@ import { ChartColor } from "@netapp/bxp-design-system-react/dist/types/component
 import { useEffect, useState } from "react";
 import { Box } from "@components/container";
 import { LineGraphWrapperPropsType } from "@modules/speed-test/types/speed-test-details.types";
-import { generateColors } from "@modules/speed-test/utils/speed-test-details.utils";
 import WorkerLegendsWrapper from "@modules/speed-test/components/speed-test-details/components/WorkerLegendsWrapper";
+import { generateColors } from "@modules/speed-test/utils/line-graph-wrapper.utils";
 
 const LineGraphWrapper = ({
   timeStamp,

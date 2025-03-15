@@ -1,37 +1,12 @@
 import {
-  CalculateAveragePropsType,
   CalculateSpeedPropsType,
   SpeedActionType,
-  SpeedDataType,
   WorkerSpeedActionPropsType,
 } from "@modules/speed-test/types/speed-test-details.types";
-
-export const calculateAverage = ({
-  worker,
-  speedAction,
-}: CalculateAveragePropsType) => {
-  return (worker[speedAction as keyof WorkerType] as SpeedDataType[]).reduce(
-    (acc, speedData) => acc + speedData.speed,
-    0
-  );
-};
-
-export const calculateAverageSpeedOfWorkers = ({
-  workers,
-  speedAction,
-}: WorkerSpeedActionPropsType) => {
-  return workers.map((worker) => {
-    const totalSpeedAsPerAction = calculateAverage({ worker, speedAction });
-    const averageSpeed = (
-      totalSpeedAsPerAction /
-      worker[speedAction as keyof SpeedActionType].length
-    ).toFixed(2);
-    return {
-      workerName: worker.workerName,
-      averageSpeed,
-    };
-  });
-};
+import {
+  calculateAverageSpeed,
+  calculateAverageSpeedOfWorkers,
+} from "@modules/speed-test/utils/speed-test.utils";
 
 export const calculateOverallAverageSpeed = ({
   workers,
@@ -48,16 +23,6 @@ export const calculateOverallAverageSpeed = ({
   const overallAverageSpeed =
     totalSpeedOfWorkers / averageSpeedOfWorkers.length;
   return Number(overallAverageSpeed.toFixed(2));
-};
-
-export const calculateAverageSpeed = ({
-  workers,
-  type,
-}: CalculateSpeedPropsType) => {
-  const totalValue = workers.reduce((total, worker) => total + worker[type], 0);
-  const averageValue = totalValue / workers.length;
-
-  return Number(averageValue);
 };
 
 export const lineGraphProcessData = ({
@@ -84,23 +49,6 @@ export const lineGraphProcessData = ({
   );
 
   return { uniqueSortedTimeStamps, graphData };
-};
-
-//Dynamic color generation
-export const generateColors = (numColors: number) => {
-  const colors = [
-    "chart-9-gradient",
-    "icon-primary",
-    "chart-5",
-    "chart-4",
-    "chart-8",
-    "chart-7",
-    "chart-2",
-    "chart-3",
-    "chart-6",
-    "chart-10",
-  ];
-  return colors.slice(0, numColors);
 };
 
 export const percentageFormatter = ({
