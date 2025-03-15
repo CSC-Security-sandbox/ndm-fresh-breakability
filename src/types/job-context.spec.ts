@@ -123,8 +123,6 @@ describe('JobContext Class', () => {
         '/path/to/file1',
         '/path/to',
         false,
-        0,
-        0,
         100,
         true,
         new Date(),
@@ -133,6 +131,8 @@ describe('JobContext Class', () => {
         'txt',
         'rwxr-xr-x',
         'txt',
+        0,
+        0,
         0,
       );
       jest.spyOn(jobContext.filesInfo, 'append').mockResolvedValue('fileId');
@@ -147,8 +147,6 @@ describe('JobContext Class', () => {
           '/path/to/dir1',
           '/path/to',
           false,
-          0,
-          0,
           100,
           true,
           new Date(),
@@ -157,6 +155,8 @@ describe('JobContext Class', () => {
           'txt',
           'rwxr-xr-x',
           'txt',
+          0,
+          0,
           0,
         );
   
@@ -245,8 +245,6 @@ describe('JobContext Class', () => {
         '/path/to/file1',
         '/path/to',
         false,
-        0,
-        0,
         100,
         true,
         new Date(),
@@ -255,6 +253,8 @@ describe('JobContext Class', () => {
         'txt',
         'rwxr-xr-x',
         'txt',
+        0,
+        0,
         0,
       );      jest.spyOn(jobContext.filesInfo, 'read').mockReturnValue((async function* () { yield fileInfo; })());
       const files = [];
@@ -271,8 +271,6 @@ describe('JobContext Class', () => {
         '/path/to/file1',
         '/path/to',
         false,
-        0,
-        0,
         100,
         true,
         new Date(),
@@ -281,6 +279,8 @@ describe('JobContext Class', () => {
         'txt',
         'rwxr-xr-x',
         'txt',
+        0,
+        0,
         0,
       );      
       jest.spyOn(jobContext.filesInfo, 'groupRead').mockReturnValue((async function* () { yield fileInfo; })());
@@ -298,8 +298,6 @@ describe('JobContext Class', () => {
         '/path/to/dir1',
         '/path/to',
         false,
-        0,
-        0,
         100,
         true,
         new Date(),
@@ -308,6 +306,8 @@ describe('JobContext Class', () => {
         'txt',
         'rwxr-xr-x',
         'txt',
+        0,
+        0,
         0,
       );      
       jest.spyOn(jobContext.dirsInfo, 'read').mockReturnValue((async function* () { yield dirInfo; })());
@@ -325,8 +325,6 @@ describe('JobContext Class', () => {
         '/path/to/dir1',
         '/path/to',
         false,
-        0,
-        0,
         100,
         true,
         new Date(),
@@ -335,6 +333,8 @@ describe('JobContext Class', () => {
         'txt',
         'rwxr-xr-x',
         'txt',
+        0,
+        0,
         0,
       );
       jest.spyOn(jobContext.dirsInfo, 'groupRead').mockReturnValue((async function* () { yield dirInfo; })());
