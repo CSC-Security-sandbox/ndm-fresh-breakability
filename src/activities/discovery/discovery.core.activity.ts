@@ -52,6 +52,8 @@ export class DiscoveryScanActivity {
             jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
             this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
         }else {
+            const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
+            jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
             this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
         }   
         await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -111,7 +113,7 @@ export class DiscoveryScanActivity {
                 errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [], 
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
-            await jobContext.appendToErrorList(dmErr);
+            jobContext.errorsInfo.lastId= await jobContext.appendToErrorList(dmErr);
             if(scanPath.retryCount < this.maxRetryCount)  {
                 this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
                 jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
