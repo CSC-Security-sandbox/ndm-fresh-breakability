@@ -16,9 +16,9 @@ annotations:
     export VITE_KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
     {{- end }}
 
-serviceAccountName: datamigrator-vault-sa
+serviceAccountName: datamigrator-openbao-sa
 
-args: 
+args:
   - "--source-vault"
 
 imagePullSecrets: azure-dev-acr-creds

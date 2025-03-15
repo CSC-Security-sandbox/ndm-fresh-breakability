@@ -6,14 +6,14 @@ image:
   repository: file-service
 
 annotations:
-    vault.hashicorp.com/agent-inject: "true"
-    vault.hashicorp.com/agent-init-first: "true"
-    vault.hashicorp.com/role: "datamigrator-role"
-    vault.hashicorp.com/agent-inject-status: "update"
-    
-serviceAccountName: datamigrator-vault-sa
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/role: "datamigrator-role"
+  vault.hashicorp.com/agent-inject-status: "update"
 
-args: 
+serviceAccountName: datamigrator-openbao-sa
+
+args:
   - "--source-vault"
 
 imagePullSecrets: azure-dev-acr-creds

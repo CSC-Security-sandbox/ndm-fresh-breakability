@@ -73,26 +73,26 @@ init_microk8s() {
     fi
 }
 
-unseal_vault() {
-    log "Waiting for Vault-0 to be ready..."
-    retry $MAX_RETRIES "kubectl wait --namespace=\"vault\" --for=jsonpath='{.status.phase}'=Running pod/vault-0 --timeout=${WAIT_TIMEOUT}s" || handle_failure "Vault-0 pod not ready"
+unseal_openbao() {
+    log "Waiting for openbao-0 to be ready..."
+    retry $MAX_RETRIES "kubectl wait --namespace=\"openbao\" --for=jsonpath='{.status.phase}'=Running pod/openbao-0 --timeout=${WAIT_TIMEOUT}s" || handle_failure "openbao-0 pod not ready"
 
-    log "Allow some time for Vault-0 to be fully ready..."
+    log "Allow some time for openbao-0 to be fully ready..."
     sleep 120
     
-    # Unseal Vault-0 first, since it's the leader pod
-    log "Unsealing Vault-0..."
-    local VAULT_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /opt/datamigrator/vault/cluster-keys.json)
-    [ -z "$VAULT_UNSEAL_KEY" ] && handle_failure "Failed to get Vault unseal key"
+    # Unseal openbao-0 first, since it's the leader pod
+    log "Unsealing openbao-0..."
+    local OPENBAO_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json)
+    [ -z "$OPENBAO_UNSEAL_KEY" ] && handle_failure "Failed to get openbao unseal key"
     
-    retry $MAX_RETRIES "kubectl exec vault-0 -n vault -- vault operator unseal \"$VAULT_UNSEAL_KEY\"" || handle_failure "Failed to unseal Vault-0"
+    retry $MAX_RETRIES "kubectl exec openbao-0 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-0"
 
-    # After unsealing Vault-0, move forward even if Vault-1 and Vault-2 are not ready yet
-    log "Proceeding with unsealing Vault-1 and Vault-2..."
+    # After unsealing openbao-0, move forward even if openbao-1 and openbao-2 are not ready yet
+    log "Proceeding with unsealing openbao-1 and openbao-2..."
 
-    # Unseal Vault-1 and Vault-2
-    retry $MAX_RETRIES "kubectl exec vault-1 -n vault -- vault operator unseal \"$VAULT_UNSEAL_KEY\"" || handle_failure "Failed to unseal Vault-1"
-    retry $MAX_RETRIES "kubectl exec vault-2 -n vault -- vault operator unseal \"$VAULT_UNSEAL_KEY\"" || handle_failure "Failed to unseal Vault-2"
+    # Unseal openbao-1 and openbao-2
+    retry $MAX_RETRIES "kubectl exec openbao-1 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-1"
+    retry $MAX_RETRIES "kubectl exec openbao-2 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-2"
     
     # Wait for both parallel tasks to complete
     wait
@@ -209,7 +209,7 @@ main() {
     log "Waiting for system stabilization..."
     sleep $MICROK8S_INIT_DELAY
     
-    unseal_vault
+    unseal_openbao
     restart_statefulsets
     restart_temporal_deployments
     

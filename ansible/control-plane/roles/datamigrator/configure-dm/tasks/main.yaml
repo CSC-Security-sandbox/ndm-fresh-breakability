@@ -2,7 +2,7 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    kubectl delete serviceaccount -n datamigrator datamigrator-vault-sa
+    kubectl delete serviceaccount -n datamigrator datamigrator-openbao-sa
   ignore_errors: yes
   when: dm_uninstall is defined
 
@@ -19,7 +19,7 @@
   become_user: "{{ vm_username }}"
   shell: |
     kubectl create namespace datamigrator
-    kubectl create serviceaccount -n datamigrator datamigrator-vault-sa
+    kubectl create serviceaccount -n datamigrator datamigrator-openbao-sa
 
 - name: Create acr pull secert
   become: yes

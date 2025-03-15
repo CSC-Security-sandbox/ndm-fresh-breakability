@@ -6,22 +6,22 @@ image:
   repository: reports-service
 
 annotations:
-    vault.hashicorp.com/agent-inject: "true"
-    vault.hashicorp.com/agent-init-first: "true"
-    vault.hashicorp.com/role: "datamigrator-role"
-    vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
-    vault.hashicorp.com/agent-inject-status: "update"
-    vault.hashicorp.com/agent-inject-template-postgres.env: |
-      {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
-      export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
-      export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
-      export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
-      export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
-      {{- end }}
-    
-serviceAccountName: datamigrator-vault-sa
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/role: "datamigrator-role"
+  vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-status: "update"
+  vault.hashicorp.com/agent-inject-template-postgres.env: |
+    {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+    export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
+    export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
+    export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
+    {{- end }}
 
-args: 
+serviceAccountName: datamigrator-openbao-sa
+
+args:
   - "--source-vault"
 
 imagePullSecrets: azure-dev-acr-creds
@@ -42,7 +42,7 @@ env:
     value: "5432"
   - name: DB_NAME
     value: "datamigrator"
-  - name: SCHEMA 
+  - name: SCHEMA
     value: "datamigrator"
   - name: REPORT_DOWNLOAD_LOCATION
     value: "/reports"
@@ -56,7 +56,6 @@ env:
     value: "INFO"
   - name: LOG_DIR
     value: "/logs"
-
 
 service:
   type: ClusterIP
@@ -79,10 +78,10 @@ liquibase:
   env:
     - name: LIQUIBASE_COMMAND_URL
       value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
-    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME 
+    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME
       value: "liquibase"
     - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
       value: "datamigrator"
-  args: 
+  args:
     - "update"
     - "--source-vault"

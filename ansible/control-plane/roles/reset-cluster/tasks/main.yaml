@@ -1,4 +1,4 @@
----    
+---
 - name: Get the node name of the Packer VM
   become: yes
   command: hostname
@@ -24,7 +24,7 @@
 #   with_items:
 #     - "--advertise-address=127.0.0.1"
 #     - "--bind-address=127.0.0.1"
-  #notify: Restart MicroK8s
+#notify: Restart MicroK8s
 
 # - name: Configure kube-controller-manager
 #   become: yes

@@ -10,20 +10,20 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
-    export DMADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
-    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
-    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.LIQUIBASE_POSTGRES_PASSWORD)
-    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
+    export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
+    export DMADMIN_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
+    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.LIQUIBASE_POSTGRES_PASSWORD)
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
     echo "ROOT_PASSWORD:$POSTGRES_ROOT_PASSWORD"
     echo "DMADMIN_PASSWORD:$DMADMIN_PASSWORD"
     echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
     echo "LIQUIBASE_POSTGRES_PASSWORD:$LIQUIBASE_POSTGRES_PASSWORD"
     echo "TEMPORAL_POSTGRES_PASSWORD:$TEMPORAL_POSTGRES_PASSWORD"
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: postgres_passwords
-  
+
 - name: Set Base64-encoded passwords as facts
   set_fact:
     postgres_root_password: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) }}"
@@ -85,7 +85,7 @@
     kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
     kubectl delete -f $HOME/postgres/postgres-secret.yaml
     kubectl delete -f $HOME/postgres/postgres-namespace.yaml
-  when: postgres_uninstall is defined    
+  when: postgres_uninstall is defined
   args:
     chdir: $HOME
 
@@ -101,7 +101,6 @@
   args:
     chdir: $HOME
 
-
 - name: Create service account
   become: yes
   become_user: "{{ vm_username }}"
@@ -112,15 +111,15 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    
+
     helm upgrade --install postgresql oci://registry-1.docker.io/bitnamicharts/postgresql -f $HOME/postgres/postgres-values.yaml --version "{{ postgres_version }}" --namespace "postgres"
     exit 0
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: SHELL_STDOUT
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Helm Install (postgres): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
 - name: Wait for 20 seconds before waiting for pods to come up
@@ -137,7 +136,7 @@
   until: kubectl_get_pods.rc == 0
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Get pods (postgres): {{ kubectl_get_pods.stdout | split('\n') }}"
 
 - name: Check postgres pod status

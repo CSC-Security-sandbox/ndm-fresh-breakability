@@ -1,0 +1,173 @@
+---
+- name: Openbao kubernetes authorization enabling
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec openbao-0 -n openbao -- bao auth enable kubernetes
+    KUBERNETES_PORT_443_TCP_ADDR=$(kubectl exec openbao-0 -n openbao -- printenv | grep KUBERNETES_PORT_443_TCP_ADDR | cut -f 2- -d "=" | tr -d " ")
+    kubectl exec openbao-0 -n openbao -- bao write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"
+
+- name: Openbao secret enable on path
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    # Check if the secrets engine already exists
+    secrets_exist=$(kubectl exec -ti openbao-0 -n openbao -- bao secrets list -format=json | jq '.["secrets/"]')
+
+    if [ "null" = "$secrets_exist" ]; then
+      kubectl exec -ti openbao-0 -n openbao -- bao secrets enable -path=secrets/ kv
+    else
+      echo "Secrets engine 'secrets/' is already enabled."
+    fi
+
+- name: Openbao policies
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -i openbao-0 -n openbao -- bao policy write {{ item }}-policy - <<EOF
+    path "secrets/{{ item }}-secrets/{{ item }}-creds" {
+      capabilities = ["read"]
+    }
+    EOF
+  with_items:
+    - keycloak
+    - postgres
+    - redis
+    - temporal
+
+- name: Openbao roles creation -- datamigrator
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti openbao-0 -n openbao -- bao write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-openbao-sa \
+    bound_service_account_namespaces=datamigrator \
+    policies=keycloak-policy,postgres-policy,redis-policy \
+    ttl=24h
+  with_items:
+    - datamigrator
+
+- name: Openbao roles creation -- keycloak
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti openbao-0 -n openbao -- bao write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-sa \
+    bound_service_account_namespaces=datamigrator,keycloak \
+    policies=keycloak-policy,postgres-policy \
+    ttl=24h
+  with_items:
+    - keycloak
+
+- name: Openbao roles creation -- postgres
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti openbao-0 -n openbao -- bao write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-sa \
+    bound_service_account_namespaces=datamigrator,postgres \
+    policies=postgres-policy \
+    ttl=24h
+  with_items:
+    - postgres
+
+- name: Openbao roles creation -- redis
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti openbao-0 -n openbao -- bao write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-sa \
+    bound_service_account_namespaces=datamigrator,redis \
+    policies=redis-policy \
+    ttl=24h
+  with_items:
+    - redis
+
+- name: Openbao roles creation -- temporal
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -ti openbao-0 -n openbao -- bao write auth/kubernetes/role/{{ item }}-role \
+    bound_service_account_names={{ item }}-sa \
+    bound_service_account_namespaces=datamigrator,temporal \
+    policies=temporal-policy \
+    ttl=24h
+  with_items:
+    - temporal
+
+- name: Create openbao password policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/password-policy.hcl.j2 dest=$HOME/openbao/password-policy.hcl
+
+- name: Create openbao keycloak client policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  template: src=./templates/keycloak-secret.hcl.j2 dest=$HOME/openbao/keycloak-secret.hcl
+
+- name: Create openbao password policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl cp $HOME/openbao/password-policy.hcl openbao-0:/tmp/password-policy.hcl -n openbao
+
+- name: Create openbao keycloak client policy file
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl cp $HOME/openbao/keycloak-secret.hcl openbao-0:/tmp/keycloak-secret.hcl -n openbao
+
+- name: Openbao password policy
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    kubectl exec -i openbao-0 -n openbao -- bao write sys/policies/password/datamigrator policy=@/tmp/password-policy.hcl
+    kubectl exec -i openbao-0 -n openbao -- bao write sys/policies/password/keycloak policy=@/tmp/keycloak-secret.hcl
+
+- name: Generate password for postgres
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    kubectl exec openbao-0 -n openbao -- bao kv put secrets/postgres-secrets/postgres-creds \
+      POSTGRES_USER="postgres" \
+      POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+      POSTGRES_DMADMIN_USER="dmadmin" \
+      POSTGRES_DMADMIN_PASSWORD="${POSTGRES_DMADMIN_PASSWORD}" \
+      KEYCLOAK_POSTGRES_USER="kcadmin" \
+      KEYCLOAK_POSTGRES_PASSWORD="${KEYCLOAK_POSTGRES_PASSWORD}" \
+      LIQUIBASE_POSTGRES_USER="liquibase" \
+      LIQUIBASE_POSTGRES_PASSWORD="${LIQUIBASE_POSTGRES_PASSWORD}" \
+      TEMPORAL_POSTGRES_USER="temporal" \
+      TEMPORAL_POSTGRES_PASSWORD="${TEMPORAL_POSTGRES_PASSWORD}"
+
+- name: Generate Keycloak secrets
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/keycloak/generate | jq -r '.data.password')
+    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    kubectl exec openbao-0 -n openbao -- bao kv put secrets/keycloak-secrets/keycloak-creds \
+      KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \
+      KEYCLOAK_ADMIN_USER="kcadmin" \
+      KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
+
+- name: Generate Redis secrets
+  become: yes
+  become_user: "{{ vm_username }}"
+  shell: |
+    export REDIS_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    kubectl exec openbao-0 -n openbao -- bao kv put secrets/redis-secrets/redis-creds \
+      REDIS_PASSWORD="${REDIS_PASSWORD}" \
+      REDIS_USERNAME="default"
+
+- name: Delete openbao directory
+  become: yes
+  become_user: "{{ vm_username }}"
+  file:
+    path: $HOME/openbao
+    state: absent

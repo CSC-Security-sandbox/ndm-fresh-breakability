@@ -13,7 +13,7 @@ spec:
         vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
         vault.hashicorp.com/agent-inject-status: "update"
     spec:
-      serviceAccountName: datamigrator-vault-sa
+      serviceAccountName: datamigrator-openbao-sa
       volumes:
       - name: admin-entry-volume
         configMap:

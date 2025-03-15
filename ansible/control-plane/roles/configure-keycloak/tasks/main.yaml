@@ -5,17 +5,17 @@
   file:
     path: $HOME/keycloak
     state: directory
-  
-- name: get passwords for keycloak from vault
+
+- name: get passwords for keycloak from openbao
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_ADMIN_PASSWORD)
-    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
+    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_ADMIN_PASSWORD)
+    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
     echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
     echo "KEYCLOAK_ADMIN_PASSWORD:$KEYCLOAK_ADMIN_PASSWORD"
   register: keycloak_passwords
-  
+
 - name: Set passwords as facts
   set_fact:
     keycloak_admin_password_base64: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_ADMIN_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_ADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
@@ -43,7 +43,7 @@
     helm delete keycloak --namespace "keycloak"
     kubectl delete -f $HOME/keycloak/keycloak-secret.yaml
     kubectl delete -f $HOME/keycloak/keycloak-namespace.yaml
-  when: keycloak_uninstall is defined    
+  when: keycloak_uninstall is defined
   args:
     chdir: $HOME
 
@@ -55,7 +55,7 @@
     kubectl apply -f $HOME/keycloak/keycloak-secret.yaml
   args:
     chdir: $HOME
-  
+
 - name: Create acr pull secert
   become: yes
   become_user: "{{ vm_username }}"
@@ -71,15 +71,14 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    
     helm upgrade --install keycloak oci://registry-1.docker.io/bitnamicharts/keycloak -f $HOME/keycloak/keycloak-values.yaml --version "{{ keycloak_version }}" --namespace "keycloak"
     exit 0
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: SHELL_STDOUT
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Kubectl deployment(keycloak): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
 - name: Wait for 20 seconds before waiting for pods to come up
@@ -96,7 +95,7 @@
   until: kubectl_get_pods.rc == 0
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Get pods (keycloak): {{ kubectl_get_pods.stdout | split('\n') }}"
 
 - name: Check Keycloak pod status

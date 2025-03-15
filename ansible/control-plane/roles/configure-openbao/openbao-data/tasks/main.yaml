@@ -1,0 +1,36 @@
+---
+- name: delete openbao-data directory if uninstall flag is defined
+  file:
+    path: /data/openbao-data
+    state: absent
+    owner: 100
+    group: 1000
+    mode: 0755
+  when: openbao_uninstall is defined
+
+- name: create openbao-data directory
+  file:
+    path: /data/openbao-data
+    state: directory
+    owner: 100
+    group: 1000
+    mode: 0755
+
+- name: Delete /opt/datamigrator/openbao if uninstall flag is defined
+  become: yes
+  file:
+    path: /opt/datamigrator/openbao
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: "0755"
+  when: openbao_uninstall is defined
+
+- name: Ensure /opt/datamigrator/openbao directory exists and is owned by the vm_username
+  become: yes
+  file:
+    path: /opt/datamigrator/openbao
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: "0755"

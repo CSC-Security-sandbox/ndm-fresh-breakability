@@ -14,14 +14,14 @@
 
 - name: Copy the tarball to the remote host
   become: yes
-  become_user: '{{ vm_username }}'
+  become_user: "{{ vm_username }}"
   copy:
     src: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
     dest: "$HOME/helm-chart.tgz"
 
 - name: Install Helm chart
   become: yes
-  become_user: '{{ vm_username }}'
+  become_user: "{{ vm_username }}"
   shell: |
     helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz
   register: helm_install_output
@@ -37,7 +37,7 @@
       become_user: "{{ vm_username }}"
       shell: kubectl wait --namespace="datamigrator" --for=condition=Ready pod --all
       register: kubectl_get_pods
-      retries: 10
+      retries: 10 # debug retries
       delay: 25
       until: kubectl_get_pods.rc == 0
   rescue:
@@ -59,7 +59,7 @@
         msg: "Pods did not become ready within the expected time frame."
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Get pods (datamigrator): {{ kubectl_get_pods.stdout | split('\n') }}"
 
 - name: Check datamigrator pod status
@@ -68,7 +68,7 @@
 
 - name: Delete the tarball from the remote host
   become: yes
-  become_user: '{{ vm_username }}'
+  become_user: "{{ vm_username }}"
   file:
     path: $HOME/helm-chart.tgz
     state: absent
@@ -86,4 +86,3 @@
     module: file
     path: "../roles/datamigrator/helm-chart/package/values.yaml"
     state: absent
-

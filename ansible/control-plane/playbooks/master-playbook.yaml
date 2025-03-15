@@ -10,8 +10,8 @@
 - name: Install and configure microk8s cluster, users, addons
   import_playbook: configure-microk8s.yaml
 
-- name: Configure vault
-  import_playbook: configure-vault.yaml
+- name: Configure openbao
+  import_playbook: configure-openbao.yaml
 
 - name: Configure postgres
   import_playbook: configure-postgres.yaml
@@ -49,7 +49,7 @@
 
 - name: Configure cloud init
   import_playbook: configure-cloud-init.yaml
-  when: local_cluster is not defined
+  # when: local_cluster is not defined
 
 - name: Reset Cluster
   import_playbook: reset-cluster.yaml

@@ -10,10 +10,10 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export REDIS_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/redis-secrets/redis-creds | jq -r .data.REDIS_PASSWORD)
+    export REDIS_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/redis-secrets/redis-creds | jq -r .data.REDIS_PASSWORD)
     echo "REDIS_PASSWORD:$REDIS_PASSWORD"
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: redis_password
 
 - name: Set Base64-encoded password as fact
@@ -57,7 +57,7 @@
   shell: |
     kubectl delete serviceaccount -n redis redis-sa
   when: redis_uninstall is defined
-  
+
 - name: remove previous redis installation
   become: yes
   become_user: "{{ vm_username }}"
@@ -69,7 +69,7 @@
     kubectl delete -f $HOME/redis/redis-storageclass.yaml
     kubectl delete -f $HOME/redis/redis-secret.yaml
     kubectl delete -f $HOME/redis/redis-namespace.yaml
-  when: redis_uninstall is defined    
+  when: redis_uninstall is defined
   args:
     chdir: $HOME
 
@@ -98,18 +98,16 @@
     helm upgrade --install redis oci://registry-1.docker.io/bitnamicharts/redis -f $HOME/redis/redis-values.yaml --namespace "redis" --version "{{ redis_version }}"
     exit 0
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: SHELL_STDOUT
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Helm Install (redis): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
 - name: Wait for 20 seconds before waiting for pods to come up
   ansible.builtin.pause:
     seconds: 20
-
-
 
 - name: Wait for pods to come up and handle failure
   block:
@@ -124,7 +122,7 @@
       until: kubectl_get_pods.rc == 0
 
     - name: debug output
-      ansible.builtin.debug: 
+      ansible.builtin.debug:
         msg: "Get pods (redis): {{ kubectl_get_pods.stdout | split('\n') }}"
 
     - name: Check redis pod status

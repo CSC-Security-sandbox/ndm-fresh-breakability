@@ -10,12 +10,12 @@
   become: yes
   become_user: "{{ vm_username }}"
   shell: |
-    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti vault-0 -n vault -- vault kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
+    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
     echo "TEMPORAL_POSTGRES_PASSWORD:$TEMPORAL_POSTGRES_PASSWORD"
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: temporal_passwords
-  
+
 - name: Set Base64-encoded password as fact
   set_fact:
     temporal_db_password: "{{ (temporal_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
@@ -51,7 +51,7 @@
     kubectl delete pvc --all --namespace "temporal"
     kubectl delete -f $HOME/temporal/temporal-secret.yaml
     kubectl delete -f $HOME/temporal/temporal-namespace.yaml
-  when: temporal_uninstall is defined    
+  when: temporal_uninstall is defined
   args:
     chdir: $HOME
 
@@ -77,11 +77,11 @@
     helm upgrade --install --repo https://go.temporal.io/helm-charts -f $HOME/temporal/temporal-values.yaml temporaltest temporal --version "{{ temporal_version }}" --namespace "temporal"
     exit 0
   args:
-    executable: /bin/bash      
+    executable: /bin/bash
   register: SHELL_STDOUT
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Helm Install (temporal): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
 - name: Wait for 150 seconds before waiting for pods to come up
@@ -120,7 +120,7 @@
         msg: "Pods did not become ready within the expected time frame."
 
 - name: debug output
-  ansible.builtin.debug: 
+  ansible.builtin.debug:
     msg: "Get pods (temporal): {{ kubectl_get_pods.stdout | split('\n') }}"
 
 - name: Delete temporal directory
