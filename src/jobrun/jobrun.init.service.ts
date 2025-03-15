@@ -558,10 +558,6 @@ export class JobRunInitService {
     console.debug("JobContext created and appended initial task ---> ", task);
     await this.redisService.setJobContext(jobRunId, jobContext);
     console.debug("JobContext Saved to Redis");
-    const redisKey = `${jobRunId}:mapping`;
-    const hashField = `SID:S-1-5-18-1-94526`;
-    const targetValue = await redisClient.hGet(redisKey, hashField);
-    console.log("Value from Redis: ", targetValue);
   }
 
   // ------------------ CreateInitialTask -------------------- //
