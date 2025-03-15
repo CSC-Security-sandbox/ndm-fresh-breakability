@@ -181,6 +181,7 @@ export const PreCheckValidationWorkflow = async ({
                         mountBasePath: sourcePath.mountBasePath,
                         exportPathName: sourcePath.exportPathName,
                         type: 'SOURCE',
+                        protocolVersion: sourceServerCredentials.protocolVersion,
                       },
                       feature: {
                         checkWritePermission: sourcePath.preserveAccessTime,
@@ -249,6 +250,7 @@ export const PreCheckValidationWorkflow = async ({
                           destination.destinationServerCredentials
                             .exportPathName,
                         type: 'DESTINATION',
+                        protocolVersion: destination.destinationServerCredentials.protocolVersion,
                       },
                       feature: { checkWritePermission: true },
                     },

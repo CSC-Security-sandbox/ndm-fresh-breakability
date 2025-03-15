@@ -20,6 +20,7 @@ const {
     getJobState: getJobStateActivity,
     updateStatus: updateStatusActivity,
     setJobState: setJobStateActivity,
+    updateLastEntry: updateLastEntryActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
    
 interface ScanWorkflowInput {
@@ -76,6 +77,7 @@ export const ScanWorkflow = async ({jobRunId , workerId} : ScanWorkflowInput): P
         } else {
           await updateStatusActivity({jobRunId, status: JobRunStatus.Failed})
             .then(() => log(jobRunId, ` status updated to Failed`))
+            .then(async () => await updateLastEntryActivity(jobRunId))
             .catch((err) => log(jobRunId, `Failed to discovery status: ${err}`));
           return { message: `Scan Errored ${error}` };
       }
