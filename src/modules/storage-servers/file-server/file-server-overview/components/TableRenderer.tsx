@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TableRendererPropsType } from "../overview.interface";
+import { TableRendererPropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import ExportPathsTable from "./ExportPathsTable";
 import OverviewTabs from "./OverviewTabs";
 import WorkersTable from "./WorkersTable";

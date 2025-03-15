@@ -1,6 +1,6 @@
 import { useGetAllProjectsQuery } from "@api/projectApi";
 import { Box } from "@components/container";
-import SideBar from "@components/sideBar/SideBar";
+import SideBar from "@components/side-bar/SideBar";
 import TabHeaderWrapper from "@components/tab-header-wrapper/TabHeaderWrapper";
 import TopNavBar from "@components/top-nav-bar/TopNavBar";
 import useAccountDetails from "@hooks/useAccountDetails";

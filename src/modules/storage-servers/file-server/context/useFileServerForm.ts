@@ -12,16 +12,8 @@ import {
 } from "@api/workerManagerApi";
 import { useLazyGetAllWorkersQuery } from "@api/workersApi";
 import { notify } from "@components/notification/NotificationWrapper";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { createValidateConnectionPayload } from "@modules/storage-servers/file-server/components/add-file-server.util";
-import {
-  ErroredWorkersDetailsType,
-  MountPathsOptionsListType,
-  WorkerIdWithNameType,
-  jobConfigFormFormType,
-} from "@modules/storage-servers/file-server/fileServer.interface";
-import { useForm } from "@netapp/bxp-design-system-react";
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
 import {
   HOST_CREDENTIALS_VALIDATION_SCHEMA,
   INITIAL_VALUE_JOB_CONFIG,
@@ -33,8 +25,16 @@ import {
   SERVICE_AND_PROTOCOL_VALIDATION_SCHEMA,
   SMB_CREDENTIALS_VALIDATION_SCHEMA,
   VALIDATE_CONNECTION_COLUMN_DEF,
-} from "../components/file-server.constant";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
+} from "@modules/storage-servers/file-server/components/file-server.constant";
+import {
+  ErroredWorkersDetailsType,
+  MountPathsOptionsListType,
+  WorkerIdWithNameType,
+  jobConfigFormFormType,
+} from "@modules/storage-servers/file-server/fileServer.interface";
+import { useForm } from "@netapp/bxp-design-system-react";
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
 export const useFileServerForm = () => {
   const interval = useRef<any | undefined>("");

@@ -1,12 +1,12 @@
+import { useLazyRefetchConfigExportPathsQuery } from "@api/configApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
+import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-server-overview/components/ReFreshExportPathsTime";
+import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
+import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
-import { EXPORT_PATHS_TABLE_COLS_DEF } from "../fileServerId.constant";
-import { ExportPathsTablePropsType } from "../overview.interface";
-import ReFreshExportPathsTime from "./ReFreshExportPathsTime";
-import { useLazyRefetchConfigExportPathsQuery } from "@api/configApi";
 
 const ExportPathsTable = ({
   fileServerDetails,

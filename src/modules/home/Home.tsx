@@ -15,7 +15,7 @@ import JobChart from "@components/chartInfo/JobsChart";
 import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/WorkerInstructions";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import { InitialFileServerOverviewApiData } from "../storage-servers/file-server/file-server-overview/fileServerId.constant";
+import { InitialFileServerOverviewApiData } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 
 const Home = () => {
   const { selectedProjectId } = useSelectedProjectId();

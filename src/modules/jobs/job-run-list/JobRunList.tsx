@@ -31,7 +31,7 @@ import {
   getJobRunListFlaternList,
   getReportActions,
 } from "./run.utils";
-import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
+import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 
 const JobRunList = () => {
   const navigate = useNavigate();

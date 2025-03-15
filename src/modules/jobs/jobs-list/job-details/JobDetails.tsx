@@ -22,15 +22,18 @@ import {
 } from "@/types/app.type";
 import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
-import JobDescription from "./components/JobDescription";
-import JobErrors from "./components/JobErrors";
-import JobHeader from "./components/JobHeader";
+import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
+import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
 import { JOB_RUN_LIST_COLUMN_DEFS } from "./job-details.constants";
 import { useParams } from "react-router-dom";
-import { handleDownloadReport } from "../../jobs.utils";
-import { getActionMenu, getReportActions } from "../../job-run-list/run.utils";
+import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import {
+  getActionMenu,
+  getReportActions,
+} from "@modules/jobs/job-run-list/run.utils";
 import { useMemo, useState } from "react";
-import CutoverConfirmationModal from "@components/Modal/CutOverConfirmationModal";
+import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 
 const JobDetails = () => {
   const navigate = useNavigate();

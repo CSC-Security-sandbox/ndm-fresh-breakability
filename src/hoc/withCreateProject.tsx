@@ -1,13 +1,12 @@
 /* eslint-disable */
-import { useForm } from "@netapp/bxp-design-system-react";
-import * as Yup from "yup";
-import useAccountDetails from "../hooks/useAccountDetails";
+import { BlueXpFormType } from "@/types/app.type";
 import {
   useCreateProjectMutation,
   useUpdateProjectMutation,
 } from "@api/projectApi";
-import { BlueXpFormType } from "@/types/app.type";
-import { Component } from "react";
+import { useForm } from "@netapp/bxp-design-system-react";
+import * as Yup from "yup";
+import useAccountDetails from "@/hooks/useAccountDetails";
 
 const CREATE_PROJECT_VALIDATION_SCHEMA = Yup.object({
   project_name: Yup.string().required("Project Name is required"),
