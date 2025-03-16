@@ -531,7 +531,8 @@ export interface ProjectApiType {
 export enum FILE_SERVER_STATUS {
   ACTIVE = "ACTIVE",
   DRAFT = "DRAFT",
-  ERROR = "ERROR",
+  IN_PROGRESS = "IN_PROGRESS",
+  ERRORED = "ERRORED",
 }
 
 export type TaskInfoCardPropType = {
