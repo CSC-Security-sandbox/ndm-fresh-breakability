@@ -366,13 +366,13 @@ export class ConfigurationService {
             });
 
             const hasPathName = createConfig?.workingDirectory?.pathName?.length > 0;
-            const hasWorkers = !createConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
+            const hasWorkers = createConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
 
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: (hasWorkers || hasPathName) ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
+                status: hasWorkers ? hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE : ConfigStatus.DRAFT,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
