@@ -1,19 +1,19 @@
-import { BlueXpTableRowType } from "@/types/app.type";
-import { toTitleCase } from "@/utils/common.utils";
+import { BlueXpTableRowType, FILE_SERVER_STATUS } from "@/types/app.type";
+import { getFileServerStatusFormat } from "@/utils/common.utils";
 import { Box } from "@components/container/index";
 import { Popover } from "@netapp/bxp-design-system-react";
-type FileServerStatus = "ACTIVE" | "DRAFT" | "ERRORED";
 
 const FileServerStatusCellRenderer = ({
   row,
 }: BlueXpTableRowType<any, any>) => {
-  const statusStyleMap: Record<FileServerStatus, string> = {
-    ACTIVE: "bg-chart-5",
-    DRAFT: "bg-chart-6",
-    ERRORED: "bg-error",
+  const statusStyleMap: Record<FILE_SERVER_STATUS, string> = {
+    [FILE_SERVER_STATUS.ACTIVE]: "bg-chart-5",
+    [FILE_SERVER_STATUS.IN_PROGRESS]: "bg-icon-primary",
+    [FILE_SERVER_STATUS.DRAFT]: "bg-chart-6",
+    [FILE_SERVER_STATUS.ERRORED]: "bg-error",
   };
 
-  const statusStyle = statusStyleMap[row?.status as FileServerStatus] || ""; // Type assertion
+  const statusStyle = statusStyleMap[row?.status as FILE_SERVER_STATUS] || ""; // Type assertion
 
   if (row?.status === "ERRORED") {
     return (
@@ -22,7 +22,7 @@ const FileServerStatusCellRenderer = ({
           <span
             className={`w-3 h-3 rounded-full inline-block ${statusStyle}`}
           ></span>
-          <Box>{toTitleCase(row?.status)}</Box>
+          <Box>{getFileServerStatusFormat(row?.status)}</Box>
         </Box>
         <Popover>{row?.errorMessage}</Popover>
       </Box>
@@ -34,7 +34,7 @@ const FileServerStatusCellRenderer = ({
       <span
         className={`w-3 h-3 rounded-full inline-block ${statusStyle}`}
       ></span>
-      <Box>{toTitleCase(row?.status)}</Box>
+      <Box>{getFileServerStatusFormat(row?.status)}</Box>
     </Box>
   );
 };
