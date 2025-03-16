@@ -31,8 +31,7 @@ const BulkDiscover = () => {
   const navigate = useNavigate();
   const [createBulkDiscoveryApi, { isLoading: isSubmitting }] =
     useBulkDiscoveryMutation();
-  const { fileServerDetails, allExportPaths, getFileServerDetails } =
-    useFileServerDetails();
+  const { fileServerDetails, allExportPaths } = useFileServerDetails();
   const [selectedExportPathsIds, setSelectedExportPathsIds] = useState<
     string[]
   >([]);
@@ -95,7 +94,7 @@ const BulkDiscover = () => {
   }, [options]);
 
   return (
-    <Box className="flex flex-col gap-4">
+    <Box className="flex flex-col gap-4 h-[80vh] overflow-y-auto">
       <Box className="p-8">
         <Box className="text-xl font-semibold mb-3">Bulk Discover</Box>
         <TopSection
@@ -117,7 +116,6 @@ const BulkDiscover = () => {
           allExportPaths={allExportPaths.filter(
             (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
           )}
-          getFileServerDetails={getFileServerDetails}
           fileServerDetails={fileServerDetails}
           showRefetch={false}
           isRowSelectingEnabled={true}

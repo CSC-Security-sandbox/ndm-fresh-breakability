@@ -44,19 +44,31 @@ const JobErrorsContainer = ({
     [errorDetails]
   );
 
+  const fatalErrorCount = getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR);
+  const transientErrorCount = getErrorCount(
+    JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
+  );
+  const recoverableErrorCount = getErrorCount(
+    JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR
+  );
+
   return (
     <CardContent className="flex flex-col gap-4">
-      <Notification type="error">
-        Fatal Errors ({getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)})
-      </Notification>
-      <Notification type="warning">
-        Transient Errors (
-        {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)})
-      </Notification>
-      <Notification type="info">
-        Recoverable Errors (
-        {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)})
-      </Notification>
+      {fatalErrorCount !== 0 && (
+        <Notification type="error">
+          Fatal Errors ({fatalErrorCount})
+        </Notification>
+      )}
+      {transientErrorCount !== 0 && (
+        <Notification type="warning">
+          Transient Errors ({transientErrorCount})
+        </Notification>
+      )}
+      {recoverableErrorCount !== 0 && (
+        <Notification type="info">
+          Recoverable Errors ({recoverableErrorCount})
+        </Notification>
+      )}
     </CardContent>
   );
 };

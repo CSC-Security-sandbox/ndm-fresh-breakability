@@ -6,7 +6,6 @@ import WorkersTable from "./WorkersTable";
 
 const TableRenderer = ({
   fileServerDetails,
-  getFileServerDetails,
   allExportPaths,
   allWorkersList,
 }: TableRendererPropsType) => {
@@ -24,7 +23,6 @@ const TableRenderer = ({
       {currentTab === 1 ? (
         <ExportPathsTable
           allExportPaths={allExportPaths}
-          getFileServerDetails={getFileServerDetails}
           fileServerDetails={fileServerDetails}
           showRefetch={true}
           setSelectedExportPathsIds={() => {}}

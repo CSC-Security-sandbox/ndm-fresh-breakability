@@ -10,14 +10,12 @@ export interface ExportPathsTablePropsType {
   showRefetch: boolean;
   isRowSelectingEnabled?: boolean;
   setSelectedExportPathsIds: (ids: string[]) => void;
-  getFileServerDetails: () => Promise<ConfigListTypeApiType | undefined>;
 }
 
 export interface TableRendererPropsType {
   allExportPaths: VolumeType[];
   allWorkersList: WorkerApiType[];
   fileServerDetails: ConfigListTypeApiType;
-  getFileServerDetails: () => Promise<ConfigListTypeApiType | undefined>;
 }
 
 export interface OverviewTabsPropsType {

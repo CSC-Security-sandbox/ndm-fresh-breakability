@@ -16,7 +16,7 @@ const BulkCutOver = () => {
   return (
     <Box className="w-full h-[70vh]">
       <BulkCutOverContextWrapper>
-        <Box className="font-semibold text-lg">Bulk Cutover</Box>
+        <Box className="font-semibold text-lg pt-8 px-8">Bulk Cutover</Box>
         <Wizard
           stepsMap={CUT_OVER_STEPS_MAP}
           stepPaths={CUT_OVER_STEPS_PATHS}

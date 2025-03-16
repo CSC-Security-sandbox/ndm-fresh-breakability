@@ -78,6 +78,7 @@ export const {
   useCreateFileServerMutation,
   useDeleteFileServerMutation,
   useUpdateFileServerMutation,
+  useGetFileServerByIdQuery,
   useLazyGetFileServerByIdQuery,
   useGetAllCutOverPathsQuery,
   useLazyGetAllCutOverPathsQuery,

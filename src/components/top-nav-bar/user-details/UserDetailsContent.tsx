@@ -44,10 +44,10 @@ const UserDetailsContent = () => {
       // };
 
       // await logoutUser(body).unwrap();
+      await auth.signoutSilent();
       Cookies.remove("access_token");
       Cookies.remove("refresh_token");
       sessionStorage.clear();
-      await auth.signoutSilent();
     } catch (error) {
       setIsLoading(false);
       notify.error("Something went wrong while logging out.");
