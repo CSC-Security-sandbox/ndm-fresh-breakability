@@ -122,35 +122,50 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
     }
-    if(metadata.gid && metadata.uid && process.platform !== 'win32') {
-      if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-        try {
-          const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid, 'GID')
-          const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid, 'UID')
-          this.logger.debug(`UID : ${metadata.uid} -> ${uid}`)
-          this.logger.debug(`GID : ${metadata.gid} -> ${gid}`)
-          if(gid && uid)
-            fs.chownSync(targetPath, parseInt(uid), parseInt(gid));
+    if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
+      if(metadata.gid && metadata.uid && process.platform !== 'win32') {
+          try {
+            const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
+            const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
+            this.logger.debug(`UID : ${metadata.uid} -> ${uid}`)
+            this.logger.debug(`GID : ${metadata.gid} -> ${gid}`)
+            if(gid && uid)
+              fs.chownSync(targetPath, parseInt(uid), parseInt(gid));
+          } catch(error) {
+            this.logger.error(`Error setting ownership: ${error.message}`);
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+            stampMetaDataOutput.errors.push(error.code)
+            await jobContext.appendToErrorList(dmErr);
+          }
+        }
+       if(process.platform === 'win32') {
+          try{
+            const getSIDCommand= `powershell.exe -Command "(Get-Acl '${sourcePath}').Owner"`;
+            metadata.sid = execSync(getSIDCommand, { encoding: "utf-8" }).trim();
+          }
+          catch(error) {
+            this.logger.error(`Error setting ownership: ${error.message}`);
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+            stampMetaDataOutput.errors.push(error.code)
+            await jobContext.appendToErrorList(dmErr);
+          }
+       }
+       try{
+          const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
+          if(sid) {
+            const command = `powershell -Command "$acl = Get-Acl '${targetPath}'; $acl.SetOwner([System.Security.Principal.NTAccount]'${sid}'); Set-Acl '${targetPath}' $acl"`;
+            execSync(command);
+          } else {
+            this.logger.debug(`SID not found for the file ${sourcePath}`)
+          }
         } catch(error) {
           this.logger.error(`Error setting ownership: ${error.message}`);
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           stampMetaDataOutput.errors.push(error.code)
           await jobContext.appendToErrorList(dmErr);
-        }
       }
-      else this.logger.debug(`KeyNotFound ${jobContext.jobConfig.options.isIdentityMappingAvailable}`)
     }
-    // if(metadata?.sid && process.platform === 'win32') {
-    //   try {
-    //     const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-    //     execSync(`icacls "${targetPath}" /setowner "${sid}"`, { stdio: 'inherit' });
-    //   } catch(error) {
-    //     this.logger.error(`Error setting ownership: ${error.message}`);
-    //     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-    //     stampMetaDataOutput.errors.push(error.code)
-    //     await jobContext.appendToErrorList(dmErr);
-    //   }
-    // }
+    
     if(metadata.mtime && metadata.atime) {
       try {
         fs.utimesSync(targetPath, new Date(metadata.atime), new Date(metadata.mtime));
