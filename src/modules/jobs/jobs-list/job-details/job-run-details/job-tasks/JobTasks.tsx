@@ -139,9 +139,9 @@ const JobTasks = () => {
       formatter: toTitleCase,
     },
     {
-      accessor: "workerId",
+      accessor: "workerName",
       label: "Worker",
-      options: workers?.map((row) => row.workerId),
+      options: workers?.map((row) => row.workerName),
     },
   ];
 
