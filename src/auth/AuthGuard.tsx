@@ -72,9 +72,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     }
 
     return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
+      refreshTimeoutRef.current && clearTimeout(refreshTimeoutRef.current);
     };
   }, [auth.isAuthenticated]);
 
