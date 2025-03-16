@@ -6,7 +6,7 @@ import { prepareHeaders } from "@api/api.utils";
 export const workersApi = createApi({
   reducerPath: "workersApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_WORKERS_SERVICE_URL,
+    baseUrl: window?.env?.VITE_WORKERS_SERVICE_URL || import.meta.env.VITE_WORKERS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({

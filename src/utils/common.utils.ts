@@ -114,5 +114,5 @@ export const getGrafanaLogUrl = (searchParam: string) => {
 
   const encodedQuery = encodeURIComponent(query);
 
-  return `${import.meta.env.VITE_GRAFANA_URL}/explore?left=${encodedQuery}`;
+  return `${window?.env?.VITE_GRAFANA_URL || import.meta.env.VITE_GRAFANA_URL}/explore?left=${encodedQuery}`;
 };

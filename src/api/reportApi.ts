@@ -5,7 +5,7 @@ export const reportApi = createApi({
   reducerPath: "reportApi",
   tagTypes: ["JOB_RUN_DETAILS"],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_REPORTS_SERVICE_URL,
+    baseUrl: window?.env?.VITE_REPORTS_SERVICE_URL || import.meta.env.VITE_REPORTS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({

@@ -14,13 +14,6 @@ if [ "$SOURCE_VAULT" = true ]; then
   done
 fi
 
-echo "Starting datamigrator-ui-service"
-npm run dev &
-#pm2 start npm --name datamigrator-ui-service --watch --ignore-watch node_modules -- run dev
-
-echo "Starting nginx"
-
-# Replace forward slashes with escaped forward slashes
 export _VITE_ADMIN_SERVICE_ENDPOINT=$(echo "$VITE_ADMIN_SERVICE_ENDPOINT" | sed 's/\//\\\//g')
 sed -i "s/__VITE_ADMIN_SERVICE_ENDPOINT__/$_VITE_ADMIN_SERVICE_ENDPOINT/g" /etc/nginx/nginx.conf
 
@@ -36,4 +29,9 @@ sed -i "s/__VITE_REPORTS_SERVICE_ENDPOINT__/$_VITE_REPORTS_SERVICE_ENDPOINT/g" /
 export _VITE_FILE_SERVICE_ENDPOINT=$(echo "$VITE_FILE_SERVICE_ENDPOINT" | sed 's/\//\\\//g')
 sed -i "s/__VITE_FILE_SERVICE_ENDPOINT__/$_VITE_FILE_SERVICE_ENDPOINT/g" /etc/nginx/nginx.conf
 
-nginx -g "daemon off;"
+chmod +x /app/generate_env.sh
+
+/app/generate_env.sh
+
+echo "Starting Nginx..."
+exec nginx -g "daemon off;"

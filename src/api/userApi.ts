@@ -12,7 +12,7 @@ export const usersApi = createApi({
     "GET_SMTP"
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_ADMIN_SERVICE_URL,
+    baseUrl: window?.env?.VITE_ADMIN_SERVICE_URL || import.meta.env.VITE_ADMIN_SERVICE_URL,
     prepareHeaders: (headers, { endpoint }) => {
       const token = Cookies.get("access_token");
       const projectId = localStorage.getItem("selected_project_id");
@@ -34,14 +34,14 @@ export const usersApi = createApi({
   endpoints: (builder) => ({
     getAllUsers: builder.query({
       query: () => {
-        return `/users?limit=${import.meta.env.VITE_API_LIMIT}`;
+        return `/users?limit=${window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT}`;
       },
       providesTags: ["ALL_USERS"],
     }),
 
     getAllUsersWithRoles: builder.query({
       query: () => {
-        return `/user-roles/grouping?limit=${import.meta.env.VITE_API_LIMIT}`;
+        return `/user-roles/grouping?limit=${window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT}`;
       },
       providesTags: ["ALL_USERS"],
     }),
@@ -121,8 +121,8 @@ export const usersApi = createApi({
 
     logoutUser: builder.mutation({
       query: (body) => ({
-        url: `${import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
-          import.meta.env.VITE_KEYCLOAK_REALM
+        url: `${window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
+          window?.env?.VITE_KEYCLOAK_REALM || import.meta.env.VITE_KEYCLOAK_REALM
         }/protocol/openid-connect/logout`,
         method: "POST",
         headers: {
@@ -134,8 +134,8 @@ export const usersApi = createApi({
 
     refreshUserToken: builder.mutation({
       query: (body) => ({
-        url: `${import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
-          import.meta.env.VITE_KEYCLOAK_REALM
+        url: `${window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
+          window?.env?.VITE_KEYCLOAK_REALM || import.meta.env.VITE_KEYCLOAK_REALM
         }/protocol/openid-connect/token`,
         method: "POST",
         headers: {

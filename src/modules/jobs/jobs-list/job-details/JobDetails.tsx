@@ -44,7 +44,7 @@ const JobDetails = () => {
   const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
-      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );

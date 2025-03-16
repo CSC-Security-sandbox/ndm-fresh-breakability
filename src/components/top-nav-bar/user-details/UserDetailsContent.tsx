@@ -17,7 +17,7 @@ const UserDetailsContent = () => {
 
   //TODO: Copy the session data to redux and access from there.
   const sessionData = JSON.parse(
-    sessionStorage.getItem(import.meta.env.VITE_SESSION_KEY || "") || "{}"
+    sessionStorage.getItem(window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "") || "{}"
   );
 
   const [isLoading, setIsLoading] = useState<boolean>(false);

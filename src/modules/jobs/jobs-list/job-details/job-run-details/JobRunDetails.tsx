@@ -42,7 +42,7 @@ const JobRunDetails = () => {
   const { data: jobRunDetails, isLoading } = useGetJobRunDetailsQuery(
     { jobRunId },
     {
-      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );
