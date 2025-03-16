@@ -136,24 +136,24 @@ Replace the `IP_ADDRESS` with your Multipass IP:
 
 ### Application Access
 
-NOTE: All credentials are managed from vault. Replace the `IP_ADDRESS` with your Multipass IP.
+NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with your Multipass IP.
 
 1. Fetch the control plane multipass IP
     ```sh
     multipass list | grep datamigrator-cp | awk '{print $3}'
     ```
-2. Fetch the vault root token
+2. Fetch the openbao root token
     ```sh
     multipass shell datamigrator-cp
     sudo su - datamigrator
-    cat /opt/datamigrator/vault/cluster-keys.json
+    cat /opt/datamigrator/openbao/cluster-keys.json
     ```
 
-3. Login to vault UI - `https://IP_ADDRESS/ui/` and give the root token for login. All application secrets are stored in vault. Navigate to secrets after opening the vault ui.
+3. Login to openbao UI - `https://IP_ADDRESS/ui/` and give the root token for login. All application secrets are stored in openbao. Navigate to secrets after opening the openbao ui.
 4. Keycloak UI - `https://IP_ADDRESS/keycloak/`
 5. NDM UI - `https://IP_ADDRESS/`. The initial username is `admin@datamigrator.local` and password is `welcome`.
 6. Temporal UI - `https://IP_ADDRESS/temporal/ui/`
-7. Postgres connection - Use the multipass IP to connect to postgres database. Get the username, password from vault. Keys are - `POSTGRES_DMADMIN_USER` and `POSTGRES_DMADMIN_PASSWORD`.
+7. Postgres connection - Use the multipass IP to connect to postgres database. Get the username, password from openbao. Keys are - `POSTGRES_DMADMIN_USER` and `POSTGRES_DMADMIN_PASSWORD`.
 
 ### Setting Up Worker (Initial Build)
 
@@ -263,21 +263,21 @@ Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are ch
   kubectl get pods -n <NAMESPACE>
   ```
 
-### Unseal vault
+### Unseal openbao
 
-- If you encounter an issue where vault is sealed, follow these steps to unseal vault.
+- If you encounter an issue where openbao is sealed, follow these steps to unseal openbao.
 - SSH into the control plane VM
 
     ```sh
     multipass shell datamigrator-cp
     ```
-- Replace VAULT_UNSEAL_KEY with your key
+- Replace OPENBAO_UNSEAL_KEY with your key
   ```sh
   sudo su - datamigrator
-  jq -r ".unseal_keys_b64[]" /opt/datamigrator/vault/cluster-keys.json
-  kubectl exec vault-0 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
-  kubectl exec vault-1 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
-  kubectl exec vault-2 -n vault -- vault operator unseal <VAULT_UNSEAL_KEY>
+  jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json
+  kubectl exec openbao-0 -n openbao -- bao operator unseal <OPENBAO_UNSEAL_KEY>
+  kubectl exec openbao-1 -n openbao -- bao operator unseal <OPENBAO_UNSEAL_KEY>
+  kubectl exec openbao-2 -n openbao -- bao operator unseal <OPENBAO_UNSEAL_KEY>
   ```
 
 ### Debug worker service

@@ -72,9 +72,6 @@ for service in "${services[@]}"; do
 
     # Define Dockerfile name
     docker_file_name="Dockerfile"
-    if [[ "$service_name" == "keycloak-customizations" ]]; then
-        docker_file_name="dockerfile-microk8s"
-    fi
 
     image_tag="${repo_url}/${service_name}:${service_version}"
     
