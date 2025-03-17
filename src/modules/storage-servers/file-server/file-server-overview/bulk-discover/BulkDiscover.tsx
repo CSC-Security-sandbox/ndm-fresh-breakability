@@ -1,5 +1,5 @@
 import useFileServerDetails from "@/hooks/useFileServerDetails";
-import { BlueXpFormType, JOBS_TYPE, } from "@/types/app.type";
+import { BlueXpFormType, JOBS_TYPE } from "@/types/app.type";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
 import { useBulkDiscoveryMutation } from "@api/jobsApi";
