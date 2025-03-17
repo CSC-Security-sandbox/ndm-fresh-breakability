@@ -92,3 +92,5 @@ export const COL_DEF_FOR_PROJECT = [
 ];
 
 export const WORKER_SCRIPT_PATH = "/opt/datamigrator/bin/worker_register.sh";
+
+export const MAX_RETRY_API_ATTEMPTS = 20;
