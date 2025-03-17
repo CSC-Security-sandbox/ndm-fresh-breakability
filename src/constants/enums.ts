@@ -6,7 +6,8 @@ export enum WorkerStatus {
 export enum ConfigStatus {
     ACTIVE = 'ACTIVE',
     DRAFT = 'DRAFT',
-    ERRORED = 'ERRORED'
+    ERRORED = 'ERRORED',
+    IN_PROGRESS = 'IN_PROGRESS'
 }
 
 export enum Protocol{
