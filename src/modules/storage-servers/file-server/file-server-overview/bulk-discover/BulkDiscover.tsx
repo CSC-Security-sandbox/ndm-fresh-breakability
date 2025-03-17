@@ -3,7 +3,7 @@ import AppFooter from "@components/layout/app-footer/AppFooter";
 import { notify } from "@components/notification/NotificationWrapper";
 import useFileServerDetails from "@/hooks/useFileServerDetails";
 import { useBulkDiscoveryMutation } from "@api/jobsApi";
-import { BlueXpFormType } from "@/types/app.type";
+import { BlueXpFormType, JOBS_TYPE, } from "@/types/app.type";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
 import {
   Button,
@@ -80,7 +80,7 @@ const BulkDiscover = () => {
       const successMessage = (
         <>
           Bulk Discover Job has been created.
-          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${'discover'}`)}>
+          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${JOBS_TYPE.DISCOVERY}`)}>
             View Job Listing
           </Button>
         </>
