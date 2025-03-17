@@ -1,11 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
-import { join } from 'path';
 import { JobStatus, JobType } from 'src/constants/enums';
-
 
 @Entity({ name: 'jobconfig' })
 export class JobConfigEntity extends Base {

@@ -1,4 +1,4 @@
-import { Controller, Get, Res, HttpException, HttpStatus, Body, Post } from '@nestjs/common';
+import { Controller, Res, Body, Post } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';

@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Res, Header, StreamableFile,Logger, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {

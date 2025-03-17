@@ -1,4 +1,3 @@
-import { last } from 'rxjs';
 import * as fs from 'fs';
 import * as path from "path";
 import { Repository } from 'typeorm';
@@ -9,7 +8,6 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { ReportType } from 'src/constants/enums';
-import { error } from 'console';
 
 @Injectable()
 export class PdfService {

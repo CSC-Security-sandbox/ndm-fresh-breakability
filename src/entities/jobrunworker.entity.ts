@@ -1,10 +1,8 @@
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { JobRunEntity } from "./jobrun.entity";
 
-
 @Entity({ name: 'worker_jobrun_mapping' })
 export class WorkerJobRunMap {
-
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
@@ -23,5 +21,4 @@ export class WorkerJobRunMap {
     @ManyToOne(() => JobRunEntity, jonRun => jonRun.worker, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'job_run_id' }) 
     jobRun: JobRunEntity;
-  
 }

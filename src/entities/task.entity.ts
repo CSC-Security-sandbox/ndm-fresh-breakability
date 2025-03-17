@@ -3,7 +3,6 @@ import { TaskStatus, TaskType } from 'src/constants/enums';
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { JobRunEntity } from './jobrun.entity';
 
-
 @Entity({ name: 'tasks' })
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
@@ -39,5 +38,4 @@ export class TaskEntity  {
   @ManyToOne(()=> JobRunEntity, jobRun=>jobRun.tasks, {onDelete: 'CASCADE', orphanedRowAction:'delete', eager: false})
   @JoinColumn({ name: 'job_run_id' })
   jobRun: JobRunEntity
-
 }

@@ -1,6 +1,3 @@
-
-
-
 export const covertBytes = (bytes: number) : string =>{
     if (bytes === 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -17,4 +14,4 @@ export const covertBytes = (bytes: number) : string =>{
 
 export const capitalize = (status: string): string => {
     return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
-  };
+};

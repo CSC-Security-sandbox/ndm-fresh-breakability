@@ -1,11 +1,4 @@
 import { registerAs } from '@nestjs/config';
-import { ConfigEntity } from 'src/entities/config.entity';
-import { FileServerEntity } from 'src/entities/fileserver.entity';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { JobConfigEntity } from 'src/entities/jobconfig.entity';
-import { JobRunEntity } from 'src/entities/jobrun.entity';
-import { ProjectEntity } from 'src/entities/project.entity';
-import { VolumeEntity } from 'src/entities/volume.entity';
 import { DataSourceOptions } from 'typeorm';
 
 export default registerAs(

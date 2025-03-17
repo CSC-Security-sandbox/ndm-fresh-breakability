@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
-import { NotFoundException } from '@nestjs/common';
 
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
@@ -36,8 +35,8 @@ describe('JobRunController', () => {
     mockJobRunService.getJobStatsId.mockResolvedValue(mockResponse);
 
     const result = await controller.getJobStatsId(jobRunId);
-    expect(result).toEqual(serializeJobRunDetailsResponse(mockResponse)); // Verify serialization
-    expect(mockJobRunService.getJobStatsId).toHaveBeenCalledWith(jobRunId); // Ensure service method was called with the correct parameter
+    expect(result).toEqual(serializeJobRunDetailsResponse(mockResponse));
+    expect(mockJobRunService.getJobStatsId).toHaveBeenCalledWith(jobRunId);
   });
 
   it('should throw 404 error when job run is not found', async () => {
@@ -47,7 +46,7 @@ describe('JobRunController', () => {
     try {
       await controller.getJobStatsId(jobRunId);
     } catch (e) {
-      expect(e.response.statusCode).toBe(404); // Check if it throws the NotFoundException
+      expect(e.response.statusCode).toBe(404);
       expect(e.response.message).toBe('Job run not found.');
     }
   });

@@ -169,8 +169,4 @@ export class OverviewService {
            }
             return overViewData;
         }
-
-        
-
     }
-
