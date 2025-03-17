@@ -99,9 +99,12 @@ const JobTasks = () => {
             eachTask = { ...eachTask, workerName: eachWorker.workerName };
           }
         })
+        if (eachTask.workerName === undefined || null) {
+          eachTask = { ...eachTask, workerName: eachTask.workerId };
+        }
+
         return eachTask;
       })
-
       setTableRows(allTasks);
       setTotalCount(result.total || 0);
     } catch (error) {
