@@ -372,7 +372,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: hasWorkers ? hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE : ConfigStatus.DRAFT,
+                status: hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
