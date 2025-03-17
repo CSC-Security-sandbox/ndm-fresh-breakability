@@ -32,8 +32,8 @@ const Filters = ({
     setDataToFilter(dataToUpdate);
   }, [columnsToFilter, rows]);
 
-const getLabelValueObject = (value?: string, formatter?: Function) => 
-  value ? [{ label: formatter ? formatter(value) : value, value }] : [];
+  const getLabelValueObject = (value?: string, formatter?: Function) =>
+    value ? [{ label: formatter ? formatter(value) : value, value }] : [];
 
 
   const form = useForm(
