@@ -28,6 +28,14 @@ alertmanager:
   service:
     type: ClusterIP
 
+  route:
+    receiver: webhook-receiver
+  receivers:
+  - name: webhook-receiver
+    webhook_configs:
+      - url: 'http://admin-service.datamigrator.svc.cluster.local/api/v1/email'
+        send_resolved: true
+
   persistence:
     enabled: true
     size: {{ prometheus_alertmanager_data_volume_size }}
