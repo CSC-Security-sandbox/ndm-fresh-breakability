@@ -1,5 +1,5 @@
 import useFileServerDetails from "@/hooks/useFileServerDetails";
-import { BlueXpFormType } from "@/types/app.type";
+import { BlueXpFormType, JOBS_TYPE } from "@/types/app.type";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
 import { useBulkDiscoveryMutation } from "@api/jobsApi";
@@ -74,10 +74,12 @@ const BulkDiscover = () => {
       );
       await createBulkDiscoveryApi(payload).unwrap();
       navigate(`/file-server/${fileServerDetails?.id}`);
+
+      const configName = fileServerDetails?.configName;
       const successMessage = (
         <>
           Bulk Discover Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs-list")}>
+          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${JOBS_TYPE.DISCOVERY}`)}>
             View Job Listing
           </Button>
         </>

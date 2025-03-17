@@ -4,6 +4,7 @@ import {
   BlueXpFormType,
   ProtocolType,
   ValidateConnectionStatus,
+  JOBS_TYPE,
 } from "@/types/app.type";
 import { convertFileToBase64, getOptionsFromArray } from "@/utils/common.utils";
 import {
@@ -323,10 +324,11 @@ export function withBulkMigrateCreateForm(
         },
       };
 
+      const configName = fileServerDetails?.configName;
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate("/jobs-list")}>
+          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${JOBS_TYPE.MIGRATE}`)}>
             View Job Listing
           </Button>
         </>

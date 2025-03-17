@@ -14,9 +14,6 @@ import { nanoid } from "@reduxjs/toolkit";
 import { useEffect, useState } from "react";
 import { Button } from "@netapp/bxp-design-system-react";
 
-const getLabelValueObject = (value?: string) =>
-  value ? [{ label: value, value }] : [];
-
 const Filters = ({
   rows,
   columnsToFilter,
@@ -35,11 +32,15 @@ const Filters = ({
     setDataToFilter(dataToUpdate);
   }, [columnsToFilter, rows]);
 
+  const getLabelValueObject = (value?: string, formatter?: Function) =>
+    value ? [{ label: formatter ? formatter(value) : value, value }] : [];
+
+
   const form = useForm(
     columnsToFilter?.reduce(
-      (filterForm, { accessor: fileName }) => ({
+      (filterForm, { accessor: fileName, label: label, formatter: formatter }) => ({
         ...filterForm,
-        [fileName]: getLabelValueObject(preSelectedFilter?.[fileName]),
+        [fileName]: getLabelValueObject(preSelectedFilter?.[fileName], formatter),
       }),
       {}
     )
