@@ -4,7 +4,7 @@ import { FormFieldInputNew } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import NFSCredentials from "./components/NFSCredentials";
 import SMBCredentials from "./components/SMBCredentials";
-import FormFrame from "../../layout/FormFrame";
+import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const Credentials = () => {
   const { hostCredentialsForm, isJobRunning } = useContext(

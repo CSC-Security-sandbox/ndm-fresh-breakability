@@ -13,15 +13,11 @@ import JobChart from "@components/chartInfo/JobsChart";
 import { InitialFileServerOverviewApiData } from "./fileServerId.constant";
 
 const FileServerOverView = () => {
-  const {
-    fileServerDetails,
-    getFileServerDetails,
-    allExportPaths,
-    allWorkersList,
-  } = useFileServerDetails();
+  const { fileServerDetails, allExportPaths, allWorkersList } =
+    useFileServerDetails();
   const [getFileOverviewApi, { isLoading, data }] = useLazyGetFileOverviewQuery(
     {
-      pollingInterval: Number(import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
       skipPollingIfUnfocused: true,
     }
   );
@@ -71,7 +67,6 @@ const FileServerOverView = () => {
         fileServerDetails={fileServerDetails}
         allExportPaths={allExportPaths}
         allWorkersList={allWorkersList}
-        getFileServerDetails={getFileServerDetails}
       />
     </Box>
   );

@@ -1,3 +1,4 @@
+import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/constant/app.constants";
 import {
   AllFileServerWithVolumesApiType,
   BlueXpFormType,
@@ -5,11 +6,13 @@ import {
   ValidateConnectionStatus,
   JOBS_TYPE,
 } from "@/types/app.type";
+import { convertFileToBase64, getOptionsFromArray } from "@/utils/common.utils";
 import {
   useBulkMigrateMutation,
   useLazyGetAllFileServersWithVolumeQuery,
   usePrecheckMutation,
 } from "@api/jobsApi";
+import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
@@ -39,15 +42,12 @@ import {
   createPathMapping,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review.utils";
 import { Button, useForm } from "@netapp/bxp-design-system-react";
 import dayjs from "dayjs";
 import { useFormik } from "formik";
 import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
-import { getPreCheckStatus } from "../components/steps/Review/Review.utils";
-import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/constant/app.constants";
-import { getOptionsFromArray, convertFileToBase64 } from "@/utils/common.utils";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>

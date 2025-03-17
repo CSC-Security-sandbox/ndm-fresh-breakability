@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { Text } from "@netapp/bxp-design-system-react";
-import { calculateLastScanned } from "../bulk-discover/bulk-discover.utils";
 import { ConfigListTypeApiType } from "@/types/app.type";
+import { calculateLastScanned } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.utils";
+import { Text } from "@netapp/bxp-design-system-react";
+import { useEffect, useState } from "react";
 
 const ReFreshExportPathsTime = ({
   fileServerDetails,

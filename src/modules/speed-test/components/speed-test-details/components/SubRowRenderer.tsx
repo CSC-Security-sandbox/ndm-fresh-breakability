@@ -3,13 +3,11 @@ import { SubRowRendererPropsType } from "@modules/speed-test/types/speed-test.ty
 import { useSpeedTestTableData } from "@modules/speed-test/hooks/useSpeedTestTableData";
 import { SPEED_TEST_TABLE_OPTIONS } from "@modules/speed-test/constants/speed-test.constants";
 import { memo, useEffect } from "react";
-import {
-  calculateAverageSpeedOfWorkers,
-  lineGraphProcessData,
-} from "@modules/speed-test/utils/speed-test-details.utils";
+import { lineGraphProcessData } from "@modules/speed-test/utils/speed-test-details.utils";
 import { SpeedActionType } from "@modules/speed-test/types/speed-test-details.types";
 import { Box } from "@components/container";
 import LineGraphWrapper from "@modules/speed-test/components/speed-test-details/components/LineGraphWrapper";
+import { calculateAverageSpeedOfWorkers } from "@modules/speed-test/utils/speed-test.utils";
 
 const SubRowRenderer = ({
   row,

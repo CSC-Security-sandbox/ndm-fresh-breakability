@@ -74,7 +74,7 @@ export type ItemType = {
   fileServer: OptionsType;
 };
 
-export type valueCellRendererPropsType = {
+export type DataCellRendererPropsType = {
   value: number;
   unit: string;
 };

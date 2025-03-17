@@ -1,13 +1,13 @@
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
-import RequiredLabel from "@components/layout/RequiredLabel";
 import {
   FormFieldInputNew,
   FormFieldSelect,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
+import { SMB_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-server/components/steps/Credentials/credentials.constant";
 import ProtocolAccordion from "./ProtocolAccordion";
-import { SMB_PROTOCOL_VERSION_OPTIONS } from "../credentials.constant";
+
 const SMBCredentials = () => {
   const { smbCredentialsForm, hostCredentialsForm, isJobRunning } = useContext(
     CommonFileServerContext

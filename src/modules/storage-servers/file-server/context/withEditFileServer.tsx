@@ -1,23 +1,23 @@
-import { notify } from "@components/notification/NotificationWrapper";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import {
-  useLazyGetFileServerByIdQuery,
-  useUpdateFileServerMutation,
-} from "@api/configApi";
 import {
   FileServerApiType,
   FileServerDetailsType,
   JOB_STATUS_TYPE_ENUM,
 } from "@/types/app.type";
-import { useNavigate } from "react-router-dom";
-import { ComponentType, useEffect, useState } from "react";
+import {
+  useLazyGetFileServerByIdQuery,
+  useUpdateFileServerMutation,
+} from "@api/configApi";
+import { notify } from "@components/notification/NotificationWrapper";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   createConfigPayload,
   patchCredentialsFormValue,
   patchJobConfigFormValue,
-} from "../components/add-file-server.util";
-import { MountPathsOptionsListType } from "../fileServer.interface";
-import { useFileServerForm } from "./useFileServerForm";
+} from "@modules/storage-servers/file-server/components/add-file-server.util";
+import { useFileServerForm } from "@modules/storage-servers/file-server/context/useFileServerForm";
+import { MountPathsOptionsListType } from "@modules/storage-servers/file-server/fileServer.interface";
+import { ComponentType, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export function withEditFileServer(WrappedComponent: ComponentType<any>) {
   return function WithEditFileServerComponent(props: any) {

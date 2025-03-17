@@ -20,12 +20,14 @@ const Mapping = () => {
   const [key, setKey] = useState(nanoid());
 
   const options = useMemo(() => {
-    return getOptionsFromArray(
+    const _options = getOptionsFromArray(
       sourceFileServerDetails?.fileServers?.map((data) => data.protocol) || [
         "NFS",
         "SMB",
       ]
     );
+    protocolForm.resetForm({ protocol: _options[0] });
+    return _options;
   }, [sourceFileServerDetails?.fileServers?.length]);
 
   useEffect(() => {

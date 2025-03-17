@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { TableRendererPropsType } from "../overview.interface";
+import { TableRendererPropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import ExportPathsTable from "./ExportPathsTable";
 import OverviewTabs from "./OverviewTabs";
 import WorkersTable from "./WorkersTable";
 
 const TableRenderer = ({
   fileServerDetails,
-  getFileServerDetails,
   allExportPaths,
   allWorkersList,
 }: TableRendererPropsType) => {
@@ -24,7 +23,6 @@ const TableRenderer = ({
       {currentTab === 1 ? (
         <ExportPathsTable
           allExportPaths={allExportPaths}
-          getFileServerDetails={getFileServerDetails}
           fileServerDetails={fileServerDetails}
           showRefetch={true}
           setSelectedExportPathsIds={() => {}}

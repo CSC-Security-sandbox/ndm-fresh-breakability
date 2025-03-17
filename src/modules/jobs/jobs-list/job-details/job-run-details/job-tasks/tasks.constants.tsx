@@ -29,7 +29,7 @@ export const TASKS_COLUMN_DEFS = [
   },
   {
     header: "Worker",
-    accessor: "workerId",
+    accessor: "workerName",
     id: "worker",
     width: 100,
     sort: {

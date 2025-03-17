@@ -1,29 +1,29 @@
+import useFileServerDetails from "@/hooks/useFileServerDetails";
+import { BlueXpFormType, JOBS_TYPE, } from "@/types/app.type";
+import { getOptionsFromArray } from "@/utils/common.utils";
+import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
+import { useBulkDiscoveryMutation } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
 import { notify } from "@components/notification/NotificationWrapper";
-import useFileServerDetails from "@/hooks/useFileServerDetails";
-import { useBulkDiscoveryMutation } from "@api/jobsApi";
-import { BlueXpFormType, JOBS_TYPE, } from "@/types/app.type";
-import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
+import { BULK_DISCOVERY_FORM_SCHEMA } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
+import { generateBulkDiscoveryPayload } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.utils";
+import { bulkDiscoveryFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
+import BulkDiscoveryFooter from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/BulkDiscoveryFooter";
+import TopSection from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/TopSection";
+import ExportPathsTable from "@modules/storage-servers/file-server/file-server-overview/components/ExportPathsTable";
 import {
   Button,
   Card,
-  useForm,
-  Text,
   FormFieldSelect,
+  Text,
+  useForm,
 } from "@netapp/bxp-design-system-react";
+import { nanoid } from "@reduxjs/toolkit";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import ExportPathsTable from "../components/ExportPathsTable";
-import { BULK_DISCOVERY_FORM_SCHEMA } from "./bulk-discover.constant";
-import { generateBulkDiscoveryPayload } from "./bulk-discover.utils";
-import { bulkDiscoveryFormType } from "./bulk-discovery.interface";
-import BulkDiscoveryFooter from "./components/BulkDiscoveryFooter";
-import TopSection from "./components/TopSection";
-import { getOptionsFromArray } from "@/utils/common.utils";
-import { nanoid } from "@reduxjs/toolkit";
+import { useNavigate } from "react-router-dom";
 
 dayjs.extend(utc);
 
@@ -31,8 +31,7 @@ const BulkDiscover = () => {
   const navigate = useNavigate();
   const [createBulkDiscoveryApi, { isLoading: isSubmitting }] =
     useBulkDiscoveryMutation();
-  const { fileServerDetails, allExportPaths, getFileServerDetails } =
-    useFileServerDetails();
+  const { fileServerDetails, allExportPaths } = useFileServerDetails();
   const [selectedExportPathsIds, setSelectedExportPathsIds] = useState<
     string[]
   >([]);
@@ -97,7 +96,7 @@ const BulkDiscover = () => {
   }, [options]);
 
   return (
-    <Box className="flex flex-col gap-4">
+    <Box className="flex flex-col gap-4 h-[80vh] overflow-y-auto">
       <Box className="p-8">
         <Box className="text-xl font-semibold mb-3">Bulk Discover</Box>
         <TopSection
@@ -119,7 +118,6 @@ const BulkDiscover = () => {
           allExportPaths={allExportPaths.filter(
             (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
           )}
-          getFileServerDetails={getFileServerDetails}
           fileServerDetails={fileServerDetails}
           showRefetch={false}
           isRowSelectingEnabled={true}

@@ -1,7 +1,7 @@
 import TableWrapper from "@components/table-wrapper/TableWrapper";
+import { WORKERS_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
+import { WorkersTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { useEffect } from "react";
-import { WORKERS_PATHS_TABLE_COLS_DEF } from "../fileServerId.constant";
-import { WorkersTablePropsType } from "../overview.interface";
 
 const WorkersTable = ({
   fileServerDetails,

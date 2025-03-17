@@ -32,8 +32,8 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-    const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const client_id = window?.env?.VITE_KEYCLOAK_CLIENT_ID || import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+    const client_secret = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
     const body = {
       refresh_token,
       client_id,
@@ -72,9 +72,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     }
 
     return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
+      refreshTimeoutRef.current && clearTimeout(refreshTimeoutRef.current);
     };
   }, [auth.isAuthenticated]);
 

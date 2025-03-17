@@ -62,7 +62,7 @@ const JobTasks = () => {
 
   useEffect(() => {
     fetchRecords();
-  }, [pagination.pageIndex, sortState, currentFilters, taskType]);
+  }, [pagination.pageIndex, sortState, currentFilters, taskType, workers]);
 
   const fetchRecords = async () => {
     let payload: any = {
@@ -91,7 +91,21 @@ const JobTasks = () => {
       taskAPIRequest.current = getJobTasks(payload);
 
       const result = await taskAPIRequest.current?.unwrap();
-      setTableRows(result.data);
+
+      //Adding workerName to the tasks data
+      const allTasks = result.data.map((eachTask) => {
+        workers?.map((eachWorker) => {
+          if (eachTask.workerId === eachWorker.workerId) {
+            eachTask = { ...eachTask, workerName: eachWorker.workerName };
+          }
+        })
+        if (eachTask.workerName === undefined || null) {
+          eachTask = { ...eachTask, workerName: eachTask.workerId };
+        }
+
+        return eachTask;
+      })
+      setTableRows(allTasks);
       setTotalCount(result.total || 0);
     } catch (error) {
       console.error({ error, level: "Task listing" });
@@ -128,9 +142,9 @@ const JobTasks = () => {
       formatter: toTitleCase,
     },
     {
-      accessor: "workerId",
+      accessor: "workerName",
       label: "Worker",
-      options: workers?.map((row) => row.workerId),
+      options: workers?.map((row) => row.workerName),
     },
   ];
 

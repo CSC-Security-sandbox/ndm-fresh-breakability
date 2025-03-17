@@ -12,7 +12,7 @@ import {
   DUMMY_DATA,
   ERRORS_DUMMY_DATA,
   ERRORS_LIST_COLUMN_DEFS,
-} from "../../job-details.constants";
+} from "@modules/jobs/jobs-list/job-details/job-details.constants";
 
 const JobDescriptionInnerCard = ({
   name,

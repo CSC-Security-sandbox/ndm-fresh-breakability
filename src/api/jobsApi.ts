@@ -18,7 +18,7 @@ export const jobsApi = createApi({
     "SPEED_TEST_JOBS",
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_JOBS_SERVICE_URL,
+    baseUrl: window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({

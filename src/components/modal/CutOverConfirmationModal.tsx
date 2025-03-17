@@ -16,9 +16,9 @@ import {
 } from "@/types/app.type";
 import { useConfirmCutOverMutation } from "@api/jobsApi";
 import { useDownloadReportsMutation } from "@api/reportApi";
-import { notify } from "../notification/NotificationWrapper";
+import { notify } from "@components/notification/NotificationWrapper";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
-import { Box } from "../container";
+import { Box } from "@components/container/index";
 
 export default function CutoverConfirmationModal({
   jobRunId,

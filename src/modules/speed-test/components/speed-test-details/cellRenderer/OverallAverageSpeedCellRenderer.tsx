@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { calculateOverallAverageSpeed } from "@modules/speed-test/utils/speed-test-details.utils";
-import ValueCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/valueCellRenderer";
 import { WorkerSpeedActionPropsType } from "@modules/speed-test/types/speed-test-details.types";
+import DataCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/DataCellRenderer";
 
 const OverallAverageSpeedCellRenderer = ({
   workers,
@@ -11,7 +11,7 @@ const OverallAverageSpeedCellRenderer = ({
     return calculateOverallAverageSpeed({ workers, speedAction });
   }, [workers, speedAction]);
 
-  return <ValueCellRenderer value={overallAverageSpeed} unit={"Mbps"} />;
+  return <DataCellRenderer value={overallAverageSpeed} unit={"Mbps"} />;
 };
 
 export default memo(OverallAverageSpeedCellRenderer);

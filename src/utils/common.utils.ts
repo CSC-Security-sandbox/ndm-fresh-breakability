@@ -1,4 +1,4 @@
-import { JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
+import { FILE_SERVER_STATUS, JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
 
 export const getJobType = (type: JOBS_TYPE) => {
   switch (type) {
@@ -50,7 +50,7 @@ export const toTitleCase = (str: string = "") => {
 };
 
 /**
- * Find time differene in milliseconds between two date strings.
+ * Find time difference in milliseconds between two date strings.
  * @param {string} startDateTimeStr The start date.
  * @param {string} endDateTimeStr The end date, if not sent it will pick current date.
  * @return {number} Difference in milliseconds.
@@ -114,5 +114,14 @@ export const getGrafanaLogUrl = (searchParam: string) => {
 
   const encodedQuery = encodeURIComponent(query);
 
-  return `${import.meta.env.VITE_GRAFANA_URL}/explore?left=${encodedQuery}`;
+  return `${window?.env?.VITE_GRAFANA_URL || import.meta.env.VITE_GRAFANA_URL}/explore?left=${encodedQuery}`;
+};
+
+export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS) => {
+  switch (status) {
+    case FILE_SERVER_STATUS.IN_PROGRESS:
+      return "In Progress";
+    default:
+      return toTitleCase(status);
+  }
 };

@@ -1,4 +1,4 @@
-import { Box } from "../container";
+import { Box } from "@components/container/index";
 import { MetricItemAdvance } from "@netapp/bxp-design-system-react";
 
 interface LegendsPropsType {

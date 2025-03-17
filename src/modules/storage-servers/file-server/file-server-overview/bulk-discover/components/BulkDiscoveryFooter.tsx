@@ -1,7 +1,7 @@
 import { Box } from "@components/container/index";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
-import { BulkDiscoveryFooterType } from "../bulk-discovery.interface";
+import { BulkDiscoveryFooterType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 
 const BulkDiscoveryFooter = ({
   bulkDiscoveryForm,

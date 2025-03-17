@@ -6,7 +6,7 @@ export const projectApi = createApi({
   tagTypes: ["ALL_PROJECTS"],
 
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_ADMIN_SERVICE_URL,
+    baseUrl: window?.env?.VITE_ADMIN_SERVICE_URL || import.meta.env.VITE_ADMIN_SERVICE_URL,
     prepareHeaders,
   }),
 

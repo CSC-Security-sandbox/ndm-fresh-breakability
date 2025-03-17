@@ -2,11 +2,7 @@ import BulkDiscover from "@modules/storage-servers/file-server/file-server-overv
 import { Box } from "@components/container";
 
 const BulkDiscoveryPage = () => {
-  return (
-    <Box className="overflow-y-scroll">
-      <BulkDiscover />
-    </Box>
-  );
+  return <BulkDiscover />;
 };
 
 export default BulkDiscoveryPage;
