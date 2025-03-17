@@ -122,7 +122,7 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
     }
-    // if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
+    if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
       if(metadata.gid && metadata.uid && process.platform !== 'win32') {
           try {
             const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
@@ -152,16 +152,10 @@ export class MigrationSyncService {
           }
        }
        try{
-        this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid}`)
-        // const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-        const sid = metadata.sid
+         const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
+         this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid} to ${sid}`)
         if(sid) {
-          const powerShellCommand = `
-          $acl = Get-Acl "${sid}"
-          $owner = New-Object System.Security.Principal.SecurityIdentifier("${sid}")
-          $acl.SetOwner($owner)
-          Set-Acl -Path "${targetPath}" -AclObject $acl
-          `;
+          const powerShellCommand = `powershell.exe -Command "$acl = Get-Acl '${targetPath}'; $owner = New-Object System.Security.Principal.SecurityIdentifier('${sid}'); $acl.SetOwner($owner); Set-Acl -Path '${targetPath}' -AclObject $acl"`;
           execSync(`powershell.exe -Command "${powerShellCommand}"`);
           this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
         } else {
@@ -173,7 +167,7 @@ export class MigrationSyncService {
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
-    // }
+    }
     
     if(metadata.mtime && metadata.atime) {
       try {
