@@ -113,16 +113,6 @@ export class JobConfigService {
       select: { sourcePathId: true, scheduler: true, status: true, id:true },
     });
 
-
-    const inactiveConfigs = existingList.filter(
-      (entry) => {
-        return entry.status === JobStatus.InActive
-      }
-    );
-
-    inactiveConfigs.forEach(async (config) => {
-      await this.jobConfigRepo.update(config.id, {status:JobStatus.Active})
-    }) 
     
     await this.jobConfigRepo.update(
       {
@@ -138,6 +128,7 @@ export class JobConfigService {
         preserveAccessTime: bulkDiscovery.preserveAccessTime,
         excludeOlderThan: bulkDiscovery.excludeOlderThan,
         firstRunAt: firstRunAt,
+        status:JobStatus.Active,
         scheduler: ScheduleStatus.SCHEDULING,
       }
     );
@@ -686,7 +677,7 @@ export class JobConfigService {
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
                   futureScheduleAt: config.futureScheduleAt,
-                  status: config.status === JobStatus.InActive ? JobStatus.Active : config.status,
+                  status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   firstRunAt: config.firstRunAt,
                 })
