@@ -5,6 +5,8 @@ import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, R
 import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
+import { execSync } from "child_process";
+import { platform } from "os";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -114,6 +116,9 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
   }
 ): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
+    let sid = undefined
+    if(process.platform == 'win32' && lStat.isFile())
+      sid = getSID(fullFilePath);
 
     const obj = new FileInfo(
         name,
@@ -131,13 +136,10 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         relativePath.split('/').length - 2,
         lStat.uid,
         lStat.gid,
+        sid
       );
     return {
       ...obj,
-
-      // modifiedTime: new Date(lStat.mtime).toISOString(),
-      // birthTime: new Date(lStat.birthtime).toISOString(),
-      // accessTime: new Date(lStat.atime).toISOString(),
       ...checksums
     }
 }
@@ -254,3 +256,8 @@ const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', '
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 
 
+export const getSID = (filePath: string) => {
+    const getSIDCommand= `powershell.exe -Command "(Get-Acl '${filePath}').Owner"`;
+    return execSync(getSIDCommand, { encoding: "utf-8" }).trim();
+
+}

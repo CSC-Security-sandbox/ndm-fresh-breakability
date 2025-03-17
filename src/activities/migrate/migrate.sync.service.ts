@@ -122,7 +122,7 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
     }
-    if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
+    // if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
       if(metadata.gid && metadata.uid && process.platform !== 'win32') {
           try {
             const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
@@ -142,6 +142,7 @@ export class MigrationSyncService {
           try{
             const getSIDCommand= `powershell.exe -Command "(Get-Acl '${sourcePath}').Owner"`;
             metadata.sid = execSync(getSIDCommand, { encoding: "utf-8" }).trim();
+            this.logger.debug(`SID for ${sourcePath} is ${metadata.sid}`)
           }
           catch(error) {
             this.logger.error(`Error setting ownership: ${error.message}`);
@@ -151,20 +152,28 @@ export class MigrationSyncService {
           }
        }
        try{
-          const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-          if(sid) {
-            const command = `powershell -Command "$acl = Get-Acl '${targetPath}'; $acl.SetOwner([System.Security.Principal.NTAccount]'${sid}'); Set-Acl '${targetPath}' $acl"`;
-            execSync(command);
-          } else {
-            this.logger.debug(`SID not found for the file ${sourcePath}`)
-          }
-        } catch(error) {
-          this.logger.error(`Error setting ownership: ${error.message}`);
-          const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-          stampMetaDataOutput.errors.push(error.code)
-          await jobContext.appendToErrorList(dmErr);
+        this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid}`)
+        // const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
+        const sid = metadata.sid
+        if(sid) {
+          const powerShellCommand = `
+          $acl = Get-Acl "${sid}"
+          $owner = New-Object System.Security.Principal.SecurityIdentifier("${sid}")
+          $acl.SetOwner($owner)
+          Set-Acl -Path "${targetPath}" -AclObject $acl
+          `;
+          execSync(`powershell.exe -Command "${powerShellCommand}"`);
+          this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
+        } else {
+          this.logger.debug(`SID not found for the file ${sourcePath}`)
+        }
+      } catch(error) {
+        this.logger.error(`Error setting ownership: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
       }
-    }
+    // }
     
     if(metadata.mtime && metadata.atime) {
       try {
