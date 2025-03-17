@@ -56,13 +56,6 @@ const ExportPathsTable = ({
       }).unwrap();
 
       interval.current = setInterval(async () => {
-        if (retryCount++ === MAX_RETRY_API_ATTEMPTS) {
-          const error = new Error(
-            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
-          );
-          showErrorOnRefetchFailure(error);
-        }
-
         const data = await getWorkFlowStatus({
           id: response?.workflowId,
         }).unwrap();
@@ -71,6 +64,15 @@ const ExportPathsTable = ({
           dispatch(configApi.util.invalidateTags(["GET_FILE_SERVER_BY_ID"]));
           notify.success("Successfully refreshed the mount / share paths.");
           setDisableRefresh(false);
+          clearInterval(interval.current);
+          return;
+        }
+
+        if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+          const error = new Error(
+            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+          );
+          showErrorOnRefetchFailure(error);
         }
       }, 2000);
     } catch (error) {
