@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Exclude, plainToClass } from 'class-transformer';
-import { IsString, IsUUID, IsBoolean, IsNumber, IsOptional, IsObject } from 'class-validator';
+import { plainToClass } from 'class-transformer';
+import { IsString, IsUUID, IsNumber, IsOptional, IsObject } from 'class-validator';
 import { Protocol } from 'src/constants/enums';
 
 class FileServerConfigDto {
@@ -74,7 +74,6 @@ export class JobRunStats {
   directories?: string = "0";
 }
 
-
 export class JobReportResponseDto {
   @ApiProperty()
   value: string | number;
@@ -87,7 +86,6 @@ export class JobReportResponseDto {
   @IsString()
   sub_category: Date;
 }
-
 
 export class JobRunDetailsResponseDto {
   @ApiProperty()
@@ -133,7 +131,6 @@ export class JobRunDetailsResponseDto {
   @IsObject()
   task?: TaskDto;
 }
-
 
 export function serializeJobRunDetailsResponse(plainObject: any): JobRunDetailsResponseDto {
   return plainToClass(JobRunDetailsResponseDto, plainObject);

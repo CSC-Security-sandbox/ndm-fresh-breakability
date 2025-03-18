@@ -1,8 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
-
-
 export class Base {
   @ApiProperty({ description: 'created_at' })
   @CreateDateColumn({ name: 'created_at' })
@@ -20,4 +18,3 @@ export class Base {
   @Column({ name: 'updated_by',nullable:true })
   updatedBy: string;
 }
-

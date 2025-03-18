@@ -15,7 +15,6 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class JobRunService {
-
     constructor(
         @InjectRepository(JobRunEntity)
         private jobRunRepo: Repository<JobRunEntity>,
@@ -172,7 +171,6 @@ export class JobRunService {
       if (fs.existsSync(filePath)) return filePath;
       await this.csvService.generateCsv(filePath, jobRunId);
       
-      // update the isReportReady flag in the jobrun table
       await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
 
       if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`)

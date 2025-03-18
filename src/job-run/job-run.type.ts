@@ -4,7 +4,6 @@ export interface InventoryStatusSummary {
     totalFileSize: BigInt;
 }
 
-
 export  interface TaskStatusCount {
     status: string;
     count: string;

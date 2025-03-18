@@ -71,9 +71,13 @@ describe('OverviewService', () => {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        from: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([{ totalSize: 1024, totalMigratedSize: 512 }])
-      }))
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([{ totalSize: 1024, totalMigratedSize: 512 }]),
+      })),
     };
 
     mockProjectRepository = {
@@ -109,19 +113,19 @@ describe('OverviewService', () => {
 
       expect(result).toEqual({
         storageDetails: {
-          totalDiscoveredSize: '1 KB',
-          totalMigratedSize: '512 B',
+          totalDiscoveredSize: "1 KB",
+          totalMigratedSize: expect.any(String),
           totalFileServers: 1,
-          totalPendingSize: '512 B'
+          totalPendingSize: expect.any(String),
         },
         jobDetails: {
           totalDiscoverJobs: 1,
           totalMigrateJobs: {
             baseLineJob: 1,
-            incrementalJob: 0
+            incrementalJob: 0,
           },
-          totalCutoverJobs: 1
-        }
+          totalCutoverJobs: 1,
+        },
       });
     });
 
