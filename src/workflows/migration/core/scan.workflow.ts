@@ -35,6 +35,7 @@ export const ScanWorkflow = async ({jobRunId , workerId} : ScanWorkflowInput): P
       await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
       while (true) {
           iteration++;
+          log(jobRunId,`Iteration number ${iteration} for scan`)
           const jobState = await getJobStateActivity(jobRunId);
           if(jobState.status !== JobRunStatus.Running) {
             return { message: `Job status changed to ${jobState.status}` };
@@ -63,6 +64,7 @@ export const ScanWorkflow = async ({jobRunId , workerId} : ScanWorkflowInput): P
             await setJobStateActivity(jobRunId, updatedJobState);
             break
           }
+        
           if(iteration >= 80) {
               log(jobRunId, `Iteration limit reached. Continuing as new...`);
               await continueAsNew({ jobRunId });

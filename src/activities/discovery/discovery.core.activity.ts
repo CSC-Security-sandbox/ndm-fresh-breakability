@@ -47,9 +47,9 @@ export class DiscoveryScanActivity {
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         const discoverOutput = await this.discover({task, jobContext});
+        const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
+        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
         if(discoverOutput.errors.size === 0) {
-            const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
-            jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
             this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
         }else {
             const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };

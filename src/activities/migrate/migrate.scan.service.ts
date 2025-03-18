@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 
-import { basePrefix, buildTask, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
+import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Operation, Origin } from "../utils/utils.types";
 
@@ -77,6 +77,8 @@ export class MigrationScanService {
                 this.logger.debug(`sourceContentPath : ${sourceContentPath}`);
                 this.logger.debug(`sourcePrefix : ${sourcePrefix}`);
                 this.logger.debug(`relativeSourcePath : ${relativeSourcePath}`);
+                this.logger.debug(`lState -----> , ${JSON.stringify(sourceStat)}`)
+
 
                 if (sourceStat.isDirectory()) {
                     syncContentOutput.directory++;
@@ -189,17 +191,21 @@ export class MigrationScanService {
     }
 
     buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
-        if (!dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())) {
-            const metadata: MetaData =  { 
-                size: sFile.size,
-                mtime: sFile.mtime,
-                mode: sFile.mode,
-                uid: sFile.uid,
-                gid: sFile.gid,
-                atime: sFile.atime,
-                ctime: sFile.ctime,
-                birthtime: sFile.birthtime,
-            } 
+        const metadata: MetaData =  { 
+            size: sFile.size,
+            mtime: sFile.mtime,
+            mode: sFile.mode,
+            uid: sFile.uid,
+            gid: sFile.gid,
+            atime: sFile.atime,
+            ctime: sFile.ctime,
+            birthtime: sFile.birthtime,
+            sid: undefined
+        } 
+
+        this.logger.debug(`isContentUpdate(sFile, dFile) : ${isContentUpdate(sFile, dFile)}`)
+        // this.logger.debug(`isMetaUpdated(sFile, dFile) : ${isMetaUpdated(sFile, dFile)}`)
+        if (isContentUpdate(sFile, dFile) ) 
             return new Command(
                 fPath,
                 {
@@ -209,7 +215,21 @@ export class MigrationScanService {
                 uuid4(),
                 0
             );
-        }
+
+        // if(isMetaUpdated(sFile, dFile))
+        //     return new Command(
+        //         fPath,
+        //         {
+        //             0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.COMPLETED },
+        //             1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
+        //         },
+        //         uuid4(),
+        //         0
+        //     );
+
+
         return undefined;
     }
+
+   
 }

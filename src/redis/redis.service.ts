@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { createClient, RedisClientType } from 'redis';
 
@@ -93,5 +93,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       return { message: 'Error while updating the job state : ' + traceId };
     }
+  }
+
+  async getOwnerIdentity(jobContext: JobContext, id: string, type: 'SID' | 'UID' | 'GID') {
+    return this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
+    // return id.toString()
   }
 }

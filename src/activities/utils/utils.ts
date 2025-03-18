@@ -5,6 +5,8 @@ import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, R
 import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
+import { execSync } from "child_process";
+import { platform } from "os";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -114,13 +116,15 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
   }
 ): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
+    let sid = undefined
+    if(process.platform == 'win32' && lStat.isFile())
+      sid = getSID(fullFilePath);
+
     const obj = new FileInfo(
         name,
         relativePath,
         relativePath,
         lStat.isDirectory(),
-        lStat.uid,
-        lStat.gid,
         lStat.size,
         !lStat.isDirectory(),
         lStat.birthtime,
@@ -130,16 +134,12 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         getFilePermissions(lStat),
         getFileType(lStat),
         relativePath.split('/').length - 2,
+        lStat.uid,
+        lStat.gid,
+        sid
       );
     return {
       ...obj,
-      uid: lStat.uid.toString(),
-      gid: lStat.gid.toString(),
-      fileSize: lStat.size,
-      blocks: lStat.blocks,
-      modifiedTime: new Date(lStat.mtime).toISOString(),
-      birthTime: new Date(lStat.birthtime).toISOString(),
-      accessTime: new Date(lStat.atime).toISOString(),
       ...checksums
     }
 }
@@ -155,7 +155,12 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => (dFile && sFile &&  (sFile.size === dFile.size) && (sFile.mtime.toISOString() === dFile.mtime.toISOString())) && (
+  (sFile.gid != dFile.gid) ||   (sFile.uid != dFile.uid) ||  (sFile.atime != dFile.atime) || (sFile.mode != dFile.mode)
+)
+
+export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
   if (error.code) {
@@ -251,3 +256,8 @@ const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', '
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 
 
+export const getSID = (filePath: string) => {
+    const getSIDCommand= `powershell.exe -Command "(Get-Acl '${filePath}').Owner"`;
+    return execSync(getSIDCommand, { encoding: "utf-8" }).trim();
+
+}
