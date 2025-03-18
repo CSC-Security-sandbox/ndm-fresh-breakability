@@ -78,6 +78,7 @@ export class ValidateWorkingDirectoryActivity {
   async isValidDirectory(payload: any, traceId: string): Promise<boolean> {
     const baseMountDir = WorkersConfig.get('baseWorkingPath');
     let isDirectoryValid = false;
+    let hasWritePermission = false;
 
     try {
       for (const fileServer of payload.listPathPayload) {
@@ -98,13 +99,22 @@ export class ValidateWorkingDirectoryActivity {
         await protocol.mountPath(traceId, mountPathPayload);
         this.logger.log("Mounted export path successfully");
 
-        this.logger.log("started validating the working directory");
+        this.logger.log("Started validating the working directory");
         const mountPoint = path.join(baseMountDir, traceId, traceId);
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {
           this.logger.log(`Working Directory exists: ${fullPath}`);
           isDirectoryValid = true;
+
+          try {
+            fs.accessSync(fullPath, fs.constants.W_OK);
+            this.logger.log(`Write permission is available for: ${fullPath}`);
+            hasWritePermission = true;
+          } catch (err) {
+            this.logger.error(`No write permission for: ${fullPath}`);
+            hasWritePermission = false;
+          }
         } else {
           this.logger.log(`Working Directory does not exist: ${fullPath}`);
         }
@@ -113,13 +123,18 @@ export class ValidateWorkingDirectoryActivity {
         await protocol.unmountPath(traceId, mountPathPayload);
         this.logger.log("Unmounted export path successfully");
 
-        if (isDirectoryValid) break;
+        if (isDirectoryValid && !hasWritePermission) {
+          throw new Error(`Provided working directory ${payload?.workingDirectory} has no writable permission`);
+        }
+
+        if (isDirectoryValid && hasWritePermission) break;
       }
     } catch (error) {
       this.logger.error(`Working Directory validation error: ${error?.message}`);
       throw new Error(error.message);
     }
 
-    return isDirectoryValid;
+    return isDirectoryValid && hasWritePermission;
   }
+
 }
