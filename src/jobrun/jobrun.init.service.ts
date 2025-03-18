@@ -51,7 +51,6 @@ import { RedisService } from "src/redis/redis.service";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
-import IdentityMap from "./identityMap";
 import { Readable } from "stream";
 
 @Injectable()
@@ -401,9 +400,6 @@ export class JobRunInitService {
       throw new Error(`JobRun with id ${jobRunId} not found`);
     }
     const jobConfig = new SpeedTestJobConfig(jobRunId, jobRunConfig.jobType);
-
-    const redisClient = await RedisUtils.getClient();
-    if (!redisClient.isOpen) await redisClient.connect();
     const jobState: JobState = new JobState(
       [],
       0,

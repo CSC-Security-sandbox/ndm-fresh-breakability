@@ -19,7 +19,7 @@ async onModuleInit(): Promise<void> {
       this.logger.log('Redis client disconnected');
     }
   }
- private async createClient(): Promise<void> {
+  async createClient(): Promise<void> {
     if (this.client && this.client.isOpen) {
       return;
     }
@@ -47,7 +47,7 @@ async onModuleInit(): Promise<void> {
     await this.client.connect();
   }
   
- private async ensureClient(): Promise<void> {
+  async ensureClient(): Promise<void> {
     if (!this.client || !this.client.isOpen) {
       this.logger.warn('Redis client not initialized. Attempting to reconnect...');
       await this.createClient();
