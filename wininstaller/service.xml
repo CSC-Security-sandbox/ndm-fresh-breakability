@@ -1,0 +1,18 @@
+<service>
+    <id>DatamigratorWorker</id>
+    <name>Datamigrator Worker</name>
+    <description>Datamigrator Worker Service</description>
+    <executable>powershell.exe</executable>
+    <arguments>-ExecutionPolicy Bypass -File "bin\start-worker.ps1"</arguments>
+    <logpath>logs</logpath>
+    <!-- <log mode="roll-by-size">
+        <sizeThreshold>10240</sizeThreshold>
+        <keepFiles>8</keepFiles>
+    </log> -->
+    <log mode="none"/>
+    <startmode>Automatic</startmode>
+    <delayedAutoStart>true</delayedAutoStart>
+    <onfailure action="restart" delay="10 sec"/>
+    <resetfailure>1 hour</resetfailure>
+    <priority>Normal</priority>
+</service>
