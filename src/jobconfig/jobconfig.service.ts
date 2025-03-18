@@ -892,7 +892,7 @@ export class JobConfigService {
           .select([
             "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
             "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-            "SUM(inventory.fileSize) AS totalSize",
+            "SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END) AS totalSize"
           ])
           .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRun.id })
           .getRawOne();

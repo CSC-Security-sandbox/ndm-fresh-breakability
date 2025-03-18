@@ -133,7 +133,7 @@ export class JobRunService {
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
     const jobRunConfigs = await this.jobRunRepo.find({where: {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, select: {jobConfigId : true}})
-    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])}, {status: JobRunStatus.Stopped})
+    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])}, {status: JobRunStatus.Stopped, endTime: new Date() })
     await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
     for(const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
