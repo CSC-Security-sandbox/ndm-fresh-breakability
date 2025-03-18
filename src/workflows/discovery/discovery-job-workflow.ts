@@ -8,20 +8,29 @@ async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { scanActivity } = proxyActivities<DiscoveryScanActivity>({ startToCloseTimeout: '300s' });
+const { scanActivity } = proxyActivities<DiscoveryScanActivity>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+});
 
 const { 
   fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
-} = proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
+} = proxyActivities<DiscoveryActivity>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+ });
 
 const { 
   updateLastEntry: updateLastEntry,
   getJobState: getJobStateActivity,
   updateStatus: updateStatusActivity,
   setJobState: setJobStateActivity,
-} = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = proxyActivities<CommonActivityService>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+ });
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
   const { traceId, options, workerId } = args;

@@ -79,7 +79,7 @@ export class DiscoveryScanActivity {
             };
 
             const scanOutput = await this.scanDirCommand(scanInput);
-            this.logger.log(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
+            this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
             if (scanOutput.error)  {
                 task.commands[i].retryCount++;
                 task.commands[i].status = CommandStatus.ERROR;
@@ -112,9 +112,14 @@ export class DiscoveryScanActivity {
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
             await jobContext.appendToErrorList(dmErr);
-            if(scanPath.retryCount < this.maxRetryCount)  {
+            if(scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal)  {
                 this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
-                jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
+                jobContext.tasksInfo.lastId = await jobContext.appendToTaskList(task);
+            }
+            else if(scanPath.isFatal){
+                this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+                task.status = TaskStatus.ERRORED;
+                jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }
         else {
@@ -147,7 +152,7 @@ export class DiscoveryScanActivity {
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
-
+                
                 if(sourceStat.isDirectory()) {
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;
