@@ -24,7 +24,8 @@ export class MigrationTaskService{
       this.workerId = this.configService.get('worker.workerId');
       this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
       this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
-      this.fetchTaskBatch = 10, this.pushTaskDirSize = 500;
+      this.fetchTaskBatch =  this.configService.get('worker.fetchTaskBatchMigration') || 1;;
+      this.pushTaskDirSize = this.configService.get('worker.scanTaskDirBatch') || 500;
   }
 
   async publishScanTask({ jobRunId }: PublishScanTaskInput): Promise<PublishScanTaskOutput> {

@@ -7,7 +7,7 @@ import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 
 import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
-import { ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
+import { PublishMigrationTaskInput, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Operation, Origin } from "../utils/utils.types";
 
 @Injectable()
@@ -15,6 +15,7 @@ export class MigrationScanService {
     readonly workerId: string;
     readonly workerJobServiceUrl: string;
     readonly maxRetryCount: number = 3;
+    readonly maxMigrationCommand : number = 1000;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -23,6 +24,7 @@ export class MigrationScanService {
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
+        this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand');
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
@@ -31,14 +33,21 @@ export class MigrationScanService {
         return  await fs.promises.readdir(directoryPath);
     }
 
+    async publishMigrationTask({ jobContext, commands}: PublishMigrationTaskInput)  {
+        const task = buildTask(TaskType.MIGRATE, jobContext.jobRunId, jobContext, commands);
+        jobContext.migrateTask.lastId  = await jobContext.appendToMigrationTask(task);
+    }
+
     async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
-        const syncContentOutput: ScanContentOutput = { files: 0, directory: 0, isGeneratedTask: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
-        let commands: Command[] = [], sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
+        const syncContentOutput: ScanContentOutput = {
+             files: 0, directory: 0, isGeneratedTask: false, error: undefined, command : []
+            }
+        let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set(), errorType = command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR ;
         
         try {
             sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
         }catch(error) {
-            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
             await jobContext.appendToErrorList(dmErr);
             syncContentOutput.error = error?.code || '';
             return syncContentOutput;
@@ -48,7 +57,7 @@ export class MigrationScanService {
             targetContent = new Set<string>(await this.getDirectoryContents(targetPath));           
         }
         catch(error) {
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
             await jobContext.appendToErrorList(dmErr);
             syncContentOutput.error = error?.code || '';
             return syncContentOutput;
@@ -88,19 +97,23 @@ export class MigrationScanService {
                     syncContentOutput.isGeneratedTask = true;
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
-                        if (command) commands.push(command);
+                        if (command) syncContentOutput.command.push(command);
                     }
                 } else if (!targetContent.has(item)) {
                     syncContentOutput.files++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
-                    if (command) commands.push(command);
+                    if (command) syncContentOutput.command.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
                     if (fs.existsSync(targetFilePath)) {
                         const targetStat = fs.statSync(targetFilePath);
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
-                        if (command) commands.push(command);
+                        if (command) syncContentOutput.command.push(command);
                     }
+                }
+                if(syncContentOutput.command.length >= this.maxMigrationCommand) {
+                    const chunk = syncContentOutput.command.splice(0, this.maxMigrationCommand);
+                    await this.publishMigrationTask({ jobContext, commands: chunk });
                 }
             }catch(error) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE,  Operation.READ_DIR, syncContentOutput.errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
@@ -108,16 +121,12 @@ export class MigrationScanService {
                 syncContentOutput.error = error?.code || '';
             }
         }
-        if (commands.length > 0) {
-            const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-            jobContext.migrateTask.lastId  = await jobContext.appendToMigrationTask(task);
-        }
-        commands = [];
         return syncContentOutput;
     }
 
     async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
         const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false};
+        const command :Command[] = []
         const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
         task.status = TaskStatus.RUNNING;
         for (let i = 0;  i < task.commands.length; i++) 
@@ -147,6 +156,13 @@ export class MigrationScanService {
 
             const result = await this.scanContent(scanInput);
             this.logger.log(`Result of scanContent: ${JSON.stringify(result)}`);
+
+            command.push(...result.command);
+            if(command.length >= this.maxMigrationCommand) {
+                const chunk = command.splice(0, this.maxMigrationCommand);
+                await this.publishMigrationTask({ jobContext, commands: chunk });
+            }
+
             if (result.isGeneratedTask) 
                 scanPath.isTaskCreated = true;
             if (result.error)  {
@@ -157,6 +173,11 @@ export class MigrationScanService {
                 scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
             scanPath.retryCount = Math.max(task.commands[i].retryCount,  scanPath.retryCount)
         }      
+
+        if(command.length > 0) {
+            const chunk = command.splice(0, this.maxMigrationCommand);
+            await this.publishMigrationTask({ jobContext, commands: chunk });
+        }
         
         if(scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount)  
             task.status =  TaskStatus.ERRORED 

@@ -19,7 +19,10 @@ export default registerAs(
       'http://localhost:3006',
     platform: process.platform,
     baseWorkingPath: process.env.BASE_WORKING_PATH || '/mnt/datamigrate',
-    maxRetryCount: process.env.MAX_OPERATION_RETRY || 3
+    maxRetryCount: process.env.MAX_OPERATION_RETRY || 3,
+    maxMigrationCommand: process.env.MAX_MIGRATION_COMMAND || 100,
+    scanTaskDirBatch : process.env.SCAN_TASK_DIR_BATCH || 500,
+    fetchTaskBatchMigration: process.env.FETCH_TASK_BATCH_MIGRATION || 1,
   }),
 );
 

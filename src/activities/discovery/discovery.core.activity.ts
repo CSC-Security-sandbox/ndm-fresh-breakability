@@ -27,7 +27,6 @@ export class DiscoveryScanActivity {
         this.workerId = this.configService.get<string>('worker.workerId');
     }
 
-
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
         if (!fs.existsSync(directoryPath)) 
             return [];
@@ -131,7 +130,9 @@ export class DiscoveryScanActivity {
     }
 
     async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
-        const scanDirOutput: ScanDirCommandOutput = { files: 0, directory: 0, isFatal: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
+        const scanDirOutput: ScanDirCommandOutput = {
+            files: 0, directory: 0, isFatal: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR,
+        }
         try {
             const sourceContent = await this.getDirectoryContents(sourcePath);
 
