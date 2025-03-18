@@ -10,15 +10,17 @@
     h1 { color: green }
   </style>
 </head>
-<body style="font-family: Arial, Helvetica, 'Lucida Grande', Geneva, Tahoma, Verdana, sans-serif; font-size: 12px;">
+<body style="font-family: Arial, Helvetica, 'Lucida Grande', Geneva, Tahoma, Verdana, sans-serif; font-size: 12px; padding: 20px;">
   <h1>{{title}}</h1>
   <h1>{{'Jobs report'}}</h1>
-  <div style="width: 100%; overflow: auto;">
-  {{> customer_info }}
-  {{> summary }}
-  {{> last_iteration }}
-  {{> last_errors }}
-  {{> cutovers }}
+  <div style="width: 98%; overflow: auto;">
+    {{> customer_info }}
+    <div style="display: flex; flex-direction: column; gap: 12px; ">
+      {{> summary }}
+      {{> last_iteration }}
+      {{> last_errors }}
+      {{> cutovers }}
+    </div>
   </div>
 </body>
 </html>
