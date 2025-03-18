@@ -198,12 +198,13 @@ export class MigrationScanService {
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
             await jobContext.appendToErrorList(dmErr);
+            if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
+                task.status = TaskStatus.ERRORED;
             if(scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal)  {
                 this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
                 jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
             } else if(scanPath.isFatal){
                 this.logger.debug(`Fatal Error Detected for task ${task.id}`)
-                task.status = TaskStatus.ERRORED;
                 jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }

@@ -299,6 +299,8 @@ export class MigrationSyncService {
           message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
       });
       jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
+      if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
+        task.status = TaskStatus.ERRORED;
       if(syncTask.retryCount < this.maxRetryCount && !syncTask.isFatal) {
         this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
         jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);

@@ -110,6 +110,8 @@ export class DiscoveryScanActivity {
                 errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [], 
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
+            if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
+                task.status = TaskStatus.ERRORED;
             await jobContext.appendToErrorList(dmErr);
             if(scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal)  {
                 this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
@@ -117,7 +119,6 @@ export class DiscoveryScanActivity {
             }
             else if(scanPath.isFatal){
                 this.logger.debug(`Fatal Error Detected for task ${task.id}`)
-                task.status = TaskStatus.ERRORED;
                 jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }
