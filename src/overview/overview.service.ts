@@ -14,113 +14,133 @@ export class OverviewService {
         @InjectRepository(ProjectEntity) private readonly projectRepository: Repository<ProjectEntity>) { }
 
     async getStorageAndJobsOverview(projectId: string, configId: string, jobConfigId: string) {
-        const whereClause ={};
-            if (projectId) {
-                whereClause['id'] = projectId;
-            }
-        
-            if (configId) {
-                whereClause['configs'] = {
-                    ...whereClause['configs'],
-                    id: configId,
-                };
-            }
-        
-            if (jobConfigId) {
-                whereClause['configs'] = {
-                    ...whereClause['configs'],
-                    fileServers: {
-                        ...whereClause['configs?.fileServers'],
-                        volumes: {
-                            sourceConfig: {
-                                id: jobConfigId,
-                                jobRuns: {
-                                    status: JobRunStatus.Completed,
-                                },
+        const getStorageAndJobsOverviewStart = Date.now();
+        const whereClause = {};
+        if (projectId) {
+            whereClause['id'] = projectId;
+        }
+
+        if (configId) {
+            whereClause['configs'] = {
+                ...whereClause['configs'],
+                id: configId,
+            };
+        }
+
+        if (jobConfigId) {
+            whereClause['configs'] = {
+                ...whereClause['configs'],
+                fileServers: {
+                    ...whereClause['configs?.fileServers'],
+                    volumes: {
+                        sourceConfig: {
+                            id: jobConfigId,
+                            jobRuns: {
+                                status: JobRunStatus.Completed,
                             },
                         },
                     },
-                };
-            }
-        
-            const projectDetails = await this.projectRepository.find({
-                where: whereClause,
-                relations: [
-                    'configs',
-                    'configs.fileServers',
-                    'configs.fileServers.volumes',
-                    'configs.fileServers.volumes.sourceConfig',
-                    'configs.fileServers.volumes.sourceConfig.jobRuns',
-                ],
-            });
+                },
+            };
+        }
 
-            this.logger.log(`projectDetails - ${JSON.stringify(projectDetails)}`);
-            
-            let totalDiscoveredSize = 0;
-            let totalMigratedSize = 0;
-            let totalFileServers = projectDetails?.flatMap(project => project?.configs ?? []).length;
+        const projectQueryStart = Date.now();
 
-            this.logger.log(`totalFileServers - ${totalFileServers}`);
+        const projectDetails = await this.projectRepository.find({
+            where: whereClause,
+            relations: [
+                'configs',
+                'configs.fileServers',
+                'configs.fileServers.volumes',
+                'configs.fileServers.volumes.sourceConfig',
+                'configs.fileServers.volumes.sourceConfig.jobRuns',
+            ],
+        });
 
-            let totalDiscoverJobs = 0;
-            const scanRunDetails = projectDetails?.flatMap(project =>
-                project.configs.flatMap(config =>
-                    config.fileServers.flatMap(fileServer =>
-                        fileServer.volumes.flatMap(volume =>
-                            volume.sourceConfig
-                                .filter(jobConfig => jobConfig.jobType === JobType.Discover)
-                                .flatMap(jobConfig => jobConfig.jobRuns)
-                        )
+        const projectQueryEnd = Date.now();
+
+        this.logger.log(`projectDetails query took ${projectQueryEnd - projectQueryStart} ms`);
+        this.logger.log(`projectDetails - ${JSON.stringify(projectDetails)}`);
+
+        let totalDiscoveredSize = 0;
+        let totalMigratedSize = 0;
+        let totalFileServers = projectDetails?.flatMap(project => project?.configs ?? []).length;
+
+        this.logger.log(`totalFileServers - ${totalFileServers}`);
+
+        let totalDiscoverJobs = 0;
+
+        const scanRunDetailsStart = Date.now();
+
+        const scanRunDetails = projectDetails?.flatMap(project =>
+            project.configs.flatMap(config =>
+                config.fileServers.flatMap(fileServer =>
+                    fileServer.volumes.flatMap(volume =>
+                        volume.sourceConfig
+                            .filter(jobConfig => jobConfig.jobType === JobType.Discover)
+                            .flatMap(jobConfig => jobConfig.jobRuns)
                     )
                 )
-            ).reduce((acc, jobRun) => {
-                const existing = acc.find(j => j.jobConfigId === jobRun.jobConfigId);
-                if (!existing || new Date(jobRun.createdAt) > new Date(existing.createdAt)) {
-                    return [...acc.filter(j => j.jobConfigId !== jobRun.jobConfigId), jobRun];
-                }
-                return acc;
-            }, []);
+            )
+        ).reduce((acc, jobRun) => {
+            const existing = acc.find(j => j.jobConfigId === jobRun.jobConfigId);
+            if (!existing || new Date(jobRun.createdAt) > new Date(existing.createdAt)) {
+                return [...acc.filter(j => j.jobConfigId !== jobRun.jobConfigId), jobRun];
+            }
+            return acc;
+        }, []);
 
-            this.logger.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
+        const scanRunDetailsEnd = Date.now();
 
-            totalDiscoverJobs = scanRunDetails?.length ?? 0;
+        this.logger.log(`scanRunDetails query took ${scanRunDetailsEnd - scanRunDetailsStart} ms`);
+        this.logger.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
 
-            const completedJobRunDetails = scanRunDetails?.filter(jobRun => jobRun.status === JobRunStatus.Completed);
-            const completedJobRunIds = completedJobRunDetails?.map(run => run.id);
+        totalDiscoverJobs = scanRunDetails?.length ?? 0;
+
+        const completedJobRunDetails = scanRunDetails?.filter(jobRun => jobRun.status === JobRunStatus.Completed);
+        const completedJobRunIds = completedJobRunDetails?.map(run => run.id);
+
+        const inventoryQueryBuilderStart = Date.now();
 
         const inventoryQueryBuilder = this.inventoryRepository
             .createQueryBuilder('inventory')
             .select('SUM(inventory.fileSize)', 'totalSize')
             .where('inventory.jobRunId IN (:...completedJobRunIds)', { completedJobRunIds: completedJobRunIds.length ? completedJobRunIds : ['00000000-0000-0000-0000-000000000000'] });
 
-            const discoveredSize = await inventoryQueryBuilder.getRawMany();
-            totalDiscoveredSize = discoveredSize[0]?.totalSize ?? 0;
+        const discoveredSize = await inventoryQueryBuilder.getRawMany();
 
-            this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
+        const inventoryQueryBuilderEnd = Date.now();
 
-            const migrateRun = projectDetails?.flatMap(project =>
-                project?.configs?.flatMap(config =>
-                    config?.fileServers?.flatMap(fileServer =>
-                        fileServer?.volumes?.flatMap(volume =>
-                            volume?.sourceConfig?.filter(jobConfig => jobConfig.jobType == JobType.Migrate)?.flatMap(jobConfig =>
-                                jobConfig.jobRuns
-                            )
+        this.logger.log(`inventoryQueryBuilder query took ${inventoryQueryBuilderEnd - inventoryQueryBuilderStart} ms`);
+
+        totalDiscoveredSize = discoveredSize[0]?.totalSize ?? 0;
+
+        this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
+
+        const migrateRun = projectDetails?.flatMap(project =>
+            project?.configs?.flatMap(config =>
+                config?.fileServers?.flatMap(fileServer =>
+                    fileServer?.volumes?.flatMap(volume =>
+                        volume?.sourceConfig?.filter(jobConfig => jobConfig.jobType == JobType.Migrate)?.flatMap(jobConfig =>
+                            jobConfig.jobRuns
                         )
                     )
                 )
             )
-            const cutOverRun= projectDetails?.flatMap(project =>
-                project?.configs?.flatMap(config =>
-                    config?.fileServers?.flatMap(fileServer =>
-                        fileServer?.volumes?.flatMap(volume =>
-                            volume?.sourceConfig?.filter(jobConfig => jobConfig.jobType == JobType.CutOver)?.flatMap(jobConfig =>
-                                jobConfig.jobRuns
-                            )
+        )
+        const cutOverRun = projectDetails?.flatMap(project =>
+            project?.configs?.flatMap(config =>
+                config?.fileServers?.flatMap(fileServer =>
+                    fileServer?.volumes?.flatMap(volume =>
+                        volume?.sourceConfig?.filter(jobConfig => jobConfig.jobType == JobType.CutOver)?.flatMap(jobConfig =>
+                            jobConfig.jobRuns
                         )
                     )
                 )
             )
+        )
         if (migrateRun?.length > 0) {
+            const migrationQueryBuilderStart = Date.now();
             const migrationQueryBuilder = this.inventoryRepository
                 .createQueryBuilder()
                 .select('SUM(subquery."maxFileSize")', 'totalMigratedSize')
@@ -134,24 +154,28 @@ export class OverviewService {
                 }, 'subquery');
 
             const migratedSize = await migrationQueryBuilder.getRawOne();
+
+            const migrationQueryBuilderEnd = Date.now();
+            this.logger.log(`migrationQueryBuilder query took ${migrationQueryBuilderEnd - migrationQueryBuilderStart} ms`);
+
             totalMigratedSize = migratedSize?.totalMigratedSize ?? 0;
         }
 
-           let totalPending = totalDiscoveredSize - totalMigratedSize;
-           let totalPendingSize = covertBytes(Number(totalPending));
-           
-           let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
-           let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
+        let totalPending = totalDiscoveredSize - totalMigratedSize;
+        let totalPendingSize = covertBytes(Number(totalPending));
 
-           this.logger.log(`totalDiscoveredSize - ${totalDiscoveredSize}`);
-           this.logger.log(`totalMigratedSize - ${totalMigratedSize}`);
-           this.logger.log(`totalPending - ${totalPending}`);
+        let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
+        let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
 
-           this.logger.log(`updateTotalDiscoveredSize - ${updateTotalDiscoveredSize}`);
-           this.logger.log(`updateTotalMigratedSize - ${updateTotalMigratedSize}`);
-           this.logger.log(`totalPendingSize - ${totalPendingSize}`);
+        this.logger.log(`totalDiscoveredSize - ${totalDiscoveredSize}`);
+        this.logger.log(`totalMigratedSize - ${totalMigratedSize}`);
+        this.logger.log(`totalPending - ${totalPending}`);
 
-           const overViewData: OverviewDTO = {
+        this.logger.log(`updateTotalDiscoveredSize - ${updateTotalDiscoveredSize}`);
+        this.logger.log(`updateTotalMigratedSize - ${updateTotalMigratedSize}`);
+        this.logger.log(`totalPendingSize - ${totalPendingSize}`);
+
+        const overViewData: OverviewDTO = {
             storageDetails: {
                 totalDiscoveredSize: updateTotalDiscoveredSize,
                 totalMigratedSize: updateTotalMigratedSize,
@@ -159,14 +183,16 @@ export class OverviewService {
                 totalPendingSize: totalPendingSize,
             },
             jobDetails: {
-                totalDiscoverJobs:totalDiscoverJobs ,
+                totalDiscoverJobs: totalDiscoverJobs,
                 totalMigrateJobs: {
-                    baseLineJob: migrateRun?.length>0 ? 1 : 0,
-                    incrementalJob: migrateRun?.length>1 ? migrateRun.length - 1 : 0,
+                    baseLineJob: migrateRun?.length > 0 ? 1 : 0,
+                    incrementalJob: migrateRun?.length > 1 ? migrateRun.length - 1 : 0,
                 },
                 totalCutoverJobs: cutOverRun?.length,
             },
-           }
-            return overViewData;
         }
+        const getStorageAndJobsOverviewEnd = Date.now();
+        this.logger.log(`getStorageAndJobsOverview whole logic took time to execute: ${getStorageAndJobsOverviewEnd - getStorageAndJobsOverviewStart} ms`);
+        return overViewData;
     }
+}
