@@ -13,6 +13,7 @@ import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/mo
 import React, { useEffect, useState } from "react";
 import Filters from "./Filters";
 import { TableWrapperPropsType } from "./TableWrapper.types";
+import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const TableWrapper = ({
   tableStateProps,
@@ -30,11 +31,16 @@ const TableWrapper = ({
   preSelectedFilter,
   handleSelection,
   secondaryLabel,
+  isRefreshing,
+  refreshFunc,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
     tableStateProps.rows || []
   );
+  const [isSearchActive, setIsSearchActive] = useState(false);
+
+  console.log("TableWrapperPropsType", isRefreshing, isSearchActive);
 
   useEffect(() => {
     const data = tableStateProps.rows || [];
@@ -92,6 +98,11 @@ const TableWrapper = ({
     }
   }, [tableState?.selectionState?.count]);
 
+  const setSearchWidgetWidth = () => {
+    console.log("setSearchWidgetWidth", isSearchActive);
+    setIsSearchActive(!isSearchActive);
+  }
+
   return (
     <Box>
       {showFilters && (
@@ -126,6 +137,17 @@ const TableWrapper = ({
         <Box className="flex gap-2 items-center">
           <TableWidgets>
             <SearchWidget setFilter={updateTextFilter} className="w-[360px]" />
+            {isRefreshing ?
+              (
+                <Button variant="text" isSubmitting={isRefreshing}></Button>
+              ) :
+              (
+                <Button variant="text" onClick={refreshFunc}>
+                  <RefreshIcon style={{ height: '16px', width: '16px', marginBottom: '4px'}}/>
+                </Button>
+              )
+            }
+            {/* <SearchWidget setFilter={updateTextFilter} onOpenOrClose={setSearchWidgetWidth} className={isSearchActive ? "w-[360px]" : ""} /> */}
             {showDownload && (
               <Button variant="icon" style={{ margin: 20 }}>
                 <DownloadMonochromeIcon />

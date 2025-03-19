@@ -8,6 +8,7 @@ import {
   useJobAdhocRunMutation,
   useGetJobConfigDetailsQuery,
   useUpdateJobRunStatusMutation,
+  jobsApi,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -34,6 +35,8 @@ import {
 } from "@modules/jobs/job-run-list/run.utils";
 import { useMemo, useState } from "react";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 const JobDetails = () => {
   const navigate = useNavigate();
@@ -41,7 +44,7 @@ const JobDetails = () => {
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
 
-  const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
+  const { data: jobConfigDetails, isFetching, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
       pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
@@ -152,6 +155,13 @@ const JobDetails = () => {
     return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
+  const dispatch = useDispatch();
+  const refreshJobDetailsList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: jobsApi, tag: 'JOB_CONFIG_DETAILS'});
+    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
+  }
+
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -207,6 +217,8 @@ const JobDetails = () => {
         content={<></>}
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
+        refreshFunc={refreshJobDetailsList}
+        isRefreshing={isFetching}
       />
     </Box>
   );

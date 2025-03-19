@@ -1,5 +1,5 @@
 import PermissionAuth from "@/auth/PermissionAuth";
-import { useGetAllFileServersOfProjectQuery } from "@api/configApi";
+import { useGetAllFileServersOfProjectQuery, configApi } from "@api/configApi";
 import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
@@ -10,13 +10,15 @@ import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "./file-server.constant";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 const FileServer = () => {
   const navigate = useNavigate();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
-  const { data: configByProject, isLoading } =
+  const { data: configByProject, isFetching ,isLoading } =
     useGetAllFileServersOfProjectQuery({
       projectId,
     });
@@ -56,6 +58,13 @@ const FileServer = () => {
     defaultSortState: { sortOrder: "desc", column: 8 },
   };
 
+  const dispatch = useDispatch();
+  const refreshSpeedTestJobRunList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});
+    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
+  }
+
   return (
     <TableWrapper
       tableStateProps={tableStateProps}
@@ -63,6 +72,8 @@ const FileServer = () => {
       rowMenu={rowMenu}
       content={ADD_NEW_FILE_SERVER}
       label="File Sever List"
+      refreshFunc={refreshSpeedTestJobRunList}
+      isRefreshing={isFetching}
     />
   );
 };

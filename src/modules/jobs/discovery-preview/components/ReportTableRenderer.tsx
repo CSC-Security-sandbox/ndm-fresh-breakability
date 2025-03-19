@@ -5,6 +5,8 @@ import {
   Popover,
 } from "@netapp/bxp-design-system-react";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 interface ReportTableProps {
   title: string;
@@ -14,6 +16,8 @@ interface ReportTableProps {
   pageSize?: number;
   defaultSortState?: { sortOrder: "asc" | "desc"; column: number };
   tooltipContent: string;
+  reportApi: any;
+  isFetching: boolean;
 }
 
 const ReportTableRenderer: React.FC<ReportTableProps> = ({
@@ -24,6 +28,8 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
   pageSize = 5,
   defaultSortState,
   tooltipContent,
+  reportApi,
+  isFetching,
 }) => {
   const tableState = {
     columns,
@@ -32,6 +38,13 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
     pageSize,
     defaultSortState,
   };
+
+  const dispatch = useDispatch();
+  const refreshReportsList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: reportApi, tag: 'REPORT_DATA'});
+    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
+  }
 
   return (
     <Card>
@@ -45,6 +58,8 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
           isLoading={false}
           showLabel={false}
           originalColumns={columns}
+          refreshFunc={refreshReportsList}
+          isRefreshing={isFetching}
         />
       </CardContent>
     </Card>

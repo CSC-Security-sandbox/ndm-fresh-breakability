@@ -16,4 +16,6 @@ export type TableWrapperPropsType = {
   preSelectedFilter?: any;
   handleSelection?: Function;
   secondaryLabel?: string;
+  isRefreshing?: boolean;
+  refreshFunc?: () => void;
 };

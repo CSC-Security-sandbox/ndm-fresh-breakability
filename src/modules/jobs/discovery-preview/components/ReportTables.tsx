@@ -1,5 +1,5 @@
 import { Box } from "@components/container/index";
-import { useGetReportDataQuery } from "@api/reportApi";
+import { useGetReportDataQuery, reportApi } from "@api/reportApi";
 import ReportTableRenderer from "./ReportTableRenderer";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import {
@@ -20,7 +20,7 @@ const ReportTables = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isLoading: reportDataIsLoading } =
+  const { data: reportData, isFetching, isLoading: reportDataIsLoading } =
     useGetReportDataQuery(payload);
   return (
     <>
@@ -33,6 +33,8 @@ const ReportTables = () => {
             rows={extractLongestDirectoryPaths(reportData)}
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
+            reportApi={reportApi}
+            isFetching={isFetching}
           />
         </Box>
         <Box className="w-full">
@@ -43,6 +45,9 @@ const ReportTables = () => {
             rows={extractBiggestFiles(reportData)}
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
+            reportApi={reportApi}
+            isFetching={isFetching}
+
           />
         </Box>
       </Box>
@@ -52,6 +57,8 @@ const ReportTables = () => {
           tooltipContent="Files with longest name."
           columns={LONGEST_FILE_NAME_COLS}
           rows={longestFileNames(reportData)}
+          reportApi={reportApi}
+          isFetching={isFetching}
         />
       </Box>
     </>

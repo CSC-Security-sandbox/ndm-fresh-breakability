@@ -7,6 +7,7 @@ import {
 import {
   useGetJobRunsQuery,
   useUpdateJobRunStatusMutation,
+  jobsApi,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -32,11 +33,13 @@ import {
   getReportActions,
 } from "./run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 const JobRunList = () => {
   const navigate = useNavigate();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: jobRunList, isLoading } = useGetJobRunsQuery({
+  const { data: jobRunList, isFetching, isLoading } = useGetJobRunsQuery({
     projectId: selectedProjectId,
   });
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(
@@ -130,6 +133,13 @@ const JobRunList = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
+  const dispatch = useDispatch();
+  const refreshJobRunList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: jobsApi, tag: 'ALL_JOB_RUNS'});
+    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
+  }
+
   return (
     <>
       {openConfirmation && (
@@ -155,6 +165,8 @@ const JobRunList = () => {
         showFilters={true}
         columnsToFilter={COLUMNS_TO_FILTER_DEFS}
         handleSelection={setJobRunListSelectedIds}
+        refreshFunc={refreshJobRunList}
+        isRefreshing={isFetching}
       />
     </>
   );

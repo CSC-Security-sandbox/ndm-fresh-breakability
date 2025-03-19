@@ -5,6 +5,7 @@ import {
   useGetAllUsersQuery,
   useResetPasswordMutation,
   useUpdateUserStatusMutation,
+  usersApi,
 } from "@api/userApi";
 import { COL_DEF_FOR_USER } from "@/constant/app.constants";
 import { Collapse } from "@mui/material";
@@ -17,11 +18,14 @@ import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
+// import { RefreshTable } from "src/components/table-wrapper/useRefresh";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
-  const { data: userData, isLoading } = useGetAllUsersQuery("");
+  const { data: userData, isFetching, isLoading } = useGetAllUsersQuery("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -95,6 +99,13 @@ const ManageUsers = () => {
     defaultSortState: { sortOrder: "desc", column: "column_created_on" },
   };
 
+  const dispatch = useDispatch();
+  const refreshUsersList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: usersApi, tag: 'ALL_USERS'});
+    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
+  }
+
   return (
     <Box className="h-[43.75rem] w-full p-6">
       <Collapse in={isCreateFormVisible} mountOnEnter unmountOnExit>
@@ -121,6 +132,8 @@ const ManageUsers = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_USER}
+          refreshFunc={refreshUsersList}
+          isRefreshing={isFetching}
         />
       </Collapse>
     </Box>

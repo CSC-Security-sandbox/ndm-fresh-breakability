@@ -5,16 +5,19 @@ import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { COL_DEF_FOR_PROJECT } from "@/constant/app.constants";
 import CreateProjectForm from "./CreateProject";
 import useAccountDetails from "@/hooks/useAccountDetails";
-import { useGetAllProjectsQuery } from "@api/projectApi";
+import { useGetAllProjectsQuery, projectApi } from "@api/projectApi";
 import { hasPermission } from "@/auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { Collapse } from "@mui/material";
+// import { RefreshTable } from "src/components/table-wrapper/useRefresh";
+import RefreshTableData from "@components/table-wrapper/RefreshTableData";
+import { useDispatch } from "react-redux";
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList, isLoading } = useGetAllProjectsQuery(
+  const { data: projectList, isFetching, isLoading } = useGetAllProjectsQuery(
     accountDetails?.id
   );
   const [isCreateFormVisible, setIsCreateFormVisible] =
@@ -48,6 +51,13 @@ const ManageProject = () => {
     pageSize: 10,
   };
 
+  const dispatch = useDispatch();
+  const refreshProjectList = () => {
+    const { recallApiData } = RefreshTableData(dispatch);
+    recallApiData({api: projectApi, tag: 'ALL_PROJECTS'});
+    // RefreshTable({dispatch, api:projectApi, tag:'ALL_PROJECTS'})
+  }
+
   return (
     <Box className="ag-theme-alpine p-6 w-full h-[43.75rem]">
       <Collapse in={isCreateFormVisible} mountOnEnter unmountOnExit>
@@ -73,6 +83,8 @@ const ManageProject = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_PROJECT}
+          refreshFunc={refreshProjectList}
+          isRefreshing={isFetching}
         />
       </Collapse>
     </Box>
