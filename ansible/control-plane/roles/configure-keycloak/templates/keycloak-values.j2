@@ -150,8 +150,8 @@ extraEnvVars:
       value: 'keycloak'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded
-    - name: JAVA_OPTS
-      value: "-XX:UseSVE=0"
+    # - name: JAVA_OPTS
+    #   value: "-XX:UseSVE=0"
 
 podSecurityContext:
   fsGroup: {{ vm_gid }}
