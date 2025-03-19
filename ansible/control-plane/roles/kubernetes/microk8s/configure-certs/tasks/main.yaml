@@ -1,5 +1,4 @@
 - name: Configure kubectl for MicroK8s
-  become_user: "{{ vm_username }}"
   become: yes
   shell: | 
     /snap/bin/microk8s.config -l | tee /home/"{{ vm_username }}"/.kube/config

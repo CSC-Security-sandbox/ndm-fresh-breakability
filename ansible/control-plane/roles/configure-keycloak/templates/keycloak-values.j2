@@ -152,3 +152,12 @@ extraEnvVars:
       value: xforwarded
     - name: JAVA_OPTS
       value: "-XX:UseSVE=0"
+
+podSecurityContext:
+  fsGroup: {{ vm_gid }}
+
+containerSecurityContext:
+  runAsUser: {{ vm_uid }}
+  runAsNonRoot: true
+  runAsGroup: {{ vm_gid }}
+  fsGroup: {{ vm_gid }}

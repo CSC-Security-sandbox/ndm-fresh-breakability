@@ -1,14 +1,12 @@
 ---
 - name: Creates redis directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/redis
     state: directory
 
 - name: generate random password for redis
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     export REDIS_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/redis-secrets/redis-creds | jq -r .data.REDIS_PASSWORD)
     echo "REDIS_PASSWORD:$REDIS_PASSWORD"
@@ -23,44 +21,36 @@
 
 - name: redis-namespace template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-namespace.j2 dest=$HOME/redis/redis-namespace.yaml
 
 - name: redis configmap template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-configmap.j2 dest=$HOME/redis/redis-configmap.yaml
 
 - name: redis-pv template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-pv.j2 dest=$HOME/redis/redis-pv.yaml
 
 - name: redis-storageclass template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-storageclass.j2 dest=$HOME/redis/redis-storageclass.yaml
 
 - name: redis-secret template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-secret.j2 dest=$HOME/redis/redis-secret.yaml
 
 - name: redis-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/redis-values.j2 dest=$HOME/redis/redis-values.yaml
 
 - name: Cleanup service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl delete serviceaccount -n redis redis-sa
   when: redis_uninstall is defined
 
 - name: remove previous redis installation
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm delete redis --namespace "redis"
     kubectl delete pvc --all --namespace "redis"
@@ -75,7 +65,6 @@
 
 - name: setup namespace, persistentvolume for redis
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/redis/redis-namespace.yaml
     kubectl apply -f $HOME/redis/redis-storageclass.yaml
@@ -87,13 +76,11 @@
 
 - name: Create service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl create serviceaccount -n redis redis-sa
 
 - name: Deploy redis helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm upgrade --install redis oci://registry-1.docker.io/bitnamicharts/redis -f $HOME/redis/redis-values.yaml --namespace "redis" --version "{{ redis_version }}"
     exit 0
@@ -113,7 +100,6 @@
   block:
     - name: Wait for pods to come up
       become: yes
-      become_user: "{{ vm_username }}"
       shell: |
         kubectl wait --namespace="redis" --for=condition=Ready pod --all
       register: kubectl_get_pods
@@ -134,7 +120,6 @@
   rescue:
     - name: Fetch and display pod logs
       become: yes
-      become_user: "{{ vm_username }}"
       shell: |
         for pod in $(kubectl get pods -n redis -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
@@ -151,7 +136,6 @@
 
 - name: Delete redis directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     state: absent
     path: $HOME/redis

@@ -2,7 +2,6 @@
 
 - name: delete grafana-data directory if uninstall flag is defined 
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: /data/grafana-data
     state: absent
@@ -13,7 +12,6 @@
 
 - name: delete loki-data directory if uninstall flag is defined 
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: /data/loki-data
     state: absent
@@ -24,7 +22,6 @@
 
 - name: create grafana-data directory 
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: /data/grafana-data
     state: directory
@@ -34,7 +31,6 @@
 
 - name: create loki-data directory 
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: /data/loki-data
     state: directory

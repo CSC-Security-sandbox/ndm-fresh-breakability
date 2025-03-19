@@ -1,8 +1,22 @@
 ---
-- name: 1.1. Create the {{ vm_username }} user account
-  user: name={{ vm_username }} state=present home=/home/{{ vm_username }} createhome=yes shell=/bin/bash
+- name: 1.1. Ensure group '{{ vm_username }}' exists with GID '{{ vm_gid }}'
+  group:
+    name: "{{ vm_username }}"
+    gid: "{{ vm_gid }}"
+    state: present
 
-- name: 1.2. Set up sudo for '{{ vm_username }}' (with passwordless access)
+- name: 1.2. Create the '{{ vm_username }}' user account with UID '{{ vm_uid }}' and GID '{{ vm_gid }}'
+  user:
+    name: "{{ vm_username }}"
+    uid: "{{ vm_uid }}"
+    group: "{{ vm_username }}"
+    state: present
+    home: "/home/{{ vm_username }}"
+    createhome: yes
+    shell: /bin/bash
+    non_unique: true
+
+- name: 1.3. Set up sudo for '{{ vm_username }}' (with passwordless access)
   become: yes
   copy:
     dest: "/etc/sudoers.d/{{ vm_username }}"
@@ -10,34 +24,38 @@
       {{ vm_username }} ALL=(ALL) NOPASSWD: ALL
     mode: "0440"
 
-- name: 1.3. Disable root SSH access
+- name: 1.4. Disable root SSH access
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PermitRootLogin'
     line: 'PermitRootLogin no'
     state: present
+  when:
+    vm_deployment is not defined
 
-- name: 1.4. Disable password authentication for SSH
+- name: 1.5. Disable password authentication for SSH
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PasswordAuthentication'
     line: 'PasswordAuthentication no'
     state: present
+  when:
+    vm_deployment is not defined
 
-- name: 1.5. Validate sudoers file for '{{ vm_username }}'
+- name: 1.6. Validate sudoers file for '{{ vm_username }}'
   become: yes
   command: visudo -cf /etc/sudoers.d/{{ vm_username }}
   register: visudo_check
   failed_when: visudo_check.rc != 0
   changed_when: false
 
-- name: 1.6. Confirm the new user can log in (only for testing the user creation)
+- name: 1.7. Confirm the new user can log in (only for testing the user creation)
   become: yes
   shell: "su - '{{ vm_username }}' -c 'whoami'"
   register: login_check
   changed_when: false
 
-- name: 1.7. Debug the login check
+- name: 1.8. Debug the login check
   become: yes
   debug:
     var: login_check.stdout

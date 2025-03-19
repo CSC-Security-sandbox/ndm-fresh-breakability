@@ -1,14 +1,12 @@
 ---
 - name: Creates keycloak directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/keycloak
     state: directory
 
 - name: get passwords for keycloak from openbao
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_ADMIN_PASSWORD)
     export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
@@ -23,22 +21,18 @@
 
 - name: Keycloak namespace
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/keycloak-namespace.j2 dest=$HOME/keycloak/keycloak-namespace.yaml
 
 - name: keycloak-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/keycloak-values.j2 dest=$HOME/keycloak/keycloak-values.yaml
 
 - name: keycloak-secret template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/keycloak-secret.j2 dest=$HOME/keycloak/keycloak-secret.yaml
 
 - name: remove previous installation
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm delete keycloak --namespace "keycloak"
     kubectl delete -f $HOME/keycloak/keycloak-secret.yaml
@@ -49,7 +43,6 @@
 
 - name: setup namespace
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/keycloak/keycloak-namespace.yaml
     kubectl apply -f $HOME/keycloak/keycloak-secret.yaml
@@ -58,7 +51,6 @@
 
 - name: Create acr pull secert
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl create secret docker-registry azure-dev-acr-creds \
         --namespace keycloak \
@@ -69,7 +61,6 @@
 
 - name: Deploy keycloak helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm upgrade --install keycloak oci://registry-1.docker.io/bitnamicharts/keycloak -f $HOME/keycloak/keycloak-values.yaml --version "{{ keycloak_version }}" --namespace "keycloak"
     exit 0
@@ -87,7 +78,6 @@
 
 - name: wait for pods to come up
   become: yes
-  become_user: "{{ vm_username }}"
   shell: kubectl wait --namespace="keycloak" --for=condition=Ready pod --all
   register: kubectl_get_pods
   retries: 10
@@ -107,7 +97,6 @@
 
 - name: Delete keycloak directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/keycloak
     state: absent

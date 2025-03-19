@@ -19,6 +19,11 @@ primary:
     selector:
         matchLabels:
             role: postgres-primary-data
+  containerSecurityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
 
   extendedConfiguration: |
     max_connections = 1000

@@ -14,14 +14,12 @@
 
 - name: Copy the tarball to the remote host
   become: yes
-  become_user: "{{ vm_username }}"
   copy:
     src: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
     dest: "$HOME/helm-chart.tgz"
 
 - name: Install Helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz
   register: helm_install_output
@@ -34,7 +32,6 @@
   block:
     - name: Wait for pods to come up
       become: yes
-      become_user: "{{ vm_username }}"
       shell: kubectl wait --namespace="datamigrator" --for=condition=Ready pod --all
       register: kubectl_get_pods
       retries: 10 # debug retries
@@ -43,7 +40,6 @@
   rescue:
     - name: Fetch and display pod logs
       become: yes
-      become_user: "{{ vm_username }}"
       shell: |
         for pod in $(kubectl get pods -n datamigrator -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
@@ -68,7 +64,6 @@
 
 - name: Delete the tarball from the remote host
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/helm-chart.tgz
     state: absent

@@ -15,6 +15,12 @@ server:
   ingress:
     enabled: false
   
+  securityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
+  
   persistentVolume:
     storageClass: "local-storage-prometheus"
     size: {{ prometheus_data_volume_size }}
@@ -24,7 +30,11 @@ server:
   
 alertmanager:
   enabled: true
-
+  podSecurityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
   service:
     type: ClusterIP
 

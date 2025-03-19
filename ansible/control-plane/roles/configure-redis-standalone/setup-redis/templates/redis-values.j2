@@ -32,6 +32,21 @@ master:
       cpu: "1.2"
       memory: "1.5Gi"
 {% endif %}
+  podSecurityContext:
+    enabled: true
+    fsGroup: {{ vm_gid }}
+
+  containerSecurityContext:
+    enabled: true
+    runAsUser: {{ vm_uid }}
+    runAsGroup: {{ vm_gid }}
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL    
 
 volumePermissions:
   enabled: true

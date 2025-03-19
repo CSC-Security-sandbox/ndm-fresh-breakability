@@ -1,14 +1,12 @@
 ---
 - name: Creates postgres directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/postgres
     state: directory
 
 - name: generate random passwords for postgres
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
     export DMADMIN_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
@@ -39,44 +37,36 @@
 
 - name: postgres-namespace template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-namespace.j2 dest=$HOME/postgres/postgres-namespace.yaml
 
 - name: postgres-storageclass template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-storageclass.j2 dest=$HOME/postgres/postgres-storageclass.yaml
 
 - name: postgres-primary-pv template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-primary-pv.j2 dest=$HOME/postgres/postgres-primary-pv.yaml
 
 - name: postgres config map template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-configmap.j2 dest=$HOME/postgres/postgres-configmap.yaml
 
 - name: postgres-secret template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-secret.j2 dest=$HOME/postgres/postgres-secret.yaml
 
 - name: postgres-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/postgres-values.j2 dest=$HOME/postgres/postgres-values.yaml
 
 - name: Cleanup service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl delete serviceaccount -n postgres postgres-sa
   when: postgres_uninstall is defined
 
 - name: remove previous installation
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm delete postgres --namespace "postgres"
     kubectl delete pvc --all --namespace "postgres"
@@ -91,7 +81,6 @@
 
 - name: setup namespace, persistentvolume for postgres
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/postgres/postgres-namespace.yaml
     kubectl apply -f $HOME/postgres/postgres-storageclass.yaml
@@ -103,13 +92,11 @@
 
 - name: Create service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl create serviceaccount -n postgres postgres-sa
 
 - name: Deploy postgres helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
 
     helm upgrade --install postgresql oci://registry-1.docker.io/bitnamicharts/postgresql -f $HOME/postgres/postgres-values.yaml --version "{{ postgres_version }}" --namespace "postgres"
@@ -128,7 +115,6 @@
 
 - name: wait for pods to come up
   become: yes
-  become_user: "{{ vm_username }}"
   shell: kubectl wait --namespace="postgres" --for=condition=Ready pod --all
   register: kubectl_get_pods
   retries: 10
@@ -148,7 +134,6 @@
 
 - name: Delete postgres directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/postgres
     state: absent

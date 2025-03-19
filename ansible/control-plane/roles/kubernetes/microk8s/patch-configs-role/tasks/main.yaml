@@ -1,27 +1,23 @@
 ---
 - name: Creates ingress directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/ingress
     state: directory
 
 - name: Create patch file for ConfigMap
-  become_user: "{{ vm_username }}"
   become: yes
   template:
     src: data-configmap.j2
     dest: $HOME/ingress/configmap-patch.yaml
 
 - name: Create patch file for DaemonSet
-  become_user: "{{ vm_username }}"
   become: yes
   template:
     src: patch-daemonset.j2
     dest: $HOME/ingress/ingress-nginx-controller-patch.json
 
 - name: Patch the ConfigMap
-  become_user: "{{ vm_username }}"
   become: yes
   shell: kubectl patch configmap nginx-ingress-tcp-microk8s-conf -n ingress --type merge --patch-file $HOME/ingress/configmap-patch.yaml
   args:
@@ -29,7 +25,6 @@
     chdir: $HOME
 
 - name: Patch the DaemonSet
-  become_user: "{{ vm_username }}"
   become: yes
   shell: kubectl patch daemonset nginx-ingress-microk8s-controller -n ingress --type json --patch-file $HOME/ingress/ingress-nginx-controller-patch.json
   args:
@@ -37,7 +32,6 @@
     chdir: $HOME
 
 - name: Delete ingress directory
-  become_user: "{{ vm_username }}"
   become: yes
   file:
     path: $HOME/ingress

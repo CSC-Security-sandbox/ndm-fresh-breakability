@@ -1,20 +1,17 @@
 - name: Admin entry configmap template
   become: yes
-  become_user: "{{ vm_username }}"
   template: 
     src: ./templates/admin-entry-configmap.j2 
     dest: $HOME/admin-entry-configmap.yaml
 
 - name: Admin entry job template
   become: yes
-  become_user: "{{ vm_username }}"
   template: 
     src: ./templates/admin-entry-job.j2 
     dest: $HOME/admin-entry-job.yaml
 
 - name: Reset job for the users
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl delete -f $HOME/admin-entry-configmap.yaml -n datamigrator
     kubectl delete -f $HOME/admin-entry-job.yaml -n datamigrator
@@ -24,7 +21,6 @@
 
 - name: Run script to add admin
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator
     sleep 5
@@ -32,7 +28,6 @@
 
 - name: Wait for job to complete successfully
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrator
   register: job_wait_result
@@ -42,7 +37,6 @@
 
 - name: Get logs from the job pod
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
     kubectl logs $POD_NAME -n datamigrator
@@ -56,7 +50,6 @@
 
 - name: Clean up admin entry configmap and job files
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: "{{ item }}"
     state: absent

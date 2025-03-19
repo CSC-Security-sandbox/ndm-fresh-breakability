@@ -1,0 +1,169 @@
+packer {
+  required_plugins {
+    ansible = {
+      version = ">= 1.1.2"
+      source = "github.com/hashicorp/ansible"
+    }
+    googlecompute = {
+      version = ">= 1.1.8"
+      source  = "github.com/hashicorp/googlecompute"
+    }
+  }
+}
+
+// Project Settings
+variable "project_name" {
+  type    = string
+  description = "The name of the project."
+}
+
+variable "component_name" {
+  type        = string
+  description = "The name of the project."
+}
+
+// GCP Variables
+variable "gcp_project_id" {
+  type    = string
+  description = "Value of GCP project id"
+}
+
+variable "gcp_region" {
+  type = string
+  description = "GCP Region"  
+}
+
+variable "gcp_zone" {
+  type = string
+  description = "GCP Zone"
+}
+
+variable "bastion_host_ip" {
+  type = string
+  description = "IP Address of Bastion host"
+}
+
+variable "bastion_host_username" {
+  type = string
+  description = "Bastion host username"
+  default = "root"
+}
+
+variable "bastion_host_private_key" {
+  type = string
+  description = "Path to bastion host private key file"
+}
+
+variable "gcp_packer_machine_type" {
+  type = string
+  description = "Packer machine type"  
+}
+
+variable "gcp_source_image" {
+  type = string
+  description = "Source image for GCP"
+}
+
+variable "gcp_disk_size" {
+  type = number
+  description = "Disk size for GCP instance"
+}
+
+variable "gcp_network" {
+  type = string
+  description = "Network for GCP instance"
+}
+
+variable "gcp_subnetwork" {
+  type = string
+  description = "Subnetwork for GCP instance"
+}
+
+variable "ssh_username" {
+  type = string
+  description = "SSH username for GCP instance"
+}
+
+variable "temporary_key_pair_type" {
+  type = string
+  description = "Temporary key pair type"
+}
+
+variable "bastion_host_port" {
+  type = number
+  description = "Bastion host port"
+}
+
+locals {
+  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
+}
+
+locals {
+  formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
+}
+
+# "###################################"
+# "#    GCP source for packer      #"
+# "###################################"
+
+source "googlecompute" "gcp_ubuntu" {
+  project_id            = var.gcp_project_id
+  source_image          = var.gcp_source_image
+  disk_size             = var.gcp_disk_size
+  zone                  = var.gcp_zone
+  machine_type          = var.gcp_packer_machine_type
+  network               = var.gcp_network
+  subnetwork            = var.gcp_subnetwork
+  image_name            = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  region                = var.gcp_region
+  ssh_username          = var.ssh_username
+  omit_external_ip      = true
+  use_internal_ip       = true
+  tags                  = ["packer", "control-plane"]
+
+  metadata = {
+    "StackName" = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+    "CreatedBy" = "Packer"
+    "Project"   = var.project_name
+    "Cloud"     = "GCP"
+  }
+
+  temporary_key_pair_type      = var.temporary_key_pair_type
+  ssh_bastion_host             = var.bastion_host_ip
+  ssh_bastion_port             = var.bastion_host_port
+  ssh_bastion_username         = var.bastion_host_username
+  ssh_bastion_private_key_file = var.bastion_host_private_key
+}
+
+build {
+  sources = [
+    "source.googlecompute.gcp_ubuntu"
+  ]
+
+  provisioner "ansible" {
+    playbook_file          = "../../../ansible/control-plane/playbooks/master-playbook.yaml"
+    inventory_directory    = "../../../ansible/control-plane/config"
+    galaxy_file            = "../../../ansible/control-plane/playbooks/linux-requirements.yaml"
+    galaxy_force_with_deps = true
+    user                   = var.ssh_username
+    ansible_ssh_extra_args =  [ "-oHostKeyAlgorithms=+ecdsa-sha2-nistp384", "-v" ]
+    ansible_env_vars = [
+      "ANSIBLE_CONFIG=../../../ansible/control-plane/config/ansible.cfg"
+    ]
+    extra_arguments = [
+      "--extra-vars", "display_skipped_hosts=false"
+    ]
+  }
+
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
+    inline = [
+      "sudo google_osconfig_agent",
+      "sudo google_metadata_script_runner",
+      "sudo shred -u /root/.ssh/authorized_keys /home/packer/.ssh/authorized_keys || true",
+      "sudo echo 'Authorized keys are shredded'",
+      "sudo sync"
+    ]
+    inline_shebang = "/bin/sh -x"
+  }
+}

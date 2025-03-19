@@ -1,7 +1,9 @@
 ---
 - name: Configure user access on VM
+  become: true
+  become_method: ansible.builtin.sudo
+  debugger: never
+  gather_facts: true
   hosts: default
-  gather_facts: yes
-  become: yes
   roles:
     - { role:  ../roles/configure-user-account, tags: 'configure-user-account' }

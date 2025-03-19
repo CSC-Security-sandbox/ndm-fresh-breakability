@@ -1,39 +1,32 @@
 ---
 - name: Creates openbao directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/openbao
     state: directory
 
 - name: openbao namespace
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/openbao-namespace.j2 dest=$HOME/openbao/openbao-namespace.yaml
 
 - name: openbao-storageclass template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/openbao-storageclass.j2 dest=$HOME/openbao/openbao-storageclass.yaml
 
 - name: openbao-pv template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/openbao-pv.j2 dest=$HOME/openbao/openbao-pv.yaml
 
 - name: openbao-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/openbao-values.j2 dest=$HOME/openbao/openbao-values.yaml
 
 - name: openbao-ingress template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/openbao-ingress.j2 dest=$HOME/openbao/openbao-ingress.yaml
 
 - name: remove previous installation
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm delete openbao --namespace "openbao"
     kubectl delete pvc --all --namespace "openbao"
@@ -47,7 +40,6 @@
 
 - name: setup namespace, persistentvolume for openbao
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/openbao/openbao-namespace.yaml
     kubectl apply -f $HOME/openbao/openbao-storageclass.yaml
@@ -57,7 +49,6 @@
 
 - name: Deploy openbao helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm repo add openbao https://openbao.github.io/openbao-helm
     helm upgrade --install openbao openbao/openbao -f $HOME/openbao/openbao-values.yaml --version "{{ openbao_version }}" --namespace "openbao"
@@ -68,7 +59,6 @@
 
 - name: setup ingress for openbao
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/openbao/openbao-ingress.yaml
   args:
@@ -84,7 +74,6 @@
 
 - name: Waiting for openbao-0 to be ready
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
   with_items:
@@ -96,7 +85,6 @@
 
 - name: Get the unseal keys and store them in /opt/datamigrator/openbao
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl exec openbao-{{ item }} -n openbao -- bao operator init -key-shares=1 -key-threshold=1 -format=json > /opt/datamigrator/openbao/cluster-keys.json
     OPENBAO_UNSEAL_KEY=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".unseal_keys_b64[]")
@@ -110,7 +98,6 @@
 
 - name: Waiting for openbao-1, openbao-2 to be ready
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
   with_items:
@@ -123,7 +110,6 @@
 
 - name: Unseal the openbao vault
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     OPENBAO_UNSEAL_KEY=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".unseal_keys_b64[]")
     kubectl exec openbao-{{ item }} -n openbao -- bao operator unseal $OPENBAO_UNSEAL_KEY
@@ -137,7 +123,6 @@
 
 - name: Authenticate to openbao
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     OPENBAO_ROOT_PASSWORD=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".root_token")
     kubectl exec openbao-{{ item }} -n openbao -- bao login $OPENBAO_ROOT_PASSWORD

@@ -32,12 +32,9 @@ data:
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA keycloak TO keycloak_role;
         GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA keycloak TO keycloak_role;
         GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA keycloak TO keycloak_role;
-        GRANT ALL PRIVILEGES ON ALL PROCEDURES IN SCHEMA keycloak TO keycloak_role;
-
         ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON TABLES TO keycloak_role;
         ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON SEQUENCES TO keycloak_role;
         ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON FUNCTIONS TO keycloak_role;
-        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON PROCEDURES TO keycloak_role;
 
         CREATE DATABASE IF NOT EXISTS datamigrator OWNER dmadmin;
         \connect datamigrator
@@ -50,9 +47,6 @@ data:
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
         GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
         GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
-        GRANT ALL PRIVILEGES ON ALL PROCEDURES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
-        GRANT ALL PRIVILEGES ON ALL VIEWS IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
-        GRANT ALL PRIVILEGES ON ALL TYPES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
         
         ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
             GRANT ALL PRIVILEGES ON TABLES TO dmadmin_role;
@@ -60,9 +54,3 @@ data:
             GRANT ALL PRIVILEGES ON SEQUENCES TO dmadmin_role;
         ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
             GRANT ALL PRIVILEGES ON FUNCTIONS TO dmadmin_role;
-        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
-            GRANT ALL PRIVILEGES ON PROCEDURES TO dmadmin_role;
-        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
-            GRANT ALL PRIVILEGES ON VIEWS TO dmadmin_role;
-        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
-            GRANT ALL PRIVILEGES ON TYPES TO dmadmin_role;

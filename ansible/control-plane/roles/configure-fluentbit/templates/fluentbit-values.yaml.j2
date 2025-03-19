@@ -87,3 +87,12 @@ daemonSetVolumeMounts:
     readOnly: true
   - name: logstore
     mountPath: /logs
+
+securityContext:
+  runAsUser: {{ vm_uid }}
+  runAsNonRoot: true
+  runAsGroup: {{ vm_gid }}
+  fsGroup: {{ vm_gid }}
+
+podSecurityContext:
+  fsGroup: {{ vm_gid }}

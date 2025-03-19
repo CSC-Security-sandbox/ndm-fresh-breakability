@@ -1,63 +1,52 @@
 ---
 - name: Creates grafana directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/grafana
     state: directory
 
 - name: Creates grafana directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/grafana/dashboards
     state: directory
 
 - name: grafana-namespace template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/grafana-namespace.yaml.j2 dest=$HOME/grafana/grafana-namespace.yaml
 
 - name: loki-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/loki-values.yaml.j2 dest=$HOME/grafana/loki-values.yaml
 
 - name: grafana-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/grafana-values.yaml.j2 dest=$HOME/grafana/grafana-values.yaml
 
 - name: grafana-storageclass template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/grafana-storageclass.j2 dest=$HOME/grafana/grafana-storageclass.yaml
 
 - name: grafana-pv template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/grafana-pv.j2 dest=$HOME/grafana/grafana-pv.yaml
 
 - name: loki-storageclass template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/loki-storageclass.j2 dest=$HOME/grafana/loki-storageclass.yaml
 
 - name: loki-pv template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/loki-pv.j2 dest=$HOME/grafana/loki-pv.yaml
 
 - name: Grafana dashboard templates
   become: yes
-  become_user: "{{ vm_username }}"
   template: src={{ item }} dest="$HOME/grafana/dashboards/{{ item | basename | regex_replace('\.j2$', '.json') }}"
   with_fileglob:
     - ./templates/dashboards/*.j2
 
 - name: Copy JSON files to server
   become: yes
-  become_user: "{{ vm_username }}"
   copy:
     src: "{{ item }}"
     dest: "$HOME/grafana/dashboards/"
@@ -66,7 +55,6 @@
 
 - name: Get dashboard config maps on remote machine
   become: yes
-  become_user: "{{ vm_username }}"
   find:
     paths: $HOME/grafana/dashboards
   register: dashboards
@@ -78,7 +66,6 @@
 
 - name: Uninstall grafana when grafana_uninstall is defined
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm uninstall loki --namespace "grafana"
     helm uninstall grafana --namespace "grafana"
@@ -95,7 +82,6 @@
 
 - name: Create grafana namespace, storageclass, pv
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/grafana/grafana-namespace.yaml
     kubectl apply -f $HOME/grafana/grafana-storageclass.yaml
@@ -106,14 +92,12 @@
 
 - name: Create configmaps for dashboards
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl create configmap "{{ item.path | basename | regex_replace('\.json$', '') }}" --namespace "grafana" --from-file="{{ item.path }}"
   with_items: "{{ dashboards.files }}"
 
 - name: Deploy Grafana and Loki using Helm
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm repo add grafana https://grafana.github.io/helm-charts
     helm repo update
@@ -130,7 +114,6 @@
 
 - name: wait for pods to come up
   become: yes
-  become_user: "{{ vm_username }}"
   shell: kubectl wait --namespace="grafana" --for=condition=Ready pod --all
   register: kubectl_get_pods
   retries: 10
@@ -146,7 +129,6 @@
 
 - name: Delete grafana directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/grafana
     state: absent

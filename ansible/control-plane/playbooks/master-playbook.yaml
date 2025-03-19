@@ -36,7 +36,7 @@
 
 - name: Configure microk8s image registry with datamigrator application images
   import_playbook: configure-microk8s-registry.yaml
-  when: local_cluster is defined
+  when: local_cluster is defined and vm_deployment is not defined
 
 - name: Configure keycloak
   import_playbook: configure-keycloak.yaml
@@ -49,8 +49,8 @@
 
 - name: Configure cloud init
   import_playbook: configure-cloud-init.yaml
-  # when: local_cluster is not defined
+  when: local_cluster is not defined and vm_deployment is not defined
 
 - name: Reset Cluster
   import_playbook: reset-cluster.yaml
-  when: local_cluster is not defined
+  when: local_cluster is not defined and vm_deployment is not defined

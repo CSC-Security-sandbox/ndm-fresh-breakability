@@ -14,7 +14,7 @@ admin_service_tag: "latest"
 db_writer_service_liquibase_tag: "latest"
 keycloak_customizations_tag: "latest"
 
-# datamigrator_ui_tag: "latest-temporal"
+# datamigrator_ui_tag: "latest"
 # config_service_tag: "latest-temporal"
 # config_service_liquibase_tag: "latest-temporal"
 # db_writer_service_tag: "latest-temporal"
@@ -26,7 +26,7 @@ keycloak_customizations_tag: "latest"
 # reports_service_tag: "latest-temporal"
 # reports_service_liquibase_tag: "latest-temporal"
 # admin_service_tag: "latest-temporal"
-# keycloak_customizations_tag: "microk8s-new"
+# keycloak_customizations_tag: "latest"
 
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
 
@@ -34,6 +34,8 @@ azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
 azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
 
 vm_username: "datamigrator"
+vm_uid: 1010
+vm_gid: 1010
 
 # Version management
 microk8s_version: "1.32/stable"
@@ -132,7 +134,7 @@ keycloak_version: 26.0.6
 redis_version: 20.8.0
 redis_data_volume_size: 30Gi
 
-temporal_version: 0.55.0
+temporal_version: 0.57.0
 
 grafana_version: 11.4.7
 grafana_data_volume_size: 10Gi

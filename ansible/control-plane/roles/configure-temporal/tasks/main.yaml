@@ -1,14 +1,12 @@
 ---
 - name: Creates temporal directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/temporal
     state: directory
 
 - name: Generate random password for temporal
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
     echo "TEMPORAL_POSTGRES_PASSWORD:$TEMPORAL_POSTGRES_PASSWORD"
@@ -23,29 +21,24 @@
 
 - name: temporal-namespace template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/temporal-namespace.j2 dest=$HOME/temporal/temporal-namespace.yaml
 
 - name: temporal-secret template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/temporal-secret.j2 dest=$HOME/temporal/temporal-secret.yaml
 
 - name: temporal-values template
   become: yes
-  become_user: "{{ vm_username }}"
   template: src=./templates/temporal-values.j2 dest=$HOME/temporal/temporal-values.yaml
 
 - name: Cleanup service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl delete serviceaccount -n temporal temporal-sa
   when: temporal_uninstall is defined
 
 - name: remove previous installation
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm delete temporal --namespace "temporal"
     kubectl delete pvc --all --namespace "temporal"
@@ -57,7 +50,6 @@
 
 - name: setup namespace and secret for temporal
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl apply -f $HOME/temporal/temporal-namespace.yaml
     kubectl apply -f $HOME/temporal/temporal-secret.yaml
@@ -66,13 +58,11 @@
 
 - name: Create service account
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     kubectl create serviceaccount temporal-sa -n temporal
 
 - name: Deploy temporal helm chart
   become: yes
-  become_user: "{{ vm_username }}"
   shell: |
     helm upgrade --install --repo https://go.temporal.io/helm-charts -f $HOME/temporal/temporal-values.yaml temporaltest temporal --version "{{ temporal_version }}" --namespace "temporal"
     exit 0
@@ -92,7 +82,6 @@
   block:
     - name: Wait for pods to come up
       become: yes
-      become_user: "{{ vm_username }}"
       shell: |
         kubectl wait --namespace="temporal" --for=condition=Ready pod \
         --selector='!job-name' --field-selector=status.phase!=Succeeded --timeout=120s && \
@@ -104,7 +93,6 @@
   rescue:
     - name: Fetch and display pod logs
       become: yes
-      become_user: "{{ vm_username }}"
       shell: |
         for pod in $(kubectl get pods -n temporal -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
@@ -125,7 +113,6 @@
 
 - name: Delete temporal directory
   become: yes
-  become_user: "{{ vm_username }}"
   file:
     path: $HOME/temporal
     state: absent

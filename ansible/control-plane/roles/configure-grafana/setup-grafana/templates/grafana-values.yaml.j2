@@ -4,6 +4,13 @@ admin:
 
 grafana:
   replicaCount: 1
+  podSecurityContext:
+    fsGroup: {{ vm_gid }}
+  containerSecurityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
   extraEnvVars:
     - name: MY_HOST_IP
       valueFrom:
@@ -16,12 +23,11 @@ grafana:
     - name: GF_SERVER_SERVE_FROM_SUB_PATH
       value: "true"
     - name: GF_AUTH_TOKEN_ROTATION_INTERVAL_MINUTES
-      value: "60"
+      value: "1000"
     - name: GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION
-      value: "1h"
+      value: "24h"
     - name: GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION
-      value: "7d"
-    
+      value: "30d"
 
 ingress:
   enabled: true
@@ -79,3 +85,6 @@ persistence:
   selector:
       matchLabels:
           role: grafana-data
+
+volumePermissions:
+  enabled: true
