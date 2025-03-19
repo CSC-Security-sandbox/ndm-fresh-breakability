@@ -414,12 +414,16 @@ export class ConfigurationService {
         if (!config) 
             throw new NotFoundException(`Config for id ${id} not found.`);
 
-        const credentials:Credentials[] = []
+        const credentials:Credentials[] = [];
+
+        const hasPathName = updateConfig?.workingDirectory?.pathName?.length > 0;
+        const hasWorkers = updateConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
 
         config.configName = updateConfig.configName;
         config.configType = updateConfig.configType;
-        config.createdBy = updateConfig.createdBy || userId
-        config.updatedBy = userId
+        config.createdBy = updateConfig.createdBy || userId;
+        config.updatedBy = userId;
+        config.status = hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT;
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
@@ -513,7 +517,7 @@ export class ConfigurationService {
             })
         });
 
-        if(payload.workerIds.length > 0 && createConfig?.workingDirectory?.pathName.length > 0) {                
+        if(payload?.workerIds?.length > 0 && createConfig?.workingDirectory?.pathName?.length > 0) {                
             this.logger.debug('started ValidateWorkingDirectoryWorkflow');            
             const startWorkFlowPayload: StartWorkFlowPayload = {
                 workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
