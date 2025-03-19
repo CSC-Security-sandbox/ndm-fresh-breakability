@@ -242,9 +242,9 @@ describe('ProjectService', () => {
   describe('update', () => {
     it('should update a project', async () => {
       const projectId = '123';
-      const updateProjectDto: UpdateProjectDto = {
-        project_name: 'Updated Project',
-      };
+      const updateProjectDto = {
+        project_description: 'Updated Project desc',
+      } as any;
       const existingProject: Project = {
         id: projectId,
         project_name: 'Test Project',
