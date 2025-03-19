@@ -20,6 +20,7 @@ COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
 COPY entrypoint.sh .
+COPY ./templates ./templates
         
 RUN npm run build 
 
