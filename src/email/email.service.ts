@@ -10,10 +10,6 @@ import hbs from 'nodemailer-express-handlebars';
 @Injectable()
 export class EmailService {
   transporter: nodemailer.Transporter;
-  emailService: {
-    verify: jest.Mock<any, any, any>;
-    sendMail: jest.Mock<any, any, any>;
-  };
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
