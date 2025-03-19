@@ -40,7 +40,7 @@ export class DiscoveryScanActivity{
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
 
         const task  = await this.commonService.fetchOneTask(jobContext) 
-        this.logger.error(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
+        this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
         if(!task) {
             scanActivityOutput.noTaskFound = true;
             return scanActivityOutput;
@@ -70,7 +70,7 @@ export class DiscoveryScanActivity{
             this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-        this.logger.log(`[${jobRunId}] Discovery Scan Activity Completed ${JSON.stringify(scanActivityOutput)}`);
+        this.logger.debug(`[${jobRunId}] Discovery Scan Activity Completed ${JSON.stringify(scanActivityOutput)}`);
         return scanActivityOutput
     }
 
@@ -83,7 +83,7 @@ export class DiscoveryScanActivity{
 
         for (let i = 0;  i < task.commands.length; i++) {
             if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-            this.logger.log(`[${jobContext.jobRunId}] Processing command: ${JSON.stringify(task.commands[i])}`);
+            this.logger.debug(`[${jobContext.jobRunId}] Processing command: ${JSON.stringify(task.commands[i])}`);
 
             const scanInput: ScanDirCommandInput = {
                 excludePatterns: excludePatterns,
