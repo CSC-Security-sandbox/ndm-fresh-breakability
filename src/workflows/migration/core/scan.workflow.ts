@@ -11,7 +11,6 @@ async function log(traceId: string, message: string) {
 
 const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ 
   startToCloseTimeout: '24h', 
-  heartbeatTimeout: '5m' 
  });
 
 const {
@@ -19,7 +18,6 @@ const {
     fetchScanTask: fetchTaskActivity
 } = proxyActivities<MigrationTaskService>({ 
   startToCloseTimeout: '24h', 
-  heartbeatTimeout: '5m' 
  });
 
 const {
@@ -29,7 +27,6 @@ const {
     updateLastEntry: updateLastEntryActivity
 } = wf.proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
-  heartbeatTimeout: '5m' 
  });
    
 interface ScanWorkflowInput {
@@ -37,48 +34,41 @@ interface ScanWorkflowInput {
     workerId: string
 }
 
-export const ScanWorkflow = async ({jobRunId , workerId} : ScanWorkflowInput): Promise<any> => {
+export const ScanWorkflow = async ({jobRunId , workerId } : ScanWorkflowInput): Promise<any> => {
   console.log('Starting MigrateScan ', jobRunId)
   let iteration = 0;
   try {
-      await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
-      while (true) {
-          iteration++;
-          log(jobRunId,`Iteration number ${iteration} for scan`)
-          const jobState = await getJobStateActivity(jobRunId);
-          if(jobState.status !== JobRunStatus.Running) {
-            return { message: `Job status changed to ${jobState.status}` };
-          }
-          let { tasks } = await fetchTaskActivity({jobRunId}); 
-          if(iteration === 1) {
-              log(jobRunId, `Tasks found in first iteration in DiscoveryJobWorkflow : ${JSON.stringify(tasks)}`);
-            }
-          if (!tasks || tasks.length === 0)  {
-              log(jobRunId, `No tasks found.`);
-              return { message: 'Scan Completed' };
-          }
-          log(jobRunId, `task found, total -> ${tasks.length}`);
-          let isFatalError = false;
-          for(const task of tasks) {
-              log(jobRunId, `Starting SCAN for task -> ${JSON.stringify(task)}`);
-              const {isTaskCreated, isFatal} = await scanActivity({task})
-              if(isFatal) isFatalError = true
-              if(isTaskCreated)
-                await publishTaskActivity({jobRunId})
-              log(jobRunId, `SCAN completed for task -> ${task.id}`);
-          }
-          if(isFatalError) {
-            log(jobRunId, `Fatal Error Occurred On worker ${workerId}`)
-            const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
-            await setJobStateActivity(jobRunId, updatedJobState);
-            break
-          }
-        
-          if(iteration >= 80) {
-              log(jobRunId, `Iteration limit reached. Continuing as new...`);
-              await continueAsNew({ jobRunId });
-            }
+    await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
+    while (true) {
+      iteration++;
+
+      log(jobRunId,`Iteration number ${iteration} for scan`)
+      const jobState = await getJobStateActivity(jobRunId);
+      if(jobState.status !== JobRunStatus.Running) {
+        return { message: `Job status changed to ${jobState.status}` };
       }
+      
+      const { isFatal, noTaskFound } = await scanActivity({ jobRunId: jobRunId });
+
+      await publishTaskActivity({jobRunId})
+
+      if (noTaskFound) {
+        log(jobRunId, `No tasks found.`);
+        return { message: 'Scan Completed' };
+      }
+
+      if(isFatal) {
+        log(jobRunId, `Fatal Error Occurred On worker ${workerId}`)
+        const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
+        await setJobStateActivity(jobRunId, updatedJobState);
+        break
+      }
+
+      if(iteration >= 80) {
+        log(jobRunId, `Iteration limit reached. Continuing as new...`);
+        await continueAsNew({ jobRunId });
+      }
+    }
   } catch (error) {
       if (error instanceof ContinueAsNew) {
           log(jobRunId, `Workflow continued as new: ${error.message}`);

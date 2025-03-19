@@ -9,6 +9,7 @@ import { RedisService } from "src/redis/redis.service";
 import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { PublishMigrationTaskInput, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Operation, Origin } from "../utils/utils.types";
+import { CommonActivityService } from "../common/common.service";
 
 @Injectable()
 export class MigrationScanService {
@@ -21,10 +22,12 @@ export class MigrationScanService {
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly logger: Logger,
         private readonly redisService: RedisService,
+        private readonly commonService: CommonActivityService
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand');
+        
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
@@ -36,9 +39,10 @@ export class MigrationScanService {
     async publishMigrationTask({ jobContext, commands}: PublishMigrationTaskInput)  {
         const task = buildTask(TaskType.MIGRATE, jobContext.jobRunId, jobContext, commands);
         jobContext.migrateTask.lastId  = await jobContext.appendToMigrationTask(task);
+        this.logger.debug(`[${jobContext.jobRunId}] Task published: ${JSON.stringify(task)}`);
     }
 
-    async scanContent({ excludePatterns = [], jobContext, jobRunId, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
+    async scanContent({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
         const syncContentOutput: ScanContentOutput = {
              files: 0, directory: 0, isGeneratedTask: false, error: undefined, command : []
             }
@@ -124,10 +128,20 @@ export class MigrationScanService {
         return syncContentOutput;
     }
 
-    async scanPath({ task }: ScanPathInput): Promise<ScanPathOutput> {
-        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false};
+    async scanPath({ jobRunId }: ScanPathInput): Promise<ScanPathOutput> {
+        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false, noTaskFound: false, files: 0, folders: 0 };
+        const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
+       
+        const task  = await this.commonService.fetchOneTask(jobContext) 
+        this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
+        if(!task) {
+            scanPath.noTaskFound = true;
+            this.logger.debug(`[${jobRunId}] No task found`);
+            return scanPath;
+        }
+
         const command :Command[] = []
-        const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
+      
         task.status = TaskStatus.RUNNING;
         for (let i = 0;  i < task.commands.length; i++) 
             if(task.commands[i].status !== CommandStatus.COMPLETED)
@@ -155,7 +169,10 @@ export class MigrationScanService {
             };
 
             const result = await this.scanContent(scanInput);
-            this.logger.log(`Result of scanContent: ${JSON.stringify(result)}`);
+            this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
+            
+            scanPath.files += result.files;
+            scanPath.folders += result.directory;
 
             command.push(...result.command);
             if(command.length >= this.maxMigrationCommand) {
@@ -211,7 +228,6 @@ export class MigrationScanService {
         else {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
-
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         return scanPath;
     }
@@ -230,7 +246,6 @@ export class MigrationScanService {
         } 
 
         this.logger.debug(`isContentUpdate(sFile, dFile) : ${isContentUpdate(sFile, dFile)}`)
-        // this.logger.debug(`isMetaUpdated(sFile, dFile) : ${isMetaUpdated(sFile, dFile)}`)
         if (isContentUpdate(sFile, dFile) ) 
             return new Command(
                 fPath,
