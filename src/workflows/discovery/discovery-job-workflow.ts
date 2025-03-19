@@ -13,7 +13,6 @@ const { scanActivity } = proxyActivities<DiscoveryScanActivity>({
 });
 
 const { 
-  fetchTasks: fetchTaskActivity,
   publishTask: publishTaskActivity,
   discoveryStatusUpdate: updateDiscoveryStatus,
 } = proxyActivities<DiscoveryActivity>({ 
@@ -43,7 +42,7 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         return { message: `Job status changed to ${jobState.status}` };
       }
 
-      const {isFatalErrored, noTaskFound  } = await scanActivity({ jobRunId: traceId });
+      const { isFatalErrored, noTaskFound } = await scanActivity({ jobRunId: traceId });
 
       await publishTaskActivity(traceId);
 
@@ -63,8 +62,6 @@ export async function DiscoveryJobWorkflow(args: any): Promise<any> {
         return { message: 'Discovery completed' };
       }
 
-   
-       
       if(isFatalErrored) {
         log(traceId, `Fatal Error Occurred On worker ${workerId}`)
         const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}

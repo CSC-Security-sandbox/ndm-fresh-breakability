@@ -106,4 +106,20 @@ export class CommonActivityService{
       return undefined;
     }
   }
+
+  async fetchOneMigrationTask(jobContext: JobContext): Promise<Task | undefined> {
+    try {
+      const tasks = await jobContext.groupReadMigrationTask('consumer-1', 1);
+      for await (const task of tasks) {
+        if(task) {
+          this.logger.debug(`Task: ${JSON.stringify(task)}`);
+          return task;
+        }
+      }
+      return undefined;
+    } catch (error) {
+      this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
+      return undefined;
+    }
+  }
 }

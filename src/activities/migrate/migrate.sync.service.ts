@@ -9,6 +9,7 @@ import { basePrefix, dmError, formatDate, getFileInfo, isFatalError } from '../u
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
 import { Operation, Origin } from '../utils/utils.types';
+import { CommonActivityService } from '../common/common.service';
 
 @Injectable()
 export class MigrationSyncService {
@@ -22,6 +23,7 @@ export class MigrationSyncService {
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
+    private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -234,9 +236,17 @@ export class MigrationSyncService {
     return syncOperation ;
   }
 
-  async syncTask({ task }: SyncTaskInput): Promise<SyncTaskOutput> {
-    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false };
-    const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
+  async syncTask({ jobRunId }: SyncTaskInput): Promise<SyncTaskOutput> {
+    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false };
+    const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
+       
+    const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
+    this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
+    if(!task) {
+      syncTask.noTaskFound = true;
+      return syncTask;
+    }
+
     task.status = TaskStatus.RUNNING
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
@@ -277,7 +287,7 @@ export class MigrationSyncService {
       }
     }
 
-    this.logger.error(`syncTask.retryCount  : ${syncTask.retryCount }`)
+    this.logger.debug(`syncTask.retryCount  : ${syncTask.retryCount }`)
 
     if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
       task.status = TaskStatus.ERRORED 

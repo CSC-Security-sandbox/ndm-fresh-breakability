@@ -7,6 +7,8 @@ export interface DiscoverPathOutput{
     isFatalErrored : boolean
     noTaskFound: boolean;
     taskId?: string
+    files: number;
+    folders: number;
 }
 
 export interface DiscoveryInput {
@@ -20,6 +22,8 @@ export interface DiscoveryOutput {
     error: number
     retryCount: number
     isFatal: boolean;
+    files: number;
+    folders: number;
 }
 
 export interface ScanDirCommandInput{

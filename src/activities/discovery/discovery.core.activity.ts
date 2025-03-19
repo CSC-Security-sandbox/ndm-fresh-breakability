@@ -35,7 +35,7 @@ export class DiscoveryScanActivity{
 
     async scanActivity({ jobRunId }: DiscoverPathInput) : Promise<DiscoverPathOutput>{
 
-        const scanActivityOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined };
+        const scanActivityOutput: DiscoverPathOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined, files: 0, folders: 0 };
         this.logger.log(`[${jobRunId}] Starting Discovery Scan Activity`);
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
 
@@ -57,15 +57,17 @@ export class DiscoveryScanActivity{
 
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
+
         const discoverOutput = await this.discover({task, jobContext});
+        scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
+        scanActivityOutput.files = discoverOutput.files;
+        scanActivityOutput.folders = discoverOutput.folders;
 
         const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
         jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
-        scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
 
         if(discoverOutput.errors.size === 0) 
             this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`); 
-
         else 
             this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -76,7 +78,7 @@ export class DiscoveryScanActivity{
 
 
     async discover({task, jobContext}:DiscoveryInput) : Promise<DiscoveryOutput> {
-        const scanPath: DiscoveryOutput = {  errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false};
+        const scanPath: DiscoveryOutput = {  errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false, files : 0, folders: 0 };
         const basePrefixPath = basePrefix(jobContext.jobRunId, jobContext.jobConfig.sourceFileServer.pathId)
         const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
         const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
@@ -95,6 +97,8 @@ export class DiscoveryScanActivity{
             };
 
             const scanOutput = await this.scanDirCommand(scanInput);
+            scanPath.files += scanOutput.files;
+            scanPath.folders += scanOutput.directory;
             this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
             if (scanOutput.error)  {
                 task.commands[i].retryCount++;
