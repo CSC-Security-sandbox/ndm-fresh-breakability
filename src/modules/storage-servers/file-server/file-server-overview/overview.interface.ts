@@ -10,6 +10,7 @@ export interface ExportPathsTablePropsType {
   showRefetch: boolean;
   isRowSelectingEnabled?: boolean;
   setSelectedExportPathsIds: (ids: string[]) => void;
+  defaultColumnState?: any;
 }
 
 export interface TableRendererPropsType {

@@ -14,6 +14,7 @@ const ExportPathsTable = ({
   showRefetch,
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
+  defaultColumnState,
 }: ExportPathsTablePropsType) => {
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
@@ -24,6 +25,7 @@ const ExportPathsTable = ({
     isRowSelecting: isRowSelectingEnabled,
     isSorting: true,
     pageSize: 10,
+    defaultColumnState: defaultColumnState,
   };
 
   // REFETCH EXPORT PATHS
