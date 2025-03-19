@@ -110,9 +110,10 @@ export class JobConfigService {
         jobType: JobType.DISCOVER,
         sourcePath: In(bulkDiscovery.sourcePathIds ?? []),
       },
-      select: { sourcePathId: true, scheduler: true },
+      select: { sourcePathId: true, scheduler: true, status: true, id:true },
     });
 
+    
     await this.jobConfigRepo.update(
       {
         jobType: JobType.DISCOVER,
@@ -127,6 +128,7 @@ export class JobConfigService {
         preserveAccessTime: bulkDiscovery.preserveAccessTime,
         excludeOlderThan: bulkDiscovery.excludeOlderThan,
         firstRunAt: firstRunAt,
+        status:JobStatus.Active,
         scheduler: ScheduleStatus.SCHEDULING,
       }
     );
@@ -530,7 +532,7 @@ export class JobConfigService {
             sourcePathId: config?.sourcePathId,
             targetPathId: destinationPath,
           },
-          select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true },
+          select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true, status:true },
         });
 
         const existingSet = new Set(
@@ -556,6 +558,7 @@ export class JobConfigService {
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
               skipFile: bulkMigrate?.options?.skipFile,
+              status: JobStatus.Active,
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
             }
@@ -674,7 +677,7 @@ export class JobConfigService {
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
                   futureScheduleAt: config.futureScheduleAt,
-                  status: config.status,
+                  status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   firstRunAt: config.firstRunAt,
                 })
@@ -687,7 +690,7 @@ export class JobConfigService {
                     excludeFilePatterns: config.excludeFilePatterns,
                     scheduler: ScheduleStatus.SCHEDULING,
                     futureScheduleAt: config.futureScheduleAt,
-                    status: config.status,
+                    status: config.status === JobStatus.InActive ? JobStatus.Active : config.status,
                     preserveAccessTime: config.preserveAccessTime,
                     firstRunAt: config.firstRunAt,
                   })
