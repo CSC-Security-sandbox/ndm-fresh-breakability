@@ -2,17 +2,16 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CommandStatus, ErrorType, FileInfo, JobContext, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
-// local imports
-
 import { ConfigService } from '@nestjs/config';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
 import { basePrefix, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from '../utils/utils';
 import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
+import { CommonActivityService } from '../common/common.service';
 
 @Injectable()
-export class DiscoveryScanActivity {
+export class DiscoveryScanActivity{
 
     readonly workerId: string;
     readonly maxRetryCount: number = 3;
@@ -22,6 +21,7 @@ export class DiscoveryScanActivity {
         private readonly logger: Logger,
         private readonly redisService: RedisService,
         @Inject(ConfigService) private readonly configService: ConfigService,
+        private readonly commonService: CommonActivityService
     ) {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.workerId = this.configService.get<string>('worker.workerId');
@@ -33,9 +33,21 @@ export class DiscoveryScanActivity {
         return  await fs.promises.readdir(directoryPath);
     }
 
-    async scanActivity({task}: DiscoverPathInput) : Promise<DiscoverPathOutput>{
-        this.logger.log(`[${task.jobRunId}] Starting Discovery Scan Activity`);
-        const jobContext: JobContext = await this.redisService.getJobContext(task.jobRunId);
+    async scanActivity({ jobRunId }: DiscoverPathInput) : Promise<DiscoverPathOutput>{
+
+        const scanActivityOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined };
+        this.logger.log(`[${jobRunId}] Starting Discovery Scan Activity`);
+        const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
+
+        const task  = await this.commonService.fetchOneTask(jobContext) 
+        this.logger.error(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
+        if(!task) {
+            scanActivityOutput.noTaskFound = true;
+            return scanActivityOutput;
+        }
+
+        scanActivityOutput.taskId = task.id;
+
         const jobState: JobState = await jobContext.getJobState();
 
         task.status = TaskStatus.RUNNING;
@@ -46,18 +58,20 @@ export class DiscoveryScanActivity {
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
         const discoverOutput = await this.discover({task, jobContext});
+
         const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
         jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
-        if(discoverOutput.errors.size === 0) {
+        scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
+
+        if(discoverOutput.errors.size === 0) 
             this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`); 
-        }
-        else {
-            const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
-            jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
+
+        else 
             this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
-        }   
         await this.redisService.setJobContext(task.jobRunId, jobContext);
-        return {isFatalErrored: discoverOutput.isFatal }
+
+        this.logger.log(`[${jobRunId}] Discovery Scan Activity Completed ${JSON.stringify(scanActivityOutput)}`);
+        return scanActivityOutput
     }
 
 

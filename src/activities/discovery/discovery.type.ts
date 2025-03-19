@@ -1,10 +1,12 @@
-import { Command, ErrorType, JobContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, ErrorType, JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface DiscoverPathInput{
-    task: Task;
+    jobRunId: string;
 }
 export interface DiscoverPathOutput{
     isFatalErrored : boolean
+    noTaskFound: boolean;
+    taskId?: string
 }
 
 export interface DiscoveryInput {

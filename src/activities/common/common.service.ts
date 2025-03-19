@@ -6,7 +6,7 @@ import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
 import axios from 'axios';
 import { JobRunStatus } from "../discovery/enums";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import { JobStatus } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class CommonActivityService{
@@ -89,5 +89,21 @@ export class CommonActivityService{
       jobState.failedWorkers ?? []
     );;
     await this.redisService.setJobContext(traceId, jobContext);
+  }
+
+  async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {
+    try {
+      const tasks = await jobContext.groupReadTasks('consumer-1', 1);
+      for await (const task of tasks) {
+        if(task) {
+          this.logger.debug(`Task: ${JSON.stringify(task)}`);
+          return task;
+        }
+      }
+      return undefined;
+    } catch (error) {
+      this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
+      return undefined;
+    }
   }
 }
