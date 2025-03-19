@@ -1,51 +1,48 @@
 <h2
-  style="color: #0067C5; font-family: 'Segoe UI', Arial, sans-serif; margin: 20px 0 10px; padding-bottom: 8px; border-bottom: 2px solid #0067C5;"
->Summary</h2>
+  style="color: #0067C5; font-family: 'Segoe UI', Arial, sans-serif; margin: 20px 0 10px; padding-bottom: 8px; border-bottom: 2px solid #0067C5;">Overview</h2>
 <div
   style="overflow-x: auto; margin-bottom: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
 >
   <table
     style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; text-align: left;"
   >
-    <thead>
-      <tr style="background-color: #0067C5; color: white;">
-        <th
-          colspan="4"
-          style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.2);"
-        >Source</th>
-        <th
-          colspan="6"
-          style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.2);"
-        >Target</th>
-        <th
-          colspan="4"
-          style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.2);"
-        >Last</th>
-        <th colspan="3" style="padding: 10px;">COC Report</th>
-      </tr>
-    </thead>
-    <thead>
-      <tr style="background-color: #f4f9ff; border-bottom: 2px solid #e1e9f5;">
-        <th style="padding: 10px; font-weight: 600;">File Server</th>
-        <th style="padding: 10px; font-weight: 600;">Path</th>
-        <th style="padding: 10px; font-weight: 600;">Items</th>
-        <th style="padding: 10px; font-weight: 600;">Capacity</th>
-        <th style="padding: 10px; font-weight: 600;">File Server</th>
-        <th style="padding: 10px; font-weight: 600;">Path</th>
-        <th style="padding: 10px; font-weight: 600;">Capacity (approx)</th>
-        <th style="padding: 10px; font-weight: 600;">Protocol</th>
-        <th style="padding: 10px; font-weight: 600;">Version</th>
-        <th style="padding: 10px; font-weight: 600;">Type</th>
-        <th style="padding: 10px; font-weight: 600;">#</th>
-        <th style="padding: 10px; font-weight: 600;">Start time</th>
-        <th style="padding: 10px; font-weight: 600;">Duration</th>
-        <th style="padding: 10px; font-weight: 600;">Failures</th>
-        <th style="padding: 10px; font-weight: 600;">State</th>
-        <th style="padding: 10px; font-weight: 600;">File Path</th>
-        <th style="padding: 10px; font-weight: 600;">Size</th>
-        <th style="padding: 10px; font-weight: 600;">Digest</th>
-      </tr>
-    </thead>
+   
+   <thead>
+  <tr style="background-color: #0067C5; color: white;">
+    <th colspan="4" style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.3);">
+      Source
+    </th>
+    <th colspan="6" style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.3);">
+      Destination
+    </th>
+    <th colspan="4" style="padding: 10px; border-right: 1px solid rgba(255,255,255,0.3);">
+      Process Overview
+    </th>
+    <th colspan="3" style="padding: 10px;">Validation Metrics</th>
+  </tr>
+</thead>
+<thead>
+  <tr style="background-color: #f4f9ff; border-bottom: 2px solid #d0d8e5;">
+    <th style="padding: 10px; font-weight: bold;">File Server</th>
+    <th style="padding: 10px; font-weight: bold;">Path</th>
+    <th style="padding: 10px; font-weight: bold;">Total Files</th>
+    <th style="padding: 10px; font-weight: bold;">Space Utilized</th>
+    <th style="padding: 10px; font-weight: bold;">File Server</th>
+    <th style="padding: 10px; font-weight: bold;">Path</th>
+    <th style="padding: 10px; font-weight: bold;">Size</th>
+    <th style="padding: 10px; font-weight: bold;">Transfer Protocol</th>
+    <th style="padding: 10px; font-weight: bold;">Version</th>
+    <th style="padding: 10px; font-weight: bold;">Job Type</th>
+    <th style="padding: 10px; font-weight: bold;">ID</th>
+    <th style="padding: 10px; font-weight: bold;">Start Time</th>
+    <th style="padding: 10px; font-weight: bold;">Elapsed Time</th>
+    <th style="padding: 10px; font-weight: bold;">Error Logs</th>
+    <th style="padding: 10px; font-weight: bold;">Current Status</th>
+    <th style="padding: 10px; font-weight: bold;">File Location</th>
+    <th style="padding: 10px; font-weight: bold;">Data Volume</th>
+  </tr>
+</thead>
+
     <tbody>
       {{#if summary.length}}
         {{#each summary}}
