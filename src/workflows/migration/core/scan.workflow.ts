@@ -9,19 +9,28 @@ async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
   }
 
-const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ startToCloseTimeout: '5h' });
+const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+ });
 
 const {
     publishScanTask: publishTaskActivity,  
     fetchScanTask: fetchTaskActivity
-} = proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+} = proxyActivities<MigrationTaskService>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+ });
 
 const {
     getJobState: getJobStateActivity,
     updateStatus: updateStatusActivity,
     setJobState: setJobStateActivity,
     updateLastEntry: updateLastEntryActivity
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ 
+  startToCloseTimeout: '24h', 
+  heartbeatTimeout: '5m' 
+ });
    
 interface ScanWorkflowInput {
     jobRunId: string;

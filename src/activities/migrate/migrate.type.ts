@@ -18,6 +18,7 @@ export interface ScanContentOutput{
     isGeneratedTask: boolean;
     error: string | undefined;
     errorType?: ErrorType | undefined;
+    command: Command[];
 }
 
 export interface FetchScanTaskInput {
@@ -118,4 +119,9 @@ export interface UpdateCutOverStatusInput {
 export enum CutOverStatus {
     APPROVED = 'APPROVED',
     REJECTED = 'REJECTED'
+}
+
+export interface PublishMigrationTaskInput {
+    jobContext: JobContext;
+    commands: Command[]
 }

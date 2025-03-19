@@ -27,7 +27,6 @@ export class DiscoveryScanActivity {
         this.workerId = this.configService.get<string>('worker.workerId');
     }
 
-
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
         if (!fs.existsSync(directoryPath)) 
             return [];
@@ -50,8 +49,9 @@ export class DiscoveryScanActivity {
         const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
         jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
         if(discoverOutput.errors.size === 0) {
-            this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
-        }else {
+            this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`); 
+        }
+        else {
             const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
             jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);    
             this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
@@ -81,7 +81,7 @@ export class DiscoveryScanActivity {
             };
 
             const scanOutput = await this.scanDirCommand(scanInput);
-            this.logger.log(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
+            this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
             if (scanOutput.error)  {
                 task.commands[i].retryCount++;
                 task.commands[i].status = CommandStatus.ERROR;
@@ -113,10 +113,16 @@ export class DiscoveryScanActivity {
                 errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [], 
                 message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
-            jobContext.errorsInfo.lastId= await jobContext.appendToErrorList(dmErr);
-            if(scanPath.retryCount < this.maxRetryCount)  {
+            if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
+                task.status = TaskStatus.ERRORED;
+            await jobContext.appendToErrorList(dmErr);
+            if(scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal)  {
                 this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
-                jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
+                jobContext.tasksInfo.lastId = await jobContext.appendToTaskList(task);
+            }
+            else if(scanPath.isFatal){
+                this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+                jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }
         else {
@@ -128,7 +134,9 @@ export class DiscoveryScanActivity {
     }
 
     async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
-        const scanDirOutput: ScanDirCommandOutput = { files: 0, directory: 0, isFatal: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR }
+        const scanDirOutput: ScanDirCommandOutput = {
+            files: 0, directory: 0, isFatal: false, error: undefined, errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR,
+        }
         try {
             const sourceContent = await this.getDirectoryContents(sourcePath);
 
@@ -149,7 +157,7 @@ export class DiscoveryScanActivity {
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
-
+                
                 if(sourceStat.isDirectory()) {
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;

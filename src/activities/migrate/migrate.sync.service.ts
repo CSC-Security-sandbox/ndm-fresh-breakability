@@ -150,23 +150,23 @@ export class MigrationSyncService {
             stampMetaDataOutput.errors.push(error.code)
             await jobContext.appendToErrorList(dmErr);
           }
+          try{
+            const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
+            this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid} to ${sid}`)
+           if(sid) {
+             const powerShellCommand = `powershell.exe -Command "$acl = Get-Acl '${targetPath}'; $owner = New-Object System.Security.Principal.SecurityIdentifier('${sid}'); $acl.SetOwner($owner); Set-Acl -Path '${targetPath}' -AclObject $acl"`;
+             execSync(`powershell.exe -Command "${powerShellCommand}"`);
+             this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
+           } else {
+             this.logger.debug(`SID not found for the file ${sourcePath}`)
+           }
+         } catch(error) {
+           this.logger.error(`Error setting ownership: ${error.message}`);
+           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+           stampMetaDataOutput.errors.push(error.code)
+           await jobContext.appendToErrorList(dmErr);
+         }
        }
-       try{
-         const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-         this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid} to ${sid}`)
-        if(sid) {
-          const powerShellCommand = `powershell.exe -Command "$acl = Get-Acl '${targetPath}'; $owner = New-Object System.Security.Principal.SecurityIdentifier('${sid}'); $acl.SetOwner($owner); Set-Acl -Path '${targetPath}' -AclObject $acl"`;
-          execSync(`powershell.exe -Command "${powerShellCommand}"`);
-          this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
-        } else {
-          this.logger.debug(`SID not found for the file ${sourcePath}`)
-        }
-      } catch(error) {
-        this.logger.error(`Error setting ownership: ${error.message}`);
-        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-        stampMetaDataOutput.errors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
-      }
     }
     
     if(metadata.mtime && metadata.atime) {
@@ -299,9 +299,16 @@ export class MigrationSyncService {
           message: `Task ${task.id} has ${syncTask.error} errors and ${syncTask.success} success during sync`
       });
       jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
-      if(syncTask.retryCount < this.maxRetryCount) {
+      if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
+        task.status = TaskStatus.ERRORED;
+      if(syncTask.retryCount < this.maxRetryCount && !syncTask.isFatal) {
         this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
         jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);
+      }
+      else if(syncTask.isFatal){
+        this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+        task.status = TaskStatus.ERRORED;
+        jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
       }
     }else {
       jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
