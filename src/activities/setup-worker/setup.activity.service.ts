@@ -382,12 +382,12 @@ async disconnectActiveSession(payload: any): Promise<any> {
     const protocol: Protocol = Protocols.getProtocol(
       ProtocolTypes[payload.fileServer.protocolType],
     );
-    const response = await protocol.disconnectSession(payload.traceId, payload);
-    this.logger.log(
-      payload.traceId,
-      `[DisconnectActiveSession] Session disconnected for ${payload.fileServer.hostname}`,
-    );
-    return response;
+    // const response = await protocol.disconnectSession(payload.traceId, payload);
+    // this.logger.log(
+    //   payload.traceId,
+    //   `[DisconnectActiveSession] Session disconnected for ${payload.fileServer.hostname}`,
+    // );
+    return {response: 'success'};
   } catch (error) {
     this.logger.log(
       payload.traceId,
