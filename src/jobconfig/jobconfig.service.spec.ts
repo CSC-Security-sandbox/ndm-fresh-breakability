@@ -30,6 +30,7 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
 import { createClient } from "redis";
 import { RedisService } from 'src/redis/redis.service';
+import { isUUID } from 'class-validator';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -50,7 +51,7 @@ describe('JobConfigService', () => {
   let inventoryRepo: Repository<InventoryEntity>;
   let volumeRepo: Repository<VolumeEntity>;
   let projectRepo: Repository<ProjectEntity>;
-  let identityMappingRepo: Repository<IdentityMappingEntity>;
+  let identityMappingRepo: any;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
   let redisService:RedisService
  
@@ -410,30 +411,6 @@ describe('JobConfigService', () => {
     });
   });
 
-  // it('should throw an error if job run details are not found', async () => {
-  //   const mockId = 'test-id';
-  //   const mockSpeedTestResults = [
-  //     {
-  //       traceId: mockId,
-  //       fileServerId: 'fileServer1',
-  //       workerId: 'worker1',
-  //       writeResult: { speedLogEntries: [{ timeStamp: new Date(), speed: 100 }] },
-  //       readResult: { speedLogEntries: [{ timeStamp: new Date(), speed: 200 }] },
-  //       networkPerformanceResult: { roundTripDelayAvg: 10, packetLoss: 0 },
-  //     },
-  //   ];
-  //   const loggerSpy = jest.spyOn(service["logger"], "error");
-
-  //   jest.spyOn(speedTestResultRepo, 'find').mockResolvedValue(mockSpeedTestResults as any);
-  //   jest.spyOn(fileServerEntityRepo, 'find').mockResolvedValue([]);
-  //   jest.spyOn(workerRepo, 'findByIds').mockResolvedValue([]);
-  //   jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
-
-  //   await expect(service.getSpeedTestById(mockId)).rejects.toThrow(HttpException);
-  //   expect(loggerSpy).toHaveBeenCalledWith(`Failed to fetch speed test results`, expect.any(String));
-
-  // });
-
   it('should return speed test details', async () => {
     const mockJobRunId = 'jobRunId';
     const mockJobRun = {
@@ -688,7 +665,7 @@ describe('JobConfigService', () => {
       preserveAccessTime: mockBulkDiscovery.preserveAccessTime,
       sourcePathId: 'path2',
       excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
-      firstRunAt: mockJobConfigEntities[0].firstRunAt,
+      firstRunAt: mockBulkDiscovery.firstRunAt,
       scheduler: ScheduleStatus.SCHEDULING,
       createdBy: mockBulkDiscovery.createdBy,
     });
@@ -1998,5 +1975,197 @@ describe('JobConfigService', () => {
         expect(saveCrossMappingSpy).toHaveBeenCalled();
       });
     });
+  });
+  describe('saveIdentityMappingsWithMap', () => {
+    it('should save identity mappings and cross mappings', async () => {
+      const jobConfigIds = ['jobConfig1', 'jobConfig2'];
+      const parsedData = [
+        {
+          sourceMapping: 'sourceMapping1',
+          targetMapping: 'targetMapping1',
+        },
+        {
+          sourceMapping: 'sourceMapping1',
+          targetMapping: 'targetMapping1',
+        },
+      ];
+      const identityMap = 'identityMap1';
+      const identityMappingEntity = {
+        id: 'identityMapping1',
+      };
+      const savedIdentityMapping = {
+        id: 'savedIdentityMapping1',
+      };
+
+      identityMappingRepo.create.mockReturnValue(identityMappingEntity);
+      identityMappingRepo.save.mockResolvedValue(savedIdentityMapping);
+
+      await service.saveIdentityMappingsWithMap(jobConfigIds, parsedData, identityMap, TemplateType.GID);
+
+      expect(identityMappingRepo.create).toHaveBeenCalledWith({
+        identityType: TemplateType.GID,
+        identityMap: identityMap,
+      });
+      expect(identityMappingRepo.create).toHaveBeenCalledWith({
+        identityType: TemplateType.GID,
+        identityMap: identityMap,
+      });
+      expect(identityMappingRepo.save).toHaveBeenCalledWith(identityMappingEntity);
+    });
+    describe('updateMappingsWithMap', () => {
+      it('should update identity mappings and cross mappings', async () => {
+        const jobConfigIds = ['1', '2'];
+        const parsedData = [
+          {
+            sourceMapping: 'sourceMapping',
+            targetMapping: 'targetMapping',
+          },
+        ];
+        const identityMap = 'identityMap';
+        const templateType = 'GID';
+
+        identityMappingRepo.create.mockReturnValue({});
+        identityMappingRepo.save.mockReturnValue({ id: '1' });
+    
+        await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, TemplateType.GID);
+  
+        expect(identityMappingRepo.create).toHaveBeenCalledWith({
+          identityType: TemplateType.GID,
+          identityMap: identityMap,
+          sourceMapping: undefined,
+          targetMapping: undefined,
+        });
+        expect(identityMappingRepo.save).toHaveBeenCalled();
+        expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
+          where: {
+            jobConfigId: jobConfigIds[0],
+          },
+        });
+        expect(identityCrossMappingRepo.create).toHaveBeenCalledWith({
+          identityMappingId: identityMap,
+          jobConfigId: jobConfigIds[0],
+        });
+        expect(identityCrossMappingRepo.save).toHaveBeenCalled();
+      });
+    });
+    describe('updateMappingsWithMap', () => {
+      it('should update identity mappings and cross mappings', async () => {
+        const jobConfigIds = ['1', '2'];
+        const parsedData = [
+          {
+            sourceMapping: 'sourceMapping',
+            targetMapping: 'targetMapping',
+          },
+        ];
+        const identityMap = 'identityMap';
+        const templateType = TemplateType.SID;
+  
+        const createIdentityMappingSpy = jest.spyOn(identityMappingRepo, 'create').mockReturnValue({});
+        const saveIdentityMappingSpy = jest.spyOn(identityMappingRepo, 'save').mockResolvedValue({});
+        const createIdentityCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'create').mockReturnValue({
+          id: '',
+          identityMappingId: '',
+          identityMapping: new IdentityMappingEntity,
+          jobConfigId: '',
+          jobConfig: new JobConfigEntity,
+          createdAt: undefined,
+          updatedAt: undefined,
+          createdBy: '',
+          updatedBy: ''
+        });
+        const saveIdentityCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
+  
+        await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, templateType);
+  
+        expect(createIdentityMappingSpy).toHaveBeenCalledWith({
+          identityType: templateType,
+          identityMap: identityMap,
+          sourceMapping: parsedData[0].sourceMapping,
+          targetMapping: parsedData[0].targetMapping,
+        });
+        expect(saveIdentityMappingSpy).toHaveBeenCalled();
+  
+        expect(createIdentityCrossMappingSpy).toHaveBeenCalledWith({
+          identityMappingId: identityMap,
+          jobConfigId: jobConfigIds[0],
+        });
+        expect(saveIdentityCrossMappingSpy).toHaveBeenCalled();
+      });
+    });
+     describe('getNoticeBoardDetailsByProjectId', () => {
+      it('should return correct counts for different job statuses', async () => {
+        const projectId = '123e4567-e89b-12d3-a456-426614174000';
+    
+      
+        jest.spyOn(jobRunRepo, 'createQueryBuilder').mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest
+              .fn()
+              .mockResolvedValueOnce(5) 
+              .mockResolvedValueOnce(2) 
+              .mockResolvedValueOnce(3) 
+          } as any;
+        });
+    
+        jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(4), 
+          } as any;
+        });
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
+        expect(result).toEqual({
+          countErroredJobRuns: 5,
+          countBlockedCutoverJobRuns: 5,
+          countRecentJobConfigs: 4,
+          countCompletedJobRuns: 5,
+        });
+    
+        expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
+        expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      });
+    
+      it('should return zero counts when no job runs exist', async () => {
+        const projectId = '123e4567-e89b-12d3-a456-426614174000';
+
+        jest.spyOn(jobRunRepo, 'createQueryBuilder').mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(0),
+          } as any;
+        });
+    
+        jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(0),
+          } as any;
+        });
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
+        expect(result).toEqual({
+          countErroredJobRuns: 0,
+          countBlockedCutoverJobRuns: 0,
+          countRecentJobConfigs: 0,
+          countCompletedJobRuns: 0,
+        });
+    
+        expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
+        expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      });
+     });
+    
   });
 });

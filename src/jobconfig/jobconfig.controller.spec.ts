@@ -10,7 +10,9 @@ import { BulkMigrateJobConfig, MigrateConfig } from './dto/bulkMigrateJob.dto';
 import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { Response } from 'express';
-import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
+import { JobConfigSpeedTest } from './dto/jobspeedTest.dto';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -226,6 +228,16 @@ describe('checkCommonWorkersAndValidatePaths', () => {
 
     expect(result).toEqual(expectedResult);
     expect(service.precheckValidation).toHaveBeenCalledWith(precheckData);
+  });
+});
+describe('createSpeedTest with bad data', () => {
+  it('should throw BadRequestException if speedTests is empty', async () => {
+    const speedTest: JobConfigSpeedTest = {
+      speedTests: [],
+      firstRunAt: new Date(),
+    };
+    await expect(controller.createSpeedTest(speedTest)).rejects.toThrow(BadRequestException);
+    await expect(controller.createSpeedTest(speedTest)).rejects.toThrow('Source path IDs cannot be empty.');
   });
 });
 });
