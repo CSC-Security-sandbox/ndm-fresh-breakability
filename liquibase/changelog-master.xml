@@ -48,4 +48,8 @@
       <sqlFile path="liquibase/20250305_01_generate_discovery_report.sql" splitStatements="false"/>
    </changeSet>
 
+   <changeSet id="9011" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250320_02_updated_jobs_report_path_based.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>
