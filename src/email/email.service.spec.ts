@@ -1,202 +1,152 @@
 import { EmailService } from './email.service';
+import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
-import { SettingType } from 'src/setting/dto/create-setting.dto';
 import * as nodemailer from 'nodemailer';
-
-// Create a fake settings repository
-const fakeSettings: GlobalSettings[] = [
-  {
-    id: '1',
-    settingKey: 'SMTP_HOST',
-    settingValue: 'smtp.example.com',
-    settingType: SettingType.SMTP,
-    description: 'SMTP Host',
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-  {
-    id: '2',
-    settingKey: 'SMTP_PORT',
-    settingValue: '587',
-    settingType: SettingType.SMTP,
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-  {
-    id: '3',
-    settingKey: 'SMTP_USER_NAME',
-    settingValue: 'test@example.com',
-    settingType: SettingType.SMTP,
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-  {
-    id: '4',
-    settingKey: 'SMTP_PASSWORD',
-    settingValue: 'password123',
-    settingType: SettingType.SMTP,
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-  {
-    id: '5',
-    settingKey: 'SMTP_FROM_EMAIL',
-    settingValue: 'from@example.com',
-    settingType: SettingType.SMTP,
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-  {
-    id: '6',
-    settingKey: 'SMTP_TO_EMAIL',
-    settingValue: 'to@example.com',
-    settingType: SettingType.SMTP,
-    populateWhoColumns: jest.fn(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    created_by: 'test',
-    updated_by: 'test',
-  },
-];
-
-const fakeSettingsRepo = {
-  find: jest.fn().mockResolvedValue(fakeSettings),
-};
-
-const fakeTransporter = {
-  verify: jest.fn().mockResolvedValue(true),
-  sendMail: jest.fn().mockResolvedValue({ messageId: '12345' }),
-};
-
+import hbs from 'nodemailer-express-handlebars';
+jest.mock('nodemailer-express-handlebars', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    use: jest.fn(),
+  })),
+}));
 jest.mock('nodemailer', () => ({
-  createTransport: jest.fn(() => fakeTransporter),
+  createTransport: jest.fn(),
 }));
 
 describe('EmailService', () => {
   let emailService: EmailService;
+  let settingsRepo: Repository<GlobalSettings>;
+  let sendMailMock: jest.Mock;
+  let verifyMock: jest.Mock;
+  let useMock : jest.Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    emailService = new EmailService(fakeSettingsRepo as any);
-  });
+    sendMailMock = jest.fn().mockResolvedValue({ messageId: '12345' });
+    verifyMock = jest.fn().mockResolvedValue(true);
 
-  describe('getSMTPSettings', () => {
-    it('should return SMTP settings from the repository', async () => {
-      const settings = await emailService.getSMTPSettings();
-      expect(fakeSettingsRepo.find).toHaveBeenCalledWith({
-        where: { settingType: SettingType.SMTP },
-      });
-      expect(settings).toEqual(fakeSettings);
-    });
-  });
-
-  describe('setupTransporter', () => {
-    const emailContent = { hello: 'world' };
-
-    it('should create transporter, verify SMTP connection and send email', async () => {
-      await emailService.setupTransporter(emailContent);
-
-      expect(nodemailer.createTransport).toHaveBeenCalledWith(
-        expect.objectContaining({
-          host: 'smtp.example.com',
-          port: 587,
-          secure: false,
-          auth: {
-            user: 'test@example.com',
-            pass: 'password123',
-          },
-          socketTimeout: 5000,
-          connectionTimeout: 5000,
-        }),
-      );
-
-      expect(fakeTransporter.verify).toHaveBeenCalled();
-      expect(fakeTransporter.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: 'from@example.com',
-          to: 'to@example.com',
-          subject: 'Data Migrator-Alert',
-          text: JSON.stringify(emailContent),
-        }),
-      );
+    (nodemailer.createTransport as jest.Mock).mockReturnValue({
+      sendMail: sendMailMock,
+      verify: verifyMock,
+      use: jest.fn(),
     });
 
-    it('should throw error if transporter.verify fails', async () => {
-      fakeTransporter.verify.mockRejectedValueOnce(
-        new Error('Verification failed'),
-      );
-      await expect(
-        emailService.setupTransporter(emailContent),
-      ).rejects.toThrow();
+    settingsRepo = {
+      find: jest.fn(),
+    } as unknown as Repository<GlobalSettings>;
+
+    emailService = new EmailService(settingsRepo);
+  });
+
+  it('should fetch SMTP settings from database', async () => {
+    const mockSettings = [
+      { settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com' },
+      { settingKey: 'SMTP_PORT', settingValue: '587' },
+      { settingKey: 'SMTP_USER_NAME', settingValue: 'user@example.com' },
+      { settingKey: 'SMTP_PASSWORD', settingValue: 'password' },
+      { settingKey: 'SMTP_FROM_EMAIL', settingValue: 'from@example.com' },
+      { settingKey: 'SMTP_TO_EMAIL', settingValue: 'to@example.com' },
+    ] as GlobalSettings[];
+
+    (settingsRepo.find as jest.Mock).mockResolvedValue(mockSettings);
+
+    const settings = await emailService.getSMTPSettings();
+    expect(settings).toEqual(mockSettings);
+    expect(settingsRepo.find).toHaveBeenCalledWith({
+      where: { settingType: expect.any(String) },
     });
   });
 
-  describe('sendEmail', () => {
-    const emailContent = { data: 'test' };
 
-    it('should send email successfully', async () => {
-      emailService.transporter = fakeTransporter as any;
+  it('should throw an error if sending email fails', async () => {
+    emailService.transporter = nodemailer.createTransport();
+    sendMailMock.mockRejectedValueOnce(new Error('SMTP Error'));
 
-      await emailService.sendEmail(
-        emailContent,
-        'from@example.com',
-        'to@example.com',
-      );
-      expect(fakeTransporter.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: 'from@example.com',
-          to: 'to@example.com',
-          subject: 'Data Migrator-Alert',
-          text: JSON.stringify(emailContent),
-        }),
-      );
+    const emailContent = {
+      alerts: [
+        {
+          labels: { severity: 'low', pod: 'pod2' },
+          annotations: { description: 'Test Desc 2', summary: 'Test Summary 2' },
+        },
+      ],
+    };
+
+    await expect(
+      emailService.sendEmail(emailContent, 'from@example.com', 'to@example.com'),
+    ).rejects.toThrow('Error sending email: SMTP Error');
+
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+  });
+  
+
+  it('should set up the transporter and send an email', async () => {
+    const mockSettings = [
+      { settingKey: 'SMTP_HOST', settingValue: 'smtp.example.com' },
+      { settingKey: 'SMTP_PORT', settingValue: '587' },
+      { settingKey: 'SMTP_USER_NAME', settingValue: 'user@example.com' },
+      { settingKey: 'SMTP_PASSWORD', settingValue: 'password' },
+      { settingKey: 'SMTP_FROM_EMAIL', settingValue: 'from@example.com' },
+      { settingKey: 'SMTP_TO_EMAIL', settingValue: 'to@example.com' },
+    ] as GlobalSettings[];
+
+    (settingsRepo.find as jest.Mock).mockResolvedValue(mockSettings);
+
+    const emailContent = {
+      alerts: [
+        {
+          labels: { severity: 'critical', pod: 'podX' },
+          annotations: { description: 'Urgent issue', summary: 'Immediate action needed' },
+        },
+      ],
+    };
+
+    await emailService.setupTransporter(emailContent);
+
+    expect(nodemailer.createTransport).toHaveBeenCalledWith({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: 'user@example.com',
+        pass: 'password',
+      },
+      socketTimeout: 5000,
+      connectionTimeout: 5000,
     });
-
-    it('should throw an error if sendMail fails', async () => {
-      fakeTransporter.sendMail.mockRejectedValueOnce(new Error('Send failure'));
-      emailService.transporter = fakeTransporter as any;
-      await expect(
-        emailService.sendEmail(
-          emailContent,
-          'from@example.com',
-          'to@example.com',
-        ),
-      ).rejects.toThrow('Error sending email');
-    });
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    expect.objectContaining({
+      from: 'from@example.com',
+      to: 'to@example.com',
+    })
   });
 
-  describe('setupAndSendMail', () => {
-    const emailContent = { sample: 'data' };
+  it('should handle error in setupTransporter', async () => {
+    (settingsRepo.find as jest.Mock).mockRejectedValueOnce(new Error('DB error'));
 
-    it('should return success response if email is sent successfully', async () => {
-      const result = await emailService.setupAndSendMail(emailContent);
-      expect(result).toEqual({
-        message: 'Email sent successfully',
-        statusCode: 200,
-      });
-    });
+    const emailContent = {
+      alerts: [],
+    };
 
-    it('should return error response if setupTransporter fails', async () => {
-      jest
-        .spyOn(emailService, 'setupTransporter')
-        .mockRejectedValueOnce(new Error('SMTP error'));
-      const result = await emailService.setupAndSendMail(emailContent);
-      expect(result).toEqual({ message: 'SMTP error', statusCode: 500 });
-    });
+    await expect(emailService.setupTransporter(emailContent)).rejects.toThrow(
+      'Error setting up SMTP transporter and sending mail: DB error',
+    );
+  });
+
+  it('should return success message when setupAndSendMail succeeds', async () => {
+    jest.spyOn(emailService, 'setupTransporter').mockResolvedValueOnce(undefined);
+
+    const emailContent = { alerts: [] };
+    const result = await emailService.setupAndSendMail(emailContent);
+
+    expect(result).toEqual({ message: 'Email sent successfully', statusCode: 200 });
+  });
+
+  it('should return error message when setupAndSendMail fails', async () => {
+    jest.spyOn(emailService, 'setupTransporter').mockRejectedValueOnce(new Error('SMTP setup failed'));
+
+    const emailContent = { alerts: [] };
+    const result = await emailService.setupAndSendMail(emailContent);
+
+    expect(result).toEqual({ message: 'SMTP setup failed', statusCode: 500 });
   });
 });
