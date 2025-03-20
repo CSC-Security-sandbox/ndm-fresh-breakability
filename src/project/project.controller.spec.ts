@@ -273,7 +273,7 @@ describe('ProjectController', () => {
 
   describe('update', () => {
     it('should update a project', async () => {
-      const updateDto = { project_name: 'updated test' };
+      const updateDto = { project_name: 'updated test' } as any;
 
       jest.spyOn(service, 'update').mockResolvedValue();
 
@@ -282,7 +282,7 @@ describe('ProjectController', () => {
     });
 
     it('should handle errors during update', async () => {
-      const updateDto = { project_name: 'updated test' };
+      const updateDto = { project_name: 'updated test' } as any;
 
       jest.spyOn(service, 'update').mockRejectedValue(new Error('Failed to update project'));
 

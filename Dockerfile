@@ -11,14 +11,16 @@ WORKDIR /app
 
 COPY ["package.json", "./"]
 COPY [".npmrc", "./"]
-RUN npm install 
-RUN rm -f ./.npmrc
+RUN --mount=type=secret,id=git_token \
+    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install \
+    && rm -f ./.npmrc
 
-COPY ./src .
+COPY ./src ./src
 COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
 COPY entrypoint.sh .
+COPY ./templates ./templates
         
 RUN npm run build 
 
