@@ -46,9 +46,13 @@ export class CsvService {
                 jc.job_type AS "Migration Type",
                 i.created_at AS "start time",
                 i.updated_at AS "End Time",
-                CASE 
-                    WHEN source_checksum = target_checksum THEN 'success'
-                    ELSE 'fail'
+                CASE
+                    WHEN is_directory THEN 'success'
+                    ELSE
+                        CASE
+                            WHEN source_checksum = target_checksum THEN 'success'
+                            ELSE 'failed'
+                        END
                 END AS status,
                 CASE 
                     WHEN is_directory THEN 'd'
@@ -56,12 +60,17 @@ export class CsvService {
                 END AS type,
                 file_size as "size",
                 source_checksum as "source checksum",
-                target_checksum as "target checksum"
+                target_checksum as "target checksum",
+                CASE 
+                    WHEN count(iccm.id) > 0 THEN 'Yes'
+                    ELSE 'No'
+                END AS "External mapping file used"
             FROM ${dbSchema}.inventory i
             LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
             LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
             LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
             LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
+            LEFT JOIN ${dbSchema}.identity_config_cross_mapping iccm ON iccm.job_config_id = jc.id
             WHERE job_run_id = $1
             ORDER BY i.created_at DESC
             LIMIT $2 OFFSET ($3 - 1) * $2;
