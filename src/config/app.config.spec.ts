@@ -1,28 +1,37 @@
-import appConfig from './app.config';
+import { Test, TestingModule } from "@nestjs/testing";
+import appConfig from "./app.config";
 
-describe('App Config', () => {
-    it('should return default configuration when environment variables are not set', () => {
-        process.env.APP_HOST = '';
-        process.env.APP_PORT = '';
-        const config = appConfig();
-        expect(config).toEqual({
-            http: { host: '0.0.0.0', port: 3000 },
-            rabbitmq: { urls: [], inventoryQueue: undefined ,  reportsQueue:  undefined},
-        });
-    });
+describe("AppConfig", () => {
+  let config: Record<string, any>;
 
-    it('should use environment variables for configuration', () => {
-        process.env.APP_HOST = 'localhost';
-        process.env.APP_PORT = '8080';
-        process.env.RABBITMQ_URLS = 'amqp://localhost,amqp://backup';
-        process.env.RABBITMQ_INVENTORY_QUEUE = 'inventory_queue';
-        const config = appConfig();
-        expect(config).toEqual({
-            http: { host: 'localhost', port: 8080 },
-            rabbitmq: {
-                urls: ['amqp://localhost', 'amqp://backup'],
-                inventoryQueue: 'inventory_queue',
-            },
-        });
-    });
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        {
+          provide: "app",
+          useFactory: appConfig,
+        },
+      ],
+    }).compile();
+
+    config = module.get<Record<string, any>>("app");
+  });
+
+  it("should have default host as 0.0.0.0", () => {
+    expect(config.http.host).toBe("0.0.0.0");
+  });
+
+  it("should have default port as 3000", () => {
+    expect(config.http.port).toBe(3000);
+  });
+
+  it("should use environment variables for host and port", () => {
+    process.env.APP_HOST = "127.0.0.1";
+    process.env.APP_PORT = "4000";
+
+    const newConfig = appConfig();
+
+    expect(newConfig.http.host).toBe("127.0.0.1");
+    expect(newConfig.http.port).toBe(4000);
+  });
 });

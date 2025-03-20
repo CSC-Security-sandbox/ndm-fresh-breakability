@@ -11,4 +11,23 @@
       <sqlFile path="liquibase/20250206_01_alter_inventory_table.sql"/>
    </changeSet>
 
+    <changeSet id="7003" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_create_operation_error_table.sql"/>
+   </changeSet>
+
+    <changeSet id="7004" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_create_task_error_table.sql"/>
+   </changeSet>
+
+    <changeSet id="7005" author="dineshs">
+      <sqlFile path="liquibase/20250219_01_alter_operations_error_table.sql"/>
+   </changeSet>
+
+    <changeSet id="7006" author="anarvekar">
+      <sqlFile path="liquibase/20250310_01_alter_ops_task_err_tabls.sql"/>
+   </changeSet>
+
+   <changeSet id="7007" author="aniketd">
+      <sqlFile path="liquibase/20250311_01_alter_operation_errors_tables.sql"/>
+   </changeSet>
 </databaseChangeLog>
