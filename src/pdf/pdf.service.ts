@@ -39,8 +39,22 @@ export class PdfService {
         const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
         const reportContent = fs.readFileSync(reportPath, 'utf8');
         const report = hbs.compile(reportContent);
+        const schema = process.env.SCHEMA || 'datamigrator';
+
+        const projectData = await this.inventoryRepo.query(
+          `
+            select p.* from ${schema}.jobrun j 
+            left join ${schema}.jobconfig j2 on j2.id = j.job_config_id
+            left join ${schema}.volume v on v.id = j2.source_path_id
+            left join ${schema}.file_server fs on fs.id = v.file_server_id
+            left join ${schema}.config c on c.id = fs.config_id 
+            left join ${schema}.project p on p.id = c.project_id
+            where j.id = $1
+          `,
+        [jobRunId]);
+
         const data = await this.reportsRepo.query(
-          `SELECT * FROM ${process.env.SCHEMA}.reports WHERE job_run_id = $1 and report_type = $2
+          `SELECT * FROM ${schema}.reports WHERE job_run_id = $1 and report_type = $2
           order by created_at DESC
           limit 1;
           `,
@@ -52,6 +66,13 @@ export class PdfService {
         if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
         reportData.last_iteration.summary = reportData.summary[0];
         reportData.last_errors.summary = reportData.summary[0];
+
+        // add customerInfo and report generation date
+        reportData.customerInfo = {
+          projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
+          reportDate: new Date().toLocaleDateString(),
+        }
+
         const html = report(reportData);
         let browser;
         try {
