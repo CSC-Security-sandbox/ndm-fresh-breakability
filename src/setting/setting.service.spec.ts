@@ -14,6 +14,15 @@ const mockSettingsRepo = {
   save: jest.fn(),
   create: jest.fn(),
 };
+jest.mock('nodemailer-express-handlebars', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    use: jest.fn(),
+  })),
+}));
+jest.mock('nodemailer', () => ({
+  createTransport: jest.fn(),
+}));
 
 describe('SettingService', () => {
   let service: SettingService;
