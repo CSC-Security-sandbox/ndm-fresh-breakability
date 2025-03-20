@@ -26,7 +26,6 @@ export class PdfService {
       const filePath = path.join(this.reportsDirectory, fileName);
       
       if (reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
-      
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
           return fs.readFileSync(filePath);
