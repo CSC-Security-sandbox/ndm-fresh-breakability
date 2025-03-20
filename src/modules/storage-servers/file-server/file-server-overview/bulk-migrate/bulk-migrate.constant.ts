@@ -143,7 +143,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
     header: "Source Path",
     accessor: "sourcePath.sourcePathName",
     Renderer: SourcePathCellRenderer,
-    width: 200,
   },
   {
     id: 2,
@@ -153,7 +152,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
     sort: {
       enabled: false,
     },
-    width: 250,
   },
   {
     id: 3,
@@ -163,7 +161,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
     sort: {
       enabled: false,
     },
-    width: 250,
   },
   {
     id: 4,
@@ -174,7 +171,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
     sort: {
       enabled: false,
     },
-    width: 10,
   },
   {
     id: 5,
@@ -185,7 +181,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
       enabled: false,
     },
     accessor: "migration",
-    width: 10,
   },
   {
     id: 6,
@@ -196,7 +191,6 @@ export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
       enabled: false,
     },
     accessor: "cutover",
-    width: 10,
   },
 ];
 
