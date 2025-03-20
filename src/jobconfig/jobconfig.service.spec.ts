@@ -20,8 +20,7 @@ import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { JobType, JobStatus, JobRunStatus, TemplateType } from 'src/constants/enums';
 import * as winston from 'winston';
-import * as uuid from 'uuid';
-import { BadRequestException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException } from '@nestjs/common';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { nextDate } from 'src/utils/mapper';
@@ -30,7 +29,6 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
 import { createClient } from "redis";
 import { RedisService } from 'src/redis/redis.service';
-import { isUUID } from 'class-validator';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;

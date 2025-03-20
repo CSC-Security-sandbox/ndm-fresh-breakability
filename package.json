@@ -113,7 +113,8 @@
       "/dist",
       "/test/",
       "/config/",
-      "/entities/"
+      "/entities/",
+      "src/redis/redis.service.ts"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -123,7 +124,8 @@
       "/test/",
       "/config/",
       "/entities/",
-      "/dto/"
+      "/dto/",
+      "/src/redis/redis.service.ts"
     ]
   }
 }

@@ -492,7 +492,6 @@ export class JobConfigService {
     }
   }
 
-
   async createBulkMigrate(
     bulkMigrate: BulkMigrateJobConfig
   ): Promise<JobConfigBulkMigrateRes[]> {
@@ -957,36 +956,6 @@ export class JobConfigService {
     return payload;
   }
 
-  async getCutoverDetailsByFileServerId(fileServerId: string) {
-    return [
-      {
-        protocol: Protocol.NFS,
-        sourcePath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          sourcePathName: "/source/test",
-        },
-        destinationFileServer: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationFileServerName: "fileServer1",
-        },
-        destinationPath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationPathName: "/destination/test",
-        },
-        jobConfig: [
-          {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            jobType: JobType.MIGRATE,
-            jobRunDetails: {
-              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-              status: JobRunStatus.Completed,
-            },
-          },
-        ],
-      },
-    ];
-  }
-
   async getConfigsByProjectId(projectId: string) {
     if (!isUUID(projectId)) throw new BadRequestException("Invalid projectId");
 
@@ -1163,18 +1132,16 @@ export class JobConfigService {
   sendCsvFile(filename: string, res: Response) {
     const filePath = join(process.cwd(), process.env.TEMPLATES_PATH, filename);
     this.logger.log(`filePath ${filePath}`);
-
+    
     if (!existsSync(filePath)) {
-      throw new NotFoundException(
-        `CSV file ${filename} not found at ${filePath}`
-      );
+      throw new NotFoundException(`CSV file ${filename} not found at ${filePath}`);
     }
 
-    res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-    res.setHeader("Content-Type", "text/csv");
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'text/csv');
 
     const fileStream = createReadStream(filePath);
-
+    
     fileStream.pipe(res);
   }
 
@@ -1493,5 +1460,35 @@ export class JobConfigService {
           await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
         }
       }
+    }
+
+    async getCutoverDetailsByFileServerId(fileServerId: string) {
+      return [
+        {
+          protocol: Protocol.NFS,
+          sourcePath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            sourcePathName: "/source/test",
+          },
+          destinationFileServer: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationFileServerName: "fileServer1",
+          },
+          destinationPath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationPathName: "/destination/test",
+          },
+          jobConfig: [
+            {
+              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+              jobType: JobType.MIGRATE,
+              jobRunDetails: {
+                id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+                status: JobRunStatus.Completed,
+              },
+            },
+          ],
+        },
+      ];
     }
 }

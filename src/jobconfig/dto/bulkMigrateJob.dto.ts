@@ -14,7 +14,6 @@ import {
     ValidatorConstraintInterface, 
     ValidationArguments
 } from 'class-validator';
-import {  Protocol } from 'src/constants/enums';
 
 
 @ValidatorConstraint({ name: 'UniqueSourcePathId', async: false })
