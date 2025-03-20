@@ -61,6 +61,7 @@ export interface FileServerFormContextType {
   workersListTableStateProps: any;
   nfsWorkersList: string[];
   children?: ReactNode;
+  isFetching: boolean;
 }
 
 export interface CommonFileServerContextProviderType

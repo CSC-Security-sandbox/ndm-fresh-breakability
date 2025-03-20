@@ -76,7 +76,7 @@ export const useFileServerForm = () => {
   const [mountPaths, setMountPaths] = useState<MountPathsOptionsListType[]>([]);
 
   // API
-  const [getAllWorkers] = useLazyGetAllWorkersQuery();
+  const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
 
@@ -228,6 +228,7 @@ export const useFileServerForm = () => {
     nfsCredentialsForm,
     smbCredentialsForm,
     workersListTableStateProps,
+    isFetching,
     jobConfigForm,
     // LOCAL STATE
     workerIdWithName,
