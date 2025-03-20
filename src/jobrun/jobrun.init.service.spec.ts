@@ -10,6 +10,7 @@ import { DeepPartial, LessThan, Repository } from 'typeorm';
 import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from 'src/entities/speed-test-job-config.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { JobStatus as JS } from 'src/constants/enums';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { ConfigService } from '@nestjs/config';
@@ -82,6 +83,14 @@ describe('JobRunInitService', () => {
           useValue:{
             create: jest.fn(),
           }
+        },
+        {
+          provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            update: jest.fn(),
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: WorkflowService,
@@ -312,22 +321,143 @@ describe('JobRunInitService', () => {
   });
 
   describe('initiateWorkflow', () => {
-    it('should initiate the workflow and update the job run', async () => {
-      const jobRunId = 'jobRunId';
-      const jobRunConfig = {};
-      const jobRunWorkflow = {} as any;
-      const startWorkFlowPayload = {};
+  const jobRunId = 'jobRunId';
+  const mockWorkflowHandle = { workflowId: 'workflowId' };
 
-      jest.spyOn(service, 'getFileServerDetails').mockResolvedValue({});
-      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue(jobRunWorkflow as any);
-      jest.spyOn(jobRunRepo, 'update').mockResolvedValue({} as any);
-
-      await service.initiateWorkflow(jobRunId, jobRunConfig as any);
-      jest.spyOn(service, "getFileServerDetails").mockResolvedValue([] as any);
-      expect(service.getFileServerDetails).toBeTruthy();
-    });
+  beforeEach(() => {
+    jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue(mockWorkflowHandle as any);
+    jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+    jest.spyOn(service, 'startStreamConsumer').mockResolvedValue(undefined);
+    jest.spyOn(service, 'getFileServerDetails').mockResolvedValue({});
   });
 
+  it('should start DISCOVER workflow and update jobRunRepo', async () => {
+    const jobRunConfig = {
+      jobType: JobType.DISCOVER,
+      connection: {},
+    };
+
+    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
+
+    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
+      WorkFlows.DISCOVERY,
+      expect.objectContaining({
+        workflowId: `${WorkFlows.DISCOVERY}-${jobRunId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          expect.objectContaining({
+            traceId: jobRunId,
+            payload: jobRunConfig,
+          }),
+        ],
+      })
+    );
+    expect(jobRunRepo.update).toHaveBeenCalledWith(
+      { id: jobRunId },
+      { workFlowId: mockWorkflowHandle.workflowId }
+    );
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+  });
+
+  it('should start SPEED_TEST workflow and update jobRunRepo', async () => {
+    const jobRunConfig = {
+      jobType: JobType.SPEED_TEST,
+      connection: {},
+    };
+
+    const mockSpeedTestJobConfig = { someKey: 'someValue' };
+    jest.spyOn(service, 'getFileServerDetails').mockResolvedValue(mockSpeedTestJobConfig);
+
+    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
+
+    expect(service.getFileServerDetails).toHaveBeenCalledWith(jobRunId);
+    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
+      WorkFlows.SPEED_TEST,
+      expect.objectContaining({
+        workflowId: `${WorkFlows.SPEED_TEST}-${jobRunId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          expect.objectContaining({
+            traceId: jobRunId,
+            payload: mockSpeedTestJobConfig,
+          }),
+        ],
+      })
+    );
+    expect(jobRunRepo.update).toHaveBeenCalledWith(
+      { id: jobRunId },
+      { workFlowId: mockWorkflowHandle.workflowId }
+    );
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+  });
+
+  it('should start CUT_OVER workflow, update jobConfigRepo, and update jobRunRepo', async () => {
+    const jobRunConfig = {
+      jobType: JobType.CUT_OVER,
+      connection: {
+        sourceCredential: { pathId: 'sourcePathId' },
+        targetCredential: { pathId: 'targetPathId' },
+      },
+    };
+
+    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
+
+    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
+      WorkFlows.CUT_OVER,
+      expect.objectContaining({
+        workflowId: `${WorkFlows.CUT_OVER}-${jobRunId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          expect.objectContaining({
+            traceId: jobRunId,
+            payload: jobRunConfig,
+          }),
+        ],
+      })
+    );
+    expect(jobConfigRepo.update).toHaveBeenCalledWith(
+      {
+        sourcePathId: 'sourcePathId',
+        targetPathId: 'targetPathId',
+        jobType: JobType.MIGRATE,
+      },
+      { status: JS.InActive }
+    );
+    expect(jobRunRepo.update).toHaveBeenCalledWith(
+      { id: jobRunId },
+      { workFlowId: mockWorkflowHandle.workflowId }
+    );
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+  });
+
+  it('should start MIGRATE workflow (default case) and update jobRunRepo', async () => {
+    const jobRunConfig = {
+      jobType: JobType.MIGRATE,
+      connection: {},
+    };
+
+    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
+
+    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
+      WorkFlows.MIGRATE,
+      expect.objectContaining({
+        workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          expect.objectContaining({
+            traceId: jobRunId,
+            payload: jobRunConfig,
+          }),
+        ],
+      })
+    );
+    expect(jobRunRepo.update).toHaveBeenCalledWith(
+      { id: jobRunId },
+      { workFlowId: mockWorkflowHandle.workflowId }
+    );
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+  });
+});
   describe('buildJobContext', () => {
     it('should build the job context and store it in Redis', async () => {
       const jobRunId = 'jobRunId';
@@ -357,6 +487,77 @@ describe('JobRunInitService', () => {
       await service.buildJobContext(jobRunId, jobRunConfig as any);
       expect(service.createInitialTask).toHaveBeenCalledWith(jobRunId, jobRunConfig);
       expect(redisService.getClient).toHaveBeenCalled();
+      expect(redisService.setJobContext).toHaveBeenCalled();
+    });
+
+    it('should handle cases where no identity mappings are found for MIGRATE job type', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRunConfig = {
+        jobType: JobType.MIGRATE,
+        workers: [],
+        connection: {
+          sourceCredential: {
+            protocol: Protocol.NFS,
+            host: 'sourceHost',
+            username: 'sourceUser',
+            password: 'sourcePass',
+            pathId: 'sourcePathId',
+            path: '/source/path',
+            workingDirectory: '/source/workingDir',
+            protocolVersion: 'v3',
+          },
+          targetCredential: {
+            protocol: Protocol.SMB,
+            host: 'targetHost',
+            username: 'targetUser',
+            password: 'targetPass',
+            pathId: 'targetPathId',
+            path: '/target/path',
+            workingDirectory: '/target/workingDir',
+            protocolVersion: 'v2',
+          },
+        },
+      };
+    
+      const mockJobConfigId = { jobConfigId: 'jobConfigId' };
+    
+      const redisClientMock = {
+        isOpen: false,
+        connect: jest.fn(),
+        exists: jest.fn().mockResolvedValue(true),
+        hSet: jest.fn(),
+        del: jest.fn(),
+        xGroupCreate: jest.fn(),
+        set: jest.fn(),
+        xAdd: jest.fn(),
+        catch: jest.fn(), // Mock `catch` to avoid undefined errors
+      };
+    
+      jest.spyOn(redisService, 'getClient').mockResolvedValue(redisClientMock as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobConfigId as any);
+      jest.spyOn(identityConfigCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(identityMappingRepo, 'findBy').mockResolvedValue([]);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue(undefined);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+      jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn() } as any);
+      jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn(),
+        xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
+        set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+    
+      // Assertions
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId },
+        select: { jobConfigId: true },
+      });
+      expect(identityConfigCrossMappingRepo.find).toHaveBeenCalledWith({
+        where: { jobConfigId: mockJobConfigId.jobConfigId },
+      });
+      // expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
+      //   identityMap: [],
+      // });
+      expect(redisClientMock.hSet).not.toHaveBeenCalled();
       expect(redisService.setJobContext).toHaveBeenCalled();
     });
   });
