@@ -7,7 +7,6 @@ const WorkersTable = ({
   fileServerDetails,
   allWorkersList,
 }: WorkersTablePropsType) => {
-
   useEffect(() => {
     if (fileServerDetails?.fileServers) {
     }

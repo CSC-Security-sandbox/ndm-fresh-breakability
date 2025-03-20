@@ -4,7 +4,7 @@ import { SpeedTestConfigType } from "@modules/speed-test/types/speed-test.types"
 
 export const configApi = createApi({
   reducerPath: "configApi",
-  tagTypes: ["GET_ALL_FILE_SERVERS", "GET_ALL_AGENTS", "GET_FILE_SERVER_BY_ID", "GET_ALL_CUTOVER_PATHS"],
+  tagTypes: ["GET_ALL_FILE_SERVERS", "GET_ALL_AGENTS", "GET_FILE_SERVER_BY_ID"],
   baseQuery: fetchBaseQuery({
     baseUrl: window?.env?.VITE_CONFIG_SERVICE_URL || import.meta.env.VITE_CONFIG_SERVICE_URL,
     prepareHeaders,
@@ -52,7 +52,6 @@ export const configApi = createApi({
         url: `/servers/${fileServerId}`,
         method: "GET",
       }),
-      providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
 
     refetchConfigExportPaths: builder.query({
@@ -64,7 +63,6 @@ export const configApi = createApi({
 
     getAllCutOverPaths: builder.query({
       query: ({ fileServerId }) => `/servers/cutover/${fileServerId}`,
-      providesTags: ["GET_ALL_CUTOVER_PATHS"],
     }),
 
     getSpeedTestFileServers: builder.query<SpeedTestConfigType[], void>({

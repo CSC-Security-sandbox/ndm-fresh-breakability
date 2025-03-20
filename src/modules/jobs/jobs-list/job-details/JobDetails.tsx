@@ -8,7 +8,6 @@ import {
   useJobAdhocRunMutation,
   useGetJobConfigDetailsQuery,
   useUpdateJobRunStatusMutation,
-  jobsApi,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -42,7 +41,7 @@ const JobDetails = () => {
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
 
-  const { data: jobConfigDetails, isFetching, isLoading } = useGetJobConfigDetailsQuery(
+  const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
       pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),

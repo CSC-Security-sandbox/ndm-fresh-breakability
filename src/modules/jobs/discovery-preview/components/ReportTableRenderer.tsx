@@ -6,6 +6,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
+import { reportApi } from "@api/reportApi";
 
 interface ReportTableProps {
   title: string;
@@ -15,7 +16,6 @@ interface ReportTableProps {
   pageSize?: number;
   defaultSortState?: { sortOrder: "asc" | "desc"; column: number };
   tooltipContent: string;
-  reportApi: any;
   isFetching: boolean;
 }
 
@@ -27,7 +27,6 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
   pageSize = 5,
   defaultSortState,
   tooltipContent,
-  reportApi,
   isFetching,
 }) => {
   const tableState = {

@@ -3,7 +3,7 @@ import { prepareHeaders } from "@api/api.utils";
 
 export const reportApi = createApi({
   reducerPath: "reportApi",
-  tagTypes: ["JOB_RUN_DETAILS", "REPORT_DATA"],
+  tagTypes: ["JOB_RUN_DETAILS", "GET_REPORT_DATA"],
   baseQuery: fetchBaseQuery({
     baseUrl: window?.env?.VITE_REPORTS_SERVICE_URL || import.meta.env.VITE_REPORTS_SERVICE_URL,
     prepareHeaders,
@@ -47,7 +47,7 @@ export const reportApi = createApi({
     getReportData: builder.query({
       query: (payload) =>
         `job-run/job-report?jobRunId=${payload.jobRunId}&reportType=${payload.reportType}`,
-      providesTags: ["REPORT_DATA"],
+      providesTags: ["GET_REPORT_DATA"],
     }),
   }),
 });

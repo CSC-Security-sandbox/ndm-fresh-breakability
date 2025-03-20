@@ -101,7 +101,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         rows: jobRunList,
         isRowSelecting: true,
         isSorting: true,
-        pageSize: 10
+        pageSize: 10,
       });
 
     // CONFORMATION FORM (BOTH STEP)
@@ -135,8 +135,6 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       handleCreateJobCutOverApi,
       isSubmittingBulkCutover,
       isFetching,
-      // isFetchingJobRuns,
-      // isFetching: isFetching.status === 'pending',
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };
