@@ -46,8 +46,8 @@ export class InventoryService {
             parentPath: file?.parentPath ?? '',
             depth: file?.depth ?? 0,
             fileName: file?.fileName ?? '',
-            uid: file?.uid ? file.uid.toString() : null,
-            gid: file?.gid ? file.gid.toString() : null,
+            uid: file?.uid ? file.uid.toString() : '',
+            gid: file?.gid ? file.gid.toString() : '',
             fileSize: file?.fileSize ? BigInt(file.fileSize).toString() : '0',
             extension: file?.extension ?? '',
             fileType: file?.fileType ?? null,
@@ -67,6 +67,7 @@ export class InventoryService {
         }
         try {
             const mappedData = data.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
+            // console.log("mappedData", mappedData);
             const inventoryRecords = this.inventoryRepo.create(mappedData);
             await this.inventoryRepo.save(inventoryRecords);
             this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);

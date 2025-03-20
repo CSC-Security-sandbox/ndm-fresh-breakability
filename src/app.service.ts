@@ -14,7 +14,7 @@ export class AppService {
         heapUsed: `${this.bytesToMB(memoryUsage.heapUsed)} MB`, // Used Heap Size
         external: `${this.bytesToMB(memoryUsage.external)} MB`, // External Memory (C++ objects)
       });
-    }, 5000); // Log memory usage every 5 seconds
+    }, 20000); // Log memory usage every 5 seconds
   }
 
   private bytesToMB(bytes: number): string {
