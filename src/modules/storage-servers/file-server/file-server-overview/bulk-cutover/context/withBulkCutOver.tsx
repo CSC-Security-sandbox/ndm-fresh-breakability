@@ -40,9 +40,9 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const [getJobRunsApi] = useLazyGetJobRunsQuery();
+    const [getJobRunsApi, { isFetching }] = useLazyGetJobRunsQuery();
     const { fileServerDetails } = useFileServerDetails();
-    const [getAllCutOverPathsApi, isFetching] = useLazyGetAllCutOverPathsQuery();
+    const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
     const [allCutOverPaths, setAllCutOverPaths] = useState<
       GetAllCutOverPathsApiType[]
     >([]);
@@ -92,7 +92,6 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         isRowSelecting: true,
         isSorting: true,
         pageSize: 10,
-        // isFetching,
       });
 
     // REVIEW (STEP 2)
@@ -102,8 +101,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         rows: jobRunList,
         isRowSelecting: true,
         isSorting: true,
-        pageSize: 10,
-        // isFetching,
+        pageSize: 10
       });
 
     // CONFORMATION FORM (BOTH STEP)
@@ -137,6 +135,8 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       handleCreateJobCutOverApi,
       isSubmittingBulkCutover,
       isFetching,
+      // isFetchingJobRuns,
+      // isFetching: isFetching.status === 'pending',
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };

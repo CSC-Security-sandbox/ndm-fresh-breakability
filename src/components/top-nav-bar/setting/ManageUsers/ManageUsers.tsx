@@ -18,12 +18,9 @@ import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
-// import { RefreshTable } from "src/components/table-wrapper/useRefresh";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const ManageUsers = () => {
-  const dispatch = useDispatch();
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
   const { data: userData, isFetching, isLoading } = useGetAllUsersQuery("");
@@ -34,6 +31,8 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
+  const refreshUsersList = useRTKApiRefresh({api: usersApi, tag: 'ALL_USERS'});
+    
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .then(() => {
@@ -99,11 +98,6 @@ const ManageUsers = () => {
     defaultColumnState: DEFAULT_COLUMN_STATE,
     defaultSortState: { sortOrder: "desc", column: "column_created_on" },
   };
-
-  const refreshUsersList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: usersApi, tag: 'ALL_USERS'});
-  }
 
   return (
     <Box className="h-[43.75rem] w-full p-6">

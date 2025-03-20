@@ -10,14 +10,12 @@ export interface ExportPathsTablePropsType {
   showRefetch: boolean;
   isRowSelectingEnabled?: boolean;
   setSelectedExportPathsIds: (ids: string[]) => void;
-  isFetching?: boolean;
 }
 
 export interface TableRendererPropsType {
   allExportPaths: VolumeType[];
   allWorkersList: WorkerApiType[];
   fileServerDetails: ConfigListTypeApiType;
-  isFetching?: boolean;
 }
 
 export interface OverviewTabsPropsType {
@@ -32,5 +30,4 @@ export interface WorkersTablePropsType {
   fileServerDetails: ConfigListTypeApiType;
   showRefetch: boolean;
   allWorkersList: WorkerApiType[];
-  isFetching: boolean;
 }

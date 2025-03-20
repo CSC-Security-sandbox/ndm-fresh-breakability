@@ -80,16 +80,6 @@ const TableWrapperWithoutFilter = ({
                 style={{ width: 360 }}
                 setFilter={updateTextFilter}
               />
-              {isRefreshing ?
-                (
-                  <Button variant="text" isSubmitting={isRefreshing}></Button>
-                ) :
-                (
-                  <Button variant="text" onClick={refreshFunc}>
-                    <RefreshIcon style={{ height: '16px', width: '16px', marginBottom: '4px'}}/>
-                  </Button>
-                )
-              }
               {showDownload && (
                 <Button
                   variant="icon"
@@ -97,6 +87,18 @@ const TableWrapperWithoutFilter = ({
                   onClick={() => alert("DOWNLOAD CALLED")}
                 >
                   <DownloadMonochromeIcon />
+                </Button>
+              )}
+              {isRefreshing !== undefined && (
+                <Button variant="icon"
+                  isSubmitting={isRefreshing} 
+                  onClick={!isRefreshing ? refreshFunc : undefined}
+                  style={{ height: '16px', width: '16px', marginBottom: '4px' }} 
+                >
+                  {!isRefreshing && (
+                    <RefreshIcon 
+                    />
+                  )}
                 </Button>
               )}
             </TableWidgets>

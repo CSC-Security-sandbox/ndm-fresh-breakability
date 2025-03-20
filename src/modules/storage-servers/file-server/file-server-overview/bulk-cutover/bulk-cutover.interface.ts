@@ -21,6 +21,7 @@ export interface BulkCutOverContextProviderType {
   fileServerDetails: FileServerDetailsType;
   handleCreateJobCutOverApi: Function;
   isSubmittingBulkCutover: boolean;
+  isFetching?: boolean;
 }
 export interface bulkCutOverFormType {
   isSelectPathConformed: false;

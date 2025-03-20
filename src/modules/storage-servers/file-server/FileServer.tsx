@@ -10,12 +10,10 @@ import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "./file-server.constant";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const FileServer = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
@@ -23,6 +21,8 @@ const FileServer = () => {
     useGetAllFileServersOfProjectQuery({
       projectId,
     });
+
+  const refreshSpeedTestJobRunList = useRTKApiRefresh({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});
 
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
@@ -58,11 +58,6 @@ const FileServer = () => {
     pageSize: 10,
     defaultSortState: { sortOrder: "desc", column: 8 },
   };
-
-  const refreshSpeedTestJobRunList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});
-  }
 
   return (
     <TableWrapper

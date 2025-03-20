@@ -38,10 +38,7 @@ const TableWrapper = ({
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
     tableStateProps.rows || []
   );
-  const [isSearchActive, setIsSearchActive] = useState(false);
-
-  console.log("TableWrapperPropsType", isRefreshing, isSearchActive);
-
+  
   useEffect(() => {
     const data = tableStateProps.rows || [];
     const filteredRows = [...data].filter((row: any) => {
@@ -98,11 +95,6 @@ const TableWrapper = ({
     }
   }, [tableState?.selectionState?.count]);
 
-  const setSearchWidgetWidth = () => {
-    console.log("setSearchWidgetWidth", isSearchActive);
-    setIsSearchActive(!isSearchActive);
-  }
-
   return (
     <Box>
       {showFilters && (
@@ -137,20 +129,21 @@ const TableWrapper = ({
         <Box className="flex gap-2 items-center">
           <TableWidgets>
             <SearchWidget setFilter={updateTextFilter} className="w-[360px]" />
-            {isRefreshing ?
-              (
-                <Button variant="text" isSubmitting={isRefreshing}></Button>
-              ) :
-              (
-                <Button variant="text" onClick={refreshFunc}>
-                  <RefreshIcon style={{ height: '16px', width: '16px', marginBottom: '4px'}}/>
-                </Button>
-              )
-            }
-            {/* <SearchWidget setFilter={updateTextFilter} onOpenOrClose={setSearchWidgetWidth} className={isSearchActive ? "w-[360px]" : ""} /> */}
             {showDownload && (
               <Button variant="icon" style={{ margin: 20 }}>
                 <DownloadMonochromeIcon />
+              </Button>
+            )}
+            {isRefreshing !== undefined && (
+              <Button variant="icon"
+                isSubmitting={isRefreshing} 
+                onClick={!isRefreshing ? refreshFunc : undefined}
+                style={{ height: '16px', width: '16px', marginBottom: '4px' }} 
+              >
+                {!isRefreshing && (
+                  <RefreshIcon 
+                  />
+                )}
               </Button>
             )}
           </TableWidgets>

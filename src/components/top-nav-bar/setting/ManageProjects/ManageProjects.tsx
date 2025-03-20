@@ -10,12 +10,9 @@ import { hasPermission } from "@/auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { Collapse } from "@mui/material";
-// import { RefreshTable } from "src/components/table-wrapper/useRefresh";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const ManageProject = () => {
-  const dispatch = useDispatch();
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
   const { data: projectList, isFetching, isLoading } = useGetAllProjectsQuery(
@@ -27,6 +24,7 @@ const ManageProject = () => {
     setEditSelectedProject(undefined);
     setIsCreateFormVisible(false);
   };
+  const refreshProjectList = useRTKApiRefresh({api: projectApi, tag: 'ALL_PROJECTS'});
 
   const canManageProject: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.UpdateProject
@@ -51,11 +49,6 @@ const ManageProject = () => {
     isSorting: true,
     pageSize: 10,
   };
-
-  const refreshProjectList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: projectApi, tag: 'ALL_PROJECTS'});
-  }
 
   return (
     <Box className="ag-theme-alpine p-6 w-full h-[43.75rem]">

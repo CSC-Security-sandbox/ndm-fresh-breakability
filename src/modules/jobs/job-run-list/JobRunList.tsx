@@ -33,12 +33,10 @@ import {
   getReportActions,
 } from "./run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const JobRunList = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: jobRunList, isFetching, isLoading } = useGetJobRunsQuery({
     projectId: selectedProjectId,
@@ -57,6 +55,7 @@ const JobRunList = () => {
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
   );
+  const refreshJobRunList = useRTKApiRefresh({api: jobsApi, tag: 'ALL_JOB_RUNS'});
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
 
@@ -133,11 +132,6 @@ const JobRunList = () => {
     pageSize: 10,
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
-
-  const refreshJobRunList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: jobsApi, tag: 'ALL_JOB_RUNS'});
-  }
 
   return (
     <>

@@ -35,12 +35,9 @@ import {
 } from "@modules/jobs/job-run-list/run.utils";
 import { useMemo, useState } from "react";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
 
 const JobDetails = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
@@ -156,11 +153,6 @@ const JobDetails = () => {
     return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
-  const refreshJobDetailsList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: jobsApi, tag: 'JOB_CONFIG_DETAILS'});
-  }
-
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -216,8 +208,6 @@ const JobDetails = () => {
         content={<></>}
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
-        refreshFunc={refreshJobDetailsList}
-        isRefreshing={isFetching}
       />
     </Box>
   );

@@ -5,8 +5,7 @@ import {
   Popover,
 } from "@netapp/bxp-design-system-react";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 interface ReportTableProps {
   title: string;
@@ -39,11 +38,7 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
     defaultSortState,
   };
 
-  const dispatch = useDispatch();
-  const refreshReportsList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: reportApi, tag: 'REPORT_DATA'});
-  }
+  const refreshReportsList = useRTKApiRefresh({api: reportApi, tag: 'REPORT_DATA'});
 
   return (
     <Card>

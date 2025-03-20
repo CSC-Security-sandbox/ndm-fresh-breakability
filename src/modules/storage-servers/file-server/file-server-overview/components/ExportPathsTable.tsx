@@ -7,9 +7,6 @@ import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-serve
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
-import { configApi } from "@api/configApi";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -17,7 +14,6 @@ const ExportPathsTable = ({
   showRefetch,
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
-  isFetching = false,
 }: ExportPathsTablePropsType) => {
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
@@ -45,12 +41,6 @@ const ExportPathsTable = ({
     }
   };
 
-  const dispatch = useDispatch();
-  const refreshExportPathsList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    // recallApiData({api: configApi, tag: 'GET_FILE_SERVER_BY_ID'});
-  }
-
   const FETCHING_DETAILS = (
     <Box className="flex gap-3 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
@@ -72,8 +62,6 @@ const ExportPathsTable = ({
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
-      refreshFunc={refreshExportPathsList}
-      isRefreshing={isFetching}
     />
   );
 };

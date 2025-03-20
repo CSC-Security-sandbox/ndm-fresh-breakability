@@ -9,17 +9,18 @@ import { useGetSpeedTestJobsQuery, useJobAdhocRunMutation, jobsApi } from "@api/
 import { notify } from "@components/notification/NotificationWrapper";
 import { useNavigate } from "react-router-dom";
 import { JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const SpeedTest = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: speedTestJobRunList, isFetching, isLoading } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
   const [adhocRun] = useJobAdhocRunMutation();
+
+  const refreshSpeedTestJobRunList = useRTKApiRefresh({api: jobsApi, tag: 'SPEED_TEST_JOBS'});
+
   const jobStatus =
     JOB_STATUS_TYPE_ENUM.COMPLETED ||
     JOB_STATUS_TYPE_ENUM.ERRORED ||
@@ -63,11 +64,6 @@ const SpeedTest = () => {
       </Button>
     </PermissionAuth>
   );
-
-  const refreshSpeedTestJobRunList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: jobsApi, tag: 'SPEED_TEST_JOBS'});
-  }
 
   return (
     <Box className="w-full p-6">

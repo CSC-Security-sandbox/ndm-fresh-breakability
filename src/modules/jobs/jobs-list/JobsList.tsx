@@ -18,21 +18,16 @@ import {
   preSelectedFilterType,
 } from "./job-listing.constant";
 import { getJobListFlaternList } from "./listing.utils";
-import { useDispatch } from "react-redux";
-// import useRefresh from "@hooks/useRefresh";
-// import { RefreshTable } from "@components/table-wrapper/RefreshTable";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-
-// import useRefresh from "src/components/table-wrapper/useRefresh";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const JobsList = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
   );
 
+  const refreshJobList = useRTKApiRefresh({api: jobsApi, tag: 'ALL_JOB_CONFIGS'});
   const source = searchParams.get("source");
   const jobType = searchParams.get("type");
   let preSelectedFilter: preSelectedFilterType = {};
@@ -88,14 +83,6 @@ const JobsList = () => {
     defaultColumnState,
     defaultSortState: { sortOrder: "desc", column: "createdAt" },
   };
-
-  const refreshJobList = () => {
-    // console.log("isFetching - first", isFetching);
-    // console.log("isLoading - first", isLoading);
-    // dispatch(jobsApi.util.invalidateTags(["ALL_JOB_CONFIGS"]));
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: jobsApi, tag: 'ALL_JOB_CONFIGS'});
-  }
 
   return (
     <TableWrapper

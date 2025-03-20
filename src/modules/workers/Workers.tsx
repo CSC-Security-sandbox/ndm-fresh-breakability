@@ -5,9 +5,8 @@ import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/W
 import useWorkers from "@hooks/useWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import RefreshTableData from "@components/table-wrapper/RefreshTableData";
-import { useDispatch } from "react-redux";
 import { workersApi } from "@api/workersApi";
+import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const Workers = () => {
   const { workers, isLoading, isFetching } = useWorkers();
@@ -18,12 +17,8 @@ const Workers = () => {
     isSorting: true,
     pageSize: 10,
   };
-  const dispatch = useDispatch();
 
-  const refreshWorkersList = () => {
-    const { recallApiData } = RefreshTableData(dispatch);
-    recallApiData({api: workersApi, tag: 'GET_ALL_WORKERS'});
-  }
+  const refreshWorkersList = useRTKApiRefresh({api: workersApi, tag: 'GET_ALL_WORKERS'});
 
   return (
     <TableWrapper
