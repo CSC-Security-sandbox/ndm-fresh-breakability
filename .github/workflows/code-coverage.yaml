@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-      - 'release*'
+      - temporal
 
 jobs:
   unit-test-cases-and-code-coverage:
