@@ -10,7 +10,6 @@ const ValidateConnection = () => {
   const { workersListTableStateProps, selectedWorkerIds, isFetching } = useContext(
     CommonFileServerContext
   );
-  console.log({workersListTableStateProps, isFetching})
 
   const checkDisabled = (row: any) => {
     return row.status !== "Online";
