@@ -1,12 +1,11 @@
-import { Module } from '@nestjs/common';
-import { InventoryController } from './inventory.controller';
-import { InventoryService } from './inventory.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { OperationErrorEntity } from 'src/entities/operation-error.entity';
-import { OperationsEntity } from 'src/entities/operation.entity';
-import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { TaskEntity } from 'src/entities/task.entity';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { TaskErrorEntity } from "src/entities/task-error.entity";
+import { TaskEntity } from "src/entities/task.entity";
+import { InventoryService } from "./inventory.service";
 
 @Module({
   imports: [
@@ -15,11 +14,11 @@ import { TaskEntity } from 'src/entities/task.entity';
       TaskEntity,
       OperationsEntity,
       TaskErrorEntity,
-      OperationErrorEntity
-    ])
+      OperationErrorEntity,
+    ]),
   ],
-  controllers: [InventoryController],
+  controllers: [],
   providers: [InventoryService],
-  exports:[InventoryService]
+  exports: [InventoryService],
 })
 export class InventoryModule {}

@@ -85,6 +85,7 @@ export class RedisConsumerService implements OnModuleInit {
     }
 
 
+
     async stopConsumer(jobRunId: string, consumerType?: string, all?: boolean) {
         if (all || !consumerType) {
             console.log("Stopping all consumers for jobRunId:", jobRunId);
@@ -361,15 +362,7 @@ export class RedisConsumerService implements OnModuleInit {
         return reader;
     }
 
-    private async handleUpdatedTask(data: any) {
-        console.log('Updated Task Data:', data);
-        await this.inventoryService.updateTask(data.id, { status: data.status });
-        if (data.commands.length) {
-            for (const cmd of data.commands) {
-                await this.inventoryService.updateOperation(cmd.commandId, { status: cmd.status as OperationStatus });
-            }
-        }
-    }
+
 
     async isConsumerRunning(key: string): Promise<boolean> {
         const value = await this.getKey(key);
