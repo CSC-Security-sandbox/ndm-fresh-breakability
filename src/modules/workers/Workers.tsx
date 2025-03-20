@@ -5,10 +5,15 @@ import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/W
 import useWorkers from "@hooks/useWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
+import { useParams } from "react-router-dom";
+import { useGetFileServerWorkersQuery } from "@api/jobsApi";
 
 const Workers = () => {
-  const { workers, isLoading } = useWorkers();
   const { selectedProjectId } = useSelectedProjectId();
+  const { jobRunId } = useParams();
+  const { data: workers, isLoading } = useGetFileServerWorkersQuery({
+    jobRunId: jobRunId,
+  });
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
     rows: workers,
