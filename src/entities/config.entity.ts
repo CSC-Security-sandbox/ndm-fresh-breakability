@@ -10,7 +10,6 @@ export class ConfigEntity extends Base {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_name' })
     configName: string;
@@ -26,7 +25,6 @@ export class ConfigEntity extends Base {
     @ApiProperty({ description: 'scannedDate' })
     @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
     scannedDate: Date;
-
 
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     @JoinColumn({ name: 'config_id' })

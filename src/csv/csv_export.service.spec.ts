@@ -1,0 +1,244 @@
+import { Test, TestingModule } from "@nestjs/testing";
+import { CsvService } from "./csv_export.service";
+import { DataSource } from "typeorm";
+import * as fs from "fs";
+import * as fastCsv from "fast-csv";
+import exp from "constants";
+
+jest.mock("fs");
+jest.mock("fast-csv");
+jest.mock("typeorm");
+
+describe("CsvService", () => {
+  let service: CsvService;
+  let mockDataSource: jest.Mocked<DataSource>;
+
+  beforeEach(async () => {
+    mockDataSource = {
+      createQueryRunner: jest.fn().mockReturnValue({
+        connect: jest.fn(),
+        release: jest.fn(),
+      }),
+      query: jest.fn(),
+    } as any;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CsvService,
+        { provide: DataSource, useValue: mockDataSource },
+      ],
+    }).compile();
+
+    service = module.get<CsvService>(CsvService);
+  });
+
+  it("should be defined", () => {
+    expect(service).toBeDefined();
+  });
+
+  describe("generateCsv", () => {
+    it("should generate CSV file and write data in batches", async () => {
+      const filePath = "test.csv";
+      const jobRunId = "12345";
+      const mockData = [
+        {
+          "source path": "path1",
+          "target path": "path2",
+          "Migration Type": "type1",
+        },
+        {
+          "source path": "path3",
+          "target path": "path4",
+          "Migration Type": "type2",
+        },
+      ];
+
+      mockDataSource.query.mockResolvedValueOnce(mockData);
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest
+        .spyOn(fs, "createWriteStream")
+        .mockReturnValue(mockWriteStream as any);
+
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+
+      await service.generateCsv(filePath, jobRunId);
+
+      expect(mockWriteStream.write).toHaveBeenCalledTimes(mockData.length);
+    });
+
+    it("should handle error in generateCsv method and not crash", async () => {
+      const filePath = "test.csv";
+      const jobRunId = "12345";
+
+      jest.spyOn(fs, "createWriteStream").mockImplementationOnce(() => {
+        throw new Error("File error");
+      });
+
+      const result = service.generateCsv(filePath, jobRunId);
+
+      await expect(result).resolves.not.toThrow();
+    });
+
+    it("should handle error in fastCsv.format and not crash", async () => {
+      const filePath = "test.csv";
+      const jobRunId = "12345";
+      const mockData = [
+        {
+          "source path": "path1",
+          "target path": "path2",
+          "Migration Type": "type1",
+        },
+      ];
+
+      mockDataSource.query.mockResolvedValueOnce(mockData);
+
+      jest.spyOn(fs, "createWriteStream").mockReturnValue({
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      } as any);
+
+      jest.spyOn(fastCsv, "format").mockImplementationOnce(() => {
+        throw new Error("CSV format error");
+      });
+
+      const result = service.generateCsv(filePath, jobRunId);
+
+      await expect(result).resolves.not.toThrow();
+    });
+
+    it("should handle error in mockDataSource.query and not crash", async () => {
+      const filePath = "test.csv";
+      const jobRunId = "12345";
+
+      mockDataSource.query.mockRejectedValueOnce(new Error("Query error"));
+
+      const result = service.generateCsv(filePath, jobRunId);
+
+      await expect(result).resolves.not.toThrow();
+    });
+
+    it("should call release on queryRunner after completing generateCsv", async () => {
+      const filePath = "test.csv";
+      const jobRunId = "12345";
+      const mockData = [{ "source path": "path1", "target path": "path2" }];
+
+      mockDataSource.query.mockResolvedValueOnce(mockData);
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest
+        .spyOn(fs, "createWriteStream")
+        .mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+
+      await service.generateCsv(filePath, jobRunId);
+
+      expect(mockDataSource.createQueryRunner().release).toHaveBeenCalled();
+    });
+    it("should generate CSV and call csvStream.end()", async () => {
+      const writeStreamMock = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+      };
+      const csvStreamMock = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStreamMock as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(csvStreamMock as any);
+      jest
+        .spyOn(service, "getInventoryData")
+        .mockResolvedValueOnce([{ id: 1, name: "File1" }])
+        .mockResolvedValueOnce([]);
+      await service.generateCsv("/test/path.csv", "job123", 10000);
+
+      expect(fs.createWriteStream).toHaveBeenCalledWith("/test/path.csv");
+      expect(csvStreamMock.pipe).toHaveBeenCalledWith(writeStreamMock);
+      expect(csvStreamMock.write).toHaveBeenCalledWith({
+        id: 1,
+        name: "File1",
+      });
+      expect(csvStreamMock.end).toHaveBeenCalledTimes(1); // ✅ Ensures end() is covered
+    });
+  });
+
+  describe("getInventoryData", () => {
+    it("should return inventory data from the database", async () => {
+      const jobRunId = "12345";
+      const limit = 10000;
+      const offset = 1;
+      const mockData = [{ "source path": "path1", "target path": "path2" }];
+
+      mockDataSource.query.mockResolvedValue(mockData);
+
+      const result = await service.getInventoryData(jobRunId, limit, offset);
+
+      expect(result).toEqual(mockData);
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.any(String), [
+        jobRunId,
+        limit,
+        offset,
+      ]);
+    });
+
+    it("should handle empty array from mockDataSource.query", async () => {
+      const jobRunId = "12345";
+      const limit = 10000;
+      const offset = 1;
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      const result = await service.getInventoryData(jobRunId, limit, offset);
+
+      expect(result).toEqual([]);
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.any(String), [
+        jobRunId,
+        limit,
+        offset,
+      ]);
+    });
+  });
+  describe("getInventoryDataQuery", () => {
+    it("should build the correct SQL query and values", async () => {
+      const jobRunId = "12345";
+      const limit = 10000;
+      const offset = 1;
+
+      const result = await service.getInventoryDataQuery(
+        jobRunId,
+        limit,
+        offset
+      );
+
+      expect(result.query).toContain("SELECT");
+      expect(result.values).toEqual([jobRunId, limit, offset]);
+    });
+
+    it("should include the correct schema in the query", async () => {
+      const jobRunId = "12345";
+      const limit = 10000;
+      const offset = 1;
+      process.env.SCHEMA = "testSchema";
+
+      const result = await service.getInventoryDataQuery(
+        jobRunId,
+        limit,
+        offset
+      );
+
+      expect(result.query).toContain("FROM testSchema.inventory");
+    });
+  });
+});

@@ -4,7 +4,6 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import { Transport } from '@nestjs/microservices';
 import * as hbs from 'hbs';
 import { join } from 'path';
 
@@ -14,21 +13,6 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
-
-  app.connectMicroservice({
-    transport: Transport.RMQ,
-    options: {
-      urls: configService.get('app.rabbitmq.urls'),
-      queue: configService.get('app.rabbitmq.reportsQueue'),
-      noAck: false,
-      queueOptions: {
-        durable: configService.get('app.rabbitmq.durable'),
-        arguments: {
-          'x-queue-type': 'quorum',
-        },
-      },
-    },
-  });
 
   await app.startAllMicroservices()
 
@@ -47,7 +31,7 @@ async function bootstrap() {
   .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document,{
+  SwaggerModule.setup('reports-docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
   app.enableShutdownHooks();

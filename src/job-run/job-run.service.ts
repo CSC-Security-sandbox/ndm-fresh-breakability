@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { CsvService } from './../csv/csv_export.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -9,10 +10,11 @@ import { covertBytes } from 'src/utils/mapper';
 import { Repository } from 'typeorm';
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto } from './dto/job-rundetails.dto';
 import { InventoryStatusSummary, TaskStatusCount } from './job-run.type';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class JobRunService {
-
     constructor(
         @InjectRepository(JobRunEntity)
         private jobRunRepo: Repository<JobRunEntity>,
@@ -22,6 +24,7 @@ export class JobRunService {
         private taskRepo: Repository<TaskEntity>,
         @InjectRepository(ReportsEntity)
         private reportsRepo: Repository<ReportsEntity>,
+        private csvService: CsvService
     ){}
 
     async jobRunReportByJobRunId(jobRunId:string, reportType:string) {
@@ -35,10 +38,23 @@ export class JobRunService {
     }
 
     async getJobStatsId(id: string) {
-
+          const getLatestReportStatus = await this.jobRunRepo.findOne({
+            where: { id: id },
+            select: ['isReportReady'],
+          });
         const saved = await this.reportsRepo.findOne({where: {jobRunId: id, reportType: ReportType.JOB_RUN_STATS}, select: {reportData: true}})
-        if(saved) 
-          return JSON.parse(saved.reportData)
+        if (saved) {
+          const parsedReport = JSON.parse(saved.reportData);
+          if (parsedReport.isReportReady !==  getLatestReportStatus.isReportReady) {
+            parsedReport.isReportReady = getLatestReportStatus.isReportReady;
+            saved.reportData = JSON.stringify(parsedReport);
+            await this.reportsRepo.update(
+              { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
+              { reportData: JSON.stringify(parsedReport) }
+            );
+          }
+          return parsedReport;
+        }
         
         const volumeSearch = {
           volumePath: true,
@@ -116,6 +132,11 @@ export class JobRunService {
         
         if(jobRun.jobConfig.jobType===JobType.Discover)
           response['discovery'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.Migrate) 
+          response['migrate'] = jobRunStatus
+        if(jobRun.jobConfig.jobType === JobType.CutOver) 
+          response['cutOver'] = jobRunStatus
+
 
         const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
             .createQueryBuilder('t')
@@ -135,5 +156,34 @@ export class JobRunService {
         }
         return response; 
       }
+
+  get getReportsDirectory(): string {
+    return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
+  }
+
+  async getCocReportByJobRunId(jobRunId: string) {
+    try {
+      console.log(`Generating COC report for jobRunId: ${jobRunId}`);
+      const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, relations: ["jobConfig"] });
+      if(!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      if(jobRun.jobConfig.jobType === JobType.Discover) throw new NotFoundException(`Job Run with id ${jobRunId} is not a migration job`);
+      const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
+      if (fs.existsSync(filePath)) return filePath;
+      await this.csvService.generateCsv(filePath, jobRunId);
       
+      await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+
+      if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`)
+    
+      const fileBuffer = fs.readFileSync(filePath);
+      const reportData = { filePath, size: fileBuffer.length, digest: crypto.createHash('sha256').update(fileBuffer).digest('hex') };
+      const report = this.reportsRepo.create({ jobRunId, reportData: JSON.stringify(reportData), reportType: ReportType.COC });
+      await this.reportsRepo.save(report);
+      console.log(`COC Report generated for jobRunId: ${jobRunId}`);
+      return filePath;
+    } catch (error) {
+      console.log(`Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`);
+      throw new NotFoundException(`Error while generating report for jobRunId: ${jobRunId}`);
+    }
+  }
 }

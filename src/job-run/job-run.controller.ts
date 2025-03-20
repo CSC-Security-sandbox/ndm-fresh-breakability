@@ -1,4 +1,4 @@
-import { ClassSerializerInterceptor, Controller, Get, Param, Query, SerializeOptions, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Param, Query, SerializeOptions } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
@@ -41,5 +41,14 @@ export class JobRunController {
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
     return serializeJobRunDetailsResponse(response);
+  }
+
+  @ApiOperation({ summary: "Get COC Report by JobRunId" })
+  @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
+  @ApiResponse({ status: 404, description: "COC report not found." })
+  @Get("coc-report/:jobRunId")
+  async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
+    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId);
+    return response;
   }
 }

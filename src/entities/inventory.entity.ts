@@ -1,9 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BaseEntity, Column, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp } from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
-
 
 @Entity({name:'inventory'})
 @Index('idx_id', ['id'])

@@ -1,5 +1,3 @@
-import { Migration } from "typeorm";
-
 export class OverviewDTO{
     storageDetails:storageDetail
     jobDetails:jobDetail

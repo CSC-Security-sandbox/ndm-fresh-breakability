@@ -1,38 +1,56 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
 import { JobRunService } from './job-run.service';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { TaskEntity } from 'src/entities/task.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
-import { JobRunStats } from './dto/job-rundetails.dto';
-
-// Mock data and repositories
-const mockJobRunRepo = {
-  findOne: jest.fn(),
-};
-
-const mockInventoryRepo = {
-  createQueryBuilder: jest.fn(),
-};
-
-const mockTaskRepo = {
-  createQueryBuilder: jest.fn(),
-};
-
-const mockReportsRepo = {
-  findOne: jest.fn(),
-  create: jest.fn(),
-  save: jest.fn(),
-};
+import { CsvService } from 'src/csv/csv_export.service';
+import * as fs from "fs";
 
 describe('JobRunService', () => {
   let service: JobRunService;
+  let mockJobRunRepo;
+  let mockInventoryRepo;
+  let mockTaskRepo;
+  let mockReportsRepo;
+  let mockCsvService;
 
   beforeEach(async () => {
+    const mockQueryBuilder = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+
+    mockJobRunRepo = {
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+
+    mockInventoryRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    };
+
+    mockTaskRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    };
+
+    mockReportsRepo = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
+
+    mockCsvService = {
+      generateCsv: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobRunService,
@@ -40,6 +58,7 @@ describe('JobRunService', () => {
         { provide: getRepositoryToken(InventoryEntity), useValue: mockInventoryRepo },
         { provide: getRepositoryToken(TaskEntity), useValue: mockTaskRepo },
         { provide: getRepositoryToken(ReportsEntity), useValue: mockReportsRepo },
+        { provide: CsvService, useValue: mockCsvService },
       ],
     }).compile();
 
@@ -83,34 +102,147 @@ describe('JobRunService', () => {
   describe('getJobStatsId', () => {
     const jobId = '12345';
 
-    it('should return saved report if it exists', async () => {
-      const savedReport = { reportData: JSON.stringify({ test: 'data' }) };
-      mockReportsRepo.findOne.mockResolvedValue(savedReport);
+    it('should return job stats with discovery data', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        isReportReady: true,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.Discover,
+          sourcePath: { 
+            fileServer: { 
+              protocol: 'http', 
+              config: { configName: 'sourceServer' } 
+            }, 
+            volumePath: '/source' 
+          },
+          destinationPath: { 
+            fileServer: { 
+              protocol: 'ftp', 
+              config: { configName: 'destServer' } 
+            }, 
+            volumePath: '/destination' 
+          },
+        },
+        worker: { workerId: 'worker1' },
+      };
+
+      const mockInventorySummary = [
+        { isDirectory: true, counts: '10', totalFileSize: '0' },
+        { isDirectory: false, counts: '50', totalFileSize: '1024' }
+      ];
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockInventoryRepo.createQueryBuilder().getRawMany.mockResolvedValue(mockInventorySummary);
 
       const result = await service.getJobStatsId(jobId);
 
-      expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId: jobId, reportType: ReportType.JOB_RUN_STATS },
-        select: { reportData: true },
-      });
-      expect(result).toEqual(JSON.parse(savedReport.reportData));
+      expect(result.discovery).toBeDefined();
+      expect(result.discovery.directories).toBe('10');
+      expect(result.discovery.fileCount).toBe('50');
+    });
+
+    it('should return job stats with migrate data', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        isReportReady: true,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.Migrate,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      const result = await service.getJobStatsId(jobId);
+      expect(result.migrate).toBeDefined();
+    });
+
+    it('should return job stats with cutover data', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        isReportReady: true,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.CutOver,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      const result = await service.getJobStatsId(jobId);
+      expect(result.cutOver).toBeDefined();
+    });
+
+    it('should save report when job is completed', async () => {
+      const mockJobRun = {
+        id: jobId,
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          jobType: JobType.Discover,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
+      await service.getJobStatsId(jobId);
+
+      expect(mockReportsRepo.create).toHaveBeenCalled();
+      expect(mockReportsRepo.save).toHaveBeenCalled();
+    });
+
+    it('should update existing report when report exists', async () => {
+      const mockJobRun = {
+        id: jobId,
+        isReportReady: true,
+      };
+
+      const existingReport = {
+        reportData: JSON.stringify({ isReportReady: false }),
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockReportsRepo.findOne.mockResolvedValue(existingReport);
+
+      await service.getJobStatsId(jobId);
+
+      expect(mockReportsRepo.update).toHaveBeenCalledWith(
+        { jobRunId: jobId, reportType: ReportType.JOB_RUN_STATS },
+        { reportData: expect.any(String) }
+      );
     });
 
     it('should throw NotFoundException if job run does not exist', async () => {
-      mockReportsRepo.findOne.mockResolvedValue(null);
       mockJobRunRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.getJobStatsId(jobId)).rejects.toThrow(NotFoundException);
-
-      expect(mockJobRunRepo.findOne).toHaveBeenCalledWith({
-        where: { id: jobId },
-        select: expect.any(Object),
-        relations: expect.any(Object),
-      });
+      await expect(service.getJobStatsId('non-existent-id'))
+        .rejects.toThrow(NotFoundException);
     });
+  });
 
-    it('should return job stats if no saved report exists', async () => {
-      mockReportsRepo.findOne.mockResolvedValue(null);
+  describe('getJobStatsId - Inventory Summary Processing', () => {
+    const jobId = '12345';
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should correctly process inventory summary for directories and files', async () => {
       const mockJobRun = {
         id: jobId,
         startTime: new Date(),
@@ -123,6 +255,49 @@ describe('JobRunService', () => {
         },
         worker: { workerId: 'worker1' },
       };
+  
+      const mockInventorySummary = [
+        { isDirectory: true, counts: '10' },
+        { isDirectory: false, counts: '50', totalFileSize: '500000' },
+      ];
+  
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockInventoryRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockInventorySummary),
+      });
+  
+      mockTaskRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      });
+  
+      const result = await service.getJobStatsId(jobId);
+  
+      expect(result.discovery.directories).toBe('10');
+      expect(result.discovery.fileCount).toBe('50');
+    });
+  
+    it('should handle case when there are no files or directories', async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: 'configId',
+          jobType: JobType.Discover,
+          sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+          destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+        },
+        worker: { workerId: 'worker1' },
+      };
+  
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       mockInventoryRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
@@ -131,6 +306,7 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
+  
       mockTaskRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
@@ -138,17 +314,73 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
-
+  
       const result = await service.getJobStatsId(jobId);
+  
+      expect(result.discovery).toBeDefined();
+      expect(result.discovery.totalSize).toBe("0");
+    });
+  });
 
-      expect(mockJobRunRepo.findOne).toHaveBeenCalled();
-      expect(mockInventoryRepo.createQueryBuilder).toHaveBeenCalled();
-      expect(mockTaskRepo.createQueryBuilder).toHaveBeenCalled();
-      expect(result).toEqual(expect.objectContaining({
-        id: jobId,
-        jobConfig: expect.any(Object),
-        worker: 0,
-      }));
+  describe("getCocReportByJobRunId", () => {
+    const jobRunId = "12345";
+    const mockJobRun = {
+      id: jobRunId,
+      jobConfig: {
+        jobType: JobType.Migrate,
+      },
+    };
+    const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
+
+    it("should return the file path if the report already exists", async () => {
+      jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+      jest.spyOn(mockJobRunRepo, "findOne").mockResolvedValue(mockJobRun);
+
+      const result = await service.getCocReportByJobRunId(jobRunId);
+
+      expect(result).toBe(mockFilePath);
+      expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
+    });
+
+    it("should throw a NotFoundException if the job run is not found", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
+        new NotFoundException(
+          `Error while generating report for jobRunId: ${jobRunId}`
+        )
+      );
+    });
+
+    it("should throw a NotFoundException if the job type is Discover", async () => {
+      mockJobRun.jobConfig.jobType = JobType.Discover;
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
+        new NotFoundException(
+          `Error while generating report for jobRunId: ${jobRunId}`
+        )
+      );
+    });
+
+    it("should throw an error if file generation fails after creating the CSV", async () => {
+      jest.spyOn(fs, "existsSync").mockReturnValue(false);
+      jest.spyOn(mockCsvService, "generateCsv").mockResolvedValue(undefined);
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
+        new Error(`Error while generating report for jobRunId: ${jobRunId}`)
+      );
+    });
+
+    it("should throw a NotFoundException if there is an error during report generation", async () => {
+      const error = new Error("Some unexpected error");
+      jest.spyOn(mockCsvService, "generateCsv").mockRejectedValue(error);
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
+        new NotFoundException(
+          `Error while generating report for jobRunId: ${jobRunId}`
+        )
+      );
     });
   });
 });

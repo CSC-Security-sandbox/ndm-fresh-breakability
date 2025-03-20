@@ -121,7 +121,7 @@ describe('DiscoveryController', () => {
     it('should generate report successfully', async () => {
       const jobRunId = 'job1';
       const reportType = ReportType.DISCOVERY;
-      const expectedResult = { message: 'Report generated successfully' };
+      const expectedResult = "OK";
       mockDiscoveryService.createReportFile.mockResolvedValue(expectedResult);
 
       const result = await controller.generateReport(jobRunId, reportType);
