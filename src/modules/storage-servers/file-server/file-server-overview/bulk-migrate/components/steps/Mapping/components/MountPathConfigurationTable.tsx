@@ -1,16 +1,10 @@
-import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import {
-  createSelectedMountPathsObject,
-  downloadBulkMigrationCsv,
-} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { downloadBulkMigrationCsv } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
-import { BlueXpTableStateType } from "@/types/app.type";
 import { Box, Button } from "@mui/material";
 import { SearchWidget, Table, useTable } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useContext, useEffect, useState } from "react";
-import UploadMappingTableDetails from "./UploadMappingTableDetails";
 
 export const MountPathConfigurationTable = () => {
   const {
@@ -18,11 +12,10 @@ export const MountPathConfigurationTable = () => {
     setSelectedMountPathsId,
     selectedMountPathsId,
     setSelectedReviewIds,
-    protocolForm,
+    mappingStepTableState,
   } = useContext(BulkMigrateContext);
 
   const { setFieldValue } = mappingStepForm;
-
   const {
     organizedRows,
     columns,
@@ -33,19 +26,7 @@ export const MountPathConfigurationTable = () => {
     updateTextFilter,
     toggleRowSelection,
     selectionState,
-  }: BlueXpTableStateType<any> = useTable({
-    columns: BULK_MIGRATION_MOUNT_PATH_COL_DEFS,
-    rows: mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.filter(
-      (row) => row.protocol === protocolForm.formState.protocol.value
-    ),
-    isSorting: true,
-    isRowSelecting: true,
-    defaultSelectionState: {
-      rows: createSelectedMountPathsObject(
-        mappingStepForm?.values?.selectedMountPathsId
-      ),
-    },
-  });
+  } = mappingStepTableState;
 
   useEffect(() => {
     const selectedRows = Object.keys(selectionState.rows).filter(
@@ -68,12 +49,7 @@ export const MountPathConfigurationTable = () => {
     <Box>
       <Box className="flex justify-end my-3">
         <Box className="flex gap-3 items-center">
-          <Box className="flex-grow">
-            {/* FILE UPLOADER */}
-            <UploadMappingTableDetails
-              toggleRowSelection={toggleRowSelection}
-            />
-          </Box>
+          <Box className="flex-grow"></Box>
           <SearchWidget setFilter={updateTextFilter} />
           <Button variant="icon" onClick={handleTableDownload}>
             <DownloadMonochromeIcon />

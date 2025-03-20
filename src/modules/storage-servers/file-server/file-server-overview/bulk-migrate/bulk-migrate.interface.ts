@@ -1,6 +1,7 @@
 import {
   AllFileServerWithVolumesApiType,
   BlueXpFormType,
+  BlueXpTableStateType,
   ConfigListTypeApiType,
   VolumeType,
   WorkerApiType,
@@ -126,6 +127,9 @@ export interface BulkMigrateContextType {
   reviewIdsValidated: string[];
   isFormSubmitting: boolean;
   preCheckStatus: PreCheckStatusType;
+  mappingStepTableState: BlueXpTableStateType<any>;
+  setFileName: (arg: string) => void;
+  fileName: string;
 }
 
 export interface ErrorsValidateMappingStepFormType {

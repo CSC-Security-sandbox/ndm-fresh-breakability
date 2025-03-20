@@ -12,6 +12,8 @@ import {
   getDestinationFileServerIdByName,
   getDestinationPathIdByName,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { UploadIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
+import { Box } from "@components/container";
 
 const VisuallyHiddenInput = styled("input")({
   clip: "rect(0 0 0 0)",
@@ -32,6 +34,7 @@ const UploadMappingTableDetails = ({
     setMigrationDetailsTableConfiguration,
     mappingStepForm,
     allFileServers,
+    setFileName,
   } = React.useContext(BulkMigrateContext);
 
   // UPLOAD
@@ -39,6 +42,7 @@ const UploadMappingTableDetails = ({
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
+    setFileName(file?.name);
     if (file) {
       try {
         const workbook = new ExcelJS.Workbook();
@@ -138,11 +142,18 @@ const UploadMappingTableDetails = ({
     <Button
       component="label"
       role={undefined}
-      variant="contained"
       tabIndex={-1}
-      startIcon={<></>}
+      startIcon={<UploadIcon />}
+      sx={{
+        backgroundColor: "white",
+        borderLeft: "1px solid #A7A7A7",
+        borderTopLeftRadius: 0,
+        borderBottomLeftRadius: 0,
+        height: "100%",
+        textTransform: "none",
+      }}
     >
-      Upload files
+      <Box style={{ color: "#0067c5", fontSize: "1rem" }}>Upload</Box>
       <VisuallyHiddenInput
         type="file"
         onChange={handleFileChange}
