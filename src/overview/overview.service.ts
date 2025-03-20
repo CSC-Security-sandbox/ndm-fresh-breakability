@@ -155,45 +155,44 @@ export class OverviewService {
       ...(cutOverRun?.length ? cutOverRun.map((run) => run.id) : []),
       ...(completedDiscoveryJobRunIds ?? []),
     ];
-    if (jobRunIds.length === 0) {
-      this.logger.log("No job runs found, skipping migration query");
-      totalMigratedSize = 0;
-      return;
+    if (jobRunIds && jobRunIds.length > 0) {
+      const discoverySizeQueryBuilder = this.inventoryRepository
+        .createQueryBuilder()
+        .select(
+          'COALESCE(SUM(latest_inventory."fileSize"), 0)',
+          "totalDiscoveredSize"
+        )
+        .from((subQuery) => {
+          return subQuery
+            .select("latest_inventory.*")
+            .from((qb) => {
+              return qb
+                .select("inventory.path", "path")
+                .addSelect("COALESCE(inventory.fileSize,0)", "fileSize")
+                .addSelect(
+                  "ROW_NUMBER() OVER (PARTITION BY inventory.path ORDER BY inventory.createdAt DESC)",
+                  "row_num"
+                )
+                .from("inventory", "inventory")
+                .where("inventory.job_run_id IN (:...jobRunId)", {
+                  jobRunId: jobRunIds,
+                });
+            }, "latest_inventory")
+            .where("latest_inventory.row_num = 1");
+        }, "latest_inventory");
+
+      const discoveredSize = await discoverySizeQueryBuilder.getRawOne();
+
+      const discoverySizeQueryBuilderEnd = Date.now();
+
+      this.logger.log(
+        `inventoryQueryBuilder query took ${discoverySizeQueryBuilderEnd - discoverySizeQueryBuilderStart} ms`
+      );
+
+      totalDiscoveredSize = discoveredSize?.totalDiscoveredSize ?? 0;
+
+      this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
     }
-    const discoverySizeQueryBuilder = this.inventoryRepository
-    .createQueryBuilder()
-    .select('COALESCE(SUM(latest_inventory."fileSize"), 0)', "totalDiscoveredSize")
-    .from((subQuery) => {
-      return subQuery
-      .select("latest_inventory.*")
-        .from((qb) => {
-          return qb
-            .select("inventory.path", "path")
-            .addSelect("COALESCE(inventory.fileSize,0)", "fileSize")
-            .addSelect(
-              "ROW_NUMBER() OVER (PARTITION BY inventory.path ORDER BY inventory.createdAt DESC)",
-              "row_num"
-            )
-            .from("inventory", "inventory")
-            .where("inventory.job_run_id IN (:...jobRunId)", {
-              jobRunId: jobRunIds,
-            });
-        }, "latest_inventory")
-        .where("latest_inventory.row_num = 1")
-    }, "latest_inventory");
-  
-
-    const discoveredSize = await discoverySizeQueryBuilder.getRawOne();
-
-    const discoverySizeQueryBuilderEnd = Date.now();
-
-    this.logger.log(
-      `inventoryQueryBuilder query took ${discoverySizeQueryBuilderEnd - discoverySizeQueryBuilderStart} ms`
-    );
-
-    totalDiscoveredSize = discoveredSize?.totalDiscoveredSize ?? 0;
-
-    this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
 
     if (migrateRun?.length > 0 || cutOverRun?.length > 0) {
       const migrationQueryBuilderStart = Date.now();
