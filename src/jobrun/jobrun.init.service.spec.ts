@@ -13,7 +13,7 @@ import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { ConfigService } from '@nestjs/config';
-import { JobStatus, Task} from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider, Task} from '@netapp-cloud-datamigrate/jobs-lib';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobRunConfig } from './jobrun.types';
 import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
@@ -188,57 +188,107 @@ describe('JobRunInitService', () => {
     });
   });
 
-//   describe('getJobConfigSpeedTest', () => {
-//     it('should return the job run config for speed test job', async () => {
-//       const jobConfigId = 'jobConfigId';
-//       const jobConfig = {};
-//       const workers = [];
-//       const details: JobRunConfig = {} as any;
 
-//       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig as any);
-//       jest.spyOn(jobConfig?.speedTestConfigs, 'flatMap').mockReturnValue(workers);
-
-//       const result = await service.getJobConfigSpeedTest(jobConfigId);
-
-//       expect(result).toEqual(details);
-//       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-//         where: { id: jobConfigId },
-//         relations: {
-//           speedTestConfigs: {
-//             workerEntities: true,
-//           },
-//         },
-//       });
-//       expect(jobConfig?.speedTestConfigs?.flatMap).toHaveBeenCalled();
-//     });
-//   });
-
-//   describe('getJobConfig', () => {
-//     it('should return the job run config', async () => {
-//       const jobConfigId = 'jobConfigId';
-//       const jobConfig = {};
-//       const sourceWorkers = [];
-//       const targetWorkers = [];
-//       const details: JobRunConfig = {};
-
-//       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig);
-//       jest.spyOn(jobConfig?.sourcePath?.fileServer, 'workers', 'get').mockReturnValue(sourceWorkers);
-//       jest.spyOn(jobConfig?.targetPath?.fileServer, 'workers', 'get').mockReturnValue(targetWorkers);
-
-//       const result = await service.getJobConfig(jobConfigId);
-
-//       expect(result).toEqual(details);
-//       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-//         where: { id: jobConfigId },
-//         relations: {
-//           sourcePath: { fileServer: { config: true, workers: true } },
-//           targetPath: { fileServer: { config: true, workers: true } },
-//         },
-//       });
-//       expect(jobConfig?.sourcePath?.fileServer?.workers).toHaveBeenCalled();
-//       expect(jobConfig?.targetPath?.fileServer?.workers).toHaveBeenCalled();
-//     });
-//   });
+  describe('getJobConfigSpeedTest', () => {
+    it('should return the job configuration for speed test', async () => {
+      const jobConfigId = 'jobConfigId';
+      const mockJobConfig = {
+        id: jobConfigId,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.txt',
+        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        sourcePath: {
+          volumePath: '/path/to/source',
+          id: 'sourcePathId',
+          fileServer: {
+            protocol: 'NFS',
+            userName: 'username',
+            password: 'password',
+            host: 'localhost',
+          },
+        },
+        speedTestConfigs: [
+          {
+            workerEntities: [
+              { workersId: 'worker1' },
+              { workersId: 'worker2' },
+            ],
+          },
+        ],
+        jobType: JobType.SPEED_TEST,
+      };
+  
+      const expectedJobRunConfig: JobRunConfig = {
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.txt',
+        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        connection: {
+          sourceCredential: {
+            path: '/path/to/source',
+            pathId: 'sourcePathId',
+            protocol: Protocol.NFS,
+            username: 'username',
+            password: 'password',
+            host: 'localhost',
+            workingDirectory: undefined, // Assuming `mountBasePath` is defined in the service
+            protocolVersion: '',
+          },
+        },
+        workers: ['worker1', 'worker2'],
+        jobType: JobType.SPEED_TEST,
+      };
+  
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+  
+      const result = await service.getJobConfigSpeedTest(jobConfigId);
+  
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobConfigId },
+        relations: {
+          speedTestConfigs: {
+            workerEntities: true,
+          },
+        },
+      });
+      expect(result).toEqual(expectedJobRunConfig);
+    });
+  
+    it('should return default values if jobConfig is not found', async () => {
+      const jobConfigId = 'nonExistentJobConfigId';
+  
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(null);
+  
+      const result = await service.getJobConfigSpeedTest(jobConfigId);
+  
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobConfigId },
+        relations: {
+          speedTestConfigs: {
+            workerEntities: true,
+          },
+        },
+      });
+      expect(result).toEqual({
+        preserveAccessTime: undefined,
+        excludeFilePatterns: undefined,
+        excludeOlderThan: undefined,
+        connection: {
+          sourceCredential: {
+            path: undefined,
+            pathId: undefined,
+            protocol: undefined,
+            username: undefined,
+            password: undefined,
+            host: undefined,
+            workingDirectory: undefined, // Assuming `mountBasePath` is defined in the service
+            protocolVersion: '',
+          },
+        },
+        workers: [],
+        jobType: undefined,
+      });
+    });
+  });
 
   describe('getFileServerDetails', () => {
     it('should return the merged results of speed test job config and file servers', async () => {
@@ -357,7 +407,7 @@ describe('createInitialTask', () => {
           sourceCredential: {
             path: '/path/to/source',
             pathId: 'sourcePathId',
-            protocol: Protocol.NFS ,
+            protocol: Protocol.NFS,
             username: 'username',
             password: 'password',
             host: 'localhost',
@@ -366,100 +416,100 @@ describe('createInitialTask', () => {
           },
         },
       };
-      const jobRun = { id: jobRunId, jobConfigId: 'jobConfigId' };
-      const jobConfig = {
-        preserveAccessTime: true,
-        excludeFilePatterns: ['*.txt'],
-        excludeOlderThan: 30,
-        sourcePath: {
-          volumePath: '/path/to/source',
-          id: 'sourcePathId',
-          fileServer: {
-            protocol: 'NFS',
-            userName: 'username',
-            password: 'password',
-            host: 'localhost',
+    
+      const jobRun = { id: jobRunId, jobConfig: {} };
+      const jobState = new JobState([], 0, 1, [], JobStatus.Pending, []);
+    
+      const mockRedisClient = {};
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockResolvedValue({
+          jobConfigId: 'jobConfigId',
+          jobType: JobType.SPEED_TEST,
+          jobState,
+          options: {
+            excludeFilePatterns: ['*.txt'],
+            sourceWorkingDir: '/mount/base/path',
+            targetWorkingDir: '/mount/base/path',
+            preserveAccessTime: true,
+            excludeOlderThan: 30,
           },
-        },
-        speedTestConfigs: [
-          {
-            workerEntities: [
-              { workersId: 'worker1' },
-              { workersId: 'worker2' },
-            ],
-          },
-        ],
-      };
-      const jobState = new JobState(
-        [],
-        0,
-        1,
-        [],
-        JobStatus.Pending
-        ,[]
+          workerMap: [
+            { workerId: 'worker1', workerJobRunMapId: 'workerJobRunMapId1' },
+            { workerId: 'worker2', workerJobRunMapId: 'workerJobRunMapId2' },
+          ],
+        }),
+      } as unknown as SpeedTestJobContextProvider;
+    
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRun as any);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue(mockRedisClient as any);
+      jest.spyOn(JobContextFactory, 'getSpeedTestProvider').mockReturnValue(mockRedisProvider);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+    
+      await service.buildSpeedTestJobContext(jobRunId, jobRunConfig);
+    
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId },
+        relations: ['jobConfig'],
+      });
+      expect(mockRedisProvider.buildContext).toHaveBeenCalledWith(
+        jobRunId,
+        expect.any(SpeedTestJobConfig),
+        JobRunStatus.Ready,
+        jobState
       );
-      const mockWorkerJobRunMap: any = {
-        id: 'workerJobRunMapId',
-        jobRunId: 'jobRunId',
-        worker: { id: 'workerId' },
-        jobRun: { id: 'jobRunId' },
-        isActive: true,
-        isPathMounted: false,
-      };
-      jest.spyOn(workerJobRunMapRepo, 'create').mockImplementation(() => mockWorkerJobRunMap);
-      jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
-
-      
-      expect(workerJobRunMapRepo.create).toHaveBeenCalledWith({
-        workerId: 'worker2',
-        isActive: true,
-        isPathMounted: false,
-      });
-      expect(optionRepo.create).toHaveBeenCalledWith({
-        excludeFilePatterns: ['*.txt'],
-        sourceWorkingDir: '/mount/base/path',
-        targetWorkingDir: '/mount/base/path',
-        preserveAccessTime: true,
-        excludeOlderThan: 30,
-      });
-      const jobContext = {
-        jobConfigId: 'jobConfigId',
-        jobType: JobType.SPEED_TEST,
-        jobState,
-        options: {
-          excludeFilePatterns: ['*.txt'],
-          sourceWorkingDir: '/mount/base/path',
-          targetWorkingDir: '/mount/base/path',
-          preserveAccessTime: true,
-          excludeOlderThan: 30,
-        },
-        workerMap: [
-          {
-            workerId: 'worker1',
-            workerJobRunMapId: 'workerJobRunMapId',
-          },
-          {
-            workerId: 'worker2',
-            workerJobRunMapId: 'workerJobRunMapId',
-          },
-        ],
-      };
-
-      expect(jobRunRepo.create).toHaveBeenCalledWith({
-        status: JobRunStatus.Ready,
-        startTime: expect.any(Date),
-        endTime: null,
-        iterationNumber: 1,
-        jobConfigId: 'jobConfigId',
-        workerMap: [{}, {}],
-        options: {},
-      });
-      expect(jobRunRepo.save).toHaveBeenCalledWith(jobRun);
-      expect(redisService.getClient).toHaveBeenCalled();
       expect(redisService.setJobContext).toHaveBeenCalledWith(
         jobRunId,
-        jobContext
+        expect.objectContaining({
+          jobConfigId: 'jobConfigId',
+          jobType: JobType.SPEED_TEST,
+          jobState,
+          options: expect.objectContaining({
+            excludeFilePatterns: ['*.txt'],
+            sourceWorkingDir: '/mount/base/path',
+            targetWorkingDir: '/mount/base/path',
+            preserveAccessTime: true,
+            excludeOlderThan: 30,
+          }),
+          workerMap: [
+            { workerId: 'worker1', workerJobRunMapId: 'workerJobRunMapId1' },
+            { workerId: 'worker2', workerJobRunMapId: 'workerJobRunMapId2' },
+          ],
+        })
       );
+    });
+  
+    it('should throw an error if jobRun is not found', async () => {
+      const jobRunId = 'invalidJobRunId';
+      const jobRunConfig: JobRunConfig = {
+        jobType: JobType.SPEED_TEST,
+        workers: [],
+        excludeFilePatterns: '',
+        preserveAccessTime: false,
+        excludeOlderThan: new Date(),
+        connection: {
+          sourceCredential: {
+            path: '',
+            pathId: '',
+            protocol: Protocol.NFS,
+            username: '',
+            password: '',
+            host: '',
+            workingDirectory: '',
+            protocolVersion: '',
+          },
+        },
+      };
+  
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+  
+      await expect(service.buildSpeedTestJobContext(jobRunId, jobRunConfig)).rejects.toThrow(
+        `JobRun with id ${jobRunId} not found`
+      );
+  
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId },
+        relations: ['jobConfig'],
+      });
     });
   });
 });

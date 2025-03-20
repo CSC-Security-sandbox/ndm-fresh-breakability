@@ -165,9 +165,9 @@ export class JobRunInitService {
       ) || [];
 
     const details: JobRunConfig = {
-      preserveAccessTime: jobConfig.preserveAccessTime,
-      excludeFilePatterns: jobConfig.excludeFilePatterns,
-      excludeOlderThan: jobConfig.excludeOlderThan,
+      preserveAccessTime: jobConfig?.preserveAccessTime,
+      excludeFilePatterns: jobConfig?.excludeFilePatterns,
+      excludeOlderThan: jobConfig?.excludeOlderThan,
       connection: {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
@@ -181,7 +181,7 @@ export class JobRunInitService {
         },
       },
       workers: workers,
-      jobType: jobConfig.jobType,
+      jobType: jobConfig?.jobType,
     };
     return details;
   }
@@ -250,6 +250,7 @@ export class JobRunInitService {
     }
     return details;
   }
+  
   async getFileServerDetails(jobRunId): Promise<any> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
