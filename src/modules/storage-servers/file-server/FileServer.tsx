@@ -62,7 +62,6 @@ const FileServer = () => {
   const refreshSpeedTestJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (

@@ -42,7 +42,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const { selectedProjectId: projectId } = useSelectedProjectId();
     const [getJobRunsApi] = useLazyGetJobRunsQuery();
     const { fileServerDetails } = useFileServerDetails();
-    const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
+    const [getAllCutOverPathsApi, isFetching] = useLazyGetAllCutOverPathsQuery();
     const [allCutOverPaths, setAllCutOverPaths] = useState<
       GetAllCutOverPathsApiType[]
     >([]);
@@ -92,6 +92,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         isRowSelecting: true,
         isSorting: true,
         pageSize: 10,
+        // isFetching,
       });
 
     // REVIEW (STEP 2)
@@ -102,6 +103,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         isRowSelecting: true,
         isSorting: true,
         pageSize: 10,
+        // isFetching,
       });
 
     // CONFORMATION FORM (BOTH STEP)
@@ -134,6 +136,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       setReviewStepSelectedIds,
       handleCreateJobCutOverApi,
       isSubmittingBulkCutover,
+      isFetching,
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };

@@ -93,9 +93,6 @@ const JobsList = () => {
     // console.log("isFetching - first", isFetching);
     // console.log("isLoading - first", isLoading);
     // dispatch(jobsApi.util.invalidateTags(["ALL_JOB_CONFIGS"]));
-    // useRefresh({api:jobsApi, tag:'ALL_JOB_CONFIGS'})
-    // RefreshTable({dispatch, api:jobsApi, tag:'ALL_JOB_CONFIGS'})
-
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'ALL_JOB_CONFIGS'});
   }

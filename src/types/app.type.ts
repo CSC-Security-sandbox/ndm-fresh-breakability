@@ -624,6 +624,7 @@ export interface GetAllCutOverPathsApiType {
       status: string;
     };
   }[];
+  isFetching: boolean;
 }
 export type NameCellRendererProps = {
   first_name: string;

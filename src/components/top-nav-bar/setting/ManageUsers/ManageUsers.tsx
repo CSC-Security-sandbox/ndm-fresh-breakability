@@ -103,7 +103,6 @@ const ManageUsers = () => {
   const refreshUsersList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: usersApi, tag: 'ALL_USERS'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (

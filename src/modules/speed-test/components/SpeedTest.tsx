@@ -67,7 +67,6 @@ const SpeedTest = () => {
   const refreshSpeedTestJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'SPEED_TEST_JOBS'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (

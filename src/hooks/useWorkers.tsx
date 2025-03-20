@@ -6,7 +6,7 @@ import { WorkerApiType } from "@/types/app.type";
 const useWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const [workers, setWorkers] = useState<WorkerApiType[]>([]);
-  const [getAllWorkers, { error, isLoading }] = useLazyGetAllWorkersQuery();
+  const [getAllWorkers, { error, isFetching, isLoading }] = useLazyGetAllWorkersQuery();
 
   useEffect(() => {
     (async () => {
@@ -20,6 +20,7 @@ const useWorkers = () => {
     workers,
     error,
     isLoading,
+    isFetching,
   };
 };
 

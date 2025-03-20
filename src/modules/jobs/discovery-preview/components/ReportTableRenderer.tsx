@@ -43,7 +43,6 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
   const refreshReportsList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: reportApi, tag: 'REPORT_DATA'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (

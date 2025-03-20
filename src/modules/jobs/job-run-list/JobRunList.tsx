@@ -137,7 +137,6 @@ const JobRunList = () => {
   const refreshJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'ALL_JOB_RUNS'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (

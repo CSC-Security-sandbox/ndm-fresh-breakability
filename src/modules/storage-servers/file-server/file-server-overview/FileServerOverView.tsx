@@ -13,7 +13,7 @@ import JobChart from "@components/chartInfo/JobsChart";
 import { InitialFileServerOverviewApiData } from "./fileServerId.constant";
 
 const FileServerOverView = () => {
-  const { fileServerDetails, allExportPaths, allWorkersList } =
+  const { fileServerDetails, allExportPaths, allWorkersList, isFetching } =
     useFileServerDetails();
   const [getFileOverviewApi, { isLoading, data }] = useLazyGetFileOverviewQuery(
     {
@@ -67,6 +67,7 @@ const FileServerOverView = () => {
         fileServerDetails={fileServerDetails}
         allExportPaths={allExportPaths}
         allWorkersList={allWorkersList}
+        isFetching={isFetching}
       />
     </Box>
   );

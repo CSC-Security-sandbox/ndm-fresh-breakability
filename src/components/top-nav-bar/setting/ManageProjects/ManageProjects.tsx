@@ -55,7 +55,6 @@ const ManageProject = () => {
   const refreshProjectList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: projectApi, tag: 'ALL_PROJECTS'});
-    // RefreshTable({dispatch, api:projectApi, tag:'ALL_PROJECTS'})
   }
 
   return (

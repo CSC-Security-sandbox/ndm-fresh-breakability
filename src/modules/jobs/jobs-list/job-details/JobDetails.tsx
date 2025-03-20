@@ -159,7 +159,6 @@ const JobDetails = () => {
   const refreshJobDetailsList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'JOB_CONFIG_DETAILS'});
-    // RefreshTable({dispatch, api:usersApi, tag:'ALL_USERS'})
   }
 
   return (
