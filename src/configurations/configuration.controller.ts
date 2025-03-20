@@ -4,8 +4,8 @@ import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
-import { ConfigResponseDto, FindallConfigPageDto } from "./dto/findallconfig.dto";
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
+import { ConfigResponseDto, FindAllConfigPageDto } from "./dto/findallconfig.dto";
+import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
 
 @ApiTags("Configuration")
 @Controller('servers')
