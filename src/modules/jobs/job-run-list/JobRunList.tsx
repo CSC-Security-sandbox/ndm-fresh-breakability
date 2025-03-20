@@ -38,6 +38,7 @@ import { useDispatch } from "react-redux";
 
 const JobRunList = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: jobRunList, isFetching, isLoading } = useGetJobRunsQuery({
     projectId: selectedProjectId,
@@ -133,7 +134,6 @@ const JobRunList = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
-  const dispatch = useDispatch();
   const refreshJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'ALL_JOB_RUNS'});

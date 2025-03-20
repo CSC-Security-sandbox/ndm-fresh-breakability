@@ -40,6 +40,7 @@ import { useDispatch } from "react-redux";
 
 const JobDetails = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
@@ -155,7 +156,6 @@ const JobDetails = () => {
     return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
-  const dispatch = useDispatch();
   const refreshJobDetailsList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'JOB_CONFIG_DETAILS'});

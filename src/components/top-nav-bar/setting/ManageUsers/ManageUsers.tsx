@@ -23,6 +23,7 @@ import RefreshTableData from "@components/table-wrapper/RefreshTableData";
 import { useDispatch } from "react-redux";
 
 const ManageUsers = () => {
+  const dispatch = useDispatch();
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
   const { data: userData, isFetching, isLoading } = useGetAllUsersQuery("");
@@ -99,7 +100,6 @@ const ManageUsers = () => {
     defaultSortState: { sortOrder: "desc", column: "column_created_on" },
   };
 
-  const dispatch = useDispatch();
   const refreshUsersList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: usersApi, tag: 'ALL_USERS'});

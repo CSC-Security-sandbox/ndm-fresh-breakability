@@ -27,6 +27,7 @@ import RefreshTableData from "@components/table-wrapper/RefreshTableData";
 
 const JobsList = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
@@ -88,7 +89,6 @@ const JobsList = () => {
     defaultSortState: { sortOrder: "desc", column: "createdAt" },
   };
 
-  const dispatch = useDispatch();
   const refreshJobList = () => {
     // console.log("isFetching - first", isFetching);
     // console.log("isLoading - first", isLoading);

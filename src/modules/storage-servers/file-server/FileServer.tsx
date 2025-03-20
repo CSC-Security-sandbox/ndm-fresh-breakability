@@ -15,6 +15,7 @@ import { useDispatch } from "react-redux";
 
 const FileServer = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
@@ -58,7 +59,6 @@ const FileServer = () => {
     defaultSortState: { sortOrder: "desc", column: 8 },
   };
 
-  const dispatch = useDispatch();
   const refreshSpeedTestJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});

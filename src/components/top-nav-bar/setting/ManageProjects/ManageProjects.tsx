@@ -15,6 +15,7 @@ import RefreshTableData from "@components/table-wrapper/RefreshTableData";
 import { useDispatch } from "react-redux";
 
 const ManageProject = () => {
+  const dispatch = useDispatch();
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
   const { data: projectList, isFetching, isLoading } = useGetAllProjectsQuery(
@@ -51,7 +52,6 @@ const ManageProject = () => {
     pageSize: 10,
   };
 
-  const dispatch = useDispatch();
   const refreshProjectList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: projectApi, tag: 'ALL_PROJECTS'});

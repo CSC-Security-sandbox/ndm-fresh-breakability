@@ -14,6 +14,7 @@ import { useDispatch } from "react-redux";
 
 const SpeedTest = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: speedTestJobRunList, isFetching, isLoading } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
@@ -63,7 +64,6 @@ const SpeedTest = () => {
     </PermissionAuth>
   );
 
-  const dispatch = useDispatch();
   const refreshSpeedTestJobRunList = () => {
     const { recallApiData } = RefreshTableData(dispatch);
     recallApiData({api: jobsApi, tag: 'SPEED_TEST_JOBS'});
