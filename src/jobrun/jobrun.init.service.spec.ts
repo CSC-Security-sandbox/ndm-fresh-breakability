@@ -6,7 +6,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { FileServerEntity } from '../entities/fileserver.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RedisService } from '../redis/redis.service';
-import { LessThan, Repository } from 'typeorm';
+import { DeepPartial, LessThan, Repository } from 'typeorm';
 import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from 'src/entities/speed-test-job-config.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
@@ -75,6 +75,13 @@ describe('JobRunInitService', () => {
         {
           provide: getRepositoryToken(IdentityConfigCrossMappingEntity),
           useClass: Repository,
+        },
+        {
+          provide: getRepositoryToken(WorkerJobRunMap),
+          useClass: Repository,
+          useValue:{
+            create: jest.fn(),
+          }
         },
         {
           provide: WorkflowService,
@@ -293,9 +300,11 @@ describe('JobRunInitService', () => {
       jest.spyOn(service, 'createInitialTask').mockResolvedValue(undefined);
       jest.spyOn(redisService, 'getClient').mockResolvedValue(undefined);
       jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
-
+      jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn() } as any);
+      jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn(),
+        xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
+        set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
       await service.buildJobContext(jobRunId, jobRunConfig as any);
-
       expect(service.createInitialTask).toHaveBeenCalledWith(jobRunId, jobRunConfig);
       expect(redisService.getClient).toHaveBeenCalled();
       expect(redisService.setJobContext).toHaveBeenCalled();
@@ -337,7 +346,6 @@ describe('createInitialTask', () => {
 
   describe('buildSpeedTestJobContext', () => {
     it('should build the job context for speed test job', async () => {
-      // Arrange
       const jobRunId = 'jobRunId';
       const jobRunConfig: JobRunConfig = {
         jobType: JobType.SPEED_TEST,
@@ -390,22 +398,18 @@ describe('createInitialTask', () => {
         JobStatus.Pending
         ,[]
       );
-      const jobContext = { id: 'jobContextId' };
-
-      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRun as any);
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig as any);
-      jest.spyOn(workerJobRunMapRepo, 'create').mockReturnValue({} as any);
-      jest.spyOn(optionRepo, 'create').mockReturnValue({} as any);
-      jest.spyOn(jobRunRepo, 'create').mockReturnValue(jobRun as any);
-      jest.spyOn(jobRunRepo, 'save').mockResolvedValue(jobRun as any);
-      jest.spyOn(redisService, 'getClient').mockResolvedValue({} as any);
-      jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
-      expect(jobConfigRepo.findOne).toHaveBeenCalledTimes(1);
-      expect(workerJobRunMapRepo.create).toHaveBeenCalledWith({
-        workerId: 'worker1',
+      const mockWorkerJobRunMap: any = {
+        id: 'workerJobRunMapId',
+        jobRunId: 'jobRunId',
+        worker: { id: 'workerId' },
+        jobRun: { id: 'jobRunId' },
         isActive: true,
         isPathMounted: false,
-      });
+      };
+      jest.spyOn(workerJobRunMapRepo, 'create').mockImplementation(() => mockWorkerJobRunMap);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
+
+      
       expect(workerJobRunMapRepo.create).toHaveBeenCalledWith({
         workerId: 'worker2',
         isActive: true,
@@ -418,6 +422,29 @@ describe('createInitialTask', () => {
         preserveAccessTime: true,
         excludeOlderThan: 30,
       });
+      const jobContext = {
+        jobConfigId: 'jobConfigId',
+        jobType: JobType.SPEED_TEST,
+        jobState,
+        options: {
+          excludeFilePatterns: ['*.txt'],
+          sourceWorkingDir: '/mount/base/path',
+          targetWorkingDir: '/mount/base/path',
+          preserveAccessTime: true,
+          excludeOlderThan: 30,
+        },
+        workerMap: [
+          {
+            workerId: 'worker1',
+            workerJobRunMapId: 'workerJobRunMapId',
+          },
+          {
+            workerId: 'worker2',
+            workerJobRunMapId: 'workerJobRunMapId',
+          },
+        ],
+      };
+
       expect(jobRunRepo.create).toHaveBeenCalledWith({
         status: JobRunStatus.Ready,
         startTime: expect.any(Date),

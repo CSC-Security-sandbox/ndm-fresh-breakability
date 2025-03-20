@@ -3,6 +3,7 @@ import { RedisService } from './redis.service';
 import * as redis from 'redis'; // Import the 'redis' module
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { FileServerDetails, JobContext, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { RedisClientType } from 'redis';
 
 describe('RedisService', () => {
   let service: RedisService;
@@ -38,6 +39,145 @@ describe('RedisService', () => {
     const client = await service.getClient();
     expect(client).toBeDefined();
   });
+
+it('should set the job context in Redis', async () => {
+  const traceId = 'test-trace-id';
+  const jobContext = { data: 'test-data', serialize: () => JSON.stringify(this) };
+
+  const mockRedisClient: Partial<RedisClientType> = {
+    set: jest.fn().mockResolvedValue('OK'),
+  };
+
+  service['client'] = mockRedisClient as RedisClientType;
+
+  await service.setJobContext(traceId, jobContext);
+
+  expect(service['client'].set).toHaveBeenCalledWith("test-trace-id", "{}");
+});
+
+it('should set the job context in Redis and handle uninitialized client', async () => {
+  const traceId = 'test-trace-id';
+  const jobContext = { data: 'test-data', serialize: () => JSON.stringify(this) };
+
+  const mockRedisClient: Partial<RedisClientType> = {
+    set: jest.fn().mockResolvedValue('OK'),
+  };
+
+  service['client'] = undefined;
+
+  jest.spyOn(service, 'getClient').mockResolvedValue(mockRedisClient as RedisClientType);
+
+  const errorSpy = jest.spyOn(service['logger'], 'error');
+  const logSpy = jest.spyOn(service['logger'], 'log');
+
+  await service.setJobContext(traceId, jobContext);
+
+  expect(errorSpy).toHaveBeenCalledWith('[Job-Service] Redis client is not initialized, trying to reconnect');
+  expect(service['getClient']).toHaveBeenCalled();
+  expect(service['client']).toBe(mockRedisClient);
+  expect(logSpy).toHaveBeenCalledWith('[Job-Service] Redis client reconnected');
+  expect(service['client'].set).toHaveBeenCalledWith("test-trace-id", "{}");
+  expect(logSpy).toHaveBeenCalledWith(`[Job-Service] [${traceId}] Job context saved to Redis.`);
+});
+
+it('should disconnect the Redis client on module destruction', async () => {
+  const mockRedisClient: Partial<RedisClientType> = {
+    isOpen: true,
+    quit: jest.fn().mockResolvedValue(undefined),
+  };
+
+  service['client'] = mockRedisClient as RedisClientType;
+
+  const logSpy = jest.spyOn(service['logger'], 'log');
+
+  await service.onModuleDestroy();
+
+  expect(service['client'].quit).toHaveBeenCalled();
+  expect(logSpy).toHaveBeenCalledWith('Redis client disconnected');
+});
+
+
+
+it('should create a Redis client and handle connection events', async () => {
+  // Mock the Redis client
+  const mockRedisClient: Partial<RedisClientType> = {
+    isOpen: false,
+    connect: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn((event, callback) => {
+      if (event === 'error') {
+        callback(new Error('Test error'));
+      } else if (event === 'connect') {
+        callback();
+      }
+      return mockRedisClient as RedisClientType;
+    }),
+  };
+
+  service['client'] = undefined; // Simulate uninitialized client
+
+  // Mock logger methods
+  const logSpy = jest.spyOn(service['logger'], 'log');
+  const errorSpy = jest.spyOn(service['logger'], 'error');
+
+  // Mock createClient to return the mock Redis client
+  jest.spyOn(redis, 'createClient').mockReturnValue(mockRedisClient as RedisClientType);
+
+  await service.createClient();
+
+  expect(redis.createClient).toHaveBeenCalled();
+  expect(service['client']).toBe(mockRedisClient);
+  expect(logSpy).toHaveBeenCalledWith(`Connecting to Redis at redis://127.0.0.1:6379`);
+  expect(mockRedisClient.connect).toHaveBeenCalled();
+  expect(errorSpy).toHaveBeenCalledWith('Redis connection error: Error: Test error');
+  expect(logSpy).toHaveBeenCalledWith('Connected to Redis');
+});
+
+
+it('should create a Redis client with authentication options', async () => {
+  // Set environment variables
+  process.env.REDIS_USERNAME = 'test-username';
+  process.env.REDIS_PASSWORD = 'test-password';
+
+  // Mock the Redis client
+  const mockRedisClient: Partial<RedisClientType> = {
+    isOpen: false,
+    connect: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn((event, callback) => {
+      if (event === 'error') {
+        callback(new Error('Test error'));
+      } else if (event === 'connect') {
+        callback();
+      }
+      return mockRedisClient as RedisClientType;
+    }),
+  };
+
+  service['client'] = undefined; // Simulate uninitialized client
+
+  // Mock logger methods
+  const logSpy = jest.spyOn(service['logger'], 'log');
+  const errorSpy = jest.spyOn(service['logger'], 'error');
+
+  // Mock createClient to return the mock Redis client
+  jest.spyOn(redis, 'createClient').mockReturnValue(mockRedisClient as RedisClientType);
+
+  await service.createClient();
+
+  expect(redis.createClient).toHaveBeenCalledWith({
+    url: 'redis://127.0.0.1:6379',
+    username: 'test-username',
+    password: 'test-password',
+  });
+  expect(service['client']).toBe(mockRedisClient);
+  expect(logSpy).toHaveBeenCalledWith(`Connecting to Redis at redis://127.0.0.1:6379`);
+  expect(mockRedisClient.connect).toHaveBeenCalled();
+  expect(errorSpy).toHaveBeenCalledWith('Redis connection error: Error: Test error');
+  expect(logSpy).toHaveBeenCalledWith('Connected to Redis');
+
+  // Clean up environment variables
+  delete process.env.REDIS_USERNAME;
+  delete process.env.REDIS_PASSWORD;
+});
 
   // it('should get the job context from Redis', async () => {
   //   const traceId = 'test-trace-id';

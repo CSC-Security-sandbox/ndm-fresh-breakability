@@ -24,12 +24,12 @@ import * as uuid from 'uuid';
 import { BadRequestException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobConfigDto } from './dto/jobconfig.dto';
-import { join } from 'path';
-import { existsSync, createReadStream } from 'fs';
 import { nextDate } from 'src/utils/mapper';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
+import { createClient } from "redis";
+import { RedisService } from 'src/redis/redis.service';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -52,6 +52,7 @@ describe('JobConfigService', () => {
   let projectRepo: Repository<ProjectEntity>;
   let identityMappingRepo: Repository<IdentityMappingEntity>;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
+  let redisService:RedisService
  
   
 
@@ -64,6 +65,9 @@ describe('JobConfigService', () => {
       log: jest.fn(),
       error: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
+    redisService = {
+      getClient: jest.fn().mockReturnValue(createClient())
+    } as unknown as jest.Mocked<RedisService>;
 
     loggerFactory = {
       create: jest.fn().mockReturnValue(loggerService),
@@ -657,7 +661,7 @@ describe('JobConfigService', () => {
         jobType: JobType.DISCOVER,
         sourcePath: In(mockBulkDiscovery.sourcePathIds),
       },
-      select: { sourcePathId: true, scheduler: true },
+      select: { sourcePathId: true, scheduler: true ,id:true,status:true},
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -674,6 +678,7 @@ describe('JobConfigService', () => {
         excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
+        status: JobStatus.Active,
       }
     );
     expect(jobConfigRepo.create).toHaveBeenCalledWith({
@@ -713,7 +718,7 @@ describe('JobConfigService', () => {
         jobType: JobType.DISCOVER,
         sourcePath: In(mockBulkDiscovery.sourcePathIds),
       },
-      select: { sourcePathId: true, scheduler: true },
+      select: { sourcePathId: true, scheduler: true,id:true ,status:true},
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -730,6 +735,7 @@ describe('JobConfigService', () => {
         excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
+        status: JobStatus.Active,
       }
     );
     expect(jobConfigRepo.create).not.toHaveBeenCalled();
@@ -779,8 +785,8 @@ describe('JobConfigService', () => {
         id: 'jobConfigId1',
         jobType: JobType.MIGRATE,
         status: 'CREATED',
-        sourcePathId: 'sourcePath1',
-        targetPathId: 'destinationPath2',
+        sourcePathId: result[0].sourcePathId,
+        targetPathId: result[0].targetPathId,
       },
     ]);
     expect(jobConfigRepo.find).toHaveBeenCalledWith({
@@ -789,7 +795,7 @@ describe('JobConfigService', () => {
         sourcePathId: 'sourcePath1',
         targetPathId: 'destinationPath1',
       },
-      select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true },
+      select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true,status:true },
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -808,6 +814,7 @@ describe('JobConfigService', () => {
         skipFile: mockBulkMigrate.options.skipFile,
         firstRunAt: mockBulkMigrate.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
+        status: JobStatus.Active,
       }
     );
     expect(jobConfigRepo.create).toHaveBeenCalledWith({

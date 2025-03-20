@@ -1877,7 +1877,7 @@ describe("JobRunService", () => {
   
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]) },
-        { status: JobRunStatus.Stopped }
+        { status: JobRunStatus.Stopped , endTime: expect.any(Date) }
       );
   
       expect(jobConfigRepo.update).toHaveBeenCalledWith(
