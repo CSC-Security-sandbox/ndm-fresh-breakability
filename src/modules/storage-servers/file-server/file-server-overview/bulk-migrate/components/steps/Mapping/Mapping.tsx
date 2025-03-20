@@ -1,11 +1,17 @@
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import { Box } from "@components/container/index";
-import { Card, FormFieldSelect, Text } from "@netapp/bxp-design-system-react";
+import {
+  Card,
+  FormFieldInputNew,
+  FormFieldSelect,
+  Text,
+} from "@netapp/bxp-design-system-react";
 import { useContext, useEffect, useMemo, useState } from "react";
 import BulkMigrateScheduleComponent from "./components/BulkMigrateScheduleComponent";
 import MountPathConfigurationTable from "./components/MountPathConfigurationTable";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { nanoid } from "@reduxjs/toolkit";
+import UploadMappingTableDetails from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/UploadMappingTableDetails";
 
 const Mapping = () => {
   const {
@@ -14,6 +20,8 @@ const Mapping = () => {
     protocolForm,
     setSelectedMountPathsId,
     setSelectedReviewIds,
+    mappingStepTableState,
+    fileName,
   } = useContext(BulkMigrateContext);
   const { setFieldValue } = mappingStepForm;
 
@@ -46,15 +54,26 @@ const Mapping = () => {
         </Box>
         <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} />
       </Card>
-      <Card className="mt-2 p-6">
-        <Box className="w-1/2 pr-16">
-          <Text>Select Protocol </Text>
+      <Card className="mt-2 p-6 flex flex-col">
+        <Text>Table mapping</Text>
+        <Box className="flex flex-grow gap-8 pt-4">
           <FormFieldSelect
             name="protocol"
             form={protocolForm}
             options={options}
             disabled={!sourceFileServerDetails}
             className="w-1/2"
+          />
+          <FormFieldInputNew
+            name="uploadFile"
+            value={fileName}
+            readOnly
+            placeholder="Upload Source to Destination Mapping"
+            inputButtons={
+              <UploadMappingTableDetails
+                toggleRowSelection={mappingStepTableState?.toggleRowSelection}
+              />
+            }
           />
         </Box>
       </Card>
