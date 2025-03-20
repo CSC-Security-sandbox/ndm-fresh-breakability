@@ -6,7 +6,9 @@ export const configApi = createApi({
   reducerPath: "configApi",
   tagTypes: ["GET_ALL_FILE_SERVERS", "GET_ALL_AGENTS", "GET_FILE_SERVER_BY_ID"],
   baseQuery: fetchBaseQuery({
-    baseUrl: window?.env?.VITE_CONFIG_SERVICE_URL || import.meta.env.VITE_CONFIG_SERVICE_URL,
+    baseUrl:
+      window?.env?.VITE_CONFIG_SERVICE_URL ||
+      import.meta.env.VITE_CONFIG_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({
@@ -35,7 +37,7 @@ export const configApi = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["GET_ALL_FILE_SERVERS"],
+      invalidatesTags: ["GET_ALL_FILE_SERVERS", "GET_FILE_SERVER_BY_ID"],
     }),
 
     // DELETE FILE SERVER
@@ -52,6 +54,7 @@ export const configApi = createApi({
         url: `/servers/${fileServerId}`,
         method: "GET",
       }),
+      providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
 
     refetchConfigExportPaths: builder.query({

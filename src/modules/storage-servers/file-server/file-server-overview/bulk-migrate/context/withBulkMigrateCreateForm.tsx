@@ -51,6 +51,7 @@ import { useFormik } from "formik";
 import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -244,7 +245,19 @@ export function withBulkMigrateCreateForm(
       }
     };
 
+    const showErrorOnFailure = (error: Error) => {
+      setIsPrecheckLoading(false);
+      setIsSubmitting(false);
+      interval.current && clearInterval(interval.current);
+
+      notify.error(
+        `Failed to perform precheck, reason - ${error?.message || "unknown"}`
+      );
+      console.error({ level: "Bulk Migrate - Precheck.", error });
+    };
+
     const handlePrecheck = (onSuccessfulSubmit?: Function) => {
+      let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
       setIsPrecheckLoading(true);
       setIsPrecheckSuccessful(false);
@@ -276,9 +289,18 @@ export function withBulkMigrateCreateForm(
                 handleSubmit(onSuccessfulSubmit);
               }
             }
+
+            if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+              const error = new Error(
+                `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+              );
+              showErrorOnFailure(error);
+            }
           }, 2000);
         })
-        .catch((e) => console.error("precheck failed", e));
+        .catch((e) => {
+          showErrorOnFailure(e);
+        });
     };
 
     const handleSubmit = async (onSuccessfulSubmit?: Function) => {
