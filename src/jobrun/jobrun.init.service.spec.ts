@@ -318,6 +318,27 @@ describe('JobRunInitService', () => {
       expect(speedTestConfigRepo.find).toHaveBeenCalled();
       expect(fileServerRepo.find).toHaveBeenCalled();
     });
+
+    it('should throw an error if jobRun is not found', async () => {
+      const jobRunId = 'jobRunId';
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+
+      const speedTestConfigFindSpy = jest.spyOn(speedTestConfigRepo, 'find');
+      const fileServerFindSpy = jest.spyOn(fileServerRepo, 'find');
+
+      await expect(service.getFileServerDetails(jobRunId)).rejects.toThrow(
+        `JobRun with id ${jobRunId} not found`
+      );
+
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId },
+        relations: ['jobConfig'],
+      });
+
+      expect(speedTestConfigFindSpy).not.toHaveBeenCalled();
+      expect(fileServerFindSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('initiateWorkflow', () => {
@@ -585,11 +606,35 @@ describe('createInitialTask', () => {
     });
 });
   describe('getWorkFlowId', () => {
-    it('should return the workflow ID based on the job type', () => {
+    it('should return the workflow ID based on the job type DISCOVER', () => {
       const jobRunId = 'jobRunId';
       const workflowId = `${WorkFlows.DISCOVERY}-${jobRunId}`;
 
       const result = service.getWorkFlowId(jobRunId, JobType.DISCOVER);
+
+      expect(result).toEqual(workflowId);
+    });
+    it('should return the workflow ID based on the job type CUT_OVER', () => {
+      const jobRunId = 'jobRunId';
+      const workflowId = `${WorkFlows.CUT_OVER}-${jobRunId}`;
+
+      const result = service.getWorkFlowId(jobRunId, JobType.CUT_OVER);
+
+      expect(result).toEqual(workflowId);
+    });
+    it('should return the workflow ID based on the job type PRECHECK', () => {
+      const jobRunId = 'jobRunId';
+      const workflowId = `${WorkFlows.PRECHECK}-${jobRunId}`;
+
+      const result = service.getWorkFlowId(jobRunId, JobType.PRECHECK);
+
+      expect(result).toEqual(workflowId);
+    });
+    it('should return the workflow ID based on the job type MIGRATE', () => {
+      const jobRunId = 'jobRunId';
+      const workflowId = `${WorkFlows.MIGRATE}-${jobRunId}`;
+
+      const result = service.getWorkFlowId(jobRunId, JobType.MIGRATE);
 
       expect(result).toEqual(workflowId);
     });
