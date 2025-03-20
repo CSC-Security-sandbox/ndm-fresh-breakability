@@ -1,20 +1,13 @@
 import { Module } from '@nestjs/common';
-import { RedisConsumerService } from './redis-consumer.service';
 import { RedisConsumerController } from './redis-consumer.controller';
-import { ScheduleModule } from '@nestjs/schedule';
-import { InventoryService } from 'src/inventory/inventory.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { TaskEntity } from 'src/entities/task.entity';
-import { OperationsEntity } from 'src/entities/operation.entity';
-import { OperationErrorEntity } from 'src/entities/operation-error.entity';
-import { TaskErrorEntity } from 'src/entities/task-error.entity';
-import { WorkflowService } from 'src/workflow/workflow.service';
+import { RedisConsumerService } from './redis-consumer.service';
+import { InventoryModule } from 'src/inventory/inventory.module';
+import { WorkflowModule } from 'src/workflow/workflow.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(),  
-    TypeOrmModule.forFeature([InventoryEntity,TaskEntity,OperationsEntity, OperationErrorEntity, TaskErrorEntity]),],
+  imports: [InventoryModule,WorkflowModule],
   controllers: [RedisConsumerController],
-  providers: [RedisConsumerService,InventoryService,WorkflowService],
+  providers: [RedisConsumerService],
+  exports: [RedisConsumerService],
 })
 export class RedisConsumerModule {}

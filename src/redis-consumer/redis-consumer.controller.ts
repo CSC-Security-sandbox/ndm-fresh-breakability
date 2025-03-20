@@ -1,37 +1,84 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
-import { RedisConsumerService } from "./redis-consumer.service";
-import { ConsumerDto } from "./consumer-dto";
-import { ApiBody } from "@nestjs/swagger";
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { ApiBody, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ConsumerDto } from './redis-consumer.dto';
+import { ConsumerType, RedisConsumerService } from './redis-consumer.service';
 
-@Controller("redis-consumer")
+@ApiTags('Redis Consumer') // Swagger tag for grouping APIs
+@Controller('redis-consumer')
 export class RedisConsumerController {
-  constructor(private readonly redisConsumerService: RedisConsumerService) {}
+    constructor(private redisConsumerService: RedisConsumerService) {}
 
-  
-  @Post("start")
-  @ApiBody({ description: 'Consumer Details', type: ConsumerDto })
-  async start(
-   @Body() consumerDto: ConsumerDto,
-  ) {
-    const {jobRunId, readerName, consumerType } = consumerDto;  
-   const result =  await this.redisConsumerService.startConsumer(jobRunId, readerName, consumerType);
-   return result;
-  }
+    /**
+     * Start a consumer for a specific job.
+     */
+    @Post('start')
+    @ApiBody({ description: 'Consumer Details', type: ConsumerDto })
+    @ApiResponse({ status: 200, description: 'Consumer started successfully.' })
+    @ApiResponse({ status: 400, description: 'Invalid input data.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
+    async start(@Body() consumerDto: ConsumerDto) {
+        const { jobRunId, readerName, consumerType } = consumerDto;
+         this.redisConsumerService.startConsumer(jobRunId, readerName, consumerType);
+        return { success: true, message: 'Consumer started successfully.' };
+    }
 
-  @Post("stop/:jobRunId/:consumerType")
-  async stop(@Param("jobRunId") jobRunId: string, @Param("consumerType") consumerType: string) {
-   const response= await this.redisConsumerService.stopConsumer(jobRunId, consumerType);
-    return response;
-  }
+    /**
+     * Stop a consumer for a specific job.
+     */
+    @Post('stop')
+    @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
+    @ApiQuery({ name: 'consumerType', enum: ConsumerType, required: false, description: 'The type of consumer to stop.' })
+    @ApiQuery({ name: 'all', type: Boolean, required: false, description: 'Stop all consumers for the job.' })
+    @ApiResponse({ status: 200, description: 'Consumer stopped successfully.' })
+    @ApiResponse({ status: 400, description: 'Invalid input data.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
+    async stop(
+        @Query('jobRunId') jobRunId: string,
+        @Query('consumerType') consumerType?: ConsumerType,
+        @Query('all') all?: boolean,
+    ) {
+        await this.redisConsumerService.stopConsumer(jobRunId, consumerType, all === true);
+        return { success: true, message: 'Consumer stopped successfully.' };
+    }
 
-  @Post("delete/:jobRunId/:consumerType")
-  async delete(@Param("jobRunId") jobRunId: string, @Param("consumerType") consumerType: string) {
-   const response= await this.redisConsumerService.stopConsumer(jobRunId, consumerType);
-    return response;
-  }
+    /**
+     * List all active consumers.
+     */
+    @Get('active-consumers')
+    @ApiResponse({ status: 200, description: 'List of active consumers retrieved successfully.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
+    async listActiveConsumers() {
+        const activeConsumers = await this.redisConsumerService.listActiveConsumers();
+        return { success: true, data: activeConsumers };
+    }
 
-  @Get('list')
-  async listWorkers() {
-    return this.redisConsumerService.listConsumers();
-  }
+    // /**
+    //  * List all pending tasks.
+    //  */
+    // @Get('pending-tasks')
+    // @ApiResponse({ status: 200, description: 'List of pending tasks retrieved successfully.' })
+    // @ApiResponse({ status: 500, description: 'Internal server error.' })
+    // async listPendingTasks() {
+    //     const pendingTasks = await this.redisConsumerService.getPendingTasks();
+    //     return { success: true, data: pendingTasks };
+    // }
+
+    /**
+     * Check if a consumer is running.
+     */
+    @Get('is-running')
+    @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
+    @ApiQuery({ name: 'consumerType', enum: ConsumerType, description: 'The type of consumer to check.' })
+    @ApiResponse({ status: 200, description: 'Consumer status retrieved successfully.' })
+    @ApiResponse({ status: 400, description: 'Invalid input data.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
+    async isConsumerRunning(
+        @Query('jobRunId') jobRunId: string,
+        @Query('consumerType') consumerType: ConsumerType,
+    ) {
+        const isRunning = await this.redisConsumerService.isConsumerRunning(
+            this.redisConsumerService.getConsumerKey(jobRunId, consumerType),
+        );
+        return { success: true, isRunning };
+    }
 }

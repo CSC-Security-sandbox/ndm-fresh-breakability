@@ -27,7 +27,7 @@ export class InventoryEntity {
     @Column({ name: 'target_checksum' ,type:'text',nullable : true})
     targetChecksum: string;
 
-    @ApiProperty({ description: 'Parent Path', type: 'text' })
+    @ApiProperty({ description: 'Parent Path', type: 'string' })
     @Column({ name: 'parent_path' })
     parentPath: string;
 

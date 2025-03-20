@@ -20,9 +20,6 @@ export class TaskErrorEntity {
   
   @Column({ type: "text", name: 'error_message' })
   errorMessage: string;
-
-  @Column({ type: "text", name: 'error_type' })
-  errorType: string;
   
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

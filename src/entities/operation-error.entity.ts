@@ -22,15 +22,6 @@ export class OperationErrorEntity {
   @Column({ type: "text", name: 'error_message' })
   errorMessage: string;
 
-  @Column({ type: "text", name: 'error_type' })
-  errorType: string;
-
-  @Column({ type: "text", name: 'origin' })
-  origin: string;
-
-  @Column({ type: "text", name: 'operation_type' })
-  operationType: string;
-
   @Column({ type: "text", name: 'file_name' })
   fileName: string;
 
