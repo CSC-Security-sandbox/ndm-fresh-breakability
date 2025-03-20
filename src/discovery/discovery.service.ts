@@ -27,8 +27,6 @@ export class DiscoveryService {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
   }
 
-  private readonly reportLocation = process.env.COC_REPORT_PATH || '/coc/reports'
-
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
