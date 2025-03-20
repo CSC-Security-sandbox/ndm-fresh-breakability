@@ -55,7 +55,7 @@ const Mapping = () => {
         <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} />
       </Card>
       <Card className="mt-2 p-6 flex flex-col">
-        <Text>Table mapping </Text>
+        <Text>Table mapping</Text>
         <Box className="flex flex-grow gap-8 pt-4">
           <FormFieldSelect
             name="protocol"

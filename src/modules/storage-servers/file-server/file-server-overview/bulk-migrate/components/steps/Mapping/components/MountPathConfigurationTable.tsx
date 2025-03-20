@@ -49,7 +49,6 @@ export const MountPathConfigurationTable = () => {
     <Box>
       <Box className="flex justify-end my-3">
         <Box className="flex gap-3 items-center">
-          <Box className="flex-grow"></Box>
           <SearchWidget setFilter={updateTextFilter} />
           <Button variant="icon" onClick={handleTableDownload}>
             <DownloadMonochromeIcon />
