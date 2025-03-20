@@ -2,18 +2,16 @@ import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/WorkerInstructions";
-import useWorkers from "@hooks/useWorkers";
+import useFetchWorkers from "@hooks/useFetchWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { useParams } from "react-router-dom";
-import { useGetFileServerWorkersQuery } from "@api/jobsApi";
 
 const Workers = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const { jobRunId } = useParams();
-  const { data: workers, isLoading } = useGetFileServerWorkersQuery({
-    jobRunId: jobRunId,
-  });
+  const { workers, isLoading } = useFetchWorkers(jobRunId);
+
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
     rows: workers,
