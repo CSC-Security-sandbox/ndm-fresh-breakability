@@ -6,11 +6,13 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { Repository } from 'typeorm';
 import { BadRequestException } from '@nestjs/common';
-import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+import { BulkMigrateJobConfig, MigrateConfig } from './dto/bulkMigrateJob.dto';
 import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
 import { Response } from 'express';
-import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
+import { JobConfigBulkMigrateResStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
+import { JobConfigSpeedTest } from './dto/jobspeedTest.dto';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -28,6 +30,8 @@ describe('JobConfigController', () => {
     deleteJobConfig: jest.fn(),
     getTemplateFilename: jest.fn(),
     sendCsvFile: jest.fn(),
+    getNoticeBoardDetailsByProjectId: jest.fn(),
+    precheckValidation: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -197,5 +201,43 @@ describe('JobConfigController', () => {
     });
   });
 });
-});
+it('should return the result of precheck validation', async () => {
+  const precheckData: JobConfigPrecheck = {
+    migrateConfigs: [{ sourcePathId: '123', destinationPathId: ['456'] }],
+    preserveAccessTime: true,
+  }
+  const expectedResult: any =  { "workflowId":"133"};
 
+  mockJobConfigService.precheck.mockResolvedValue(expectedResult);  
+
+  const result = await controller.precheck(precheckData);
+
+  expect(result).toEqual(expectedResult);
+  expect(service.precheck).toHaveBeenCalledWith(precheckData);
+});
+describe('checkCommonWorkersAndValidatePaths', () => {
+  it('should return the result of precheck validation', async () => {
+    const precheckData: MigrateConfig[] = [
+      { sourcePathId: '123', destinationPathId: ['456'] },
+      { sourcePathId: '789', destinationPathId: ['012'] },
+    ];
+    const expectedResult: any[] = [{ success: true }];
+
+    mockJobConfigService.precheckValidation.mockResolvedValue(expectedResult);
+    const result = await controller.checkCommonWorkersAndValidatePaths(precheckData);
+
+    expect(result).toEqual(expectedResult);
+    expect(service.precheckValidation).toHaveBeenCalledWith(precheckData);
+  });
+});
+describe('createSpeedTest with bad data', () => {
+  it('should throw BadRequestException if speedTests is empty', async () => {
+    const speedTest: JobConfigSpeedTest = {
+      speedTests: [],
+      firstRunAt: new Date(),
+    };
+    await expect(controller.createSpeedTest(speedTest)).rejects.toThrow(BadRequestException);
+    await expect(controller.createSpeedTest(speedTest)).rejects.toThrow('Source path IDs cannot be empty.');
+  });
+});
+});

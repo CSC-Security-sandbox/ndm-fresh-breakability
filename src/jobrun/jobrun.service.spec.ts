@@ -6,13 +6,13 @@ import { JobConfigEntity } from "../entities/jobconfig.entity";
 import { WorkerJobRunMap } from "../entities/workerjobrun.entity";
 import { CutOverStatus, JobRunStatus, JobStatus, JobType, Protocol, WorkFlows } from "src/constants/enums";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { Any, Repository } from "typeorm";
+import { Any, In, Repository, UpdateResult } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { ConfigService } from "@nestjs/config";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { ErrorType, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ErrorType, JobContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { TaskEntity } from "src/entities/task.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
@@ -25,7 +25,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { RedisService } from "src/redis/redis.service";
 import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
-import { ApprovalRequestDTO } from "./dto/jobrunactions.dto";
+import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
 import { ScheduleStatus } from "src/constants/status";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
@@ -36,6 +36,8 @@ import { NetworkPerformanceResultEntity, SpeedLogEntity, SpeedLogEntryEntity, Sp
 import { WorkerEntity } from "src/entities/worker.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -50,6 +52,9 @@ describe("JobRunService", () => {
   let configService: ConfigService;
   let jobConfigService: JobConfigService;
   let operationErrorRepo: Repository<OperationErrorEntity>;
+  let identityMappingRepo: Repository<IdentityMappingEntity>;
+  let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
+  let redisService: RedisService;
   
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -235,6 +240,7 @@ describe("JobRunService", () => {
             count: jest.fn(),
             createQueryBuilder: jest.fn(),
             update: jest.fn(),
+            delete:jest.fn()
           },
         },
         {
@@ -293,11 +299,53 @@ describe("JobRunService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(IdentityMappingEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },{
+          provide: getRepositoryToken(IdentityConfigCrossMappingEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         {
           provide: WorkflowService,
           useValue: {
             startWorkflow: jest.fn(),
+            terminateWorkflow: jest.fn(),
+            getWorkflowStatus : jest.fn(),
+          },
+        },
+        {
+          provide: RedisService,
+          useValue: {
+            getJobContext: jest.fn(),
+            setJobContext: jest.fn(),
           },
         },
         ConfigService,
@@ -312,7 +360,9 @@ describe("JobRunService", () => {
     jobRunInitService = module.get<JobRunInitService>(JobRunInitService);
     jobConfigService = module.get<JobConfigService>(JobConfigService);
     operationErrorRepo = module.get<Repository<OperationErrorEntity>>(getRepositoryToken(OperationErrorEntity));
-   
+    identityMappingRepo = module.get<Repository<IdentityMappingEntity>>(getRepositoryToken(IdentityMappingEntity));
+    identityCrossMappingRepo = module.get<Repository<IdentityConfigCrossMappingEntity>>(getRepositoryToken(IdentityConfigCrossMappingEntity));
+    redisService = module.get<RedisService>(RedisService);
  
     jobRunRepo = module.get<Repository<JobRunEntity>>(
       getRepositoryToken(JobRunEntity)
@@ -1683,5 +1733,202 @@ describe("JobRunService", () => {
        },
      } );
   });
+
+  describe('actions', () => {
+    it('should pause job runs', async () => {
+      const jobRunActions: JobRunActionsReq = {
+        action: JobRunActions.PAUSE,
+        jobRuns: ['jobRun1', 'jobRun2'],
+      };
+      jest.spyOn(service, 'pauseJobRuns').mockResolvedValue({ details: 'Operation Completed Successfully' } as any);
+
+      const result = await service.actions(jobRunActions);
+
+      expect(result).toBeDefined();
+      expect(result.details).toBe('Operation Completed Successfully');
+    });
+
+    it('should stop job runs', async () => {
+      const jobRunActions: JobRunActionsReq = {
+        action: JobRunActions.STOP,
+        jobRuns: ['jobRun1', 'jobRun2'],
+      };
+        jest.spyOn(service, 'stopJobRuns').mockResolvedValueOnce({ details: 'Operation Completed Successfully' } as any);
+      const result = await service.actions(jobRunActions);
+
+      expect(result).toBeDefined();
+      expect(result.details).toBe('Operation Completed Successfully');
+    });
+
+    it('should resume job runs', async () => {
+      const jobRunActions: JobRunActionsReq = {
+        action: JobRunActions.RESUME,
+        jobRuns: ['jobRun1', 'jobRun2'],
+      };
+      jest.spyOn(service, 'resumeJobRuns').mockResolvedValueOnce({ details: 'Operation Completed Successfully' } as any);
+      const result = await service.actions(jobRunActions);
+      expect(result).toBeDefined();
+      expect(result.details).toBe('Operation Completed Successfully');
+    });
+  });
+  describe('pauseJobRuns', () => {
+    it('should pause the job runs and update their status', async () => {
+      const jobRuns = ['jobRunId1', 'jobRunId2'];
+      const jobContextMock = { jobState: { status: JobRunStatus.Paused } };
+      const workerJobRunMapUpdateSpy = jest.spyOn(workerJobRunMapRepo, 'update').mockResolvedValue(undefined);
+      const jobRunRepoUpdateSpy = jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+      jest.spyOn(redisService, 'getJobContext').mockResolvedValue(jobContextMock as any);
+
+      await service.pauseJobRuns(jobRuns);
+
+      expect(workerJobRunMapUpdateSpy).toHaveBeenCalledWith({ jobRunId: In(jobRuns) }, { isActive: false });
+      expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith({ id: In(jobRuns) }, { status: JobRunStatus.Paused });
+    });
+
+    it('should update the job context and return success message', async () => {
+      const jobRuns = ['jobRunId1', 'jobRunId2'];
+      const jobContextMock = { jobState: { status: JobRunStatus.Paused } };
+      const getJobContextSpy = jest.spyOn(redisService, 'getJobContext').mockResolvedValue(jobContextMock as any);
+      const setJobContextSpy = jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+    
+      const result = await service.pauseJobRuns(jobRuns);
+
+      expect(getJobContextSpy).toHaveBeenCalledTimes(jobRuns.length);
+      expect(setJobContextSpy).toHaveBeenCalledTimes(jobRuns.length);
+      expect(result).toEqual({ details: 'Operation Completed Successfully' });
+    });
+  });
+  describe('updateJobRunStatus', () => {
+    it('should update the job run status and job config scheduler when status is not running', async () => {
+      const jobRunId = '1';
+      const status = JobRunStatus.Completed;
+      const jobRunDetails = {
+        id: jobRunId,
+        jobConfigId: '1',
+      };
+      const jobConfigDetails = {
+        id: '1',
+        futureScheduleAt: '0 0 * * *',
+      };
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRunDetails as any);
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfigDetails as any);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue(undefined);
+      jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, status);
+
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunDetails.jobConfigId } });
+      expect(jobConfigRepo.update).toHaveBeenCalledWith({ id: jobConfigDetails.id }, { firstRunAt: expect.any(Date), scheduler: ScheduleStatus.SCHEDULING });
+      expect(jobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { status: status, endTime: expect.any(Date) });
+    });
+
+    it('should update the job run status when status is running', async () => {
+      const jobRunId = '1';
+      const status = JobRunStatus.Running;
+      const jobRunDetails = {
+        id: jobRunId,
+        jobConfigId: '1',
+      };
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRunDetails as any);
+      jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, status);
+
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
+      expect(jobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { status: status });
+    });
+  });  
+  describe('stopJobRuns', () => {
+    it('should stop job runs and update repositories correctly', async () => {
+      const jobRuns = ['jobRun1', 'jobRun2'];
+      const mappings = [
+        { workerId: 'worker1', jobRunId: 'jobRun1' },
+        { workerId: 'worker2', jobRunId: 'jobRun2' },
+      ];
+      const jobRunConfigs = [{ jobConfigId: 'config1' }, { jobConfigId: 'config2' }];
+      const jobContextMock = {
+        jobConfig: { jobType: 'SOME_JOB_TYPE' },
+        jobState: { status: 'RUNNING' },
+        appendToFileList: jest.fn(),
+        cleanup: jest.fn(),
+      };
+      
+      jest.spyOn(global, 'setTimeout').mockImplementation((fn) => (fn as any)());
+      jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mappings as any);  
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue(jobRunConfigs as any);
+      jest.spyOn(redisService, 'getJobContext').mockResolvedValue(jobContextMock as any);
+      const result = await service.stopJobRuns(jobRuns);
+
   
+      expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
+        where: { jobRunId: In(jobRuns), isActive: true },
+        select: { workerId: true, jobRunId: true },
+      });
+  
+      expect(workerJobRunMapRepo.delete).toHaveBeenCalledWith({ jobRunId: In(jobRuns) });
+  
+      expect(jobRunRepo.find).toHaveBeenCalledWith({
+        where: { id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running]) },
+        select: { jobConfigId: true },
+      });
+  
+      expect(jobRunRepo.update).toHaveBeenCalledWith(
+        { id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]) },
+        { status: JobRunStatus.Stopped , endTime: expect.any(Date) }
+      );
+  
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { id: In(jobRunConfigs.map((jobRun) => jobRun.jobConfigId)) },
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+      );
+  
+      expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
+      expect(workFlowService.terminateWorkflow).toHaveBeenCalledTimes(jobRuns.length);
+      expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
+      expect(jobContextMock.appendToFileList).toHaveBeenCalledTimes(jobRuns.length);
+      expect(jobContextMock.cleanup).toHaveBeenCalledTimes(jobRuns.length);
+  
+      expect(result).toEqual({ details: 'Operation Completed Successfully' });
+  
+      jest.restoreAllMocks();
+    });
+  }); 
+  describe('resumeJobRuns', () =>{
+   
+    it('should resume job runs and update statuses correctly', async () => {
+      const jobRuns = ['jobRunId1'];
+      const jobContextMock = {
+        jobConfig: { jobType: 'SOME_JOB_TYPE' },
+        jobState: { status: 'RUNNING',tasks_total: 1 },
+        appendToFileList: jest.fn(),
+        cleanup: jest.fn(),
+      };
+    
+     jest.spyOn(redisService, 'getJobContext').mockResolvedValue(jobContextMock as any);
+     jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue({ id: 'jobRunId1', status: JobRunStatus.Paused } as any);
+    
+     jest.spyOn(jobRunInitService,'getJobConfig').mockResolvedValue({jobType:JobType.MIGRATE,workers:1} as any)   
+      const result = await service.resumeJobRuns(jobRuns);   
+      expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
+        where: { jobRunId: In(jobRuns) },
+        select: { workerId: true },
+      });
+      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
+        { jobRunId: In(jobRuns) },
+        { isActive: true },
+      );
+      expect(jobRunRepo.update).toHaveBeenCalledWith(
+        { id: In(jobRuns), status: JobRunStatus.Paused },
+        { status: JobRunStatus.Running },
+      );
+  
+      expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
+      expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
+      expect(result).toEqual({ details: 'Operation Completed Successfully' });
+
+  });
+});
 });

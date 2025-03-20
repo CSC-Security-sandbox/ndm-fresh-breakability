@@ -51,7 +51,6 @@ import { RedisService } from "src/redis/redis.service";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
-import IdentityMap from "./identityMap";
 import { Readable } from "stream";
 
 @Injectable()
@@ -166,9 +165,9 @@ export class JobRunInitService {
       ) || [];
 
     const details: JobRunConfig = {
-      preserveAccessTime: jobConfig.preserveAccessTime,
-      excludeFilePatterns: jobConfig.excludeFilePatterns,
-      excludeOlderThan: jobConfig.excludeOlderThan,
+      preserveAccessTime: jobConfig?.preserveAccessTime,
+      excludeFilePatterns: jobConfig?.excludeFilePatterns,
+      excludeOlderThan: jobConfig?.excludeOlderThan,
       connection: {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
@@ -182,7 +181,7 @@ export class JobRunInitService {
         },
       },
       workers: workers,
-      jobType: jobConfig.jobType,
+      jobType: jobConfig?.jobType,
     };
     return details;
   }
@@ -251,6 +250,7 @@ export class JobRunInitService {
     }
     return details;
   }
+  
   async getFileServerDetails(jobRunId): Promise<any> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
@@ -401,9 +401,6 @@ export class JobRunInitService {
       throw new Error(`JobRun with id ${jobRunId} not found`);
     }
     const jobConfig = new SpeedTestJobConfig(jobRunId, jobRunConfig.jobType);
-
-    const redisClient = await RedisUtils.getClient();
-    if (!redisClient.isOpen) await redisClient.connect();
     const jobState: JobState = new JobState(
       [],
       0,

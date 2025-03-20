@@ -174,7 +174,6 @@ export class JobRunService {
       // append dummy file entry to appendToFileList to close consumers and then start new consumers
       await jobContext.appendToFileList(this.dummyFileEntry());
       // wait for 5 seconds to close consumers
-      await new Promise((resolve) => setTimeout(resolve, 5000));
       this.logger.debug(`Resuming Job Run ${jobRunId} and appended Last file entry to file list to clone old consumers`);
       await this.redisService.setJobContext(jobRunId, jobContext);
       await this.resumeJobRun(jobRunId);
@@ -187,7 +186,7 @@ export class JobRunService {
       const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
       if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
       const details:JobRunConfig = await this.jobRunInitService.getJobConfig(jobRun.jobConfigId);
-      if(details.workers.length === 0) {
+      if(details.workers?.length === 0) {
         this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
         return;
       }
