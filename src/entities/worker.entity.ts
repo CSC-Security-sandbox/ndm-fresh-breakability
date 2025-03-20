@@ -1,9 +1,11 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, ManyToMany } from 'typeorm';
+import { Entity, Column, PrimaryColumn, ManyToOne, JoinColumn, ManyToMany, OneToMany } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { WorkerStatus } from 'src/constants/enums';
-import { ProjectEntity } from './project.entity';
+import { WorkerConfiguration } from 'src/constants/types';
 import { Base } from './base.entity';
+import { ProjectEntity } from './project.entity';
 import { FileServerEntity } from './fileserver.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 
 @Entity({name:'worker'})
 export class WorkerEntity extends Base  {
@@ -14,11 +16,6 @@ export class WorkerEntity extends Base  {
   @ApiProperty({ description: 'projectId' })
   @Column({ type: 'uuid', nullable: false , name: 'project_id'})
   projectId: string;
-
-
-  @ApiProperty({ description: 'clientId' })
-  @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
-  clientId: string;
 
   @ApiProperty({ description: 'workerName' })
   @Column({ type: 'varchar', length: 255, nullable: false, name:'worker_name' })
@@ -36,7 +33,16 @@ export class WorkerEntity extends Base  {
   @Column({ type: 'varchar', name:'status' })
   status: WorkerStatus;
 
-  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers,{cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
+  @ApiProperty({ description: 'workerNumber' })
+  @Column({ type: 'int', generated: 'increment', name: 'worker_number' })
+  workerNumber: number;
+
+  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  metaConfig: WorkerConfiguration[];
+
+  @ManyToMany(() => FileServerEntity, fileServers=>fileServers.workers, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE', onUpdate:'CASCADE'})
   fileServers: FileServerEntity[];
 
+  @OneToMany(()=>WorkerJobRunMap, jobRunMap=>jobRunMap.worker, { cascade: true,  eager: false})
+  jobRunMap: WorkerJobRunMap[]
 }

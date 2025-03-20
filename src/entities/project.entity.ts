@@ -1,8 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
-
+import { WorkerEntity } from "./worker.entity";
 import { ConfigEntity } from "./config.entity";
 
 @Entity({name:'project'})
@@ -23,5 +22,4 @@ export class ProjectEntity extends Base {
     
     @OneToMany(()=> ConfigEntity, config=>config.project, {cascade: true, orphanedRowAction: 'delete', onDelete:'CASCADE' })
     configs: ConfigEntity[]
-
 }

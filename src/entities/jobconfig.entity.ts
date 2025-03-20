@@ -4,7 +4,6 @@ import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
 
-
 export enum JobStatus {
   Active = 'ACTIVE',
   InActive = 'IN_ACTIVE',
@@ -16,7 +15,6 @@ export enum JobType {
   CutOver = 'CUT_OVER',
   SpeedTest = 'SPEED_TEST',
 }
-
 
 @Entity({ name: 'jobconfig' })
 export class JobConfigEntity extends Base {

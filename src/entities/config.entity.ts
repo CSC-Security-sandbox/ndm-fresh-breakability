@@ -3,8 +3,8 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToOne, OneToMany, PrimaryGene
 import { Base } from "./base.entity";
 import { FileServerEntity } from "./fileserver.entity";
 import { ProjectEntity } from "./project.entity";
-import { ConfigStatus } from "src/constants/enums";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
+import { ConfigStatus } from "src/constants/enums";
 
 @Entity({name:'config'})
 export class ConfigEntity extends Base {
@@ -31,6 +31,10 @@ export class ConfigEntity extends Base {
     @ApiProperty({ description: 'Scanned Date' })
     @Column({ name: 'scanned_date' , nullable : true, type : 'timestamp without time zone'})
     scannedDate: Date;
+
+    @ApiProperty({ description: 'Error message' })
+    @Column({ name: 'error_message', type: 'text', nullable: true })
+    errorMessage: string;
 
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]

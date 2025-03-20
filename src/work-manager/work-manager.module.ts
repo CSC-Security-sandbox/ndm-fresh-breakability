@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import appConfig from 'src/config/app.config';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { WorkflowModule } from 'src/workflow/workflow.module';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { WorkManagerController } from './work-manager.controller';
+import { WorkManagerService } from './work-manager.service';
+
+@Module({
+  imports: [
+    LoggerModule.forRoot(),
+    ConfigModule.forRoot({ load: [appConfig] }),
+    TypeOrmModule.forFeature([WorkerEntity,JobRunEntity, ConfigEntity]),
+    WorkflowModule,
+    AuthKeycloakModule
+  ],
+  controllers: [WorkManagerController],
+  providers: [WorkManagerService]
+})
+export class WorkManagerModule {}

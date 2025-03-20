@@ -1,37 +1,48 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { FindManyOptions, In, Repository } from 'typeorm';
+import { validate as isUUID } from 'uuid';
+import { ConfigStatus, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
-import { WorkerEntity } from 'src/entities/worker.entity';
-import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
-import { FindManyOptions, In, Repository } from 'typeorm';
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { Credentials } from './configuration.types';
-import { ConfigDTO } from './dto/config.dto';
-import { FindallConfigPageDto } from './dto/findallconfig.dto';
-import { ConfigStatus, RabbitMq } from 'src/constants/enums';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
-
-
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigDTO } from './dto/config.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
+import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
+import { CreateRequestDto, Options } from 'src/work-manager/dto/validate-connection.dto';
+import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
+import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
+import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 
 @Injectable()
 export class ConfigurationService {
-    private logger: Logger = new Logger(ConfigurationService.name)
+    private logger : LoggerService
     constructor(
         @InjectRepository(ConfigEntity)
         private readonly configEntity: Repository<ConfigEntity>,
         @InjectRepository(FileServerEntity)
         private readonly fileServerEntity: Repository<FileServerEntity>,
+        @InjectRepository(VolumeEntity)
+        private readonly volumes: Repository<VolumeEntity>,
         @InjectRepository(FileServerWorkingDirectoryMappingEntity)
         private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
-        private rabbitMQService: RabbitMQService
-        
-    ) {}
+        private loggerFactory: LoggerFactory,
+        private readonly workFlowService: WorkflowService
+    ) {
+        this.logger = this.loggerFactory.create(ConfigurationService.name)
+    }
 
-    async getAllConfig(findallConfigPageDto: FindallConfigPageDto) {
-        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findallConfigPageDto;
+    async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
+      try {
+        const { page, limit, sort = 'createdAt', order = 'ASC', ...filter } = findAllConfigPageDto;
         
         const findOptions: FindManyOptions<ConfigEntity> = {
           where: filter, order: { [sort]: order }, 
@@ -44,6 +55,7 @@ export class ConfigurationService {
             createdBy: true,
             scannedDate: true,
             status: true,
+            errorMessage: true,
             fileServers:{
                 id: true,
                 host: true,
@@ -71,9 +83,14 @@ export class ConfigurationService {
             total = await this.configEntity.count();
         }
         return { serverConfig, total };
+      } catch (error) {
+        this.logger.error(`Error fetching configurations: ${error.message}`);
+        throw new InternalServerErrorException('Failed to fetch configurations');
+      }
     }
 
     async getConfigById(id: string) {
+        try {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
         const config =  await this.configEntity.findOne({
@@ -127,13 +144,200 @@ export class ConfigurationService {
                 workingDirectory: true 
             }
         });
-
-        
+     
         if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
-        return config
+        return config;
+        } catch (error) {
+            this.logger.error(`Error fetching config by ID: ${error.message}`);
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Failed to retrieve configuration for ID: ${id}`);
+        }
     }
 
-    async createConfiguration(createConfig: ConfigDTO, userId: string) {
+    async getCutoverDetailsByConfigId(configId: string) {
+        if (!isUUID(configId)) {
+            throw new BadRequestException('Invalid configId');
+        }
+    
+        try {
+            const config = await this.fetchConfigWithRelations(configId);
+            const validJobConfigs = this.extractValidJobConfigs(config);
+            if (validJobConfigs.length === 0) return [];
+    
+            const volumeMap = await this.getVolumeDetailsMap(validJobConfigs);
+            return this.constructResponse(validJobConfigs, volumeMap);
+        } catch (error) {
+            this.logger.error(`Error fetching cutover details: ${error.message}`);
+            throw new InternalServerErrorException('An error occurred while processing the request.');
+        }
+    }
+    
+    private async fetchConfigWithRelations(configId: string) {
+        try {
+            const config = await this.configEntity.findOne({
+                select: {
+                    id: true,
+                    configName: true,
+                    configType: true,
+                    fileServers: {
+                        id: true,
+                        host: true,
+                        serverType: true,
+                        protocol: true,
+                        volumes: {
+                            id: true,
+                            volumePath: true,
+                            jobConfig: {
+                                id: true,
+                                jobType: true,
+                                sourcePathId: true,
+                                targetPathId: true
+                            }
+                        }
+                    }
+                },
+                where: { id: configId, fileServers: {
+                        volumes: {
+                            jobConfig: {
+                                status: JobStatus.Active
+                            }
+                        }
+                }},
+                relations: {
+                    fileServers: {
+                        volumes: {
+                            jobConfig: {
+                                jobRunDetails: true
+                            }
+                        }
+                    }
+                }
+            });
+        
+            if (!config) {
+                throw new NotFoundException(`Config for id ${configId} not found.`);
+            }
+        
+            return config;
+        } catch (error) {
+            this.logger.error(`Error fetching config with relations: ${error.message}`);
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Failed to fetch config details.');
+        }
+    }
+    
+    private extractValidJobConfigs(config: ConfigEntity) {
+      try {
+        return config.fileServers.flatMap(fileServer =>
+            fileServer.volumes.flatMap(volume =>
+                volume.jobConfig
+                    .filter(jobConfig =>
+                        jobConfig.jobType === JobType.Migrate  && jobConfig.status !== JobStatus.InActive &&
+                        jobConfig.jobRunDetails.some(jobRun => jobRun.status === JobRunStatus.Completed)
+                    )
+                    .map(job => ({
+                        protocol: fileServer.protocol,
+                        sourcePathId: job.sourcePathId,
+                        targetPathId: job.targetPathId,
+                        jobConfig: {
+                            id: job.id,
+                            jobType: job.jobType,
+                            jobRunDetails: job.jobRunDetails.map(runDetail => ({
+                                id: runDetail.id,
+                                status: runDetail.status
+                            }))
+                        }
+                    }))
+            )
+        );
+      } catch (error) {
+        this.logger.error(`Error extracting valid job configs: ${error.message}`);
+        throw new InternalServerErrorException('Failed to extract valid job configurations.');
+      }
+    }
+    
+    private async getVolumeDetailsMap(validJobConfigs: any[]) {
+        try {
+            const volumeIds = [
+                ...new Set(validJobConfigs.flatMap(job => [job.sourcePathId, job.targetPathId]))
+            ].filter(Boolean);
+        
+            if (volumeIds.length === 0) {
+                throw new NotFoundException('No valid volumes found for the given config.');
+            }
+        
+            const volumeDetails = await this.volumes.find({
+                where: { id: In(volumeIds) },
+                relations: ['fileServer', 'fileServer.config'],
+                select: {
+                    id: true,
+                    volumePath: true,
+                    fileServer: {
+                        id: true,
+                        config: {
+                            id: true,
+                            configName: true
+                        }
+                    }
+                }
+            });
+        
+            if (!volumeDetails.length) {
+                throw new NotFoundException('Volume details not found.');
+            }
+        
+            return new Map(volumeDetails.map(volume => [
+                volume.id,
+                {
+                    id: volume.id,
+                    sourcePathName: volume.volumePath,
+                    destinationPathName: volume.volumePath,
+                    configId: volume.fileServer?.config?.id || '',
+                    configName: volume.fileServer?.config?.configName || ''
+                }
+            ]));
+        } catch (error) {
+            this.logger.error(`Error fetching volume details: ${error.message}`);
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Failed to retrieve volume details.');
+        }
+    }
+    
+    private constructResponse(validJobConfigs: any[], volumeMap: Map<string, any>) {
+       try {
+        return validJobConfigs.map(job => ({
+            protocol: job.protocol,
+            sourcePath: volumeMap.get(job.sourcePathId) ? {
+                id: volumeMap.get(job.sourcePathId)?.id,
+                sourcePathName: volumeMap.get(job.sourcePathId)?.sourcePathName
+            } : { id: '', sourcePathName: '' },
+    
+            destinationFileServer: volumeMap.get(job.targetPathId) ? {
+                id: volumeMap.get(job.targetPathId)?.configId,
+                destinationFileServerName: volumeMap.get(job.targetPathId)?.configName
+            } : {},
+    
+            destinationPath: volumeMap.get(job.targetPathId) ? {
+                id: volumeMap.get(job.targetPathId)?.id,
+                destinationPathName: volumeMap.get(job.targetPathId)?.destinationPathName
+            } : { id: '', destinationPathName: '' },
+    
+            jobConfig: [job.jobConfig]
+        }));
+       } catch (error) {
+        this.logger.error(`Error constructing response: ${error.message}`);
+        throw new InternalServerErrorException('Failed to construct response.');
+       }
+    }
+    
+    async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
+        this.logger.debug("Config creation started");        
         const credentials:Credentials[] = []
         try {
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
@@ -161,35 +365,39 @@ export class ConfigurationService {
                 });
             });
 
+            const hasPathName = createConfig?.workingDirectory?.pathName?.length > 0;
+            const hasWorkers = createConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
+
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: createConfig?.workingDirectory?.pathName.length > 0 ? ConfigStatus.DRAFT : ConfigStatus.ACTIVE,
+                status: hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
         
             const update = await this.configEntity.save(config);
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: update.id, credentials});
 
+            await this.startValidateWorkingDirectoryWorkflow(createConfig, update.id, traceId);
+         
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
                 pathId: createConfig?.workingDirectory?.pathId,
                 workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-                configId: update.id
+                configId: update.id,
+                createdBy: userId
             });
-        
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-
+            this.refreshConfig(update.id, traceId)
             return update;
         }catch(error) {
-            this.logger.error(`Error Occurred during creating Config ${error}`)
+            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during creating Config')
         }
     }
 
-    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string) {
+    async updateConfiguration(id: string, updateConfig: ConfigDTO, userId: string, traceId: string) {
         if(!isUUID(id)) 
             throw new BadRequestException('Invalid configId')
 
@@ -206,12 +414,16 @@ export class ConfigurationService {
         if (!config) 
             throw new NotFoundException(`Config for id ${id} not found.`);
 
-        const credentials:Credentials[] = []
+        const credentials:Credentials[] = [];
+
+        const hasPathName = updateConfig?.workingDirectory?.pathName?.length > 0;
+        const hasWorkers = updateConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
 
         config.configName = updateConfig.configName;
         config.configType = updateConfig.configType;
-        config.createdBy = updateConfig.createdBy || userId
-        config.updatedBy = userId
+        config.createdBy = updateConfig.createdBy || userId;
+        config.updatedBy = userId;
+        config.status = hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT;
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
@@ -249,7 +461,7 @@ export class ConfigurationService {
             const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
 
             if (!mapping) {
-                this.logger.error(`Mapping for configId ${id} not found`);
+                this.logger.error(`Mapping for configId ${id} not found for request ${traceId}`);
                 throw new NotFoundException(`Mapping for configId ${id} not found`);
             }
 
@@ -262,22 +474,230 @@ export class ConfigurationService {
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
             config.fileServers = await Promise.all(fileServerPromises);
-            const update = await this.configEntity.save(config)
-            await this.rabbitMQService.sendMessage(RabbitMq.ListPaths,  {configId: config.id})
+            const update = await this.configEntity.save(config);
+
+            await this.startValidateWorkingDirectoryWorkflow(updateConfig, update.id, traceId);
+
+            this.refreshConfig(update.id, traceId)
             return update
         }catch(error) {
-            this.logger.error(`Error Occurred during updating Config ${error}`)
+            this.logger.error(`Error Occurred during updating Config ${error} for traceId ${traceId}`)
             throw new InternalServerErrorException('Error Occurred during updating Config')
         }
     }
-    
+
+    async startValidateWorkingDirectoryWorkflow(createConfig: ConfigDTO, configId: string, traceId: string) {
+       try {
+        const listPathPayload: ListPathDTO[] = [];
+            
+        createConfig?.fileServers?.forEach((fileServer)=>{
+            const payload: ListPathDTO = {
+                type: fileServer?.protocol,
+                protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
+                host: fileServer?.host,
+                username: fileServer?.userName,
+                password: fileServer?.password
+            }
+            listPathPayload.push(payload);
+        });
+
+        const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+            exportPath: createConfig?.workingDirectory?.pathName,
+            workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+            configId: configId,
+            workerIds: [],
+            listPathPayload,
+            options: new Options()
+        }
+
+        createConfig?.fileServers?.forEach((fileServer) => {
+            fileServer?.workers?.forEach(worker => {
+                if (!payload.workerIds.includes(worker))
+                    payload.workerIds.push(worker);
+            })
+        });
+
+        if(payload?.workerIds?.length > 0 && createConfig?.workingDirectory?.pathName?.length > 0) {                
+            this.logger.debug('started ValidateWorkingDirectoryWorkflow');            
+            const startWorkFlowPayload: StartWorkFlowPayload = {
+                workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
+                taskQueue: 'ParentWorkflow-TaskQueue',
+                args: [{ traceId: traceId, payload: {traceId, ...payload}, options: payload.options }],
+                ...payload.options
+            };
+
+            await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY, startWorkFlowPayload);
+            this.logger.debug('completed ValidateWorkingDirectoryWorkflow successfully');
+        }
+       } catch (error) {
+        this.logger.error(`Error while starting ValidateWorkingDirectoryWorkflow - ${error.message}`)
+       }
+    }
 
     async remove(id: string) {
-        if(!isUUID(id)) 
-            throw new BadRequestException('Invalid configId')
-        const config = await this.configEntity.findOne({
+        try {
+            if (!isUUID(id))
+                throw new BadRequestException('Invalid configId')
+            const config = await this.configEntity.findOne({
                 where: { id }
             });
-        return await this.configEntity.remove(config)
+            return await this.configEntity.remove(config);
+        } catch (error) {
+            this.logger.error(`Error removing config: ${error.message}`);
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Failed to remove config.');
+        }
+    }
+
+    async refreshConfig(configId: string, traceId: string) {
+        if (!isUUID(configId)) {
+            throw new BadRequestException('Invalid UUID format');
+        }
+        try {
+            const config = await this.configEntity.findOne({
+                where: { id: configId }, 
+                relations: { fileServers: { workers: true } }
+            });
+            
+            if (!config) {
+                throw new NotFoundException(`Config Not found with config id ${configId}`);
+            }
+
+            const payload: CreateRequestDto = {
+                fileServer: {
+                    hostname: '',
+                    protocols: []
+                },
+                options: new Options(),
+                workerIds: []
+            };
+
+            config.fileServers?.forEach((fileServer) => {
+                payload.fileServer.hostname = fileServer.host;
+                payload.fileServer.protocols.push({
+                    type: fileServer.protocol,
+                    username: fileServer.userName,
+                    password: fileServer.password
+                });
+                fileServer?.workers?.forEach(worker => {
+                    if (!payload.workerIds.includes(worker.workerId))
+                        payload.workerIds.push(worker.workerId);
+                });
+            });
+
+            if (payload.workerIds.length === 0) return;
+
+            await this.fileServerEntity.update(
+                { id: In(config.fileServers.map(it => it.id)) },
+                { isRefreshed: false }
+            );
+
+            const startWorkFlowPayload: StartWorkFlowPayload = {
+                workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
+                taskQueue: 'ParentWorkflow-TaskQueue',
+                args: [{ traceId: traceId, payload: { traceId, ...payload }, options: payload.options }],
+                ...payload.options
+            };
+
+            const workflow = await this.workFlowService.startWorkflow(WorkFlows.LIST_PATHS, startWorkFlowPayload);
+            this.updateResult(workflow.workflowId, configId);
+            return { workflowId: workflow.workflowId };
+        } catch (error) {
+            this.logger.error(`Error refreshing config: ${error.message}`);
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Failed to refresh config.');
+        }
+    }
+
+    async updateResult(id: string, configId: string) {
+      try {
+        setTimeout(async ()=>{
+                try {
+                    const details: ListPathWorkflowStatus = await this.workFlowService.getWorkFlowRes(id) as ListPathWorkflowStatus;
+    
+                    if (!details) {
+                        this.logger.warn(`No workflow details found for workflowId: ${id}`);
+                        return;
+                    }
+    
+                    if (details.status === WorkflowExecutionStatus.COMPLETED) {
+                        await this.updatePaths(configId, details);
+                    } else {
+                        this.logger.warn(`Workflow ${id} did not complete. Status: ${details.status}`);
+                    }
+                } catch (error) {
+                    this.logger.error(`Error fetching workflow result: ${error.message}`);
+                }
+        },2000)
+      } catch (error) {
+        this.logger.error(`Unexpected error in updateResult: ${error.message}`);
+        throw new InternalServerErrorException('Failed to update workflow result.');
+      }
+    }
+
+    async updatePaths(id: string, details:ListPathWorkflowStatus) {
+       try {
+        const pathsMap: PathsMap = {
+            NFS: {workers: 0, paths: []},
+            SMB: {workers: 0, paths: []},
+        }
+        details.completed.forEach(workflow => {
+            pathsMap[workflow.protocolType].workers++
+            workflow.paths.forEach(path =>{
+                if(!pathsMap[workflow.protocolType].paths.includes(path)) 
+                pathsMap[workflow.protocolType].paths.push(path)
+            });
+        })
+        const config =  await this.configEntity.findOne({
+            select: {
+                fileServers:{
+                    id: true,
+                    protocol: true,
+                    volumes:{
+                        id: true,
+                        volumePath: true,
+                    }
+                }
+            },
+            where: { id },
+            relations: {
+                fileServers: {
+                    volumes: true       
+                }
+            }
+        });
+        for(let fileServer of config.fileServers) {
+            await this.volumes.update({
+                fileServerId: fileServer.id,
+                volumePath: In(pathsMap[fileServer.protocol].paths)
+            },{ reachableCount: pathsMap[fileServer.protocol].workers})
+
+            const existingPaths = new Set(fileServer.volumes.map(vol => vol.volumePath));
+            const founds: VolumeEntity[] = []
+            pathsMap[fileServer.protocol].paths.forEach((path)=>{
+                if(!existingPaths.has(path))
+                    founds.push(this.volumes.create({
+                        fileServerId: fileServer.id,
+                        reachableCount:  pathsMap[fileServer.protocol].workers,
+                        volumePath: path,
+                        createdBy: config.updatedBy ?? config.createdBy
+                    }))
+            })
+            await this.volumes.save(founds)
+            await this.fileServerEntity.update({id: fileServer.id},{isRefreshed: true})
+        }
+
+        await this.configEntity.update({id}, {scannedDate : new Date()});
+       } catch (error) {
+        this.logger.error(`Error in updatePaths: ${error.message}`);
+        if (error instanceof BadRequestException || error instanceof NotFoundException) {
+            throw error;
+        }
+        throw new InternalServerErrorException('Failed to update paths.');
+       }
     }
 }

@@ -3,7 +3,7 @@ import { IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 
-export class FindallConfigPageDto {
+export class FindAllConfigPageDto {
   @ApiPropertyOptional({ description: 'Page number for pagination', example: '1' })
   @IsOptional()
   @IsNumberString()
@@ -38,9 +38,7 @@ export class FindallConfigPageDto {
   @IsOptional()
   @IsString()
   stage?: string;
-
 }
-
 
 export class ConfigResponseDto {
   @ApiProperty()

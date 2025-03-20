@@ -1,15 +1,14 @@
+import { DataSourceOptions } from 'typeorm';
+import typeormConfig from "src/config/database.config";
 import { ConfigEntity } from "src/entities/config.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
-import { ProjectEntity } from "src/entities/project.entity";
-import { WorkerEntity } from "src/entities/worker.entity";
-import { DataSourceOptions } from 'typeorm';
-
-import typeormConfig from 'src/config/database.config';
-import { VolumeEntity } from "src/entities/volume.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
-import { FileServerWorkingDirectoryMappingEntity } from "src/entities/fileserver_workingdirectory_mapping.entity";
-
+import { ProjectEntity } from "src/entities/project.entity";
+import { VolumeEntity } from "src/entities/volume.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 describe('TypeORM Config', () => {
   const OLD_ENV = process.env;
@@ -29,6 +28,7 @@ describe('TypeORM Config', () => {
     process.env.DB_USER = 'testuser';
     process.env.DB_PASSWORD = 'testpassword';
     process.env.DB_NAME = 'testdb';
+    process.env.SCHEMA = 'migrateadmin';
 
     const config = typeormConfig();
 
@@ -36,12 +36,13 @@ describe('TypeORM Config', () => {
       type: 'postgres',
       host: 'localhost',
       port: 5432,
+      schema:'migrateadmin',
       username: 'testuser',
       password: 'testpassword',
       database: 'testdb',
       synchronize: false,
       dropSchema: false,
-      logging: true,
+      logging: false,
       entities: [
         WorkerEntity,
         ConfigEntity,
@@ -50,7 +51,8 @@ describe('TypeORM Config', () => {
         ProjectEntity,
         JobConfigEntity,
         JobRunEntity,
-        FileServerWorkingDirectoryMappingEntity
+        FileServerWorkingDirectoryMappingEntity,
+        WorkerJobRunMap
       ],
       migrations: []
     };

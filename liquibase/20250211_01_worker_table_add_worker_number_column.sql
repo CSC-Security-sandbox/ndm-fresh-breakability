@@ -1,0 +1,1 @@
+ALTER TABLE worker ADD COLUMN IF NOT EXISTS worker_number serial;

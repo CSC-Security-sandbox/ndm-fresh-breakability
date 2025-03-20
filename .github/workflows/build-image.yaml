@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - temporal
 
 jobs:
   build-and-push:
@@ -12,22 +13,17 @@ jobs:
     steps:
       # Checkout the repository
       - name: Checkout Code
-        uses: actions/checkout@v4
-
-      # Replace GitHub Token Placeholder in .npmrc
-      - name: Replace GitHub Token Placeholder in .npmrc
-        run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # Authenticate to Azure
       - name: Log in to Azure
-        uses: azure/login@v2
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       # Log in to Azure Container Registry
       - name: 'Authenticate to ACR'
-        uses: azure/docker-login@v2
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
         with:
           login-server: ${{ secrets.ACR_NAME }}.azurecr.io
           username: ${{ secrets.AZURE_SP_USERNAME }}
@@ -35,18 +31,31 @@ jobs:
 
       # Set up QEMU for cross-architecture builds
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
 
       # Set up Buildx for multi-platform builds
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
+
+      # Determine the tag suffix based on the branch
+      - name: Set Tag Suffix
+        id: set_tag_suffix
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/temporal" ]]; then
+            echo "TAG_SUFFIX=-temporal" >> $GITHUB_ENV
+          else
+            echo "TAG_SUFFIX=" >> $GITHUB_ENV
+          fi
 
       # Build and push multi-platform Docker image
       - name: Build and Push Multi-Platform Docker Image
         run: |
+          echo "Building Docker image with tags:"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}${{ env.TAG_SUFFIX }}"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest${{ env.TAG_SUFFIX }}"
           docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} \
-            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}${{ env.TAG_SUFFIX }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest${{ env.TAG_SUFFIX }} \
             --push .
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -59,17 +68,17 @@ jobs:
     steps:
       # Checkout the repository
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # Authenticate to Azure
       - name: Log in to Azure
-        uses: azure/login@v2
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       # Log in to Azure Container Registry
       - name: 'Authenticate to ACR'
-        uses: azure/docker-login@v2
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
         with:
           login-server: ${{ secrets.ACR_NAME }}.azurecr.io
           username: ${{ secrets.AZURE_SP_USERNAME }}
@@ -77,18 +86,31 @@ jobs:
 
       # Set up QEMU for cross-architecture builds
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
 
       # Set up Buildx for multi-platform builds
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
+
+      # Determine the tag suffix based on the branch
+      - name: Set Tag Suffix
+        id: set_tag_suffix
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/temporal" ]]; then
+            echo "TAG_SUFFIX=-temporal" >> $GITHUB_ENV
+          else
+            echo "TAG_SUFFIX=" >> $GITHUB_ENV
+          fi
 
       # Build and push multi-platform Docker image for migrations
       - name: Build and Push Multi-Platform Docker Image for Migrations
         run: |
+          echo "Building Docker image for migrations with tags:"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}${{ env.TAG_SUFFIX }}"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest${{ env.TAG_SUFFIX }}"
           docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }} \
-            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:${{ github.sha }}${{ env.TAG_SUFFIX }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}-migrations:latest${{ env.TAG_SUFFIX }} \
             --push ./liquibase
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
