@@ -1,10 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Protocol, ServerType } from "src/constants/enums";
-import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
+import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { WorkerEntity } from "./worker.entity";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
+import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
 @Entity({name:'file_server'})
 export class FileServerEntity extends Base {
@@ -39,12 +40,16 @@ export class FileServerEntity extends Base {
     @JoinColumn({ name: 'config_id' }) 
     config: ConfigEntity;
 
-    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: true})
+    @OneToMany(()=> VolumeEntity, volume=>volume.fileServer, {cascade: true, eager: false})
     volumes: VolumeEntity[]
 
     @ApiProperty({ description: 'is Refreshed Config' })
     @Column({ name: 'is_refreshed' , nullable : true, type : 'boolean'})
     isRefreshed: boolean;
+
+    @ApiProperty({ description: 'protocol version' })
+    @Column({ type: 'varchar', nullable: false, name: 'protocol_version'})
+    protocolVersion: ProtocolVersion;
 
     @ManyToMany(() => WorkerEntity, worker=>worker.fileServers)
     @JoinTable({
@@ -59,4 +64,9 @@ export class FileServerEntity extends Base {
         },
     })
     workers: WorkerEntity[];
+
+     
+    @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.fileServer)
+    @JoinColumn({ name: 'config_id' })
+    workingDirectory: FileServerWorkingDirectoryMappingEntity;
 }

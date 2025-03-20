@@ -1,11 +1,14 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
+import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
+
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
-import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
+import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
@@ -28,8 +31,43 @@ export class JobConfigController {
     return jobConfig;
   }
 
+  @ApiOperation({ summary: 'Create a new Speed Test job' })
+  @ApiResponse({ status: 201, description: 'Speed Test job has been successfully created.' })
+  @Post('/speed-test')
+  async createSpeedTest(@Body() speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
+    if (!speedTest.speedTests || speedTest.speedTests.length === 0) {
+      throw new BadRequestException('Source path IDs cannot be empty.');
+    }
+    const jobConfig = await this.jobConfigService.createSpeedTest(speedTest);
+    return jobConfig;
+  }
+
+  @ApiOperation({ summary: 'Get all Speed test jobs' })
+  @ApiResponse({ status: 200, description: 'Returns a list of all Speed jobs Runs.' })
+  @Get('/speed-test')
+  async getAllSpeedTestJobConfig(): Promise<SpeedTestJobRun[]> {
+    return await this.jobConfigService.getAllSpeedTestJobRuns();
+  }
+
+  @ApiOperation({ summary: 'Store Speed test Result' })
+  @ApiResponse({ status: 201, description: 'Speed test Result has been successfully Stored.' })
+  @Post('/store-speed-test-result')
+  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult){
+    this.jobConfigService.storeSpeedTestResult(speedTestResult);
+  }
+
+  @ApiOperation({ summary: 'Get speedtest by ID' })
+  @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
+  @ApiResponse({ status: 404, description: 'Job not found.' })
+  @Get('/speed-test/:id')
+  async getSpeedTestById(@Param('id') id: string): Promise<SpeedTestEntry> {
+    return await this.jobConfigService.getSpeedTestById(id);
+  }
+
   @ApiOperation({ summary: 'Create a new migrate job' })
   @ApiResponse({ status: 201, description: 'Migrate job has been successfully created.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-migrate')
   async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
@@ -37,6 +75,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new cutover job' })
   @ApiResponse({ status: 201, description: 'Cutover job has been successfully created.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-cutover')
   async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     return await this.jobConfigService.createBulkCutover(bulkCutover);
@@ -44,9 +84,11 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'precheck for migration job' })
   @ApiResponse({ status: 200, description: 'Precheck is passed' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/precheck')
-  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
-    return await this.jobConfigService.precheck(precheckData);
+  async precheck(@Body() precheckData: JobConfigPrecheck) { 
+     return  await this.jobConfigService.precheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
@@ -101,6 +143,16 @@ export class JobConfigController {
       return await this.jobConfigService.getConfigsByProjectId(projectId);
   }
 
+  @ApiOperation({ summary: 'Get notice board details by project ID' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved notice board details' })
+  @ApiResponse({ status: 400, description: 'Invalid project ID' })
+  @ApiResponse({ status: 404, description: 'Notice board not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @Get('notice-board/:projectId')
+  async getNoticeBoardDetailsByProjectId(@Param('projectId') projectId: string) {
+    return await this.jobConfigService.getNoticeBoardDetailsByProjectId(projectId);
+  }
+
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
@@ -118,6 +170,12 @@ export class JobConfigController {
   @Delete(':id')
   async deleteJobConfig(@Param('id') id: string): Promise<{ message: string }> {
     return await this.jobConfigService.deleteJobConfig(id);
+  }
+
+  @ApiOperation({ summary: 'Precheck Validation' })
+  @Post('precheck/validate')
+  async checkCommonWorkersAndValidatePaths(@Body() precheckData: MigrateConfig[]) {
+    return await this.jobConfigService.precheckValidation(precheckData);
   }
 
 }

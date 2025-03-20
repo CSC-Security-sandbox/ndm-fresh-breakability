@@ -1,26 +1,60 @@
-import { JobConfigBulkMigrateResStatus, JobStatus, JobType } from "src/constants/enums";
+import {
+  JobConfigBulkMigrateResStatus,
+  JobStatus,
+  JobType,
+} from "src/constants/enums";
 
 export interface InActivateJobConfigPayload {
-    jobConfigId: string
+  jobConfigId: string;
 }
 
 export interface JobConfigBulkMigrateRes {
-    id: string;
-    jobType: JobType;
-    status: JobConfigBulkMigrateResStatus;
-    sourcePathId: string;
-    targetPathId: string;
+  id: string;
+  jobType: JobType;
+  status: JobConfigBulkMigrateResStatus;
+  sourcePathId: string;
+  targetPathId: string;
 }
 
 export interface JobConfigBulkCutoverRes {
-    id: string;
-    jobType: JobType;
-    status: JobStatus;
-    firstRunAt: Date;
+  id: string;
+  jobType: JobType;
+  status: JobStatus;
+  firstRunAt: Date;
+  sourcePathId: string;
+  targetPathId: string;
+}
+export type FlattenedCutoverConfig = {
     sourcePathId: string;
-    targetPathId: string[];
+    destinationPathId: string;
+};
+
+export type SpeedTestJobRun = {
+  jobRunId: string;
+  jobConfigId: string;
+  startTime: Date;
+  endTime: Date;
+  fileServerCount: number;
+  workers: number;
+  status: string;
+}
+
+export type SpeedTestEntry = {
+  jobRunId: string;
+  startTime: Date;
+  endTime: Date;
+  totalWorkers: number;
+  fileServers: any[];
+  status: string;
 }
 
 export interface JobConfigPrecheckRes {
-    status: 'success'
+  status: string;
+  sourcePathId: string;
+  details: PrecheckDestination[];
+}
+export interface PrecheckDestination {
+  destinationPathId: string;
+  status: string;
+  errors?: string[];
 }

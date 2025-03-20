@@ -72,6 +72,10 @@ export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
+
+  @ApiProperty({ description: 'Skip Files time duration', example: '1h' })
+  @IsString()
+  skipFile: string
 }
 
 export class MigrateConfig {
@@ -115,7 +119,7 @@ export class BulkMigrateJobConfig {
     description: 'BLOB data for SID mappings (Excel file content)',
   })
   @IsOptional()
-  sidMapping: Buffer;
+  sidMapping: string;
 
   @ApiProperty({
     type: 'string',
@@ -123,7 +127,7 @@ export class BulkMigrateJobConfig {
     description: 'BLOB data for GID mappings (Excel file content)',
   })
   @IsOptional()
-  gidMapping: Buffer;
+  gidMapping: string;
 
   @ApiProperty({
     type: MigrateJobConfigOptions,

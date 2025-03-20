@@ -3,20 +3,40 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobConfigEntity} from '../entities/jobconfig.entity';
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { TaskEntity } from 'src/entities/task.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerModule } from 'src/workers/workers.module';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
+import { JobRunInitService } from './jobrun.init.service';
+import { RedisModule } from 'src/redis/redis.module';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+
 
 @Module({
     imports: [
+        LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity]),
+        WorkerModule,
+        RedisModule
     ],
-    providers: [JobRunService, JobConfigService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

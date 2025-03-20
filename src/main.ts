@@ -12,23 +12,6 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  app.connectMicroservice({
-    transport: Transport.RMQ,
-    options: {
-      urls: configService.get('app.rabbitmq.urls'),
-      queue: configService.get('app.rabbitmq.queue'),
-      noAck: false,
-      queueOptions: {
-        durable: configService.get('app.rabbitmq.durable'),
-        arguments: {
-          'x-queue-type': 'quorum',
-        },
-      },
-    },
-  });
-
-  await app.startAllMicroservices()
-
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   
   app.setGlobalPrefix('api/v1/')
@@ -43,7 +26,7 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('docs', app, document,{
+  SwaggerModule.setup('/api/v1/jobs-docs', app, document,{
     jsonDocumentUrl: 'swagger/json',
   });
   

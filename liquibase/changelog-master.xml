@@ -7,4 +7,23 @@
       <sqlFile path="liquibase/20250124_01_create_all_jobs_existing_tables.sql"/>
    </changeSet>
 
+   <changeSet id="5002" author="akunal">
+      <sqlFile path="liquibase/20250210_01_jobrun_table_add_column.sql"/>
+   </changeSet>
+   <changeSet id="5003" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_alter_ops_add_extension_columns.sql"/>
+   </changeSet>
+
+   <changeSet id="5004" author="anarvekar">
+      <sqlFile path="liquibase/20250221_01_alter_job_config_add_skip_file_column.sql"/>
+   </changeSet>
+   <changeSet id="5005" author="adityav2">
+      <sqlFile path="liquibase/20250310_01_create_all_speed_test_tables.sql"/>
+   </changeSet>
+      <changeSet id="5006" author="adityav2">
+      <sqlFile path="liquibase/20250314_01_update_speed_test_result_tables.sql"/>
+   </changeSet>
+   <changeSet id="5017" author="shivam6">
+      <sqlFile path="liquibase/20250315_01_create_identity_mapping_tables.sql"/>
+   </changeSet>
 </databaseChangeLog>

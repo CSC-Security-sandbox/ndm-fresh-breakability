@@ -1,86 +1,523 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In } from 'typeorm';
-import { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
-import { join } from 'path';
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
-import { FindManyOptions, Repository } from 'typeorm';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { JobConfigDto } from './dto/jobconfig.dto';
-import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigMigrateBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
-import { JobConfigBulkMigrateResStatus, JobRunStatus, JobStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { InActivateJobConfigPayload, JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes } from './jobconfig.types';
-import { OnEvent } from '@nestjs/event-emitter';
-import { EmitterEvents } from 'src/constants/events';
-import { ScheduleStatus } from 'src/constants/status';
-import { nextDate } from 'src/utils/mapper';
-import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
-import { ProjectEntity } from 'src/entities/project.entity';
+import {
+  BadRequestException,
+  HttpException, HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Response } from "express";
+import { createReadStream, existsSync } from "fs";
+import { join } from "path";
+import {
+  JobConfigBulkMigrateResStatus,
+  JobRunStatus,
+  JobStatus,
+  JobType,
+  Protocol,
+  TemplateType,
+  WorkFlows,
+} from "src/constants/enums";
+import { ScheduleStatus } from "src/constants/status";
+import { Options } from "src/constants/types";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { ProjectEntity } from "src/entities/project.entity";
+import { VolumeEntity } from "src/entities/volume.entity";
+import { nextDate } from "src/utils/mapper";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { StartWorkFlowPayload } from "src/workflow/workflow.types";
+import { In, Repository } from "typeorm";
+import { validate as isUUID, v4 as uuidv4 } from "uuid";
+import { JobConfigEntity } from "../entities/jobconfig.entity";
+import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+
+import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
+
+import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
+import { JobConfigDto } from "./dto/jobconfig.dto";
+import {
+  JobConfigCutoverBulk,
+  JobConfigDiscoverBulk,
+  JobConfigPrecheck, MigrateConfig
+} from "./dto/jobdicoverybulk.dto";
+import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
+
+import { JobListingDTO } from "./dto/joblisting.dto";
+import {
+  FlattenedCutoverConfig,
+  JobConfigBulkCutoverRes,
+  JobConfigBulkMigrateRes,
+  SpeedTestEntry,
+  SpeedTestJobRun
+} from "./jobconfig.types";
+import { run } from "node:test";
+import { FileServerEntity } from "src/entities/fileserver.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { ParsedMapping } from "src/utils/indentity-mapping.type";
 
 @Injectable()
 export class JobConfigService {
-  private readonly logger = new Logger(JobConfigService.name)
+ 
+  private readonly logger = new Logger(JobConfigService.name);
   constructor(
+    @InjectRepository(FileServerEntity)
+    private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
+    @InjectRepository(SpeedTestConfigEntity)
+    private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
+    @InjectRepository(SpeedLogEntity)
+    private speedLogRepo: Repository<SpeedLogEntity>,
+    @InjectRepository(NetworkPerformanceResultEntity)
+    private networkPerformanceResultRepo: Repository<NetworkPerformanceResultEntity>,
+    @InjectRepository(SpeedTestResultEntity)
+    private speedTestResultRepo: Repository<SpeedTestResultEntity>,
+    @InjectRepository(SpeedLogEntryEntity)
+    private SpeedLogEntryRepo: Repository<SpeedLogEntryEntity>,
+    @InjectRepository(FileServerEntity)
+    private fileServerEntityRepo: Repository<FileServerEntity>,
+    @InjectRepository(SpeedTestConfigWorkerEntity)
+    private SpeedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>,
+    @InjectRepository(WorkerEntity)
+    private workeRepo: Repository<WorkerEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(JobRunEntity)
+    private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(ProjectEntity)
     private readonly projectRepo: Repository<ProjectEntity>,
+    @InjectRepository(VolumeEntity)
+    private readonly volumeRepo: Repository<VolumeEntity>,
+    private readonly workFlowService: WorkflowService,
+    private readonly configService: ConfigService,
+    @InjectRepository(IdentityMappingEntity)
+    private identityMappingRepo: Repository<IdentityMappingEntity>,
+    @InjectRepository(IdentityConfigCrossMappingEntity)
+    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>
   ) {}
 
-  // ------------ Events ---------------- //
-  @OnEvent(EmitterEvents.IN_ACTIVE_JOB_CONFIG)
-  async inActivateJobConfig (payload: InActivateJobConfigPayload) {
-    await this.jobConfigRepo.update({id: payload.jobConfigId}, {status: JobStatus.InActive})
-  }
-
   // ------------ Bulk Discovery ---------------- //
-  async createBulkDiscovery(bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
-    const firstRunAt = bulkDiscovery?.firstRunAt ?? new Date()
+  async createBulkDiscovery(
+    bulkDiscovery: JobConfigDiscoverBulk
+  ): Promise<JobConfigEntity[]> {
+    const firstRunAt = bulkDiscovery?.firstRunAt ?? new Date();
     const existingList = await this.jobConfigRepo.find({
-      where: { jobType: JobType.DISCOVER, sourcePath: In(bulkDiscovery.sourcePathIds ?? [])}, select: {sourcePathId:true, scheduler: true}
-    })
-   
-    await this.jobConfigRepo.update({jobType: JobType.DISCOVER, sourcePathId: In(bulkDiscovery?.sourcePathIds), scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])}, {
-      excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-      preserveAccessTime: bulkDiscovery.preserveAccessTime,
-      excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-      firstRunAt: firstRunAt,
-      scheduler: ScheduleStatus.SCHEDULING
-    })
+      where: {
+        jobType: JobType.DISCOVER,
+        sourcePath: In(bulkDiscovery.sourcePathIds ?? []),
+      },
+      select: { sourcePathId: true, scheduler: true, status: true, id:true },
+    });
 
-    const existingSet = new Set(existingList.map(it=>it.sourcePathId))
-    const entries:JobConfigEntity[] = []
-
-    bulkDiscovery.sourcePathIds.forEach((path: string) =>  {
-      if(!existingSet.has(path))
-        entries.push(this.jobConfigRepo.create({
-          status: JobStatus.Active,
-          excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
-          jobType:  JobType.DISCOVER,
-          preserveAccessTime: bulkDiscovery.preserveAccessTime,
-          sourcePathId: path,
-          excludeOlderThan:  bulkDiscovery.excludeOlderThan,
-          firstRunAt: firstRunAt,
-          scheduler: ScheduleStatus.SCHEDULING,
-          createdBy: bulkDiscovery.createdBy
-        })
-      )})
     
+    await this.jobConfigRepo.update(
+      {
+        jobType: JobType.DISCOVER,
+        sourcePathId: In(bulkDiscovery?.sourcePathIds),
+        scheduler: In([
+          ScheduleStatus.READY_TO_BE_SCHEDULED,
+          ScheduleStatus.SCHEDULING,
+        ]),
+      },
+      {
+        excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+        preserveAccessTime: bulkDiscovery.preserveAccessTime,
+        excludeOlderThan: bulkDiscovery.excludeOlderThan,
+        firstRunAt: firstRunAt,
+        status:JobStatus.Active,
+        scheduler: ScheduleStatus.SCHEDULING,
+      }
+    );
+
+    const existingSet = new Set(existingList.map((it) => it.sourcePathId));
+    const entries: JobConfigEntity[] = [];
+
+    bulkDiscovery.sourcePathIds.forEach((path: string) => {
+      if (!existingSet.has(path))
+        entries.push(
+          this.jobConfigRepo.create({
+            status: JobStatus.Active,
+            excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
+            jobType: JobType.DISCOVER,
+            preserveAccessTime: bulkDiscovery.preserveAccessTime,
+            sourcePathId: path,
+            excludeOlderThan: bulkDiscovery.excludeOlderThan,
+            firstRunAt: firstRunAt,
+            scheduler: ScheduleStatus.SCHEDULING,
+            createdBy: bulkDiscovery.createdBy,
+          })
+        );
+    });
+
     return await this.jobConfigRepo.save(entries);
   }
 
-  async createBulkMigrate(bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
+  // ------------ Speed Test ---------------- //
+  async getAllSpeedTestJobRuns(): Promise<SpeedTestJobRun[]> {
+    try {
+      const jobConfigs = await this.jobConfigRepo.find({
+        where: { jobType: JobType.SPEED_TEST },
+        relations: ['jobRuns', 'speedTestConfigs', 'speedTestConfigs.workerEntities'],
+      });
+
+      const result = jobConfigs.flatMap(jobConfig => {
+        return jobConfig.jobRuns.map(jobRun => {
+          const fileServerCount = jobConfig.speedTestConfigs.length;
+          const workers = jobConfig.speedTestConfigs.flatMap(config => config.workerEntities);
+          const workerCount = new Set(workers.map(worker => worker.workersId)).size;
+          const jobRunResponse: SpeedTestJobRun = {
+            jobRunId: jobRun.id,
+            jobConfigId: jobConfig.id,
+            startTime: jobRun.startTime,
+            endTime: jobRun.endTime,
+            fileServerCount: fileServerCount,
+            workers: workerCount,
+            status: jobRun.status,
+          };
+
+          return jobRunResponse;
+        });
+      });
+
+      this.logger.log('Fetched all speed test job runs successfully');
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to fetch speed test job runs', error.stack);
+      throw new HttpException(
+        {
+          status: "failed",
+          message:
+            error.message ||
+            "Failed to fetch speed test job runs",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<void> {
+    try {
+      this.logger.log('Storing speed test result', JSON.stringify(speedTest));
+  
+      let writeResult, readResult, networkResult;
+  
+      // Store writeResult if present
+      if (speedTest.writeResult) {
+        const writeLog = Object.assign(new SpeedLogEntity(), {
+          totalTimeTaken: speedTest.writeResult.totalTimeTaken,
+          fileSize: speedTest.writeResult.fileSize,
+          error: speedTest.writeResult.error,
+        });
+        writeResult = await this.speedLogRepo.save(writeLog);
+  
+        for (const log of speedTest.writeResult.speedLogs) {
+          const writeLogEntry = Object.assign(new SpeedLogEntryEntity(), {
+            speedLogId: writeResult.id,
+            timeStamp: log.timeStamp,
+            speed: Number(log.speed),
+          });
+          await this.SpeedLogEntryRepo.save(writeLogEntry);
+        }
+      }
+  
+      // Store readResult if present
+      if (speedTest.readResult) {
+        const readLog = Object.assign(new SpeedLogEntity(), {
+          totalTimeTaken: speedTest.readResult.totalTimeTaken,
+          fileSize: speedTest.readResult.fileSize,
+          error: speedTest.readResult.error,
+        });
+        readResult = await this.speedLogRepo.save(readLog);
+  
+        for (const log of speedTest.readResult.speedLogs) {
+          const readLogEntry = Object.assign(new SpeedLogEntryEntity(), {
+            speedLogId: readResult.id,
+            timeStamp: log.timeStamp,
+            speed: Number(log.speed),
+          });
+          await this.SpeedLogEntryRepo.save(readLogEntry);
+        }
+      }
+  
+      // Store networkPerformanceResult if present
+      if (speedTest.networkPerformanceResult) {
+        const networkPerformanceResult = Object.assign(new NetworkPerformanceResultEntity(), {
+          packetLoss: speedTest.networkPerformanceResult.packetLoss,
+          roundTripDelayMin: speedTest.networkPerformanceResult.roundTripDelay.min,
+          roundTripDelayAvg: speedTest.networkPerformanceResult.roundTripDelay.avg,
+          roundTripDelayMax: speedTest.networkPerformanceResult.roundTripDelay.max,
+          roundTripDelayMdev: speedTest.networkPerformanceResult.roundTripDelay.mdev,
+          error: speedTest.networkPerformanceResult.error,
+        });
+        networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
+      }
+  
+      // Store speedTestResult
+      const speedTestResult = Object.assign(new SpeedTestResultEntity(), {
+        traceId: speedTest.traceId,
+        workerId: speedTest.workerId,
+        fileServerId: speedTest.fileServerID,
+        writeResult: writeResult,
+        readResult: readResult,
+        networkPerformanceResult: networkResult,
+      });
+  
+      await this.speedTestResultRepo.save(speedTestResult);
+  
+      this.logger.log('Speed test result stored successfully');
+    } catch (error) {
+      this.logger.error('Failed to store speed test result', error.stack);
+      throw new HttpException(
+        {
+          status: 'failed',
+          message: error.message || 'Failed to store speed test result',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getSpeedTestDetails(jobRunId: string): Promise<any> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ['jobConfig'],
+    });
+    if (!jobRun) {
+      throw new Error(`JobRun with id ${jobRunId} not found`);
+    }
+    const jobConfigId = jobRun.jobConfigId;
+  
+    const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
+      where: { jobId: jobConfigId },
+      relations: ['workerEntities', 'jobConfig'],
+    });
+  
+    const fileServers = await this.fileServerRepo.find({
+      relations: ['config', 'volumes', 'workingDirectory', 'workers']
+    });
+  
+    const workerIds = speedTestJobConfig.flatMap(config => config.workerEntities.map(worker => worker.workersId));
+    const workers = await this.workeRepo.findByIds(workerIds);
+  
+    const fileServersMap = new Map();
+  
+    speedTestJobConfig.forEach(config => {
+      const fileServer = fileServers.find(server => server.id === config.fileServer);
+  
+      if (fileServer) {
+        if (!fileServersMap.has(fileServer.id)) {
+          fileServersMap.set(fileServer.id, {
+            fileServerId: fileServer.id,
+            fileServerName: fileServer.config.configName,
+            fileServerProtocol: fileServer.protocol,
+            workers: [],
+          });
+        }
+  
+        config.workerEntities.forEach(workerEntity => {
+          const worker = workers.find(w => w.workerId === workerEntity.workersId);
+          fileServersMap.get(fileServer.id).workers.push({
+            workerName: worker?.workerName || "unknown",
+            workerId: workerEntity.workersId,
+          });
+        });
+      }
+    });
+  
+    const fileServersArray = Array.from(fileServersMap.values());
+  
+    const response = {
+      jobRunId: jobRunId,
+      startTime: jobRun.startTime,
+      endTime: jobRun.endTime,
+      status: jobRun.status,
+      totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+      fileServers: fileServersArray,
+    };
+  
+    return response;
+  }
+
+  async getSpeedTestById(id: string): Promise<SpeedTestEntry> {
+    try {
+      const speedTestResults = await this.speedTestResultRepo.find({
+        where: { traceId: id },
+        relations: ['writeResult', 'readResult', 'networkPerformanceResult', 'writeResult.speedLogEntries', 'readResult.speedLogEntries'],
+      });
+      
+      if(speedTestResults.length === 0){
+        return this.getSpeedTestDetails(id);
+      }
+
+      const fileServersMap = new Map();
+  
+      const fileServerIds = speedTestResults.map(result => result.fileServerId);
+      const fileServers = await this.fileServerEntityRepo.find({
+        where: { id: In(fileServerIds) },
+        relations: ['config'],
+      });
+  
+      const workerIds = speedTestResults.map(result => result.workerId);
+      const workers = await this.workeRepo.findByIds(workerIds);
+  
+      for (const result of speedTestResults) {
+        const fileServer = fileServers.find(fs => fs.id === result.fileServerId);
+  
+        if (!fileServersMap.has(result.fileServerId)) {
+          fileServersMap.set(result.fileServerId, {
+            fileServerId: fileServer.id,
+            fileServerName: fileServer.config.configName,
+            fileServerProtocol: fileServer.protocol,
+            workers: [],
+          });
+        }
+        const readError = result.readResult?.error;
+        const writeError = result.writeResult?.error;
+        const networkPerformanceError = result.networkPerformanceResult?.error;
+        const writeSpeed = (result.writeResult?.speedLogEntries || []).map(entry => ({
+          timeStamp: entry.timeStamp,
+          speed: entry.speed,
+        }));
+  
+        const readSpeed = (result.readResult?.speedLogEntries || []).map(entry => ({
+          timeStamp: entry.timeStamp,
+          speed: entry.speed,
+        }));
+  
+        const worker = workers.find(w => w.workerId === result.workerId);
+        fileServersMap.get(result.fileServerId).workers.push({
+          workerName: worker?.workerName || "unknown",
+          workerId: result.workerId,
+          readSpeed: readSpeed.length ? readSpeed : null,
+          writeSpeed: writeSpeed.length ? writeSpeed : null,
+          rtd: result.networkPerformanceResult?.roundTripDelayAvg ?? null,
+          packetLoss: result.networkPerformanceResult?.packetLoss ?? null,
+          readError,
+          writeError,
+          networkPerformanceError
+        });
+      }
+  
+      const fileServersArray = Array.from(fileServersMap.values());
+      const jobRunDetails = await this.jobRunRepo.findOne({ where: { id } });
+  
+      if (!jobRunDetails) {
+        throw new HttpException(
+          {
+            status: "failed",
+            message: "Job run details not found",
+          },
+          HttpStatus.NOT_FOUND
+        );
+      }
+  
+      const response : SpeedTestEntry = {
+        jobRunId: id,
+        startTime: jobRunDetails.startTime,
+        endTime: jobRunDetails.endTime,
+        status: jobRunDetails.status,
+        totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+        fileServers: fileServersArray,
+      };
+  
+  
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to fetch speed test results', error.stack);
+      throw new HttpException(
+        {
+          status: "failed",
+          message: error.message || "Failed to fetch speed test results",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async createSpeedTest(speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
+    try {
+      const firstRunAt = speedTest?.firstRunAt ?? new Date();
+      const jobConfig = this.jobConfigRepo.create({
+        status: JobStatus.Active,
+        jobType: JobType.SPEED_TEST,
+        firstRunAt: firstRunAt,
+        scheduler: ScheduleStatus.SCHEDULING,
+        preserveAccessTime: false,
+        sourcePathId: uuidv4(),
+        createdBy: speedTest.createdBy,
+      });
+
+      await this.jobConfigRepo.save(jobConfig);
+      const speedTestJobID = jobConfig.id;
+
+      const entries: SpeedTestConfigEntity[] = [];
+      const workersEntity: SpeedTestConfigWorkerEntity[] = [];
+      for (const fileServerConfig of speedTest.speedTests) {
+
+        const speedTestConfig = this.SpeedTestConfigRepo.create({
+          jobId: speedTestJobID,
+          fileServer: fileServerConfig.fileServer,
+          protocol: fileServerConfig.protocol,
+          readTest:fileServerConfig.test.readTest,
+          writeTest:fileServerConfig.test.writeTest,
+          packetLossTest:fileServerConfig.test.packetLossTest,
+        });
+        entries.push(speedTestConfig);
+        const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
+
+        for (const worker of fileServerConfig.workers) {
+          const workerEntity = this.SpeedTestConfigWorkerRepo.create({
+            workersId: worker,
+            jobId: savedSpeedTestConfig.id,
+          });
+          workersEntity.push(workerEntity);
+        }
+      }
+      await this.SpeedTestConfigWorkerRepo.save(workersEntity);
+      this.logger.log('Speed Test job created successfully');
+      return entries;
+    } catch (error) {
+      this.logger.error('Failed to create Speed Test job', error.stack);
+      throw new HttpException(
+        {
+          status: 'failed',
+          message: error.message || 'Failed to create Speed Test job',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async createBulkMigrate(
+    bulkMigrate: BulkMigrateJobConfig
+  ): Promise<JobConfigBulkMigrateRes[]> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
+    let parsedMappings: ParsedMapping[] = [];
+    let templateType ;
+    const identityMap = uuidv4();
+    const jobConfigIdsToUpdate: any[] = [];
 
     if (!bulkMigrate?.migrateConfigs) {
       return [];
     }
+    if (bulkMigrate?.sidMapping) {
+      templateType = TemplateType.SID;
+      const sidMapping = await this.decodeBase64(bulkMigrate.sidMapping);
+      parsedMappings = await this.parseBlobData(sidMapping, templateType);
+    }
+ 
+    if (bulkMigrate?.gidMapping) {
+      templateType = TemplateType.GID;
+      const gidMapping = await this.decodeBase64(bulkMigrate.gidMapping);
+      parsedMappings = await this.parseBlobData(gidMapping, templateType);
+    }
+ 
+ 
 
     for (const config of bulkMigrate.migrateConfigs) {
       if (!config?.destinationPathId) {
@@ -89,11 +526,20 @@ export class JobConfigService {
 
       for (const destinationPath of config.destinationPathId) {
         const existingJobConfigs = await this.jobConfigRepo.find({
-          where: { jobType: JobType.MIGRATE, sourcePathId: config?.sourcePathId, targetPathId: destinationPath },
-          select: { sourcePathId: true, targetPathId: true, scheduler: true }
+          where: {
+            jobType: JobType.MIGRATE,
+            sourcePathId: config?.sourcePathId,
+            targetPathId: destinationPath,
+          },
+          select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true, status:true },
         });
 
-        const existingSet = new Set(existingJobConfigs.map(jobConfig => `${jobConfig?.sourcePathId}-${jobConfig?.targetPathId}`));
+        const existingSet = new Set(
+          existingJobConfigs.map(
+            (jobConfig) =>
+              `${jobConfig?.sourcePathId}-${jobConfig?.targetPathId}`
+          )
+        );
 
         if (existingSet.has(`${config?.sourcePathId}-${destinationPath}`)) {
           await this.jobConfigRepo.update(
@@ -101,65 +547,311 @@ export class JobConfigService {
               jobType: JobType.MIGRATE,
               sourcePathId: config?.sourcePathId,
               targetPathId: destinationPath,
-              scheduler: In([ScheduleStatus.READY_TO_BE_SCHEDULED, ScheduleStatus.SCHEDULING])
+              scheduler: In([
+                ScheduleStatus.READY_TO_BE_SCHEDULED,
+                ScheduleStatus.SCHEDULING,
+              ]),
             },
             {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              skipFile: bulkMigrate?.options?.skipFile,
+              status: JobStatus.Active,
               firstRunAt: firstRunAt,
-              scheduler: ScheduleStatus.SCHEDULING
+              scheduler: ScheduleStatus.SCHEDULING,
             }
           );
+          if (parsedMappings.length > 0) {
+            const jobConfigIds = existingJobConfigs.map((jobConfig) => jobConfig.id);
+            this.logger.log("id pushed", ...jobConfigIds)
+            jobConfigIdsToUpdate.push(...jobConfigIds);
+          }
         } else {
-          jobConfigs.push(this.jobConfigRepo.create({
-            status: JobStatus.Active,
-            excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
-            jobType: JobType.MIGRATE,
-            preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
-            sourcePathId: config?.sourcePathId,
-            targetPathId: destinationPath,
-            excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
-            firstRunAt: firstRunAt,
-            scheduler: ScheduleStatus.SCHEDULING,
-            futureScheduleAt: bulkMigrate?.futureRunSchedule
-          }));
+          jobConfigs.push(
+            this.jobConfigRepo.create({
+              status: JobStatus.Active,
+              excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
+              jobType: JobType.MIGRATE,
+              preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+              sourcePathId: config?.sourcePathId,
+              targetPathId: destinationPath,
+              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              firstRunAt: firstRunAt,
+              scheduler: ScheduleStatus.SCHEDULING,
+              futureScheduleAt: bulkMigrate?.futureRunSchedule,
+              skipFile: bulkMigrate?.options?.skipFile,
+            })
+          );
         }
       }
     }
 
     if (jobConfigs.length > 0) {
-      return (await this.jobConfigRepo.save(jobConfigs)).map(({ id, jobType, sourcePathId, targetPathId }) => ({
-        id,
-        jobType,
-        status: JobConfigBulkMigrateResStatus.CREATED,
-        sourcePathId,
-        targetPathId
-      }));
+      const savedJobConfigs = await this.jobConfigRepo.save(jobConfigs);
+      const jobConfigIds = savedJobConfigs.map((jobConfig) => jobConfig.id);
+      if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
+        await this.saveIdentityMappingsWithMap(jobConfigIds, parsedMappings, identityMap, templateType);
+      }
+      return (await this.jobConfigRepo.save(jobConfigs)).map(
+        ({ id, jobType, sourcePathId, targetPathId }) => ({
+          id,
+          jobType,
+          status: JobConfigBulkMigrateResStatus.CREATED,
+          sourcePathId,
+          targetPathId,
+        })
+      );
+      
     } else {
+      if (jobConfigIdsToUpdate.length > 0) {
+        await this.updateMappingsWithMap(jobConfigIdsToUpdate, parsedMappings, identityMap, templateType);
+      }
       return [];
     }
   }
 
-  async createBulkCutover(bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
-    return [
-      {
-        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.CutOver,
-        status: JobStatus.Active,
-        firstRunAt: new Date('2025-01-25T12:00:00+00:00'),
-        sourcePathId: 'e98cb64f-57d5-40b7-b7fe-1c4fda581b6d',
-        targetPathId: ['fc3d1b79-7288-4d8d-8bc3-ec0b7753dbfc'],
+  async createBulkCutover(
+    bulkCutover: JobConfigCutoverBulk
+  ): Promise<JobConfigBulkCutoverRes[]> {
+    try {
+      const allCutoverConfigs = this.flattenCutoverConfig(
+        bulkCutover.cutoverConfig
+      );
+      const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
+      const jobRunStatuses = await this.jobRunRepo.find({
+        where: { jobConfigId: In(jobConfigs.map((j) => j.id)), status: In([JobRunStatus.Completed, JobRunStatus.Stopped]) },
+        order: { endTime: "DESC" }, 
+      });
+
+      const latestJobStatusMap = new Map<
+        string,
+        { status: JobRunStatus; endTime: Date }
+      >();
+
+      jobRunStatuses.forEach((jobRun) => {
+        if ((!latestJobStatusMap.has(jobRun.jobConfigId))) {
+          latestJobStatusMap.set(jobRun.jobConfigId, {
+            status: jobRun.status,
+            endTime: jobRun.endTime,
+          });
+        }
+      });
+
+      const completedMigrations = jobConfigs.filter(
+        (config) =>
+          config.jobType === JobType.MIGRATE &&
+          latestJobStatusMap.has(config.id) &&
+          latestJobStatusMap.get(config.id)!.status === JobRunStatus.Completed
+      );
+
+      const jobConfigMap = new Map<string, JobConfigEntity>();
+      completedMigrations.forEach((config) => {
+        jobConfigMap.set(config.id, config);
+      });
+
+      const newCutoverJobs: JobConfigEntity[] = [];
+      const updatedCutoverJobs: JobConfigEntity[] = [];
+
+      for (const { sourcePathId, destinationPathId } of allCutoverConfigs) {
+        for (const config of jobConfigMap.values()) {
+          if (
+            config.sourcePathId === sourcePathId &&
+            config.targetPathId === destinationPathId
+          ) {
+            const existingCutover = await this.jobConfigRepo.findOne({
+              where: {
+                jobType: JobType.CUT_OVER,
+                sourcePathId,
+                targetPathId: destinationPathId,
+              },
+            });
+
+            if (!existingCutover) {
+              newCutoverJobs.push(
+                this.jobConfigRepo.create({
+                  jobType: JobType.CUT_OVER,
+                  sourcePathId,
+                  targetPathId: destinationPathId,
+                  excludeFilePatterns: config.excludeFilePatterns,
+                  scheduler: ScheduleStatus.SCHEDULING,
+                  futureScheduleAt: config.futureScheduleAt,
+                  status: JobStatus.Active,
+                  preserveAccessTime: config.preserveAccessTime,
+                  firstRunAt: config.firstRunAt,
+                })
+              );
+            }else{
+              if(existingCutover && existingCutover.status === JobStatus.Active){
+                await this.jobConfigRepo.update(existingCutover.id,
+                  {
+                    jobType: JobType.CUT_OVER,
+                    excludeFilePatterns: config.excludeFilePatterns,
+                    scheduler: ScheduleStatus.SCHEDULING,
+                    futureScheduleAt: config.futureScheduleAt,
+                    status: config.status === JobStatus.InActive ? JobStatus.Active : config.status,
+                    preserveAccessTime: config.preserveAccessTime,
+                    firstRunAt: config.firstRunAt,
+                  })
+                  updatedCutoverJobs.push({ ...existingCutover, ...config });
+              }
+              else{
+                throw new HttpException(
+                  {
+                    status: "failed",
+                    message:
+                      `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`,
+                  },
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+            }
+          }
+        }
       }
-    ];
+
+      const savedJobs = await this.jobConfigRepo.save(newCutoverJobs);
+
+      return [...savedJobs, ...updatedCutoverJobs].map((job) => ({
+        id: job.id,
+        firstRunAt: job.firstRunAt,
+        jobType: job.jobType,
+        sourcePathId: job.sourcePathId,
+        targetPathId: job.targetPathId,
+        status: JobStatus.Active,
+      }));
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: "failed",
+          message:
+            error.message ||
+            "An error occurred while creating bulk cutover job",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
-  async precheck(data: JobConfigPrecheck): Promise<JobConfigPrecheckRes> {
-    return { status: 'success' }
+  flattenCutoverConfig(config: MigrateConfig[]): FlattenedCutoverConfig[] {
+    return config.flatMap(({ sourcePathId, destinationPathId }) =>
+      destinationPathId.map((destId) => ({
+        sourcePathId,
+        destinationPathId: destId,
+      }))
+    );
+  }
+
+  async precheck(data: JobConfigPrecheck) {
+    const traceId: string = uuidv4();
+    try {
+      const serverMappings = new Map();
+      for (const config of data.migrateConfigs) {
+        const pathIds = new Set<string>();
+        const destinationPathIds = config.destinationPathId;
+        pathIds.add(config.sourcePathId);
+        destinationPathIds.forEach((id) => pathIds.add(id));
+        const pathToWorkerMapping = await this.volumeRepo.find({
+          where: { id: In([...pathIds]) },
+          relations: {
+            fileServer: { workers: true},
+          },
+        });
+        const sourceVolume = pathToWorkerMapping.find(
+          (p) => p.id === config.sourcePathId
+        );
+
+        const sourceFileServer = sourceVolume.fileServer;
+
+        let sourceEntry = serverMappings.get(sourceFileServer.id);
+        if (!sourceEntry) {
+          sourceEntry = {
+            sourceServerCredentials: {
+              id: sourceFileServer.id,
+              host: sourceFileServer.host,
+              userName: sourceFileServer.userName,
+              password: sourceFileServer.password,
+              protocol: sourceFileServer.protocol,
+              protocolVersion: sourceFileServer.protocolVersion.replace(/^v/, ''),
+              serverType: sourceFileServer.serverType,
+            },
+            sourcePaths: [],
+          };
+          serverMappings.set(sourceFileServer.id, sourceEntry);
+        }
+
+        const sourcePathEntry = {
+          pathId: config.sourcePathId,
+          preserveAccessTime: data.preserveAccessTime,
+          mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
+          exportPathName: sourceVolume.volumePath,
+          destinations: [],
+          commonWorkers: [],
+        };
+        for (const destinationPathId of destinationPathIds) {
+          const destinationVolume = pathToWorkerMapping.find(
+            (p) => p.id === destinationPathId
+          );
+          if (!destinationVolume)
+            return {
+              status: "error",
+              erros: ["DESTINATION_PATH_NOT_FOUND"],
+              message: `Destination path ${destinationPathId} not found`,
+            };
+
+          const destinationFileServer = destinationVolume.fileServer;
+
+          sourcePathEntry.destinations.push({
+            destinationPathId,
+            destinationServerCredentials: {
+              id: destinationFileServer.id,
+              host: destinationFileServer.host,
+              userName: destinationFileServer.userName,
+              password:destinationFileServer.password,
+              protocol: destinationFileServer.protocol,
+              protocolVersion: destinationFileServer.protocolVersion.replace(/^v/, ''),
+              serverType: destinationFileServer.serverType,
+              mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
+              exportPathName: destinationVolume.volumePath,
+            },
+          });
+          sourcePathEntry.commonWorkers = [];
+        }
+        sourceEntry.sourcePaths.push(sourcePathEntry);
+      }
+      const finalResult = Array.from(serverMappings.values());
+
+      this.logger.debug(
+        `[${traceId}] Precheck payload: ${JSON.stringify(finalResult)}`
+      );
+      const startPrecheckWorkPayload: StartWorkFlowPayload = {
+        workflowId: WorkFlows.PRECHECK + "-" + traceId,
+        taskQueue: "ParentWorkflow-TaskQueue",
+        args: [
+          {
+            traceId: traceId,
+            payload: finalResult,
+            options: new Options()
+          },
+        ],
+      }
+         const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK, startPrecheckWorkPayload);
+         return { workflowId: workflow.workflowId };
+    } catch (error) {
+        this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
+        return {
+          status: "error",
+          erros: ["PRECHECK_FAILED"],
+          message: `Failed to perform the precheck: ${error}`,
+        };
+    }
   }
 
   // ------------  update ---------------- //
-  async updateJobConfig(id: string, data: Partial<JobConfigDto>): Promise<JobConfigEntity> {
+  async updateJobConfig(
+    id: string,
+    data: Partial<JobConfigDto>
+  ): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
       throw new Error(`Job with id ${id} not found`);
@@ -180,70 +872,83 @@ export class JobConfigService {
 
   // ------------ Job Config By Id ---------------- //
   async getJobConfigById(id: string): Promise<any> {
-    const jobConfig = await this.jobConfigRepo.findOne({ where: { id },  
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where: { id },
       relations: [
-        'jobRuns',
-        'sourcePath', 
-        'sourcePath.fileServer', 
-        'sourcePath.fileServer.config',
-        'targetPath',
-        'targetPath.fileServer',
-        'targetPath.fileServer.config',
+        "jobRuns",
+        "sourcePath",
+        "sourcePath.fileServer",
+        "sourcePath.fileServer.config",
+        "targetPath",
+        "targetPath.fileServer",
+        "targetPath.fileServer.config",
       ],
     });
 
-    if (!jobConfig) 
-      throw new Error(`Job with id ${id} not found`);
+    if (!jobConfig) throw new Error(`Job with id ${id} not found`);
 
-    const runStats = await Promise.all(jobConfig.jobRuns.map(async (jobRun) => {
-    
-      const inventoryCounts = await this.inventoryRepo
-        .createQueryBuilder('inventory')
-        .select([
-          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-          "SUM(inventory.fileSize) AS totalSize",
-        ])
-        .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRun.id })
-        .getRawOne();
-      return {
-        jobRunId: jobRun.id,
-        isReportReady: jobRun.isReportReady,
-        status: jobRun.status,
-        startTime: jobRun.startTime,
-        endTime: jobRun.endTime, 
-        jobType: jobConfig.jobType,
-        timeElapsed : jobRun.endTime ? jobRun.endTime.getTime() - jobRun.startTime.getTime()  : Date.now() - jobRun.startTime.getTime(),
-        scannedFilesCount: BigInt(inventoryCounts.filecount || '0')?.toString(),
-        scannedDirectoriesCount: BigInt(inventoryCounts.directorycount || '0')?.toString(),
-        totalScannedSize: this.covertBytes(Number(inventoryCounts.totalsize || '0')),
-        errors: []
-      };
-    }));
-  
-    const payload={
+    const runStats = await Promise.all(
+      jobConfig.jobRuns.map(async (jobRun) => {
+        const inventoryCounts = await this.inventoryRepo
+          .createQueryBuilder("inventory")
+          .select([
+            "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+            "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+            "SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END) AS totalSize"
+          ])
+          .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRun.id })
+          .getRawOne();
+        return {
+          jobRunId: jobRun.id,
+          isReportReady: jobRun.isReportReady,
+          status: jobRun.status,
+          startTime: jobRun.startTime,
+          endTime: jobRun.endTime,
+          jobType: jobConfig.jobType,
+          timeElapsed: jobRun.endTime
+            ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
+            : Date.now() - jobRun.startTime.getTime(),
+          scannedFilesCount: BigInt(
+            inventoryCounts.filecount || "0"
+          )?.toString(),
+          scannedDirectoriesCount: BigInt(
+            inventoryCounts.directorycount || "0"
+          )?.toString(),
+          totalScannedSize: this.covertBytes(
+            Number(inventoryCounts.totalsize || "0")
+          ),
+          errors: [],
+        };
+      })
+    );
+
+    const payload = {
       jobConfigId: id,
       jobType: jobConfig.jobType,
       sourceServer: {
-        serverName: jobConfig.sourcePath?.fileServer?.config?.configName || null,
+        serverName:
+          jobConfig.sourcePath?.fileServer?.config?.configName || null,
         path: jobConfig.sourcePath?.volumePath || null,
         protocol: jobConfig.sourcePath?.fileServer?.protocol || null,
       },
 
-      destinationServer: jobConfig.targetPath? {
-        serverName: jobConfig.targetPath?.fileServer?.config?.configName || null,
-        path: jobConfig.targetPath?.volumePath || null,
-        protocol: jobConfig.targetPath?.fileServer?.protocol || null,
-      }:{},
+      destinationServer: jobConfig.targetPath
+        ? {
+            serverName:
+              jobConfig.targetPath?.fileServer?.config?.configName || null,
+            path: jobConfig.targetPath?.volumePath || null,
+            protocol: jobConfig.targetPath?.fileServer?.protocol || null,
+          }
+        : {},
 
-      status: jobConfig.status,    
+      status: jobConfig.status,
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
       aggregateData: {
-        timeElapsed: 0,
-        scannedFilesCount: 0,
-        scannedDirectoriesCount: 0,
-        totalScannedSize: "0 B"
+        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => a + b,0),
+        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => a + b,0n)?.toString(),
+        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => a + b,0n)?.toString(),
+        totalScannedSize: runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => a + b,0),
       },
       errors: [],
     };
@@ -251,26 +956,8 @@ export class JobConfigService {
     return payload;
   }
 
-  async getCutoverDetailsByFileServerId(fileServerId: string) {
-    return [{
-      protocol: Protocol.NFS,
-      sourcePath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', sourcePathName: '/source/test' },
-      destinationFileServer: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationFileServerName: 'fileServer1' },
-      destinationPath: { id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39', destinationPathName: '/destination/test' },
-      jobConfig: [{
-        id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-        jobType: JobType.MIGRATE,
-        jobRunDetails: [{
-          id: 'b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39',
-          status: JobRunStatus.Completed
-        }]
-      }]
-    }]
-  }
-
   async getConfigsByProjectId(projectId: string) {
-    if (!isUUID(projectId))
-      throw new BadRequestException('Invalid projectId');
+    if (!isUUID(projectId)) throw new BadRequestException("Invalid projectId");
 
     const project = await this.projectRepo.findOne({
       select: {
@@ -284,66 +971,120 @@ export class JobConfigService {
             protocol: true,
             volumes: {
               id: true,
-              volumePath: true
-            }
-          }
-        }
+              volumePath: true,
+            },
+          },
+        },
       },
       where: { id: projectId },
       relations: {
         configs: {
           fileServers: {
-            volumes: true
-          }
-        }
-      }
+            volumes: true,
+          },
+        },
+      },
     });
 
-    if (!project) throw new NotFoundException(`Project for id ${projectId} not found.`);
+    if (!project)
+      throw new NotFoundException(`Project for id ${projectId} not found.`);
     return project;
   }
 
+  async getNoticeBoardDetailsByProjectId(projectId: string) {
+    const countErroredJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status IN (:...statuses)', { statuses: [JobRunStatus.Failed, JobRunStatus.Errored] })
+        .getCount();
+
+    const countBlockedCutoverJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status = :status', { status: JobRunStatus.Blocked })
+        .andWhere('jc.jobType = :jobType', { jobType: JobType.CUT_OVER })
+        .getCount();
+
+    const countRecentJobConfigs =
+      await this.jobConfigRepo
+        .createQueryBuilder('jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere("jc.createdAt >= NOW() - INTERVAL '1 DAY'")
+        .getCount();
+
+    const countCompletedJobRuns =
+      await this.jobRunRepo
+        .createQueryBuilder('jr')
+        .innerJoin('jr.jobConfig', 'jc')
+        .innerJoin('jc.sourcePath', 'sp')
+        .innerJoin('sp.fileServer', 'fs')
+        .innerJoin('fs.config', 'c')
+        .where('c.projectId = :projectId', { projectId })
+        .andWhere('jr.status = :status', { status: JobRunStatus.Completed })
+        .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
+        .getCount();
+
+    console.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
+
+    return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
+  }
+
   // ------------ Job Config All ---------------- //
-  async getAllJobConfig(projectId:string): Promise<JobListingDTO[]> {
-    const allJobsDetails = await this.jobConfigRepo.createQueryBuilder('jobconfig')
-      .leftJoin('jobconfig.jobRuns', 'jobRun')
-      .leftJoin('jobconfig.sourcePath', 'sourceVolumes')
-      .leftJoin('jobconfig.targetPath', 'targetVolumes')
-      .leftJoin('sourceVolumes.fileServer', 'sourceFileServer')
-      .leftJoin('targetVolumes.fileServer', 'targetFileServer')
-      .leftJoin('sourceFileServer.config', 'sourceConfig')
-      .leftJoin('targetFileServer.config', 'targetConfig')
+  async getAllJobConfig(projectId: string): Promise<JobListingDTO[]> {
+    const allJobsDetails = await this.jobConfigRepo
+      .createQueryBuilder("jobconfig")
+      .leftJoin("jobconfig.jobRuns", "jobRun")
+      .leftJoin("jobconfig.sourcePath", "sourceVolumes")
+      .leftJoin("jobconfig.targetPath", "targetVolumes")
+      .leftJoin("sourceVolumes.fileServer", "sourceFileServer")
+      .leftJoin("targetVolumes.fileServer", "targetFileServer")
+      .leftJoin("sourceFileServer.config", "sourceConfig")
+      .leftJoin("targetFileServer.config", "targetConfig")
       .select([
-        'jobconfig.id AS jobConfigId',
-        'jobconfig.jobType AS jobType',
-        'jobconfig.status AS jobConfigStatus',
-        'jobconfig.firstRunAt AS firstRunAt',
-        'jobconfig.sourcePathId AS sourcePath',
-        'jobconfig.targetPathId AS targetPath',
-        'jobconfig.futureScheduleAt AS futureSchedule',
-        'sourceVolumes.volumePath AS sourcePath',
-        'targetVolumes.volumePath AS targetPath',
-        'sourceFileServer.protocol AS sourceProtocol',
-        'targetFileServer.protocol AS targetProtocol',
-        'sourceConfig.configName AS sourceServerName',
-        'targetConfig.configName AS targetServerName',
+        "jobconfig.id AS jobConfigId",
+        "jobconfig.jobType AS jobType",
+        "jobconfig.status AS jobConfigStatus",
+        "jobconfig.firstRunAt AS firstRunAt",
+        "jobconfig.sourcePathId AS sourcePath",
+        "jobconfig.targetPathId AS targetPath",
+        "jobconfig.futureScheduleAt AS futureSchedule",
+        "sourceVolumes.volumePath AS sourcePath",
+        "targetVolumes.volumePath AS targetPath",
+        "sourceFileServer.protocol AS sourceProtocol",
+        "targetFileServer.protocol AS targetProtocol",
+        "sourceConfig.configName AS sourceServerName",
+        "targetConfig.configName AS targetServerName",
         'jobconfig.createdAt AS "createdAt"',
-      ]).addSelect('COUNT(jobRun.id)', 'totalRuns')
-      .where('sourceConfig.projectId = :projectId', { projectId })
-      .orWhere('targetConfig.projectId = :projectId', { projectId })
-      .groupBy('jobconfig.id')
-      .addGroupBy('jobconfig.jobType')
-      .addGroupBy('jobconfig.status')
-      .addGroupBy('jobconfig.sourcePathId')
-      .addGroupBy('jobconfig.targetPathId')
-      .addGroupBy('jobconfig.futureScheduleAt')
-      .addGroupBy('sourceVolumes.volumePath')
-      .addGroupBy('targetVolumes.volumePath')
-      .addGroupBy('sourceFileServer.protocol')
-      .addGroupBy('targetFileServer.protocol')
-      .addGroupBy('sourceConfig.configName')
-      .addGroupBy('targetConfig.configName')
-      .addGroupBy('jobconfig.createdAt')
+      ])
+      .addSelect("COUNT(jobRun.id)", "totalRuns")
+      .where("sourceConfig.projectId = :projectId", { projectId })
+      .orWhere("targetConfig.projectId = :projectId", { projectId })
+      .groupBy("jobconfig.id")
+      .addGroupBy("jobconfig.jobType")
+      .addGroupBy("jobconfig.status")
+      .addGroupBy("jobconfig.sourcePathId")
+      .addGroupBy("jobconfig.targetPathId")
+      .addGroupBy("jobconfig.futureScheduleAt")
+      .addGroupBy("sourceVolumes.volumePath")
+      .addGroupBy("targetVolumes.volumePath")
+      .addGroupBy("sourceFileServer.protocol")
+      .addGroupBy("targetFileServer.protocol")
+      .addGroupBy("sourceConfig.configName")
+      .addGroupBy("targetConfig.configName")
+      .addGroupBy("jobconfig.createdAt")
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
@@ -352,30 +1093,36 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate: nextDate(job.jobtype, job.firstrunat, job.futureschedule),
+        nextScheduleDate: nextDate(
+          job.jobtype,
+          job.firstrunat,
+          job.futureschedule
+        ),
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
-          protocol: job.sourceprotocol
+          protocol: job.sourceprotocol,
         },
-        destinationServer: job.targetpath ? {
-          serverName: job.targetservername,
-          path: job.targetpath,
-          protocol: job.targetprotocol
-        } : {},
+        destinationServer: job.targetpath
+          ? {
+              serverName: job.targetservername,
+              path: job.targetpath,
+              protocol: job.targetprotocol,
+            }
+          : {},
         errors: 0,
         totalRuns: job.totalRuns,
         configName: job.configname,
-        createdAt: job.createdAt
+        createdAt: job.createdAt,
       });
     });
-    return payload
+    return payload;
   }
 
   private templates = {
-    sid: 'sid_template.csv',
-    gid: 'gid_template.csv',
-    uid: 'uid_template.csv',
+    sid: "sid_template.csv",
+    gid: "gid_template.csv",
+    uid: "uid_template.csv",
   };
 
   getTemplateFilename(type: TemplateType) {
@@ -406,19 +1153,342 @@ export class JobConfigService {
     const bytesInPB = bytesInTB * 1024;
 
     if (bytes < bytesInKB) {
-        return `${bytes} B`;
+      return `${bytes} B`;
     } else if (bytes < bytesInMB) {
-        return `${(bytes / bytesInKB).toFixed(2)} KB`;
+      return `${(bytes / bytesInKB).toFixed(2)} KB`;
     } else if (bytes < bytesInGB) {
-        return `${(bytes / bytesInMB).toFixed(2)} MB`;
+      return `${(bytes / bytesInMB).toFixed(2)} MB`;
     } else if (bytes < bytesInTB) {
-        return `${(bytes / bytesInGB).toFixed(2)} GB`;
+      return `${(bytes / bytesInGB).toFixed(2)} GB`;
     } else if (bytes < bytesInPB) {
-        return `${(bytes / bytesInTB).toFixed(2)} TB`;
+      return `${(bytes / bytesInTB).toFixed(2)} TB`;
     } else {
-        return `${(bytes / bytesInPB).toFixed(2)} PB`;
+      return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
-}
+    }
+  hasCommonWorkers(data: any): boolean {
+    const workerIds = new Set<string>();
+    for (const volume of data) {
+      if (volume.fileServer.workers.length === 0) {
+        return false;
+      }
+      for (const worker of volume.fileServer.workers) {
+        if (workerIds.has(worker.id)) {
+          return true;
+        }
+        if (worker.status === "Online") {
+          workerIds.add(worker.id);
+        }
+      }
+    }
+    return false;
+  }  
+  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
+    if (conditions.length === 0) return [];
+    const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
+    conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
+      const sourceParam = `sourcePathId_${index}`;
+      const targetParam = `destinationPathId_${index}`;
+      if (index === 0) {
+        queryBuilder.where(
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam}) AND jobConfig.jobType = 'MIGRATE'`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
+        );
+      } else {
+        queryBuilder.orWhere(
+          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam})`,
+          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
+        );
+      }
+    });
+    return await queryBuilder.getMany();
+  }
 
+  async precheckValidation(precheckData: MigrateConfig[]) {
+    console.log("precheckData",JSON.stringify(precheckData));
+    const results = new Map<string,any>();
+    for (const config of precheckData) {
+      if(!results.has(config.sourcePathId)){
+        const payload = {
+          sourcePathId: config.sourcePathId,
+          destinations:[]
+        };
+        results.set(config.sourcePathId,payload);
+      }
+      const pathIds = new Set<string>();
+      const destinationPathIds = config.destinationPathId;
+      pathIds.add(config.sourcePathId);
+      destinationPathIds.forEach((id) => pathIds.add(id));
+      const pathToWorkerMapping = await this.volumeRepo.find({
+        where: { id: In([...pathIds]) },
+        relations: {
+          fileServer: { workers: true},
+        },
+      });
+      console.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
+      const sourceVolume = pathToWorkerMapping.find(
+        (p) => p.id === config.sourcePathId
+      );
+      if (!sourceVolume){
+        const data = results.get(config.sourcePathId);
+        data.status = "failed";
+        data.error = ["SOURCE_PATH_NOT_FOUND"];
+        data.message = `Source path ${config.sourcePathId} not found`;
+        results.set(config.sourcePathId,data);
+        continue;
+      }
 
+      const sourceFileServer = sourceVolume.fileServer;
+      const sourceWorkers =
+        sourceFileServer?.workers?.filter((w) => w.status === "Online") || [];
+
+      for (const destinationPathId of destinationPathIds) {
+        const destinationVolume = pathToWorkerMapping.find(
+          (p) => p.id === destinationPathId
+        );
+        if (!destinationVolume){
+          const data = results.get(config.sourcePathId);
+              data.status = "failed";
+              const destinationPayload ={
+                status: "failed",
+                errors: ["DESTINATION_PATH_NOT_FOUND"],
+                message: `Destination path ${destinationPathId} not found`,
+                destinationPathId: destinationPathId
+              };
+              data.destinations.push(destinationPayload);
+              results.set(config.sourcePathId,data);
+              continue;
+          }
+        const destinationFileServer = destinationVolume.fileServer;
+        const destinationWorkers =
+          destinationFileServer?.workers?.filter(
+            (w) => w.status === "Online"
+          ) || [];
+
+        if(sourceFileServer.protocolVersion !== destinationFileServer.protocolVersion){
+          const data = results.get(config.sourcePathId);
+          const destinationPayload ={
+            status: "failed",
+            errors: ["PROTOCOL_VERSION_MISMATCH"],
+            message: `Protocol version mismatch between source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+            destinationPathId: destinationPathId
+          };
+          data.destinations.push(destinationPayload);
+          results.set(config.sourcePathId,data);
+          continue;
+        }
+        this.logger.log('protocolVersion',sourceFileServer.protocolVersion);
+        this.logger.log('protocolVersion',destinationFileServer.protocolVersion);
+        const commonWorkers = sourceWorkers.filter((sw) =>
+          destinationWorkers.some((dw) => dw.workerId === sw.workerId)
+        );
+        console.log("commonWorkers",JSON.stringify(commonWorkers)); 
+        if (commonWorkers.length === 0)
+          {
+            const data = results.get(config.sourcePathId);
+            const destinationPayload ={
+              status: "failed",
+              errors: ["NO_COMMON_WORKERS"],
+              message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+              destinationPathId: destinationPathId
+            };
+            data.destinations.push(destinationPayload);
+            results.set(config.sourcePathId,data);
+          }else{
+            const data = results.get(config.sourcePathId);
+            data.destinations.push({
+              destinationPathId: destinationPathId,
+              status: "success",
+              commonWorkers: commonWorkers.map((w) => ({workerId: w.workerId})),
+            });
+            results.set(config.sourcePathId,data);
+          }
+        }
+        const data = results.get(config.sourcePathId);
+        data.status = "success";
+        results.set(config.sourcePathId,data);
+      }
+      this.logger.log("results",JSON.stringify(results));
+      return Array.from(results.values()).flatMap((it) => it);
+    }
+  
+    async decodeBase64(base64String: string): Promise<string> {
+      try {
+        const base64Data = base64String.split(",")[1];
+        if (!base64Data) {
+          throw new Error("Invalid Base64 format");
+        }
+        return Buffer.from(base64Data, "base64").toString("utf-8");
+      } catch (error) {
+        console.error("Error decoding Base64:", error);
+        throw error;
+      }
+    }
+  
+    async parseBlobData(
+      blobData: string,
+      templateType: TemplateType
+    ): Promise<ParsedMapping[]> {
+      return blobData
+        ?.trim()
+        ?.split("\n")
+        ?.map((line) => line.split(","))
+        ?.map((columns) => {
+          if (templateType === TemplateType.SID) {
+            const [sourceMapping, targetMapping] = columns;
+            return { sourceMapping, targetMapping };
+          } else if (templateType === TemplateType.GID) {
+            const [sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid] = columns;
+            return { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid };
+          }
+        });
+    }
+  
+    async saveIdentityMappingsWithMap(
+      jobConfigIds: string[],
+      parsedData: ParsedMapping[],
+      identityMap: string,
+      templateType: TemplateType
+    ) {
+      console.log("reached for saving mappings");
+  
+      for (const mapping of parsedData) {
+        if (templateType === TemplateType.SID) {
+          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
+          const identityMappingEntity = this.identityMappingRepo.create({
+            identityType: templateType,
+            identityMap: identityMap,
+            sourceMapping: sourceMapping,
+            targetMapping: targetMapping,
+          });
+          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
+          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+        } else if (templateType === TemplateType.GID) {
+          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
+  
+          const gidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.GID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingGid,
+            targetMapping: targetMappingGid,
+          });
+          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
+          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+  
+          const uidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.UID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingUid,
+            targetMapping: targetMappingUid,
+          });
+          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
+          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+        }
+      }
+  
+      for (const jobConfigId of jobConfigIds) {
+        const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
+          identityMappingId: identityMap,
+          jobConfigId: jobConfigId,
+        });
+  
+        await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
+      }
+    }
+  
+    async updateMappingsWithMap(
+      jobConfigIds: any[],
+      parsedData: ParsedMapping[],
+      identityMap: string,
+      templateType: TemplateType
+    ) {
+      this.logger.log("reached for updating mappings");
+      this.logger.log("jobCIDs", jobConfigIds);
+      this.logger.log("parsedData", parsedData);
+  
+      for (const mapping of parsedData) {
+        if (templateType === TemplateType.SID) {
+          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
+          const identityMappingEntity = this.identityMappingRepo.create({
+            identityType: templateType,
+            identityMap: identityMap,
+            sourceMapping: sourceMapping,
+            targetMapping: targetMapping,
+          });
+          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
+          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+        } else if (templateType === TemplateType.GID) {
+          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
+  
+          const gidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.GID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingGid,
+            targetMapping: targetMappingGid,
+          });
+          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
+          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+  
+          const uidMappingEntity = this.identityMappingRepo.create({
+            identityType: TemplateType.UID,
+            identityMap: identityMap,
+            sourceMapping: sourceMappingUid,
+            targetMapping: targetMappingUid,
+          });
+          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
+          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+        }
+      }
+  
+      for (const jobConfigId of jobConfigIds) {
+        const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
+          where: {
+            jobConfigId: jobConfigId,
+          },
+        });
+  
+        if (existingCrossMapping) {
+          existingCrossMapping.identityMappingId = identityMap;
+          await this.identityCrossMappingRepo.save(existingCrossMapping);
+          console.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
+        } else {
+          const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
+            identityMappingId: identityMap,
+            jobConfigId: jobConfigId,
+          });
+  
+          await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
+        }
+      }
+    }
+
+    async getCutoverDetailsByFileServerId(fileServerId: string) {
+      return [
+        {
+          protocol: Protocol.NFS,
+          sourcePath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            sourcePathName: "/source/test",
+          },
+          destinationFileServer: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationFileServerName: "fileServer1",
+          },
+          destinationPath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationPathName: "/destination/test",
+          },
+          jobConfig: [
+            {
+              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+              jobType: JobType.MIGRATE,
+              jobRunDetails: {
+                id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+                status: JobRunStatus.Completed,
+              },
+            },
+          ],
+        },
+      ];
+    }
 }

@@ -1,27 +1,35 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobStatus, JobType } from "src/constants/enums";
-import { EmitterEvents } from "src/constants/events";
-import { ScheduleStatus, SocketEvents } from "src/constants/status";
+import { JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
+import * as parser from 'cron-parser';
+import { CutOverStatus, JobRunStatus, JobStatus, JobType, WorkFlows } from "src/constants/enums";
+import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { FindManyOptions, In, LessThan, MoreThan, Raw, Repository } from "typeorm";
+import { RedisService } from "src/redis/redis.service";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
+import { FindManyOptions, FindOptionsWhere, In, IsNull, Not, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import {
   JobRunDetailsDTO,
   JobRunDto,
   JobRunsDTO
 } from "./dto/jobrun.dto";
-import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
+import { ApprovalRequestDTO, JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { JobRunConfig, UnMountNotificationPayload, UpdateJobRunMappingPayload } from "./jobrun.types";
-import { JobOptionsEntity } from "src/entities/joboptions.entity";
-import { ConfigService } from "@nestjs/config";
-
+import { JobRunInitService } from "./jobrun.init.service";
+import { JobRunConfig } from "./jobrun.types";
+import { FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
 @Injectable()
 export class JobRunService {
+ 
+ 
   private readonly logger = new Logger(JobRunService.name);
   private readonly mountBasePath: string 
 
@@ -34,46 +42,45 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
-    @InjectRepository(JobOptionsEntity)
-    private optionRepo: Repository<JobOptionsEntity>,
-    private readonly eventEmitter: EventEmitter2,
-    private readonly configService: ConfigService
+    @InjectRepository(OperationsEntity)
+    private operationRepo : Repository<OperationsEntity>,
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo : Repository<OperationErrorEntity>,
+    private readonly configService: ConfigService,
+    private  readonly jobRunInitService: JobRunInitService,
+    private readonly redisService: RedisService,
+    private workFlowService: WorkflowService,
   ) {
     this.mountBasePath = this.configService.get<string>('app.paths.mountBasePath')
   }
 
-  @OnEvent(EmitterEvents.JOB_RUN_STATUS_UPDATE, { async: true })
-  async jobRunStatusUpdate(payload: {jobRunId: string, status: JobRunStatus}){
-    switch(payload.status) {
-      case JobRunStatus.Completed: 
-        await this.jobRunRepo.update({id: payload.jobRunId}, {endTime: new Date(), status: JobRunStatus.Completed})
-        await this.updateJobRunMapping({jobRunId: payload.jobRunId, isActive: false})
-        await this.reScheduleJobConfigById(payload.jobRunId)
-        break;
-      default:
-        await this.jobRunRepo.update({id: payload.jobRunId}, { status: payload.status})
-        break
+  async cutOverApproval(jobRunId: string, status: CutOverStatus) {
+    const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations: {jobConfig: true}})
+    if(status === CutOverStatus.REJECTED) {
+      if(jobRun)
+        await this.jobConfigRepo.update({
+          sourcePathId:  jobRun.jobConfig.sourcePathId,
+          targetPathId:  jobRun.jobConfig.targetPathId,
+          jobType: JobType.MIGRATE
+        }, {status : JobStatus.Active})
     }
+    else {
+      await this.jobConfigRepo.update({
+        sourcePathId:  jobRun.jobConfig.sourcePathId,
+        targetPathId:  jobRun.jobConfig.targetPathId,
+        jobType: JobType.CUT_OVER
+      }, {status : JobStatus.InActive})
+    }
+    await this.jobRunRepo.update({id: jobRunId}, {status: JobRunStatus.Completed})
   }
 
-  @OnEvent(EmitterEvents.UPDATE_JOB_RUN_MAPPING, { async: true })
-  async updateJobRunMapping(payload: UpdateJobRunMappingPayload){
-    await this.workerJobRunMapRepo.update({jobRunId: payload.jobRunId}, {isActive: payload.isActive})
-  }
-
-
-  @OnEvent(EmitterEvents.UNMOUNT_NOTIFICATION,  {async: true}) 
-  async unmountNotification(payload: UnMountNotificationPayload){
-    const workers = await this.workerJobRunMapRepo.find({where:{jobRunId: payload.jobRunId, isPathMounted: true}})
-    for(const worker of workers) 
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
-        workerId: worker.workerId,
-        socketEvents: SocketEvents.UNMOUNT_PATH,
-        payload: {
-          mountBaseDir: this.mountBasePath,
-          ...payload
-        }
-    });
+  async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
+    const signal: SignalWorkFlowPayload = {
+      payload: approvalRequest.action,
+      signalName:  'approve',
+      workflowId: `${WorkFlows.CUT_OVER}-${approvalRequest.jobRunId}`
+    }
+    return await this.workFlowService.sendSignal(signal)
   }
 
   // ------------------ Ad-hoc Run -------------------- //
@@ -85,146 +92,12 @@ export class JobRunService {
       throw new BadRequestException(`Job run is already created for ${jobConfigId}`)
     if(jobConfig.status === JobStatus.InActive)
       throw new BadRequestException(`Job run can not be created to Inactive Job Config`)
-    return await this.createJobRun(jobConfig.id, new Date())
+    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date())
   }
    
-  // ------------------ Cron schedule -------------------- //
-  async scheduleAJob() {
-    const currentTime = new Date();
-    const jobs: JobConfigEntity[] = await this.jobConfigRepo.find({
-      select:{id: true},
-      where: {
-        status: JobStatus.Active, scheduler: ScheduleStatus.SCHEDULING, 
-        firstRunAt: LessThan(currentTime)
-      },
-    })
-    jobs.forEach(async (job) => await this.createJobRun(job.id, currentTime));
-    return jobs;
-  }
-
-  // ------------------ Update Job Config by Job Run Id ---------------//
-  async reScheduleJobConfigById(jobRunId: string) {
-    const jonRun = await this.jobRunRepo.findOne({where: {id: jobRunId}, relations:{jobConfig: true}})
-    if(jonRun.jobConfig?.firstRunAt > new Date()) {
-      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.SCHEDULING})
-      this.logger.log(`Rescheduling Job ${jonRun.jobConfig.id}}`)
-    }
-    else
-      await this.jobConfigRepo.update({id: jonRun.jobConfig.id}, {scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
-  }
-
-
-  // ------------------ Get list of workers -------------------- //
-  async getJobConfig(
-    jobConfigId
-  ): Promise<JobRunConfig> {
-    const jobConfig = await this.jobConfigRepo.findOne({
-      where : {id: jobConfigId},
-      relations: {
-        sourcePath: { fileServer: { config: true, workers:true } },
-        targetPath: { fileServer: { config: true, workers:true } }
-      },
-    })
-
-    const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
-    const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-
-    const details : JobRunConfig = {
-      preserveAccessTime: jobConfig.preserveAccessTime,
-      excludeFilePatterns: jobConfig.excludeFilePatterns,
-      excludeOlderThan: jobConfig.excludeOlderThan,
-      connection: {
-        sourceCredential: {
-          path: jobConfig?.sourcePath?.volumePath ,
-          pathId : jobConfig?.sourcePath?.id ,
-          protocol: jobConfig?.sourcePath?.fileServer?.protocol,
-          username: jobConfig?.sourcePath?.fileServer?.userName,
-          password: jobConfig?.sourcePath?.fileServer?.password,
-          host: jobConfig?.sourcePath?.fileServer?.host,
-          workingDirectory: this.mountBasePath
-        }
-      },
-      workers: sourceWorkers.map((worker) => worker.workerId),
-      jobType: jobConfig.jobType
-    }
-
-    if (jobConfig.targetPathId) {
-      const workers: string[] = [];
-      const workerSet = new Set<string>();
-      sourceWorkers.forEach((worker) => workerSet.add(worker.workerId));
-      targetWorkers?.forEach((worker) => {
-        if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
-      });
-
-      details.connection['targetCredential'] = {
-        path: jobConfig?.targetPath?.volumePath ,
-        pathId : jobConfig?.targetPath?.id ,
-        protocol: jobConfig?.targetPath?.fileServer?.protocol ,
-        username: jobConfig?.targetPath?.fileServer?.userName,
-        password: jobConfig?.targetPath?.fileServer?.password,
-        host: jobConfig?.targetPath?.fileServer?.host,
-        workingDirectory: this.mountBasePath
-      }
-      details['workers'] = workers
-      return details;
-    }
-    return details
-  }
-
-  // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string , currentTime: Date) {
-    const details:JobRunConfig = await this.getJobConfig(jobConfigId)
-    
-    if(details.workers.length === 0) {
-      this.logger.warn(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`)
-      return
-    }
-    const workerMap = details.workers.map((worker) =>
-      this.workerJobRunMapRepo.create({ workerId: worker, isActive: true, isPathMounted: false })
-    )
-
-    const options = this.optionRepo.create({
-      excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: this.mountBasePath,
-      targetWorkingDir: this.mountBasePath,
-      preserveAccessTime: details.preserveAccessTime,
-      excludeOlderThan: details.excludeOlderThan
-    })
-    const jobRunRecord = this.jobRunRepo.create({
-      status: JobRunStatus.Ready,
-      startTime: currentTime,
-      endTime: null,
-      iterationNumber: 1,
-      jobConfigId: jobConfigId,
-      workerMap: workerMap,
-      options: options
-    });
-    const update = await this.jobRunRepo.save(jobRunRecord);
-    // make JobConfig Active
-    await this.jobConfigRepo.update({id: jobConfigId}, {scheduler: ScheduleStatus.SCHEDULED})
-    await this.sendMountMessage(details, update.id)
-
-    this.eventEmitter.emit(EmitterEvents.CREATE_TASK, {
-      jobRunId: update.id,
-      status: update.status,
-      details: details
-    });
-
-    return update
-  }
-  //  ------------------- sendMountMessage ------------------ //
-  async sendMountMessage(details: JobRunConfig, jobRunId: string) {
-      details.workers.forEach(worker => 
-        this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER, {
-          workerId: worker,
-          socketEvents: SocketEvents.MOUNT_PATH,
-          payload: { jobRunId: jobRunId, ...details.connection}
-      })
-    )
-  }
  
   //  ------------------- JobRun actions ------------------ //
-  async actions( jobRunActions: JobRunActionsReq) {
+  async actions(jobRunActions: JobRunActionsReq) {
     switch (jobRunActions.action) {
       case JobRunActions.PAUSE:
         return await this.pauseJobRuns(jobRunActions.jobRuns);
@@ -241,6 +114,11 @@ export class JobRunService {
   async pauseJobRuns(jobRuns: string[]) { 
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: false})
     await this.jobRunRepo.update({id: In(jobRuns)}, {status: JobRunStatus.Paused})
+    for(const jobRunId of jobRuns) {
+      const jobContext = await this.redisService.getJobContext(jobRunId);
+      jobContext.jobState.status = JobContextStatus.Paused;
+      await this.redisService.setJobContext(jobRunId, jobContext);
+    }
     return {details: 'Operation Completed Successfully'}
   }
 
@@ -254,17 +132,30 @@ export class JobRunService {
       worker.set(map.workerId,(worker.get(map.workerId) || []).concat([map.jobRunId]))
     }) 
     await this.workerJobRunMapRepo.delete({jobRunId: In(jobRuns)})
-    await this.jobRunRepo.update(
-      {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, {status: JobRunStatus.Stopped}
-      )
-    worker.forEach((jobRuns, workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
-        workerId: workerId,
-        socketEvents: SocketEvents.STOP_TASK,
-        payload: { jobRuns }
-      })
-    )
+    const jobRunConfigs = await this.jobRunRepo.find({where: {id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running])}, select: {jobConfigId : true}})
+    await this.jobRunRepo.update({id: In(jobRuns), status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])}, {status: JobRunStatus.Stopped, endTime: new Date() })
+    await this.jobConfigRepo.update({id: In(jobRunConfigs.map(jobRun => jobRun.jobConfigId))},{scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED})
+    for(const jobRunId of jobRuns) {
+      const jobContext = await this.redisService.getJobContext(jobRunId);
+      const workflowId = this.jobRunInitService.getWorkFlowId(jobRunId, jobContext.jobConfig.jobType as JobType);
+      await this.workFlowService.terminateWorkflow(workflowId);
+
+      jobContext.jobState.status = JobContextStatus.Stopped;
+      // append dummy file entry to appendToFileList
+      await jobContext.appendToFileList(this.dummyFileEntry());
+      this.logger.debug(`Job Run ${jobRunId} Stopped and appended Last file entry to file list`);
+      await this.redisService.setJobContext(jobRunId, jobContext);
+      // wait for 10 seconds to close consumers
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      await jobContext.cleanup();
+      this.logger.debug(`Job Run ${jobRunId} Stopped and appended Last file entry to file list`);
+      this.logger.debug(`Workflow Terminated ${workflowId}`);
+    }
     return {details: 'Operation Completed Successfully'}
+  }
+
+  dummyFileEntry() {
+    return new FileInfo("LAST_FILE", "", "", false, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0,1001,1001);
   }
 
   //  ------------------- JobRun actions RESUME ------------------ //
@@ -273,17 +164,49 @@ export class JobRunService {
       where: {jobRunId: In(jobRuns)}, select: {workerId: true}
     })
     await this.workerJobRunMapRepo.update({jobRunId: In(jobRuns)}, {isActive: true})
-    const workerSet = new Set<string>(mappings.map(it=>it.workerId))
     await this.jobRunRepo.update({id: In(jobRuns), status: JobRunStatus.Paused}, {status: JobRunStatus.Running})
     this.logger.debug(mappings)
-    workerSet.forEach((workerId)=>
-      this.eventEmitter.emit(EmitterEvents.NOTIFY_WORKER,{
-        workerId: workerId,
-        socketEvents: SocketEvents.WAKE_UP,
-        payload: { jobRuns }
-      })
-    )
+
+    for(const jobRunId of jobRuns) {
+      const jobContext = await this.redisService.getJobContext(jobRunId);
+      jobContext.jobState.status = JobContextStatus.Pending;
+      jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
+      // append dummy file entry to appendToFileList to close consumers and then start new consumers
+      await jobContext.appendToFileList(this.dummyFileEntry());
+      // wait for 5 seconds to close consumers
+      this.logger.debug(`Resuming Job Run ${jobRunId} and appended Last file entry to file list to clone old consumers`);
+      await this.redisService.setJobContext(jobRunId, jobContext);
+      await this.resumeJobRun(jobRunId);
+    }
     return {details: 'Operation Completed Successfully'}
+  }
+
+  async resumeJobRun(jobRunId: string) {
+    try {
+      const jobRun = await this.jobRunRepo.findOne({where: {id: jobRunId}})
+      if(!jobRun) throw new NotFoundException(`Job run with id ${jobRunId} not found`)
+      const details:JobRunConfig = await this.jobRunInitService.getJobConfig(jobRun.jobConfigId);
+      if(details.workers?.length === 0) {
+        this.logger.warn(`Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`)
+        return;
+      }
+      // check if workflow already exists
+      const workflowId = this.jobRunInitService.getWorkFlowId(jobRunId, details.jobType);
+      const workflowStatus = await this.workFlowService.getWorkflowStatus(workflowId);
+      this.logger.debug(`Workflow Status ${workflowStatus}`)
+      if(workflowStatus === JobContextStatus.Running) {
+        this.logger.debug(`Terminating Workflow ${workflowId}`);
+        await this.workFlowService.terminateWorkflow(workflowId);
+        this.logger.debug(`Workflow Terminated ${workflowId}`);
+      }
+      this.logger.debug(`Resuming Workflow ${workflowId}`);
+      await this.jobRunInitService.initiateWorkflow(jobRunId, details);
+      this.logger.debug(`Workflow Resumed ${workflowId}`);
+      return;
+    } catch (error) {
+      this.logger.error(`Failed to resume Job Run ${jobRunId} ${error}`);
+      throw new Error(`Failed to resume Job Run ${jobRunId} ${error}`);
+    }
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -370,7 +293,7 @@ export class JobRunService {
       )?.toString(),
       totalScannedSize: jobConfigDetails.jobType === JobType.DISCOVER ?  this.covertBytes(Number(inventoryCounts?.totalsize || "0")) : '0',
       totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? '' : '0',
-      errors: [],
+      errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
         taskType: task.taskType,
@@ -494,7 +417,7 @@ export class JobRunService {
             inventoryCounts?.totalsize || "0"
           )) : '',
           totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? '' : '0',
-          errors: [],
+          errors: await this.getErrorCounts(jobRun.jobrunid),
         };
         return response;
       })
@@ -525,4 +448,79 @@ export class JobRunService {
     }
   }
 
+  async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
+    const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+    });
+    if (!jobRunDetails) throw new Error(`Job run with id ${jobRunId} not found`);
+    if(status !== JobRunStatus.Running) {
+      const jobConfig = await this.jobConfigRepo.findOne({
+        where: { id: jobRunDetails.jobConfigId },
+      });
+      if (jobConfig && jobConfig.futureScheduleAt) {
+        try {
+          const date = parser.parseExpression(jobConfig.futureScheduleAt).next().toDate();
+          await this.jobConfigRepo.update(
+            { id: jobConfig.id },
+            { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING }
+          );
+        } catch (e) {
+          throw new Error(`Invalid cron expression in futureScheduleAt: ${e.message}`);
+        }
+      } else {
+        await this.jobConfigRepo.update(
+          { id: jobRunDetails.jobConfigId },
+          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+        );
+      }
+      await this.jobRunRepo.update(
+        { id: jobRunId },
+        { status: status, endTime: new Date() }
+      );
+    } else {
+      return this.jobRunRepo.update(
+        { id: jobRunId },
+        { status: status }
+      );
+    };
+  }
+
+  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
+    const { page = "1", limit = "10", sort = "createdAt", order = "DESC", jobRunId, errorType } = taskQuery;
+    const queryBuilder = this.operationErrorRepo.createQueryBuilder("oe")
+     .leftJoinAndSelect("oe.operation", "o")
+      .where("o.jobRunId = :jobRunId", { jobRunId }) 
+      .andWhere("oe.errorType = :errorType", { errorType }) 
+      .orderBy(`oe.${sort}`, order as "ASC" | "DESC") 
+      .select([
+        "oe.id", "oe.errorMessage", "oe.errorType", "oe.createdAt","oe.fileName","oe.filePath","oe.origin","oe.operationType","oe.errorCode",
+        "COALESCE(o.retryCount, 0) AS retryCount"
+      ])
+      .limit(parseInt(limit))
+      .offset((parseInt(page) - 1) * parseInt(limit)); 
+  
+    const [data, total] = await queryBuilder.getManyAndCount();
+    return { data, total };
+  }
+  
+
+   async getErrorOverview(jobRunId: string) {
+    return this.getErrorCounts(jobRunId);
+  }
+
+  async getErrorCounts(jobRunId: string) {
+    const countQuery =  this.operationErrorRepo.createQueryBuilder("oe")
+    .innerJoin("oe.operation", "o") 
+    .where("o.jobRunId = :jobRunId", { jobRunId })
+    .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+    .groupBy("oe.errorType");
+    let errorTypeCounts;
+    try {
+      errorTypeCounts = await countQuery.getRawMany();
+    } catch (error) {
+      this.logger.error("Error occurred while fetching error type counts:", error);
+      errorTypeCounts = [];
+    }
+    return errorTypeCounts;
+  }
 }
