@@ -116,7 +116,7 @@ export class RedisConsumerService implements OnModuleInit {
                     }
     
                     // Update local state
-                    this.isRunningMap.set(key, false);
+                     this.isRunningMap.set(key, false);
     
                     console.log(`[${jobRunId}] Consumer ${type} is set to stop.`);
                 } else {
@@ -207,7 +207,8 @@ export class RedisConsumerService implements OnModuleInit {
                         val: isActive,
                     });
                 } else {
-                    console.log(`Consumer ${member} is not active.`);
+                    // console.log(`Consumer ${member} is not active.`);
+
                 }
             } catch (error) {
                 console.error(`Error processing member ${member}:`, error);
@@ -231,7 +232,7 @@ export class RedisConsumerService implements OnModuleInit {
         const contextProvider = JobContextFactory.getProvider("redis", this.redisClient);
         const jobContext = await contextProvider.getJobContext(jobRunId);
         if (!jobContext) {
-            this.stopConsumer(jobRunId, consumerType);
+            await this.stopConsumer(jobRunId, consumerType);
             throw new Error('jobContext is null');
         }
         const key = this.getConsumerKey(jobRunId, consumerType);
@@ -254,10 +255,10 @@ export class RedisConsumerService implements OnModuleInit {
                 if (!(await this.isConsumerRunning(key))) {
                     console.log(`[${jobRunId}] Stopping consumer: ${consumerType}`);
                     if (consumerType === ConsumerType.files) {
-                        this.stopConsumer(jobRunId, undefined, true);
+                        await this.stopConsumer(jobRunId, undefined, true);
 
                     }else{
-                    this.stopConsumer(jobRunId, consumerType);
+                     await this.stopConsumer(jobRunId, consumerType);
                     }
                     return;
                 }
@@ -309,26 +310,28 @@ export class RedisConsumerService implements OnModuleInit {
                 await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
                 this.accumulatedRecords = []; // Clear after final processing
             }
-    
-            
-            try{
-            const jobType = jobContext.jobConfig.jobType;
-            const workflowId = getWorkflowId(jobRunId, jobType);
-            await this.workflowService.signalWorkflow({
-                namespace: 'default',
-                workflowExecution: { workflowId: workflowId },
-                signalName: 'reportingSignal',
-                input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
-            });
-        }
-        catch (error) {
-            console.error(`Error signaling workflow:`, error);
-        }
 
             this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
-            this.stopConsumer(jobRunId, undefined, true);
+            await this.stopConsumer(jobRunId, undefined, true);
             console.log(`[${jobRunId}] Stopping consumer`);
-            return;
+            
+                    try{
+                    const jobType = jobContext.jobConfig.jobType;
+                    const workflowId = getWorkflowId(jobRunId, jobType);
+                    console.log("----- Kill signal send to workflow----");
+                    await this.workflowService.signalWorkflow({
+                        namespace: 'default',
+                        workflowExecution: { workflowId: workflowId },
+                        signalName: 'reportingSignal',
+                        input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
+                    });
+                    console.log("----- Kill signal Done to workflow----");
+                }
+                catch (error) {
+                    console.error(`Error signaling workflow:`, error);
+                }
+                console.log(`Killing all consumers for jobRunId: ${jobRunId}`);
+            return true;
         }
 
         // Accumulate records in a batch

@@ -8,11 +8,12 @@ import { WorkflowModule } from './workflow/workflow.module';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import temporalConfig from './config/temporal.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      load: [appConfig,databaseConfig,],
+      load: [appConfig,databaseConfig,temporalConfig],
       isGlobal: true
     }),
     TypeOrmModule.forRootAsync({
