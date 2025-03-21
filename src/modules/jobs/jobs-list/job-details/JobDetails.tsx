@@ -5,7 +5,6 @@ import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import {
-  useJobAdhocRunMutation,
   useGetJobConfigDetailsQuery,
   useUpdateJobRunStatusMutation,
 } from "@api/jobsApi";
@@ -34,9 +33,11 @@ import {
 } from "@modules/jobs/job-run-list/run.utils";
 import { useMemo, useState } from "react";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
+import useAdhocRun from "@hooks/useAdhocRun";
 
 const JobDetails = () => {
   const navigate = useNavigate();
+  const adhocRun = useAdhocRun();
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
@@ -44,14 +45,15 @@ const JobDetails = () => {
   const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
-      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
       skipPollingIfUnfocused: true,
     }
   );
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
-  const [adhocRun] = useJobAdhocRunMutation();
 
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
@@ -91,6 +93,7 @@ const JobDetails = () => {
           status: row.status,
           handleUpdateStatus,
           isDisabled: isLoading || isUpdating,
+          adhocRun: () => adhocRun(jobId),
         })
       : [];
 
@@ -137,17 +140,6 @@ const JobDetails = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
-  const jobAdhocRun = () => {
-    adhocRun({ jobConfigId: jobId })
-      .then((res) => {
-        if (res.error) throw res.error;
-        notify.success("Successfully initiated ad-hoc run");
-      })
-      .catch((err) => {
-        notify.error(err.message || "Fail to initiate ad-hoc run");
-      });
-  };
-
   const latestJobRunId = useMemo(() => {
     return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
@@ -175,7 +167,7 @@ const JobDetails = () => {
           </Heading>
           <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
             <Button
-              onClick={jobAdhocRun}
+              onClick={() => adhocRun(jobId, true)}
               disabled={
                 !jobId ||
                 jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE

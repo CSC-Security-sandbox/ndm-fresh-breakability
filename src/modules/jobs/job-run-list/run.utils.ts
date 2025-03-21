@@ -21,6 +21,7 @@ export const getActionMenu = ({
   status,
   handleUpdateStatus,
   isDisabled,
+  adhocRun,
 }: GetActionMenuPropType) => {
   switch (status) {
     case JOB_STATUS_TYPE_ENUM.RUNNING:
@@ -50,6 +51,15 @@ export const getActionMenu = ({
           label: "Stop",
           onClick: () =>
             handleUpdateStatus(jobRunId, JOB_ACTION_STATUS_ENUM.STOP),
+          disabled: isDisabled,
+        },
+      ];
+    case JOB_STATUS_TYPE_ENUM.STOPPED:
+    case JOB_STATUS_TYPE_ENUM.ERRORED:
+      return [
+        {
+          label: "Start",
+          onClick: adhocRun,
           disabled: isDisabled,
         },
       ];

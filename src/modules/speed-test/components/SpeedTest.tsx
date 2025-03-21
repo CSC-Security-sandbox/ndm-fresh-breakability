@@ -5,19 +5,18 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { SPEED_TEST_COLUMN_DEF } from "@modules/speed-test/constants/speed-test.constants";
 import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
 import useSelectedProjectId from "@/hooks/useSelectedProjectId";
-import { useGetSpeedTestJobsQuery, useJobAdhocRunMutation } from "@api/jobsApi";
-import { notify } from "@components/notification/NotificationWrapper";
+import { useGetSpeedTestJobsQuery } from "@api/jobsApi";
 import { useNavigate } from "react-router-dom";
 import { JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
+import useAdhocRun from "@hooks/useAdhocRun";
 
 const SpeedTest = () => {
   const navigate = useNavigate();
+  const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: speedTestJobRunList, isLoading, isFetching, refetch } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
-  const [adhocRun] = useJobAdhocRunMutation();
-
   const jobStatus =
     JOB_STATUS_TYPE_ENUM.COMPLETED ||
     JOB_STATUS_TYPE_ENUM.ERRORED ||
@@ -41,16 +40,7 @@ const SpeedTest = () => {
     {
       label: "Adhoc Run",
       disabled: row.status !== jobStatus,
-      onClick: () => {
-        (async () => {
-          try {
-            await adhocRun({ jobConfigId: row.jobConfigId }).unwrap();
-            notify.success("Successfully initiated ad-hoc run");
-          } catch (err) {
-            notify.error(err?.message || "Failed to initiate ad-hoc run");
-          }
-        })();
-      },
+      onClick: () => adhocRun(row.jobConfigId, true),
     },
   ];
 

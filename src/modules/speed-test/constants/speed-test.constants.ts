@@ -197,7 +197,7 @@ export const SPEED_TEST_GRAPH_COLUMN_DEF = [
   {
     header: "Avg RTD Network",
     accessor: "rtd",
-    popoverText: "Sample",
+    popoverText: "Average Round Trip Delay Network",
     id: 6,
     Renderer: ({
       row,
@@ -213,7 +213,7 @@ export const SPEED_TEST_GRAPH_COLUMN_DEF = [
   {
     header: "Avg Packet Loss",
     accessor: "packetLoss",
-    popoverText: "Sample",
+    popoverText: "Average Packet Loss",
     id: 7,
     Renderer: ({
       row,
@@ -254,3 +254,9 @@ export const SPEED_TEST_SUCCESS =
 
 export const SPEED_TEST_TOOLTIP =
   "Please note that scratch path is currently unavailable, and the file server is inactive.";
+
+export enum SPEED_TEST_ERROR_ENUM {
+  readSpeed = "readError",
+  writeSpeed = "writeError",
+  networkPerformance = "networkPerformanceError",
+}

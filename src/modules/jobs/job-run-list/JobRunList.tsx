@@ -32,9 +32,11 @@ import {
   getReportActions,
 } from "./run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
+import useAdhocRun from "@hooks/useAdhocRun";
 
 const JobRunList = () => {
   const navigate = useNavigate();
+  const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
   const { data: jobRunList, isLoading, isFetching, refetch } = useGetJobRunsQuery({
     projectId: selectedProjectId,
@@ -85,6 +87,7 @@ const JobRunList = () => {
           status: row.status,
           handleUpdateStatus,
           isDisabled: isLoading || isUpdating,
+          adhocRun: () => adhocRun(row.jobConfigId),
         })
       : [];
 

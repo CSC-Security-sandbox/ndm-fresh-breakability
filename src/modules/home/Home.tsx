@@ -20,7 +20,7 @@ import { InitialFileServerOverviewApiData } from "@modules/storage-servers/file-
 const Home = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const navigate = useNavigate();
-  const [getProjectOverviewApi, { data, isLoading }] =
+  const [getProjectOverviewApi, { data, isLoading, isError }] =
     useLazyGetProjectOverviewQuery();
 
   const [chartData, setChartData] = useState<FileServerOverviewApi>(
@@ -65,6 +65,7 @@ const Home = () => {
             title="Jobs"
             Icon={WorkspaceIcon}
             isLoading={isLoading}
+            isError={isError}
           />
           <ChartInfo
             children={
@@ -73,6 +74,7 @@ const Home = () => {
             title="Storage"
             Icon={GcpStorageIcon}
             isLoading={isLoading}
+            isError={isError}
           />
         </Box>
         <NoticeBoard />

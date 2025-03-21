@@ -1,4 +1,4 @@
-import { DataItemType, FileInfo, ProcessedData } from "@/app/type.interface";
+import { DataItemType, FileInfo, ProcessedData } from "@/types/app.type";
 
 {
   /* This convert bytes to MB */

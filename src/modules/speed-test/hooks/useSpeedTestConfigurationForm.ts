@@ -39,13 +39,13 @@ const useSpeedTestConfigurationForm = () => {
           label: configData?.serverName,
           value: configData?.id,
           isDisabled:
-            configData.hasScratchPath === true &&
-            configData.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
+            configData?.hasScratchPath === true &&
+            configData?.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
               ? false
               : true,
           tooltip:
-            configData.hasScratchPath === true &&
-            configData.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
+            configData?.hasScratchPath === true &&
+            configData?.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
               ? ""
               : SPEED_TEST_TOOLTIP,
         })
@@ -53,11 +53,11 @@ const useSpeedTestConfigurationForm = () => {
       const configDetails = configurationData.map(
         (configData: SpeedTestConfigType) => ({
           id: configData.id,
-          protocol: configData.fileServers.map((server) => ({
-            label: server.protocol,
-            value: server.id,
+          protocol: configData?.fileServers.map((server) => ({
+            label: server?.protocol,
+            value: server?.id,
           })),
-          workers: configData.fileServers
+          workers: configData?.fileServers
             .map((server) =>
               server.workers.map((worker) => ({
                 label: worker.workerName,
@@ -78,7 +78,8 @@ const useSpeedTestConfigurationForm = () => {
     if (configureSpeedTestForm?.formState?.fileServer !== "") {
       configDetails.map((configData) => {
         if (
-          configData.id === configureSpeedTestForm?.formState?.fileServer?.value
+          configData?.id ===
+          configureSpeedTestForm?.formState?.fileServer?.value
         ) {
           setProtocolOptions(configData.protocol);
           setWorkerOptions(configData.workers);
@@ -95,7 +96,7 @@ const useSpeedTestConfigurationForm = () => {
 
   // Sort Config form data as per protocol, Add new speed test configuration and reset form
   const handleAddSpeedTest = useCallback(() => {
-    const dataAsPerProtocol = configureSpeedTestForm.formState.protocol.map(
+    const dataAsPerProtocol = configureSpeedTestForm?.formState?.protocol.map(
       (protocol: string) => ({
         ...configureSpeedTestForm.formState,
         protocol: [protocol],
@@ -105,14 +106,14 @@ const useSpeedTestConfigurationForm = () => {
     setSpeedTestConfiguration((prev) => {
       const updatedConfig = prev.filter((item) => {
         const isMatch = dataAsPerProtocol.some((protocolItem: ItemType) => {
-          const isProtocolMatch = item.protocol.some((itemProtocol) =>
+          const isProtocolMatch = item?.protocol.some((itemProtocol) =>
             protocolItem.protocol.some(
               (formStateProtocol) =>
                 itemProtocol.value === formStateProtocol.value
             )
           );
           return (
-            item.fileServer.value === protocolItem.fileServer.value &&
+            item?.fileServer?.value === protocolItem?.fileServer?.value &&
             isProtocolMatch
           );
         });

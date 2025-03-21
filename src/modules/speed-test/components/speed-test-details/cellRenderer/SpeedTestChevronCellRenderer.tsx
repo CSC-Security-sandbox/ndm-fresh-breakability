@@ -7,7 +7,7 @@ import DataCellRenderer from "@modules/speed-test/components/speed-test-details/
 const SpeedTestChevronCellRenderer = ({ row, rowState, type }: any) => {
   const averageSpeed: number = useMemo(() => {
     return percentageFormatter({
-      workers: row.workers,
+      workers: row?.workers,
       type,
     });
   }, [row.workers, type]);
