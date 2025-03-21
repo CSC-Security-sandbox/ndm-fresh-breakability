@@ -10,6 +10,7 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
 import { JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigurationService } from './configuration.service';
@@ -30,6 +31,10 @@ const mockConfigRepository = {
   save: jest.fn(),
   remove: jest.fn(),
   update: jest.fn()
+};
+
+const mockProjectRepository = {
+  findOne: jest.fn()
 };
 
 const mockFileServerRepository = {
@@ -61,7 +66,8 @@ describe('ConfigurationService', () => {
   let service: ConfigurationService;
   let configRepository: Repository<ConfigEntity>;
   let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
-  let workflowService:WorkflowService
+  let workflowService:WorkflowService;
+  let projectRepository: Repository<ProjectEntity>;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -87,6 +93,10 @@ describe('ConfigurationService', () => {
         {
           provide: getRepositoryToken(ConfigEntity),
           useValue: mockConfigRepository,
+        },
+        {
+          provide: getRepositoryToken(ProjectEntity),
+          useValue: mockProjectRepository,
         },
         {
           provide: getRepositoryToken(FileServerEntity),
@@ -115,6 +125,7 @@ describe('ConfigurationService', () => {
     service = module.get<ConfigurationService>(ConfigurationService);
     workflowService = module.get<WorkflowService>(WorkflowService);
     configRepository = module.get(getRepositoryToken(ConfigEntity));
+    projectRepository = module.get(getRepositoryToken(ProjectEntity));
     mappingRepository = module.get(getRepositoryToken(FileServerWorkingDirectoryMappingEntity));
   });
 
@@ -1078,6 +1089,25 @@ describe('ConfigurationService', () => {
       await expect(service.getCutoverDetailsByConfigId(configId))
         .rejects
         .toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('checkUniqueConfigName', () => {
+    it('should throw NotFoundException if project does not exist', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(null);
+      await expect(service.isConfigNameUnique('invalid-project-id', 'config-name')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name is not unique', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(new ProjectEntity());
+      jest.spyOn(configRepository, 'findOne').mockResolvedValue(new ConfigEntity());
+      await expect(service.isConfigNameUnique('project-id', 'config-name')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return true if config name is unique', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(new ProjectEntity());
+      jest.spyOn(configRepository, 'findOne').mockResolvedValue(null);
+      await expect(service.isConfigNameUnique('project-id', 'config-name')).resolves.toEqual({ isUnique: true });
     });
   });
 

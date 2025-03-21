@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe } from "@nestjs/common";
-import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
@@ -60,6 +60,19 @@ export class ConfigurationController{
     @Get('cutover/:configId')
     async getCutoverDetailsByConfigId(@Param('configId') configId: string) {
         return await this.configurationService.getCutoverDetailsByConfigId(configId);
+    }
+
+    @Get('check-unique')
+    @ApiQuery({ name: 'projectId', type: 'string', required: true })
+    @ApiQuery({ name: 'configName', type: 'string', required: true })
+    @ApiResponse({ status: 200, description: 'Returns true if unique config name' })
+    @ApiResponse({ status: 400, description: 'Config name already exists' })
+    @ApiResponse({ status: 404, description: 'Project ID not found' })
+    async isConfigNameUnique(
+        @Query('projectId') projectId: string,
+        @Query('configName') configName: string,
+    ): Promise<{ isUnique: boolean }> {
+        return await this.configurationService.isConfigNameUnique(projectId, configName);
     }
 
     @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })

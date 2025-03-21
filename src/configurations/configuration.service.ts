@@ -19,6 +19,7 @@ import { CreateRequestDto, Options } from 'src/work-manager/dto/validate-connect
 import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Injectable()
 export class ConfigurationService {
@@ -34,6 +35,8 @@ export class ConfigurationService {
         private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
+        @InjectRepository(ProjectEntity)
+        private readonly projectEntity: Repository<ProjectEntity>,
         private loggerFactory: LoggerFactory,
         private readonly workFlowService: WorkflowService
     ) {
@@ -172,6 +175,23 @@ export class ConfigurationService {
             this.logger.error(`Error fetching cutover details: ${error.message}`);
             throw new InternalServerErrorException('An error occurred while processing the request.');
         }
+    }
+
+    async isConfigNameUnique(projectId: string, configName: string): Promise<{ isUnique: boolean }> {
+        const projectExists = await this.projectEntity.findOne({ where: { id: projectId } });
+        if (!projectExists) {
+            throw new NotFoundException('Invalid Project ID');
+        }
+
+        const existingConfig = await this.configEntity.findOne({
+            where: { projectId, configName },
+        });
+
+        if (existingConfig) {
+            throw new BadRequestException('Config name already exists for this project.');
+        }
+
+        return { isUnique: true };
     }
     
     private async fetchConfigWithRelations(configId: string) {
@@ -389,7 +409,8 @@ export class ConfigurationService {
                 createdBy: userId
             });
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-            this.refreshConfig(update.id, traceId)
+            this.refreshConfig(update.id, traceId);
+            await this.isConfigNameUnique(createConfig.projectId, createConfig.configName);
             return update;
         }catch(error) {
             this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
