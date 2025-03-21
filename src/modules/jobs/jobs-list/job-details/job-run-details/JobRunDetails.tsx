@@ -38,7 +38,7 @@ import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 
 const JobRunDetails = () => {
-  const navigation = useNavigate();
+  const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const params = useParams<{ jobId: string; jobRunId: string }>();
   const { jobId, jobRunId } = params;
@@ -132,11 +132,11 @@ const JobRunDetails = () => {
       )}
       <Box className="flex justify-between">
         <Breadcrumbs className="mb-4">
-          <Button onClick={() => navigation("/jobs-list")} variant="text">
+          <Button onClick={() => navigate("/jobs-list")} variant="text">
             Jobs
           </Button>
           <Button
-            onClick={() => navigation(`/job-details/${jobId}`)}
+            onClick={() => navigate(`/job-details/${jobId}`)}
             variant="text"
           >
             Job Details
@@ -171,9 +171,9 @@ const JobRunDetails = () => {
               >
                 {isDiscoveryJob && (
                   <ActionMenu.Button
-                    onClick={() =>
-                      void navigation(`/job-discovery-preview/${jobRunId}`)
-                    }
+                    onClick={() => {
+                      navigate(`/job-discovery-preview/${jobRunId}`);
+                    }}
                   >
                     Preview
                   </ActionMenu.Button>
