@@ -1,44 +1,33 @@
-import { useLazyGetAllWorkersQuery } from "@api/workersApi";
-import { useCallback, useEffect, useState } from "react";
+import { useGetAllWorkersQuery } from "@api/workersApi";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { WorkerApiType } from "@/types/app.type";
-import { useLazyGetFileServerWorkersQuery } from "@api/jobsApi";
+import { useGetFileServerWorkersQuery } from "@api/jobsApi";
+import { useParams } from "react-router-dom";
 
-const useFetchWorkers = (jobRunId: string) => {
+const useFetchWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
-  const [workers, setWorkers] = useState<WorkerApiType[]>([]);
+  const { jobRunId } = useParams();
 
-  //Workers API
-  const [getAllWorkers, { error, isLoading: isGetAllWorkersLoading }] =
-    useLazyGetAllWorkersQuery();
-  const [getFileServerWorkers, { isLoading: isGetFileServerWorkersLoading }] =
-    useLazyGetFileServerWorkersQuery();
+  const {
+    data: allWorkers,
+    error: getAllWorkersError,
+    isLoading: isGetAllWorkersLoading,
+  } = useGetAllWorkersQuery(
+    { projectId: selectedProjectId },
+    { skip: !selectedProjectId }
+  );
 
-  const isLoading = jobRunId
-    ? isGetFileServerWorkersLoading
-    : isGetAllWorkersLoading;
-
-  const getWorkers = useCallback(async () => {
-    try {
-      const workers = jobRunId
-        ? await getFileServerWorkers({ jobRunId })
-        : await getAllWorkers({ projectId: selectedProjectId });
-      setWorkers(workers?.data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [selectedProjectId, jobRunId, getFileServerWorkers, getAllWorkers]);
-
-  useEffect(() => {
-    if (selectedProjectId || jobRunId) {
-      getWorkers();
-    }
-  }, [getWorkers]);
+  const {
+    data: fileServerWorkers,
+    error: getFileServerWorkersError,
+    isLoading: isGetFileServerWorkersLoading,
+  } = useGetFileServerWorkersQuery({ jobRunId }, { skip: !jobRunId });
 
   return {
-    workers,
-    error,
-    isLoading,
+    workers: jobRunId ? fileServerWorkers : allWorkers,
+    error: jobRunId ? getFileServerWorkersError : getAllWorkersError,
+    isLoading: jobRunId
+      ? isGetFileServerWorkersLoading
+      : isGetAllWorkersLoading,
   };
 };
 

@@ -253,5 +253,5 @@ export const {
   useGetJobRunErrorsMutation,
   useLazyGetJobRunErrorsOverviewQuery,
   useLazyGetNoticeBoardDetailsQuery,
-  useLazyGetFileServerWorkersQuery,
+  useGetFileServerWorkersQuery,
 } = jobsApi;

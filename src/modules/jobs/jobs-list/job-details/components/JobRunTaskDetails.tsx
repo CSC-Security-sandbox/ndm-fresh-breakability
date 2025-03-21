@@ -16,7 +16,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
 
   const total = completed + pending + errored + running;
   const url = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunDetails?.id}/tasks`;
-  const workersUrl = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunDetails?.id}/workers`;
+  const workersUrl = `/workers/${jobRunDetails?.id}`;
 
   return (
     <Card className="flex gap-16 p-10">

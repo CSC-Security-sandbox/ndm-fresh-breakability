@@ -5,12 +5,11 @@ import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/W
 import useFetchWorkers from "@hooks/useFetchWorkers";
 import { WORKERS_COLUMN_DEF } from "./workers.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { useParams } from "react-router-dom";
+import { notify } from "@components/notification/NotificationWrapper";
 
 const Workers = () => {
   const { selectedProjectId } = useSelectedProjectId();
-  const { jobRunId } = useParams();
-  const { workers, isLoading } = useFetchWorkers(jobRunId);
+  const { workers, error, isLoading } = useFetchWorkers();
 
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
@@ -18,6 +17,11 @@ const Workers = () => {
     isSorting: true,
     pageSize: 10,
   };
+
+  if (error) {
+    notify.error("Failed to fetch workers");
+    console.error({ error, level: "workers" });
+  }
 
   return (
     <TableWrapper

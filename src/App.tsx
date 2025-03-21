@@ -64,11 +64,7 @@ const App = () => {
             element={<BulkCutOverPage />}
           />
           {/* WORKER */}
-          <Route
-            path="/job-details/:jobId/run/:jobRunId/workers"
-            element={<WorkersPage />}
-          />
-          <Route path="/workers" element={<WorkersPage />} />
+          <Route path="/workers/:jobRunId?" element={<WorkersPage />} />
           {/* JOBS ROUTES */}
           <Route path="jobs-list" element={<JobListPage />} />
           <Route path="job-details/:jobId" element={<JobDetailsPage />} />
