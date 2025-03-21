@@ -72,6 +72,7 @@ export class CsvService {
             LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
             LEFT JOIN ${dbSchema}.identity_config_cross_mapping iccm ON iccm.job_config_id = jc.id
             WHERE job_run_id = $1
+            GROUP BY v_source.volume_path, v_target.volume_path, i.path, jc.job_type, i.created_at, i.updated_at, i.is_directory, i.source_checksum, i.target_checksum, i.file_size
             ORDER BY i.created_at DESC
             LIMIT $2 OFFSET ($3 - 1) * $2;
         `;
