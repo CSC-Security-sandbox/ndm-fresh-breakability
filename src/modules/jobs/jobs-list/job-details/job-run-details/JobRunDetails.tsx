@@ -35,6 +35,7 @@ import {
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
+import { Show } from "@components/show/Show";
 
 const JobRunDetails = () => {
   const navigation = useNavigate();
@@ -158,35 +159,37 @@ const JobRunDetails = () => {
               ))}
             </ActionMenuButtonStyle>
           )}
-          {reportActionButtons.length > 0 && (
-            <ActionMenuButtonStyle
-              isDisabled={!jobRunDetails?.isReportReady}
-              button={
-                <DropdownButton>
-                  {isDiscoveryJob ? "Discovery" : "Download"} Report
-                </DropdownButton>
-              }
-            >
-              {isDiscoveryJob && (
-                <ActionMenu.Button
-                  onClick={() =>
-                    void navigation(`/job-discovery-preview/${jobRunId}`)
-                  }
-                >
-                  Preview
-                </ActionMenu.Button>
-              )}
-              {reportActionButtons.map((row) => (
-                <ActionMenu.Button
-                  onClick={row.onClick}
-                  isDisabled={row.disabled}
-                  key={row.label}
-                >
-                  {row.label}
-                </ActionMenu.Button>
-              ))}
-            </ActionMenuButtonStyle>
-          )}
+          <Show>
+            <Show.When isTrue={reportActionButtons.length > 0}>
+              <ActionMenuButtonStyle
+                isDisabled={!jobRunDetails?.isReportReady}
+                button={
+                  <DropdownButton>
+                    {isDiscoveryJob ? "Discovery" : "Download"} Report
+                  </DropdownButton>
+                }
+              >
+                {isDiscoveryJob && (
+                  <ActionMenu.Button
+                    onClick={() =>
+                      void navigation(`/job-discovery-preview/${jobRunId}`)
+                    }
+                  >
+                    Preview
+                  </ActionMenu.Button>
+                )}
+                {reportActionButtons.map((row) => (
+                  <ActionMenu.Button
+                    onClick={row.onClick}
+                    isDisabled={row.disabled}
+                    key={row.label}
+                  >
+                    {row.label}
+                  </ActionMenu.Button>
+                ))}
+              </ActionMenuButtonStyle>
+            </Show.When>
+          </Show>
           <Button
             onClick={() => {
               window.open(viewLogUrl, "_blank");
