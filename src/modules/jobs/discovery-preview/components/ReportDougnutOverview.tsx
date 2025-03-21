@@ -106,7 +106,7 @@ const ReportDougnutOverview = () => {
             />
             <Box className="flex flex-col gap-2 grow">
               <Box className="flex gap-8">
-                {overviewLegendMap.map((item, index) => (
+                {overviewLegendMap?.map((item, index) => (
                   <LegendMetric
                     key={index}
                     Icon={item.Icon}

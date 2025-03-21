@@ -12,7 +12,7 @@ const TestsCellRenderer = ({
   return (
     <>
       <Box className="w-full pr-4">
-        {row?.tests.map((test) => test.label).join(", ")}
+        {row?.tests.map((test) => test?.label).join(", ")}
       </Box>
       <RemoveNameCellRenderer row={row} />
     </>

@@ -8,7 +8,7 @@ const SpeedTestProtocolNameCellRenderer = ({
   SpeedTestConfigurationType,
   SpeedTestConfigurationType
 >) => {
-  return <Box>{row?.protocol.map((e) => e.label).join(", ")}</Box>;
+  return <Box>{row?.protocol.map((e) => e?.label).join(", ")}</Box>;
 };
 
 export default SpeedTestProtocolNameCellRenderer;

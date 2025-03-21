@@ -19,6 +19,10 @@ import ReportTables from "@modules/jobs/discovery-preview/components/ReportTable
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
 import { notify } from "@components/notification/NotificationWrapper";
+import ChartError from "@components/chartInfo/ChartError";
+import { Card, CardContent } from "@netapp/bxp-design-system-react";
+import { useEffect } from "react";
+import { Show } from "@components/show/Show";
 
 const DiscoveryPreview = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();
@@ -26,8 +30,11 @@ const DiscoveryPreview = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isLoading: reportDataIsLoading } =
-    useGetReportDataQuery(payload);
+  const {
+    data: reportData,
+    isFetching: reportDataIsLoading,
+    isError,
+  } = useGetReportDataQuery(payload);
 
   const [downloadReports] = useDownloadReportsMutation();
   const [getPdfReport] = useGetPdfReportMutation();
@@ -60,6 +67,12 @@ const DiscoveryPreview = () => {
     }
   };
 
+  useEffect(() => {
+    if (isError) {
+      notify.error("Failed to fetch the discovery report");
+    }
+  }, [isError]);
+
   return (
     <Box>
       <Box className="flex justify-end mb-4">
@@ -82,26 +95,36 @@ const DiscoveryPreview = () => {
           </ActionMenu.Button>
         </ActionMenuButtonStyle>
       </Box>
+      <Show>
+        <Show.When isTrue={isError}>
+          <Card>
+            <CardContent>
+              <ChartError>Failed to fetch the discovery report</ChartError>
+            </CardContent>
+          </Card>
+        </Show.When>
+        <Show.Else>
+          <GraphLoader label="Report Header" isLoading={reportDataIsLoading}>
+            <ReportHeader />
+          </GraphLoader>
 
-      <GraphLoader label="Report Header" isLoading={reportDataIsLoading}>
-        <ReportHeader />
-      </GraphLoader>
+          <GraphLoader label="Report Overview" isLoading={reportDataIsLoading}>
+            <ReportDougnutOverview />
+          </GraphLoader>
 
-      <GraphLoader label="Report Overview" isLoading={reportDataIsLoading}>
-        <ReportDougnutOverview />
-      </GraphLoader>
+          <GraphLoader label="Graphs" isLoading={reportDataIsLoading}>
+            <Graphs />
+          </GraphLoader>
 
-      <GraphLoader label="Graphs" isLoading={reportDataIsLoading}>
-        <Graphs />
-      </GraphLoader>
+          <GraphLoader label="Report pie chart" isLoading={reportDataIsLoading}>
+            <ReportDoughnutChart />
+          </GraphLoader>
 
-      <GraphLoader label="Report pie chart" isLoading={reportDataIsLoading}>
-        <ReportDoughnutChart />
-      </GraphLoader>
-
-      <GraphLoader label="Report tables" isLoading={reportDataIsLoading}>
-        <ReportTables />
-      </GraphLoader>
+          <GraphLoader label="Report tables" isLoading={reportDataIsLoading}>
+            <ReportTables />
+          </GraphLoader>
+        </Show.Else>
+      </Show>
     </Box>
   );
 };

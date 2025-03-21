@@ -15,7 +15,7 @@ const MigrateFileOption = () => {
           Migrate all files or exclude files older than date?
         </Popover>
       </Box>
-      <Text className="flex gap-6">
+      <Box className="flex gap-6">
         <RadioButton
           form={optionForm}
           name="migrate_file_option"
@@ -30,7 +30,7 @@ const MigrateFileOption = () => {
         >
           Exclude file older than (UTC)
         </RadioButton>
-      </Text>
+      </Box>
       {optionForm.formState.migrate_file_option ===
         MIGRATE_OPTION_ENUM.EXCLUDE && (
         <Box className="flex gap-3 mt-3">

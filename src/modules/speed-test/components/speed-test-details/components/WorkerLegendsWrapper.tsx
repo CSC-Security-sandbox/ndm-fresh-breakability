@@ -1,7 +1,7 @@
 import { useCurrentTheme } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { WorkerLegendsWrapperPropsType } from "@modules/speed-test/types/speed-test-details.types";
-import DataCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/DataCellRenderer";
+import WorkerCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/WorkerCellRenderer";
 
 const WorkerLegendsWrapper = ({
   workerLegends,
@@ -22,10 +22,7 @@ const WorkerLegendsWrapper = ({
           </Box>
           <Box className="flex flex-row items-center">
             <Box className="font-semibold">
-              <DataCellRenderer
-                value={Number(worker.averageSpeed)}
-                unit={"Mbps"}
-              />
+              <WorkerCellRenderer value={worker.averageSpeed} />
             </Box>
           </Box>
         </Box>
