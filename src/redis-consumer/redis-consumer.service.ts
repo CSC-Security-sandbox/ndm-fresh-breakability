@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DMError, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { OperationStatus } from 'src/enum/queues.enum';
 import { InventoryService } from 'src/inventory/inventory.service';
@@ -37,7 +37,7 @@ const getWorkflowId = (jobRunId: string, jobType: string) => {
 }
 
 @Injectable()
-export class RedisConsumerService implements OnModuleInit {
+export class RedisConsumerService{
     private redisClient: any;
 
     private consumers: Map<string, StreamStatus> = new Map();
@@ -54,7 +54,7 @@ export class RedisConsumerService implements OnModuleInit {
         private readonly workflowService: WorkflowService
     ) { }
 
-    async onModuleInit() {
+    async onApplicationBootstrap() {
         try {
             this.redisClient = await RedisUtils.getClient();
             if (!this.redisClient.isOpen) await this.redisClient.connect();
