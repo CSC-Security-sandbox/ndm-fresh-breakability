@@ -4,7 +4,7 @@ import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
-import { ConfigResponseDto, FindAllConfigPageDto } from "./dto/findallconfig.dto";
+import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
 
 @ApiTags("Configuration")
@@ -40,6 +40,18 @@ export class ConfigurationController{
     @Get('/')
     async getAllConfiguration(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findAllConfigPageDto: FindAllConfigPageDto) {
         return await this.configurationService.getAllConfig(findAllConfigPageDto);
+    }
+
+    @ApiOperation({ summary: 'Get list of File servers For speed test',  description: 'Returns a list of File servers'})
+    @ApiOkResponse({ description: 'The list of File servers has been retrieved successfully.',  type: [FileServerInfo]})
+    @ApiBadRequestResponse({
+        description: 'Invalid pagination parameters.'
+    })
+    @ApiBearerAuth()
+    @Auth(Permission.ViewConfig)
+    @Get('/file-servers')
+    async getFileServers() {
+        return await this.configurationService.getAllFileServers();
     }
 
     @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})

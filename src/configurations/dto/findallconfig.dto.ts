@@ -46,3 +46,14 @@ export class ConfigResponseDto {
   @ApiProperty({ type: () => WorkerEntity, description: 'WorkerEntity object' })
   data: ConfigEntity[];
 }
+
+export class FileServerInfo{
+  @ApiProperty()
+  file_server_name: string;
+  @ApiProperty()
+  file_server_id: string;
+  @ApiProperty()
+  protocol: string;
+  @ApiProperty()
+  has_scratch_path: boolean;
+}
