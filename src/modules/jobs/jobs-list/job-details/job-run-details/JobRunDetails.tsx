@@ -34,15 +34,20 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import useAdhocRun from "@hooks/useAdhocRun";
+import { Show } from "@components/show/Show";
 
 const JobRunDetails = () => {
-  const navigation = useNavigate();
+  const navigate = useNavigate();
+  const adhocRun = useAdhocRun();
   const params = useParams<{ jobId: string; jobRunId: string }>();
   const { jobId, jobRunId } = params;
   const { data: jobRunDetails, isLoading } = useGetJobRunDetailsQuery(
     { jobRunId },
     {
-      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
       skipPollingIfUnfocused: true,
     }
   );
@@ -78,13 +83,14 @@ const JobRunDetails = () => {
         ]
       : [];
 
-  const ActionButtons = canUpdateStatus
+  const actionButtons = canUpdateStatus
     ? [
         ...getActionMenu({
           jobRunId,
           status: jobRunDetails?.status || JOB_STATUS_TYPE_ENUM.COMPLETED,
           handleUpdateStatus,
           isDisabled: false,
+          adhocRun: () => adhocRun(jobId),
         }),
         ...enableCutOver,
       ]
@@ -96,7 +102,7 @@ const JobRunDetails = () => {
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
   );
-  const ReportActionButtons =
+  const reportActionButtons =
     jobRunDetails && canDownloadReport
       ? getReportActions(
           {
@@ -126,11 +132,11 @@ const JobRunDetails = () => {
       )}
       <Box className="flex justify-between">
         <Breadcrumbs className="mb-4">
-          <Button onClick={() => navigation("/jobs-list")} variant="text">
+          <Button onClick={() => navigate("/jobs-list")} variant="text">
             Jobs
           </Button>
           <Button
-            onClick={() => navigation(`/job-details/${jobId}`)}
+            onClick={() => navigate(`/job-details/${jobId}`)}
             variant="text"
           >
             Job Details
@@ -138,11 +144,11 @@ const JobRunDetails = () => {
           <Box>Job Run Details</Box>
         </Breadcrumbs>
         <Box className="flex gap-2">
-          {ActionButtons.length > 0 && (
+          {actionButtons.length > 0 && (
             <ActionMenuButtonStyle
               button={<DropdownButton>Action</DropdownButton>}
             >
-              {ActionButtons.map((row) => (
+              {actionButtons.map((row) => (
                 <ActionMenu.Button
                   onClick={row.onClick}
                   isDisabled={isLoading || isUpdating}
@@ -153,35 +159,37 @@ const JobRunDetails = () => {
               ))}
             </ActionMenuButtonStyle>
           )}
-          {ReportActionButtons.length > 0 && (
-            <ActionMenuButtonStyle
-              isDisabled={!jobRunDetails?.isReportReady}
-              button={
-                <DropdownButton>
-                  {isDiscoveryJob ? "Discovery" : "Download"} Report
-                </DropdownButton>
-              }
-            >
-              {isDiscoveryJob && (
-                <ActionMenu.Button
-                  onClick={() =>
-                    void navigation(`/job-discovery-preview/${jobRunId}`)
-                  }
-                >
-                  Preview
-                </ActionMenu.Button>
-              )}
-              {ReportActionButtons.map((row) => (
-                <ActionMenu.Button
-                  onClick={row.onClick}
-                  isDisabled={row.disabled}
-                  key={row.label}
-                >
-                  {row.label}
-                </ActionMenu.Button>
-              ))}
-            </ActionMenuButtonStyle>
-          )}
+          <Show>
+            <Show.When isTrue={reportActionButtons.length > 0}>
+              <ActionMenuButtonStyle
+                isDisabled={!jobRunDetails?.isReportReady}
+                button={
+                  <DropdownButton>
+                    {isDiscoveryJob ? "Discovery" : "Download"} Report
+                  </DropdownButton>
+                }
+              >
+                {isDiscoveryJob && (
+                  <ActionMenu.Button
+                    onClick={() => {
+                      navigate(`/job-discovery-preview/${jobRunId}`);
+                    }}
+                  >
+                    Preview
+                  </ActionMenu.Button>
+                )}
+                {reportActionButtons.map((row) => (
+                  <ActionMenu.Button
+                    onClick={row.onClick}
+                    isDisabled={row.disabled}
+                    key={row.label}
+                  >
+                    {row.label}
+                  </ActionMenu.Button>
+                ))}
+              </ActionMenuButtonStyle>
+            </Show.When>
+          </Show>
           <Button
             onClick={() => {
               window.open(viewLogUrl, "_blank");

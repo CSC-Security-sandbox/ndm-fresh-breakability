@@ -51,7 +51,7 @@ export default function CutoverConfirmationModal({
       <ModalHeader>Cutover Confirmation</ModalHeader>
       <ModalContent>
         <>
-          <Text>
+          <Box>
             Are you sure you want to Approve the Cutover ?
             <Box>
               <Button
@@ -68,7 +68,7 @@ export default function CutoverConfirmationModal({
                 Download CoC Report
               </Button>
             </Box>
-          </Text>
+          </Box>
 
           <Checkbox
             form={confirmCutOverForm}

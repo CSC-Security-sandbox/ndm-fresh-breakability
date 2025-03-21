@@ -11,16 +11,18 @@ import StorageChart from "@components/chartInfo/StorageChart";
 import { FileServerOverviewApi } from "@/types/app.type";
 import JobChart from "@components/chartInfo/JobsChart";
 import { InitialFileServerOverviewApiData } from "./fileServerId.constant";
+import { notify } from "@components/notification/NotificationWrapper";
 
 const FileServerOverView = () => {
   const { fileServerDetails, allExportPaths, allWorkersList } =
     useFileServerDetails();
-  const [getFileOverviewApi, { isLoading, data }] = useLazyGetFileOverviewQuery(
-    {
-      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
+  const [getFileOverviewApi, { isLoading, isError, data }] =
+    useLazyGetFileOverviewQuery({
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
       skipPollingIfUnfocused: true,
-    }
-  );
+    });
   const [chartData, setChartData] = useState<FileServerOverviewApi>(
     InitialFileServerOverviewApiData
   );
@@ -39,6 +41,13 @@ const FileServerOverView = () => {
     }
   }, [fileServerDetails.id]);
 
+  useEffect(() => {
+    if (isError) {
+      console.error({ error: isError, level: "File overview" });
+      notify.error("Failed to fetch file server overview data.");
+    }
+  }, [isError]);
+
   return (
     <Box className="p-8">
       <JobsAction fileServerDetails={fileServerDetails} />
@@ -55,12 +64,14 @@ const FileServerOverView = () => {
           title="Storage"
           Icon={GcpStorageIcon}
           isLoading={isLoading}
+          isError={isError}
         />
         <ChartInfo
           children={<JobChart jobDetails={chartData.jobDetails} />}
           title="Jobs"
-          isLoading={isLoading}
           Icon={WorkspaceIcon}
+          isLoading={isLoading}
+          isError={isError}
         />
       </Box>
       <TableRenderer

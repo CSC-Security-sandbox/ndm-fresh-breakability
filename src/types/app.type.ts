@@ -594,6 +594,7 @@ export type GetActionMenuPropType = {
     status: JOB_ACTION_STATUS_ENUM
   ) => void;
   isDisabled: Boolean;
+  adhocRun: () => void;
 };
 
 export type ValidationCellRendererPropType = {
@@ -676,6 +677,12 @@ export interface ChartInfoPropsType {
   title: string;
   children: ReactNode;
   isLoading: boolean;
+  isError: boolean;
+}
+
+export interface ChartErrorPropsType {
+  children: string;
+  hideErrorIcon?: boolean;
 }
 
 export type TemporaryPasswordPropsType = {
