@@ -34,15 +34,19 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import useAdhocRun from "@hooks/useAdhocRun";
 
 const JobRunDetails = () => {
   const navigation = useNavigate();
+  const adhocRun = useAdhocRun();
   const params = useParams<{ jobId: string; jobRunId: string }>();
   const { jobId, jobRunId } = params;
   const { data: jobRunDetails, isLoading } = useGetJobRunDetailsQuery(
     { jobRunId },
     {
-      pollingInterval: Number(window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL),
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
       skipPollingIfUnfocused: true,
     }
   );
@@ -78,13 +82,14 @@ const JobRunDetails = () => {
         ]
       : [];
 
-  const ActionButtons = canUpdateStatus
+  const actionButtons = canUpdateStatus
     ? [
         ...getActionMenu({
           jobRunId,
           status: jobRunDetails?.status || JOB_STATUS_TYPE_ENUM.COMPLETED,
           handleUpdateStatus,
           isDisabled: false,
+          adhocRun: () => adhocRun(jobId),
         }),
         ...enableCutOver,
       ]
@@ -96,7 +101,7 @@ const JobRunDetails = () => {
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
   );
-  const ReportActionButtons =
+  const reportActionButtons =
     jobRunDetails && canDownloadReport
       ? getReportActions(
           {
@@ -138,11 +143,11 @@ const JobRunDetails = () => {
           <Box>Job Run Details</Box>
         </Breadcrumbs>
         <Box className="flex gap-2">
-          {ActionButtons.length > 0 && (
+          {actionButtons.length > 0 && (
             <ActionMenuButtonStyle
               button={<DropdownButton>Action</DropdownButton>}
             >
-              {ActionButtons.map((row) => (
+              {actionButtons.map((row) => (
                 <ActionMenu.Button
                   onClick={row.onClick}
                   isDisabled={isLoading || isUpdating}
@@ -153,7 +158,7 @@ const JobRunDetails = () => {
               ))}
             </ActionMenuButtonStyle>
           )}
-          {ReportActionButtons.length > 0 && (
+          {reportActionButtons.length > 0 && (
             <ActionMenuButtonStyle
               isDisabled={!jobRunDetails?.isReportReady}
               button={
@@ -171,7 +176,7 @@ const JobRunDetails = () => {
                   Preview
                 </ActionMenu.Button>
               )}
-              {ReportActionButtons.map((row) => (
+              {reportActionButtons.map((row) => (
                 <ActionMenu.Button
                   onClick={row.onClick}
                   isDisabled={row.disabled}

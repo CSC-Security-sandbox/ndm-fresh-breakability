@@ -32,7 +32,8 @@ const JobTasks = () => {
   const pageSize = 10; // rows per page
   const pageCount = Math.ceil(totalCount / pageSize);
   const rowsCountArray = Array(totalCount);
-  const [getJobTasks, { isLoading }] = useLazyGetJobTasksQuery();
+  const [getJobTasks, { data: jobTaskData, isLoading }] =
+    useLazyGetJobTasksQuery();
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const { selectedProjectId } = useSelectedProjectId();
   const { data: workers } = useGetAllWorkersQuery<{
@@ -62,7 +63,7 @@ const JobTasks = () => {
 
   useEffect(() => {
     fetchRecords();
-  }, [pagination.pageIndex, sortState, currentFilters, taskType, workers]);
+  }, [pagination.pageIndex, sortState, currentFilters, taskType]);
 
   const fetchRecords = async () => {
     let payload: any = {
@@ -87,32 +88,29 @@ const JobTasks = () => {
 
     try {
       setError(undefined);
-      taskAPIRequest.current && (await taskAPIRequest.current?.abort());
+      if (taskAPIRequest.current) taskAPIRequest.current.abort();
       taskAPIRequest.current = getJobTasks(payload);
-
-      const result = await taskAPIRequest.current?.unwrap();
-
-      //Adding workerName to the tasks data
-      const allTasks = result.data.map((eachTask) => {
-        workers?.map((eachWorker) => {
-          if (eachTask.workerId === eachWorker.workerId) {
-            eachTask = { ...eachTask, workerName: eachWorker.workerName };
-          }
-        })
-        if (eachTask.workerName === undefined || null) {
-          eachTask = { ...eachTask, workerName: eachTask.workerId };
-        }
-
-        return eachTask;
-      })
-      setTableRows(allTasks);
-      setTotalCount(result.total || 0);
+      await taskAPIRequest.current.unwrap();
     } catch (error) {
       console.error({ error, level: "Task listing" });
       if (error?.name === "AbortError") return;
       setError(error);
     }
   };
+
+  useEffect(() => {
+    if (jobTaskData) {
+      //Adding workerName to the tasks data
+      const allTasks = jobTaskData.data.map((eachTask) => {
+        const workerName =
+          workers?.find((row) => row.workerId === eachTask.workerId)
+            ?.workerName || eachTask.workerId;
+        return { ...eachTask, workerName };
+      });
+      setTableRows(allTasks);
+      setTotalCount(jobTaskData.total || 0);
+    }
+  }, [jobTaskData, workers]);
 
   const RenderTablePager = useMemo(
     () => (

@@ -30,7 +30,8 @@ const JobErrorsContainer = ({
             }).unwrap();
           setErrorDetails(_JobErrorsOverview);
         } catch (error) {
-          notify.error("Something went wrong");
+          notify.error("Failed to fetch job errors.");
+          console.error({ error, level: "Job error card" });
         }
       })();
     }
