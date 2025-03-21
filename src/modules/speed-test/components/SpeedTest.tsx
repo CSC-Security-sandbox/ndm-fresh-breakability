@@ -17,7 +17,6 @@ const SpeedTest = () => {
   const { data: speedTestJobRunList, isLoading, isFetching, refetch } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
-  const [adhocRun] = useJobAdhocRunMutation();
 
   const jobStatus =
     JOB_STATUS_TYPE_ENUM.COMPLETED ||
