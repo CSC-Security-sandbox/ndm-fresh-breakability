@@ -5,6 +5,7 @@ import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
+import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
 
 @ApiTags("Configuration")
 @Controller('servers')
@@ -13,8 +14,9 @@ export class ConfigurationController{
         private configurationService: ConfigurationService,
     ){}
 
-    @ApiOperation({ summary: 'Create Configuration' })
+    @ApiOperation({ summary: 'Create Configuration' , description: ConfigApiDoc.CREATE_CONFIG})
     @ApiCreatedResponse({ description: 'Configuration Created Successfully.' })
+    
     @ApiBearerAuth()
     @Auth(Permission.ManageConfig)
     @Post('')
@@ -28,7 +30,7 @@ export class ConfigurationController{
     }
 
 
-    @ApiOperation({ summary: 'Get a paginated list of Config',  description: 'Returns a list of Workers based on the provided pagination parameters.'})
+    @ApiOperation({ summary: 'Get a paginated list of Config',  description: ConfigApiDoc.GET_ALL_CONFIG})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponseDto})
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
@@ -52,7 +54,7 @@ export class ConfigurationController{
         return await this.configurationService.getAllFileServers();
     }
 
-    @ApiOperation({ summary: 'Get Configuration by ID' })
+    @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBearerAuth()
@@ -72,7 +74,7 @@ export class ConfigurationController{
         return await this.configurationService.getCutoverDetailsByConfigId(configId);
     }
 
-    @ApiOperation({ summary: 'Update Configuration by ID' })
+    @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })
     @ApiOkResponse({ description: 'Configuration Updated Successfully' })
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBody({ description: 'Configuration data to update', type: ConfigDTO })
@@ -87,7 +89,7 @@ export class ConfigurationController{
         return await this.configurationService.updateConfiguration(id,updateConfig, userDetails.user.id, userDetails?.trackId)
     }
 
-    @ApiOperation({ summary: 'Delete Configuration by ID' })
+    @ApiOperation({ summary: 'Delete Configuration by ID' , description: ConfigApiDoc.DELETE_CONFIG_ID})
     @ApiOkResponse({ description: 'Configuration Deleted Successfully' })
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBearerAuth()
