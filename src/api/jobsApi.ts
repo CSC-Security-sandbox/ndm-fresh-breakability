@@ -18,7 +18,9 @@ export const jobsApi = createApi({
     "SPEED_TEST_JOBS",
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL,
+    baseUrl:
+      window?.env?.VITE_JOBS_SERVICE_URL ||
+      import.meta.env.VITE_JOBS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({
@@ -218,6 +220,13 @@ export const jobsApi = createApi({
         method: "GET",
       }),
     }),
+
+    getFileServerWorkers: builder.query({
+      query: ({ jobRunId }) => ({
+        url: `workers/job-run/${jobRunId}`,
+        method: "GET",
+      }),
+    }),
   }),
 });
 
@@ -244,4 +253,5 @@ export const {
   useGetJobRunErrorsMutation,
   useLazyGetJobRunErrorsOverviewQuery,
   useLazyGetNoticeBoardDetailsQuery,
+  useGetFileServerWorkersQuery,
 } = jobsApi;
