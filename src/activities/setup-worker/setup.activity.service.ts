@@ -105,7 +105,7 @@ export class SetupActivityService {
         message: `Worker ${this.workerId} successfully set up.`,
       };
     } catch (error) {
-      console.error(`[${jobRunId}] - Setup failed: ${error.message}`);
+      console.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
       return {
         jobRunId,
         status: 'error',
