@@ -14,8 +14,6 @@ interface ReportTableProps {
   pageSize?: number;
   defaultSortState?: { sortOrder: "asc" | "desc"; column: number };
   tooltipContent: string;
-  isFetching: boolean;
-  refetch: () => void;
 }
 
 const ReportTableRenderer: React.FC<ReportTableProps> = ({
@@ -26,8 +24,6 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
   pageSize = 5,
   defaultSortState,
   tooltipContent,
-  isFetching,
-  refetch,
 }) => {
   const tableState = {
     columns,
@@ -49,8 +45,6 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
           isLoading={false}
           showLabel={false}
           originalColumns={columns}
-          refreshFunc={refetch}
-          isRefreshing={isFetching}
         />
       </CardContent>
     </Card>

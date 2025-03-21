@@ -20,7 +20,7 @@ const ReportTables = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isLoading: reportDataIsLoading, isFetching, refetch } =
+  const { data: reportData, isLoading: reportDataIsLoading } =
     useGetReportDataQuery(payload);
   return (
     <>
@@ -33,8 +33,6 @@ const ReportTables = () => {
             rows={extractLongestDirectoryPaths(reportData)}
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
-            isFetching={isFetching}
-            refetch={refetch}
           />
         </Box>
         <Box className="w-full">
@@ -45,8 +43,6 @@ const ReportTables = () => {
             rows={extractBiggestFiles(reportData)}
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
-            isFetching={isFetching}
-            refetch={refetch}
           />
         </Box>
       </Box>
@@ -56,8 +52,6 @@ const ReportTables = () => {
           tooltipContent="Files with longest name."
           columns={LONGEST_FILE_NAME_COLS}
           rows={longestFileNames(reportData)}
-          isFetching={isFetching}
-          refetch={refetch}
         />
       </Box>
     </>
