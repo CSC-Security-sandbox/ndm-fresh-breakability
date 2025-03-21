@@ -10,3 +10,10 @@
       - nfs-common
       - smbclient
     state: present
+    
+- name: 2.3. Ensure rpc-statd is enabled and running
+  systemd:
+    name: rpc-statd
+    enabled: yes
+    state: started
+    masked: no
