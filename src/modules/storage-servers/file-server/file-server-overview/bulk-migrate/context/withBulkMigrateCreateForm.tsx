@@ -390,6 +390,7 @@ export function withBulkMigrateCreateForm(
           mappingStepForm?.values?.selectedMountPathsId
         ),
       },
+      pageSize: 10,
     });
 
     const createBulkMigrateHelpers: BulkMigrateContextType = {
