@@ -7,7 +7,7 @@ interface RefreshProps {
 }
 
 const useRTKApiRefresh = ({api, tag}: RefreshProps) => {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<typeof api.util.dispatch>();
 
   const fetchData = () => {
     dispatch(api.util.invalidateTags([tag]));

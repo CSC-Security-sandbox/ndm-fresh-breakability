@@ -140,10 +140,7 @@ const TableWrapper = ({
                 onClick={!isRefreshing ? refreshFunc : undefined}
                 style={{ height: '16px', width: '16px', marginBottom: '4px' }} 
               >
-                {!isRefreshing && (
-                  <RefreshIcon 
-                  />
-                )}
+                <RefreshIcon />
               </Button>
             )}
           </TableWidgets>
