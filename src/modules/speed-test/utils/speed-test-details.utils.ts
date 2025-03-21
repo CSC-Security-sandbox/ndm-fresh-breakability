@@ -16,12 +16,15 @@ export const calculateOverallAverageSpeed = ({
     workers,
     speedAction,
   });
-  const totalSpeedOfWorkers = averageSpeedOfWorkers.reduce(
+  const filteredSpeed = averageSpeedOfWorkers.filter(
+    (worker) => !isNaN(Number(worker.averageSpeed))
+  );
+  const totalSpeedOfWorkers = filteredSpeed.reduce(
     (sum, worker) => sum + Number(worker.averageSpeed),
     0
   );
-  const overallAverageSpeed =
-    totalSpeedOfWorkers / averageSpeedOfWorkers.length;
+
+  const overallAverageSpeed = totalSpeedOfWorkers / filteredSpeed.length;
   return Number(overallAverageSpeed.toFixed(2));
 };
 

@@ -16,9 +16,9 @@ const RemoveNameCellRenderer = ({
   const handleRemoveFileServer = () => {
     const filteredSpeedTest = speedTestConfiguration.filter((configData) => {
       const fileServerMatch =
-        configData.fileServer.value === row.fileServer.value;
-      const protocolMatch = row.protocol.every((protocol) =>
-        configData.protocol.some((p) => p.value === protocol.value)
+        configData?.fileServer?.value === row?.fileServer?.value;
+      const protocolMatch = row?.protocol.every((protocol) =>
+        configData?.protocol.some((p) => p?.value === protocol?.value)
       );
       return !(fileServerMatch && protocolMatch);
     });

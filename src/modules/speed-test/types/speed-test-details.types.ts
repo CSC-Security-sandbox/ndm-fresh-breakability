@@ -10,6 +10,9 @@ export type WorkerType = SpeedTestMenuPropsType & {
   workerId: string;
   readSpeed: SpeedDataType[];
   writeSpeed: SpeedDataType[];
+  networkPerformanceError: string;
+  readSpeedError: string;
+  writeSpeedError: string;
 };
 
 export type SpeedTestMenuPropsType = {
@@ -101,4 +104,8 @@ export type CalculateSpeedPropsType = {
 export type SpeedTestDetailsType = SpeedTestType & {
   fileServers: string[];
   totalWorkers: number;
+};
+
+export type workerErrorsPropsType = {
+  workers: WorkerType[];
 };
