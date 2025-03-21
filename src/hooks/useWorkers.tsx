@@ -6,14 +6,16 @@ import { WorkerApiType } from "@/types/app.type";
 const useWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const [workers, setWorkers] = useState<WorkerApiType[]>([]);
-  const [getAllWorkers, { error, isFetching, isLoading }] = useLazyGetAllWorkersQuery();
+  const [getAllWorkers, { error, isLoading, isFetching }] = useLazyGetAllWorkersQuery();
+
+  const getWorkers = async () => {
+    getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
+      setWorkers(resp?.data);
+    });
+  }
 
   useEffect(() => {
-    (async () => {
-      getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
-        setWorkers(resp?.data);
-      });
-    })();
+    getWorkers();
   }, [selectedProjectId]);
 
   return {
@@ -21,6 +23,7 @@ const useWorkers = () => {
     error,
     isLoading,
     isFetching,
+    refetch: getWorkers,
   };
 };
 

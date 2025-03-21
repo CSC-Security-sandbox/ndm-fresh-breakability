@@ -20,7 +20,7 @@ const ReportTables = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isFetching, isLoading: reportDataIsLoading } =
+  const { data: reportData, isLoading: reportDataIsLoading, isFetching, refetch } =
     useGetReportDataQuery(payload);
   return (
     <>
@@ -34,6 +34,7 @@ const ReportTables = () => {
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
             isFetching={isFetching}
+            refetch={refetch}
           />
         </Box>
         <Box className="w-full">
@@ -45,7 +46,7 @@ const ReportTables = () => {
             isSorting={true}
             defaultSortState={{ sortOrder: "desc", column: 2 }}
             isFetching={isFetching}
-
+            refetch={refetch}
           />
         </Box>
       </Box>
@@ -56,6 +57,7 @@ const ReportTables = () => {
           columns={LONGEST_FILE_NAME_COLS}
           rows={longestFileNames(reportData)}
           isFetching={isFetching}
+          refetch={refetch}
         />
       </Box>
     </>

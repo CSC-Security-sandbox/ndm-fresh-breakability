@@ -7,7 +7,6 @@ import {
 import {
   useGetJobRunsQuery,
   useUpdateJobRunStatusMutation,
-  jobsApi,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -33,12 +32,11 @@ import {
   getReportActions,
 } from "./run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const JobRunList = () => {
   const navigate = useNavigate();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: jobRunList, isFetching, isLoading } = useGetJobRunsQuery({
+  const { data: jobRunList, isLoading, isFetching, refetch } = useGetJobRunsQuery({
     projectId: selectedProjectId,
   });
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(
@@ -55,7 +53,6 @@ const JobRunList = () => {
   const canDownloadReport = hasPermission(
     USER_PERMISSION_TYPE_ENUM.AgentDeployment
   );
-  const refreshJobRunList = useRTKApiRefresh({api: jobsApi, tag: 'ALL_JOB_RUNS'});
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
 
@@ -158,7 +155,7 @@ const JobRunList = () => {
         showFilters={true}
         columnsToFilter={COLUMNS_TO_FILTER_DEFS}
         handleSelection={setJobRunListSelectedIds}
-        refreshFunc={refreshJobRunList}
+        refreshFunc={refetch}
         isRefreshing={isFetching}
       />
     </>

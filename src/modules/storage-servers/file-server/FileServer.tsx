@@ -1,5 +1,5 @@
 import PermissionAuth from "@/auth/PermissionAuth";
-import { useGetAllFileServersOfProjectQuery, configApi } from "@api/configApi";
+import { useGetAllFileServersOfProjectQuery } from "@api/configApi";
 import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
@@ -10,19 +10,16 @@ import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "./file-server.constant";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const FileServer = () => {
   const navigate = useNavigate();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
-  const { data: configByProject, isFetching ,isLoading } =
+  const { data: configByProject ,isLoading, isFetching, refetch } =
     useGetAllFileServersOfProjectQuery({
       projectId,
     });
-
-  const refreshSpeedTestJobRunList = useRTKApiRefresh({api: configApi, tag: 'GET_ALL_FILE_SERVERS'});
 
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
@@ -66,7 +63,7 @@ const FileServer = () => {
       rowMenu={rowMenu}
       content={ADD_NEW_FILE_SERVER}
       label="File Sever List"
-      refreshFunc={refreshSpeedTestJobRunList}
+      refreshFunc={refetch}
       isRefreshing={isFetching}
     />
   );

@@ -5,7 +5,6 @@ import {
   useGetAllUsersQuery,
   useResetPasswordMutation,
   useUpdateUserStatusMutation,
-  usersApi,
 } from "@api/userApi";
 import { COL_DEF_FOR_USER } from "@/constant/app.constants";
 import { Collapse } from "@mui/material";
@@ -18,12 +17,11 @@ import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
-  const { data: userData, isFetching, isLoading } = useGetAllUsersQuery("");
+  const { data: userData, isLoading, isFetching, refetch } = useGetAllUsersQuery("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -31,8 +29,6 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const refreshUsersList = useRTKApiRefresh({api: usersApi, tag: 'ALL_USERS'});
-    
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .then(() => {
@@ -125,7 +121,7 @@ const ManageUsers = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_USER}
-          refreshFunc={refreshUsersList}
+          refreshFunc={refetch}
           isRefreshing={isFetching}
         />
       </Collapse>

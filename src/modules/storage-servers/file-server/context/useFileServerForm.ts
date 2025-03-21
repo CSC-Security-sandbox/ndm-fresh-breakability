@@ -80,20 +80,21 @@ export const useFileServerForm = () => {
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
 
+  const fetchWorkers = () => {
+    getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
+      const allWorkersWithNameAndId: WorkerIdWithNameType = {};
+      resp?.data?.forEach((worker: GetAllWorkersApiType) => {
+        let workerId = worker.workerId;
+        allWorkersWithNameAndId[workerId] = worker.workerName;
+      });
+      setWorkerIdWithName(allWorkersWithNameAndId);
+      setAllWorkersList(resp?.data);
+    });
+  }
+
   // API TO GET ALL WORKERS
   useEffect(() => {
-    (async () => {
-      getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
-        const allWorkersWithNameAndId: WorkerIdWithNameType = {};
-        resp?.data?.forEach((worker: GetAllWorkersApiType) => {
-          let workerId = worker.workerId;
-          allWorkersWithNameAndId[workerId] = worker.workerName;
-        });
-        setWorkerIdWithName(allWorkersWithNameAndId);
-        setAllWorkersList(resp?.data);
-      });
-    })();
-
+    fetchWorkers();
     return () => {
       interval.current && clearInterval(interval.current);
     };
@@ -229,6 +230,7 @@ export const useFileServerForm = () => {
     smbCredentialsForm,
     workersListTableStateProps,
     isFetching,
+    refetch: fetchWorkers,
     jobConfigForm,
     // LOCAL STATE
     workerIdWithName,

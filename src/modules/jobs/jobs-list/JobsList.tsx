@@ -6,7 +6,6 @@ import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   useGetJobConfigsQuery,
   useUpdateJobStatusMutation,
-  jobsApi,
 } from "@api/jobsApi";
 import { JOB_CONFIG_STATUS_ENUM } from "@/types/app.type";
 import { useSearchParams } from "react-router-dom";
@@ -18,7 +17,6 @@ import {
   preSelectedFilterType,
 } from "./job-listing.constant";
 import { getJobListFlaternList } from "./listing.utils";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const JobsList = () => {
   const navigate = useNavigate();
@@ -26,8 +24,6 @@ const JobsList = () => {
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
   );
-
-  const refreshJobList = useRTKApiRefresh({api: jobsApi, tag: 'ALL_JOB_CONFIGS'});
   const source = searchParams.get("source");
   const jobType = searchParams.get("type");
   let preSelectedFilter: preSelectedFilterType = {};
@@ -37,9 +33,10 @@ const JobsList = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const {
     data: jobList,
-    isFetching,
     isLoading,
     isError,
+    isFetching,
+    refetch: refetchJobList,
   } = useGetJobConfigsQuery({ projectId: selectedProjectId });
   const [updateStatus] = useUpdateJobStatusMutation();
 
@@ -96,7 +93,7 @@ const JobsList = () => {
       showFilters={true}
       columnsToFilter={COLUMNS_TO_FILTER_DEFS}
       preSelectedFilter={preSelectedFilter}
-      refreshFunc={refreshJobList}
+      refreshFunc={refetchJobList}
       isRefreshing={isFetching}
     />
   );

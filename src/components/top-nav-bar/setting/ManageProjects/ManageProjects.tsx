@@ -5,17 +5,16 @@ import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { COL_DEF_FOR_PROJECT } from "@/constant/app.constants";
 import CreateProjectForm from "./CreateProject";
 import useAccountDetails from "@/hooks/useAccountDetails";
-import { useGetAllProjectsQuery, projectApi } from "@api/projectApi";
+import { useGetAllProjectsQuery } from "@api/projectApi";
 import { hasPermission } from "@/auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { Collapse } from "@mui/material";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList, isFetching, isLoading } = useGetAllProjectsQuery(
+  const { data: projectList, isLoading, isFetching, refetch } = useGetAllProjectsQuery(
     accountDetails?.id
   );
   const [isCreateFormVisible, setIsCreateFormVisible] =
@@ -24,7 +23,6 @@ const ManageProject = () => {
     setEditSelectedProject(undefined);
     setIsCreateFormVisible(false);
   };
-  const refreshProjectList = useRTKApiRefresh({api: projectApi, tag: 'ALL_PROJECTS'});
 
   const canManageProject: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.UpdateProject
@@ -75,7 +73,7 @@ const ManageProject = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_PROJECT}
-          refreshFunc={refreshProjectList}
+          refreshFunc={refetch}
           isRefreshing={isFetching}
         />
       </Collapse>

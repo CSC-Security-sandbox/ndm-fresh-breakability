@@ -62,6 +62,7 @@ export interface FileServerFormContextType {
   nfsWorkersList: string[];
   children?: ReactNode;
   isFetching: boolean;
+  refetch: () => void;
 }
 
 export interface CommonFileServerContextProviderType

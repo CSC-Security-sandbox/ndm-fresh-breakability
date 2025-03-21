@@ -5,21 +5,18 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { SPEED_TEST_COLUMN_DEF } from "@modules/speed-test/constants/speed-test.constants";
 import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
 import useSelectedProjectId from "@/hooks/useSelectedProjectId";
-import { useGetSpeedTestJobsQuery, useJobAdhocRunMutation, jobsApi } from "@api/jobsApi";
+import { useGetSpeedTestJobsQuery, useJobAdhocRunMutation } from "@api/jobsApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useNavigate } from "react-router-dom";
 import { JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
-import useRTKApiRefresh from "@hooks/useRTKApiRefresh";
 
 const SpeedTest = () => {
   const navigate = useNavigate();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: speedTestJobRunList, isFetching, isLoading } = useGetSpeedTestJobsQuery({
+  const { data: speedTestJobRunList, isLoading, isFetching, refetch } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
   const [adhocRun] = useJobAdhocRunMutation();
-
-  const refreshSpeedTestJobRunList = useRTKApiRefresh({api: jobsApi, tag: 'SPEED_TEST_JOBS'});
 
   const jobStatus =
     JOB_STATUS_TYPE_ENUM.COMPLETED ||
@@ -73,7 +70,7 @@ const SpeedTest = () => {
         rowMenu={rowMenu}
         content={ADD_NEW_SPEED_TEST}
         label="Job Run Listing"
-        refreshFunc={refreshSpeedTestJobRunList}
+        refreshFunc={refetch}
         isRefreshing={isFetching}
       />
     </Box>
