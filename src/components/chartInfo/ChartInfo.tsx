@@ -9,6 +9,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import React from "react";
 import ChartError from "./ChartError";
+import { Show } from "@components/show/Show";
 
 const ChartInfo = React.memo(
   ({ title, Icon, children, isLoading, isError }: ChartInfoPropsType) => {
@@ -23,9 +24,15 @@ const ChartInfo = React.memo(
           </CardHeader>
           <CardContent>
             <Box className="flex gap-8">
-              {!isLoading && !isError && children}
-              {isLoading && <CardContentLoading className="h-40" />}
-              {isError && <ChartError>Failed to load data!</ChartError>}
+              <Show>
+                <Show.When isTrue={isLoading}>
+                  <CardContentLoading className="h-40" />
+                </Show.When>
+                <Show.When isTrue={isError}>
+                  <ChartError>Failed to load data!</ChartError>
+                </Show.When>
+                <Show.Else>{children}</Show.Else>
+              </Show>
             </Box>
           </CardContent>
         </Card>

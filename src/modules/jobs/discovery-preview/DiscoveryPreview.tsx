@@ -22,6 +22,7 @@ import { notify } from "@components/notification/NotificationWrapper";
 import ChartError from "@components/chartInfo/ChartError";
 import { Card, CardContent } from "@netapp/bxp-design-system-react";
 import { useEffect } from "react";
+import { Show } from "@components/show/Show";
 
 const DiscoveryPreview = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();
@@ -94,17 +95,15 @@ const DiscoveryPreview = () => {
           </ActionMenu.Button>
         </ActionMenuButtonStyle>
       </Box>
-
-      {isError && (
-        <Card>
-          <CardContent>
-            <ChartError>Failed to fetch the discovery report</ChartError>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isError && (
-        <>
+      <Show>
+        <Show.When isTrue={isError}>
+          <Card>
+            <CardContent>
+              <ChartError>Failed to fetch the discovery report</ChartError>
+            </CardContent>
+          </Card>
+        </Show.When>
+        <Show.Else>
           <GraphLoader label="Report Header" isLoading={reportDataIsLoading}>
             <ReportHeader />
           </GraphLoader>
@@ -124,8 +123,8 @@ const DiscoveryPreview = () => {
           <GraphLoader label="Report tables" isLoading={reportDataIsLoading}>
             <ReportTables />
           </GraphLoader>
-        </>
-      )}
+        </Show.Else>
+      </Show>
     </Box>
   );
 };
