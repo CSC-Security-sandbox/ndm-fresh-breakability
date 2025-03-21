@@ -2,9 +2,13 @@ import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers
 import { downloadBulkMigrationCsv } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import { Box, Button } from "@mui/material";
-import { SearchWidget, Table, useTable } from "@netapp/bxp-design-system-react";
+import {
+  SearchWidget,
+  Table,
+  TablePager,
+} from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect } from "react";
 
 export const MountPathConfigurationTable = () => {
   const {
@@ -18,6 +22,7 @@ export const MountPathConfigurationTable = () => {
   const { setFieldValue } = mappingStepForm;
   const {
     organizedRows,
+    pagination,
     columns,
     sortState,
     toggleSort,
@@ -58,7 +63,7 @@ export const MountPathConfigurationTable = () => {
 
       <Table
         columns={columns}
-        rows={organizedRows}
+        rows={pagination?.pageRows}
         sortState={sortState}
         toggleSort={toggleSort}
         filterState={filterState}
@@ -67,6 +72,16 @@ export const MountPathConfigurationTable = () => {
         selectionState={selectionState}
         isRowDisabled={checkDisabled}
       />
+      {pagination?.pageRows && (
+        <TablePager
+          pageRows={pagination?.pageRows}
+          pageSize={10}
+          rows={organizedRows}
+          pageIndex={pagination?.pageIndex}
+          pageCount={pagination?.pageCount}
+          gotoPage={pagination?.gotoPage}
+        />
+      )}
     </Box>
   );
 };
