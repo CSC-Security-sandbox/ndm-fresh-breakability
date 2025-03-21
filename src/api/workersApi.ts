@@ -5,7 +5,6 @@ import { prepareHeaders } from "@api/api.utils";
 
 export const workersApi = createApi({
   reducerPath: "workersApi",
-  tagTypes: ["GET_ALL_WORKERS"],
   baseQuery: fetchBaseQuery({
     baseUrl: window?.env?.VITE_WORKERS_SERVICE_URL || import.meta.env.VITE_WORKERS_SERVICE_URL,
     prepareHeaders,
@@ -15,7 +14,7 @@ export const workersApi = createApi({
       query: ({ projectId }) => {
         return `?projectId=${projectId}`;
       },
-      providesTags: ["GET_ALL_WORKERS"],
+
       // THIS IS RESP MODIFICATION DUE TO BLUEXP SELECT WORKS ON ID. ON VALIDATE CONNECTION
       transformResponse: (response: any) => {
         return response?.data?.map((worker: GetAllWorkersApiType) => {

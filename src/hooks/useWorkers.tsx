@@ -8,7 +8,7 @@ const useWorkers = () => {
   const [workers, setWorkers] = useState<WorkerApiType[]>([]);
   const [getAllWorkers, { error, isLoading, isFetching }] = useLazyGetAllWorkersQuery();
 
-  const getWorkers = async () => {
+  const getWorkers = () => {
     getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
       setWorkers(resp?.data);
     });
