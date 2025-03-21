@@ -17,7 +17,7 @@ import {
   useTable,
   Text,
 } from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import TaskFilters from "./TaskFilters";
 import { TASKS_COLUMN_DEFS } from "./tasks.constants";
@@ -41,7 +41,6 @@ const JobTasks = () => {
   }>({
     projectId: selectedProjectId,
   });
-  const taskAPIRequest = useRef<any | undefined>(""); // instead we should use this but its failing and not returning result QueryActionCreatorResult<any>
 
   const [searchParams] = useSearchParams();
 
@@ -88,9 +87,7 @@ const JobTasks = () => {
 
     try {
       setError(undefined);
-      if (taskAPIRequest.current) taskAPIRequest.current.abort();
-      taskAPIRequest.current = getJobTasks(payload);
-      await taskAPIRequest.current.unwrap();
+      await getJobTasks(payload).unwrap();
     } catch (error) {
       console.error({ error, level: "Task listing" });
       if (error?.name === "AbortError") return;

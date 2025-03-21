@@ -4,7 +4,7 @@ import { Box } from "@components/container";
 import { Text } from "@netapp/bxp-design-system-react";
 
 const useAdhocRun = () => {
-  const [adhocRun] = useJobAdhocRunMutation();
+  const [adhocRunApi] = useJobAdhocRunMutation();
 
   const jobAdhocRun = (jobConfigId: string, isAdhocRun?: boolean) => {
     const successMessage = isAdhocRun
@@ -14,7 +14,7 @@ const useAdhocRun = () => {
       ? "Fail to initiate the ad-hoc run."
       : "Fail to initiate the job run.";
 
-    adhocRun({ jobConfigId })
+    adhocRunApi({ jobConfigId })
       .unwrap()
       .then(() => {
         notify.success(successMessage);
