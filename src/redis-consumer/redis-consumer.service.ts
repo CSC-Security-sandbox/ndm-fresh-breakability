@@ -48,6 +48,7 @@ export class RedisConsumerService{
     private logger = new Logger(this.constructor.name);
     private batchSize: number = parseInt(process.env.BATCH_SIZE) || 300;
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
+    private processingQueue: Promise<void> = Promise.resolve();
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -225,17 +226,16 @@ export class RedisConsumerService{
     async startConsumer(jobRunId: string, readerName?: string, consumerType?: string) {
         if (consumerType) {
             setImmediate(() => {
+                readerName = readerName || `${consumerType}-reader`;
                 this.startConsumerCall(jobRunId, readerName, consumerType);
             });
         } else {
-            await Promise.all(
-                Object.values(ConsumerType).map(async (element) => {
-                    this.logger.log(`[${jobRunId}] Starting consumer: ${element}`);
-                    this.isRunningMap.set(`${jobRunId}_${element}`, true);
-                    readerName = `${element}-reader`;
-                    setImmediate(() => this.startConsumerCall(jobRunId, readerName, element));
-                })
-            );
+            Object.values(ConsumerType).forEach((consumerType) => {
+                this.logger.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
+                readerName = `${consumerType}-reader`;
+                 console.log("readerName", readerName);
+                setImmediate(() => this.startConsumerCall(jobRunId, readerName, consumerType));
+            });
         }
     }
 
@@ -243,9 +243,9 @@ export class RedisConsumerService{
         this.logger.log(`[${jobRunId}] Stopping consumer: ${consumerType}`);
 
         if (consumerType === ConsumerType.files) {
-            await this.withRetry(() => this.stopConsumer(jobRunId, null, true));
+            await this.stopConsumer(jobRunId, null, true);
         } else {
-            await this.withRetry(() => this.stopConsumer(jobRunId, consumerType));
+            await this.stopConsumer(jobRunId, consumerType);
         }
     }
     async startConsumerCall(jobRunId: string, readerName: string, consumerType: string) {
@@ -266,7 +266,7 @@ export class RedisConsumerService{
             const { pathId } = jobContext.jobConfig.sourceFileServer;
 
             while (await this.isConsumerRunning(key)) {
-                // this.logger.log('Active Consumers:', await this.listActiveConsumers());
+                this.logger.log('Active Consumers:', await this.listActiveConsumers());
                 this.logger.log(`[${jobRunId}] Running Process for key: ${key}`);
                 let hasData = false;
                 const reader = this.getReader(jobContext, readerName, consumerType);
@@ -276,16 +276,18 @@ export class RedisConsumerService{
                     if (!(await this.isConsumerRunning(key))) {
                         return await this.handleStopConsumer(jobRunId, consumerType);
                     }
-                    await this.processData(data, consumerType, jobRunId, pathId, jobContext);
+
+                     await this.processData(data, consumerType, jobRunId, pathId, jobContext);
                 }
                 if (!hasData) {
                     this.logger.log(`[${jobRunId}]: ${key} No new data found, sleeping...`);
-                    await this.throttle(4000); // Sleep for 4 seconds
+                    await new Promise(resolve => setTimeout(resolve, 4000));
+                    if (!(await this.isConsumerRunning(key))) {
+                        return await this.handleStopConsumer(jobRunId, consumerType);
+                    }
                 }
             }
-            if (!(await this.isConsumerRunning(key))) {
-                return await this.handleStopConsumer(jobRunId, consumerType);
-            }
+           
             this.logger.log(`[${jobRunId}] Consumer stopped`);
         } catch (error) {
             this.logger.error(`[${jobRunId}] Error starting consumer:`, error);
@@ -295,9 +297,7 @@ export class RedisConsumerService{
 
         this.logger.log(`[${jobRunId}] Consumer stopped`);
     }
-    private async throttle(ms: number) {
-        await new Promise(resolve => setTimeout(resolve, ms));
-    }
+  
     private async processData(data: any, consumerType: string, jobRunId: string, pathId: string, jobContext: any) {
         try {
             switch (consumerType) {
@@ -314,10 +314,10 @@ export class RedisConsumerService{
                     await this.inventoryService.saveTasks(data);
                     break;
                 case ConsumerType.directories:
-                    this.stopConsumer(jobRunId, consumerType);
+                    await this.stopConsumer(jobRunId, consumerType);
                     break;
                 case ConsumerType.files:
-                    await this.handleFiles(data, jobRunId, pathId, jobContext);
+                    this.handleFiles(data, jobRunId, pathId, jobContext);
                     break;
                 default:
                     this.logger.warn(`[${jobRunId}] Unknown consumer type: ${consumerType}`);
@@ -328,45 +328,93 @@ export class RedisConsumerService{
         }
     }
 
-    private async handleFiles(data: any, jobRunId: string, pathId: string, jobContext: any) {
-        if (data.fileName === this.lastFile) {
-            this.logger.log("data.fileName==========> ", data.fileName);
-            if (this.accumulatedRecords.length > 0) {
-                this.logger.log(`Processing remaining ${this.accumulatedRecords.length} records before stopping.`);
+    // private async handleFiles(data: any, jobRunId: string, pathId: string, jobContext: any) {
+    //     if (data.fileName === this.lastFile) {
+    //         this.logger.log("data.fileName==========> ", data.fileName);
+    //         if (this.accumulatedRecords.length > 0) {
+    //             this.logger.log(`Processing remaining ${this.accumulatedRecords.length} records before stopping.`);
+    //             await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
+    //             this.accumulatedRecords = []; // Clear after final processing
+    //         }
+
+    //         this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
+    //         await this.stopConsumer(jobRunId, undefined, true);
+    //         this.logger.log(`[${jobRunId}] Stopping consumer`);
+
+    //         try {
+    //             const jobType = jobContext.jobConfig.jobType;
+    //             const workflowId = getWorkflowId(jobRunId, jobType);
+    //             this.logger.log("----- Kill signal send to workflow----");
+    //             await this.workflowService.signalWorkflow({
+    //                 namespace: 'default',
+    //                 workflowExecution: { workflowId: workflowId },
+    //                 signalName: 'reportingSignal',
+    //                 input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
+    //             });
+    //             this.logger.log("----- Kill signal Done to workflow ----");
+    //         }
+    //         catch (error) {
+    //             this.logger.error(`Error signaling workflow:`, error);
+    //         }
+    //         this.logger.log(`Killing all consumers for jobRunId: ${jobRunId}`);
+    //         return true;
+    //     }
+
+    //     // Accumulate records in a batch
+    //     this.accumulatedRecords.push(data);
+    //     // this.count = this.count+this.accumulatedRecords.length
+    //     const batchSize = this.batchSize; // Adjust the batch size as needed
+    //      console.log("this.accumulatedRecords.length", this.accumulatedRecords.length);
+    //     if (this.accumulatedRecords.length >= batchSize) {
+    //         await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
+    //         this.accumulatedRecords = []; // Reset the accumulator after processing
+    //     }
+    // }
+
+
+    private async handleFiles(data: any, jobRunId: string, pathId: string, jobContext: any): Promise<void> {
+        this.processingQueue = this.processingQueue.then(async () => {
+            if (data.fileName === this.lastFile) {
+                this.logger.log("data.fileName==========> ", data.fileName);
+                if (this.accumulatedRecords.length > 0) {
+                    this.logger.log(`Processing remaining ${this.accumulatedRecords.length} records before stopping.`);
+                    await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
+                    this.accumulatedRecords = []; // Clear after final processing
+                }
+    
+                this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
+                await this.stopConsumer(jobRunId, undefined, true);
+                this.logger.log(`[${jobRunId}] Stopping consumer`);
+    
+                try {
+                    const jobType = jobContext.jobConfig.jobType;
+                    const workflowId = getWorkflowId(jobRunId, jobType);
+                    this.logger.log("----- Kill signal send to workflow----");
+                    await this.workflowService.signalWorkflow({
+                        namespace: 'default',
+                        workflowExecution: { workflowId: workflowId },
+                        signalName: 'reportingSignal',
+                        input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
+                    });
+                    this.logger.log("----- Kill signal Done to workflow ----");
+                } catch (error) {
+                    this.logger.error(`Error signaling workflow:`, error);
+                }
+                this.logger.log(`Killing all consumers for jobRunId: ${jobRunId}`);
+                return; // Exit early
+            }
+    
+            // Accumulate records in a batch
+            this.accumulatedRecords.push(data);
+            console.log("this.accumulatedRecords.length", this.accumulatedRecords.length);
+    
+            if (this.accumulatedRecords.length >= this.batchSize) {
                 await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
-                this.accumulatedRecords = []; // Clear after final processing
+                this.accumulatedRecords = []; // Reset the accumulator after processing
             }
-
-            this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
-            await this.withRetry(() => this.stopConsumer(jobRunId, undefined, true));
-            this.logger.log(`[${jobRunId}] Stopping consumer`);
-
-            try {
-                const jobType = jobContext.jobConfig.jobType;
-                const workflowId = getWorkflowId(jobRunId, jobType);
-                this.logger.log("----- Kill signal send to workflow----");
-                await this.workflowService.signalWorkflow({
-                    namespace: 'default',
-                    workflowExecution: { workflowId: workflowId },
-                    signalName: 'reportingSignal',
-                    input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
-                });
-                this.logger.log("----- Kill signal Done to workflow ----");
-            }
-            catch (error) {
-                this.logger.error(`Error signaling workflow:`, error);
-            }
-            this.logger.log(`Killing all consumers for jobRunId: ${jobRunId}`);
-            return true;
-        }
-
-        // Accumulate records in a batch
-        this.accumulatedRecords.push(data);
-        const batchSize = this.batchSize; // Adjust the batch size as needed
-        if (this.accumulatedRecords.length >= batchSize) {
-            await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
-            this.accumulatedRecords = []; // Reset the accumulator after processing
-        }
+        }).catch(error => {
+            this.logger.error("Error in processing queue:", error);
+        });
     }
 
     private async handleErrors(data: any) {
@@ -440,26 +488,6 @@ export class RedisConsumerService{
         return await this.redisClient.sMembers(setKey);
     }
 
-    private async withRetry<T>(
-        operation: () => Promise<T>,
-        maxRetries: number = 3,
-        initialDelay: number = 1000
-    ): Promise<T> {
-        let attempt = 0;
-        while (attempt < maxRetries) {
-            try {
-                return await operation();
-            } catch (error) {
-                attempt++;
-                if (attempt >= maxRetries) {
-                    throw error; // Re-throw after max retries
-                }
-                const delay = initialDelay * Math.pow(2, attempt - 1);
-                this.logger.warn(`Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-        throw new Error('Max retries reached');
-    }
+   
 
 }

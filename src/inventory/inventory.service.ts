@@ -161,7 +161,6 @@ export class InventoryService {
   }
 
   async saveTasks(data: any) {
-    console.log("data***************************", data);
     try {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
         throw new Error("Invalid task data");
