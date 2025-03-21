@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ConsumerDto } from './redis-consumer.dto';
-import { ConsumerType, RedisConsumerService } from './redis-consumer.service';
+import { RedisConsumerService } from './redis-consumer.service';
+import { ConsumerType } from 'src/enum/redis-consumer.enum';
 
 @ApiTags('Redis Consumer') // Swagger tag for grouping APIs
 @Controller('redis-consumer')
@@ -52,20 +53,6 @@ export class RedisConsumerController {
         return { success: true, data: activeConsumers };
     }
 
-    // /**
-    //  * List all pending tasks.
-    //  */
-    // @Get('pending-tasks')
-    // @ApiResponse({ status: 200, description: 'List of pending tasks retrieved successfully.' })
-    // @ApiResponse({ status: 500, description: 'Internal server error.' })
-    // async listPendingTasks() {
-    //     const pendingTasks = await this.redisConsumerService.getPendingTasks();
-    //     return { success: true, data: pendingTasks };
-    // }
-
-    /**
-     * Check if a consumer is running.
-     */
     @Get('is-running')
     @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
     @ApiQuery({ name: 'consumerType', enum: ConsumerType, description: 'The type of consumer to check.' })

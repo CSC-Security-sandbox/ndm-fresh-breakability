@@ -63,54 +63,35 @@ export class InventoryService {
         };
     }
 
+
     async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
-        if (!data || data.length === 0) {
-            this.logger.warn('No inventory data received, skipping insert.');
-            return;
-        }
-        try {
-            const mappedData = data.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
-            // console.log("mappedData", mappedData);
-            const inventoryRecords = this.inventoryRepo.create(mappedData);
-            await this.inventoryRepo.save(inventoryRecords);
-            this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);
-        } catch (err) {
-            this.logger.error(`Failed to save inventory records: ${err.message}`, err.stack);
-            throw err;
-        }
-    }
-  //   async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
-  //     if (!data || data.length === 0) {
-  //         this.logger.warn('No inventory data received, skipping insert.');
-  //         return;
-  //     }
+      if (!data || data.length === 0) {
+          this.logger.warn('No inventory data received, skipping insert.');
+          return;
+      }
   
-  //     try {
-  //         // Map the data to the target format
-  //         const mappedData = data.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
+      const batchSize = 500; // Adjust batch size as needed
+      const failedRecords: CreateInventory[] = [];
   
-  //         // Define the batch size
-  //         const batchSize = 1000; // Adjust the batch size as needed
-  //         const inventoryBatches: InventoryEntity[][] = [];
+      for (let i = 0; i < data.length; i += batchSize) {
+          const batch = data.slice(i, i + batchSize);
+          try {
+              const mappedData = batch.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
+              const inventoryRecords = this.inventoryRepo.create(mappedData);
+              await this.inventoryRepo.save(inventoryRecords);
+              this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);
+          } catch (err) {
+              this.logger.error(`Failed to save inventory records in batch: ${err.message}`, err.stack);
+              failedRecords.push(...batch);
+          }
+      }
   
-  //         // Split the mapped data into batches
-  //         for (let i = 0; i < mappedData.length; i += batchSize) {
-  //             const batch = mappedData.slice(i, i + batchSize);
-  //             const inventoryBatch = this.inventoryRepo.create(batch); // Create entities for the batch
-  //             inventoryBatches.push(inventoryBatch);
-  //         }
-  
-  //         // Save each batch to the database
-  //         for (const batch of inventoryBatches) {
-  //             await this.inventoryRepo.save(batch);
-  //         }
-  
-  //         this.logger.log(`Successfully inserted ${mappedData.length} inventory records in batches`);
-  //     } catch (err) {
-  //         this.logger.error(`Failed to save inventory records: ${err.message}`, err.stack);
-  //         throw err;
-  //     }
-  // }
+      if (failedRecords.length > 0) {
+          this.logger.error(`Total failed records: ${failedRecords.length}. Logging them separately.`);
+          failedRecords.forEach(record => this.logger.error(`Failed Record: ${JSON.stringify(record)}`));
+      }
+  }
+ 
     async saveOperationError(data: OperationError) {
         try {
             if (!data || !data.operationId) {
