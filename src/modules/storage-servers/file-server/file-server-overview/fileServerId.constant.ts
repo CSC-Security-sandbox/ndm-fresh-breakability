@@ -79,3 +79,7 @@ export const InitialFileServerOverviewApiData: FileServerOverviewApi = {
     totalPendingSize: "",
   },
 };
+
+export const BULK_DISCOVERY_DEFAULT_COLUMN_STATE = {
+  2: { isHidden: true },
+};

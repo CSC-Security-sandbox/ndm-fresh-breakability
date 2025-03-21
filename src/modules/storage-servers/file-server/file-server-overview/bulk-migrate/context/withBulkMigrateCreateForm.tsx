@@ -5,6 +5,7 @@ import {
   ProtocolType,
   ValidateConnectionStatus,
   JOBS_TYPE,
+  BlueXpTableStateType,
 } from "@/types/app.type";
 import { convertFileToBase64, getOptionsFromArray } from "@/utils/common.utils";
 import {
@@ -40,21 +41,24 @@ import {
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import {
   createPathMapping,
+  createSelectedMountPathsObject,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review.utils";
-import { Button, useForm } from "@netapp/bxp-design-system-react";
+import { Button, useForm, useTable } from "@netapp/bxp-design-system-react";
 import dayjs from "dayjs";
 import { useFormik } from "formik";
 import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
 ) {
   return function withBulkMigrateCreateFormComponent(props: any) {
     const interval = useRef<any | undefined>("");
-
+    const navigate = useNavigate();
     const { selectedProjectId: projectId } = useSelectedProjectId();
     const [selectedMountPathsId, setSelectedMountPathsId] = useState<string[]>(
       []
@@ -89,6 +93,7 @@ export function withBulkMigrateCreateForm(
     const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
 
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [fileName, setFileName] = useState<string>("");
 
     const mappingStepForm = useFormik<MappingStepFormikFormType>({
       initialValues: {
@@ -101,8 +106,6 @@ export function withBulkMigrateCreateForm(
       validate: validateMappingStepForm,
       onSubmit: () => {},
     });
-
-    const navigate = useNavigate();
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -242,7 +245,19 @@ export function withBulkMigrateCreateForm(
       }
     };
 
+    const showErrorOnFailure = (error: Error) => {
+      setIsPrecheckLoading(false);
+      setIsSubmitting(false);
+      interval.current && clearInterval(interval.current);
+
+      notify.error(
+        `Failed to perform precheck, reason - ${error?.message || "unknown"}`
+      );
+      console.error({ level: "Bulk Migrate - Precheck.", error });
+    };
+
     const handlePrecheck = (onSuccessfulSubmit?: Function) => {
+      let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
       setIsPrecheckLoading(true);
       setIsPrecheckSuccessful(false);
@@ -274,9 +289,18 @@ export function withBulkMigrateCreateForm(
                 handleSubmit(onSuccessfulSubmit);
               }
             }
+
+            if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+              const error = new Error(
+                `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+              );
+              showErrorOnFailure(error);
+            }
           }, 2000);
         })
-        .catch((e) => console.error("precheck failed", e));
+        .catch((e) => {
+          showErrorOnFailure(e);
+        });
     };
 
     const handleSubmit = async (onSuccessfulSubmit?: Function) => {
@@ -328,7 +352,14 @@ export function withBulkMigrateCreateForm(
       const successMessage = (
         <>
           Bulk Migrate Job has been created.
-          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${JOBS_TYPE.MIGRATE}`)}>
+          <Button
+            variant="text"
+            onClick={() =>
+              navigate(
+                `/jobs-list?source=${configName}&type=${JOBS_TYPE.MIGRATE}`
+              )
+            }
+          >
             View Job Listing
           </Button>
         </>
@@ -345,6 +376,22 @@ export function withBulkMigrateCreateForm(
           console.error(err);
         });
     };
+
+    // Migration Table
+    const mappingStepTableState: BlueXpTableStateType<any> = useTable({
+      columns: BULK_MIGRATION_MOUNT_PATH_COL_DEFS,
+      rows: mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.filter(
+        (row) => row.protocol === protocolForm.formState.protocol.value
+      ),
+      isSorting: true,
+      isRowSelecting: true,
+      defaultSelectionState: {
+        rows: createSelectedMountPathsObject(
+          mappingStepForm?.values?.selectedMountPathsId
+        ),
+      },
+      pageSize: 10,
+    });
 
     const createBulkMigrateHelpers: BulkMigrateContextType = {
       migrationDetailsTableConfiguration,
@@ -368,6 +415,9 @@ export function withBulkMigrateCreateForm(
       isFormSubmitting:
         isPrecheckSubmitting || isSubmitting || isBulkMigrateSubmitting,
       protocolForm,
+      mappingStepTableState,
+      setFileName,
+      fileName,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

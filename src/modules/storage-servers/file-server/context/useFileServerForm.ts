@@ -35,6 +35,7 @@ import {
 import { useForm } from "@netapp/bxp-design-system-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 
 export const useFileServerForm = () => {
   const interval = useRef<any | undefined>("");
@@ -141,6 +142,7 @@ export const useFileServerForm = () => {
   };
 
   const handleValidateConnection = async () => {
+    let retryCount = 0;
     if (selectedWorkerIds.length === 0) return [];
 
     setValidateConnectionLoader(true);
@@ -169,12 +171,36 @@ export const useFileServerForm = () => {
             interval.current && clearInterval(interval.current);
             resolve({ errorMessageList });
             setDisableNextButton(false);
+          } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+            clearInterval(interval.current);
+            setValidateConnectionLoader(false);
+            let message = "Worker(s) are not responding.";
+            try {
+              const incompleteWorkers = data?.status?.data.filter(
+                (item: { status: string }) => item.status !== "COMPLETED"
+              );
+              const workerNames = incompleteWorkers.map(
+                (item: { workerId: string }) =>
+                  workerIdWithName[item.workerId] || item.workerId
+              );
+              message = `Worker is not responding, Validation for workers ${workerNames.join(
+                ", "
+              )} took too long`;
+            } catch (error: any) {
+              console.error({
+                level:
+                  "File Server validation - Worker taking too long to respond, and failed to create list of workers",
+                error,
+              });
+            }
+            notify.error(message);
           }
         }, 2000);
       });
     } catch (error: any) {
       setValidateConnectionLoader(false);
-      notify?.error("Something went wrong...");
+      notify.error("Something went wrong...");
+      console.error({ level: "File Server validation", error });
     }
   };
 

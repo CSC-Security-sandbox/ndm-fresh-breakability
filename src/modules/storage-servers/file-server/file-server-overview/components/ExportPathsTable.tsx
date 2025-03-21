@@ -1,4 +1,7 @@
-import { useLazyRefetchConfigExportPathsQuery } from "@api/configApi";
+import {
+  configApi,
+  useLazyRefetchConfigExportPathsQuery,
+} from "@api/configApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
@@ -6,7 +9,11 @@ import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-se
 import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
+import { ValidateConnectionStatus } from "@/types/app.type";
+import { useDispatch } from "react-redux";
+import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -14,9 +21,13 @@ const ExportPathsTable = ({
   showRefetch,
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
+  defaultColumnState,
 }: ExportPathsTablePropsType) => {
+  const interval = useRef<any | undefined>("");
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
+  const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
+  const dispatch = useDispatch();
 
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
@@ -24,22 +35,58 @@ const ExportPathsTable = ({
     isRowSelecting: isRowSelectingEnabled,
     isSorting: true,
     pageSize: 10,
+    defaultColumnState: defaultColumnState,
+  };
+
+  const showErrorOnRefetchFailure = (error: Error) => {
+    setDisableRefresh(false);
+    interval.current && clearInterval(interval.current);
+
+    notify.error(
+      `Failed to refresh the list, reason - ${error?.message || "unknown"}`
+    );
+    console.error({ level: "File server overview - refresh list.", error });
   };
 
   // REFETCH EXPORT PATHS
   const handleRefetchExportPaths = async () => {
     setDisableRefresh(true);
     try {
-      await reFetchExportPathsApi({
+      let retryCount = 0;
+      const response = await reFetchExportPathsApi({
         fileServerId: fileServerDetails.id,
       }).unwrap();
-      notify.success("Please wait, the paths will be refreshed soon.");
+
+      interval.current = setInterval(async () => {
+        const data = await getWorkFlowStatus({
+          id: response?.workflowId,
+        }).unwrap();
+
+        if (data?.status === ValidateConnectionStatus.COMPLETED) {
+          dispatch(configApi.util.invalidateTags(["GET_FILE_SERVER_BY_ID"]));
+          notify.success("Successfully refreshed the mount / share paths.");
+          setDisableRefresh(false);
+          clearInterval(interval.current);
+          return;
+        }
+
+        if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+          const error = new Error(
+            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+          );
+          showErrorOnRefetchFailure(error);
+        }
+      }, 2000);
     } catch (error) {
-      notify.error("Something Went Wrong.");
-    } finally {
-      setDisableRefresh(false);
+      showErrorOnRefetchFailure(error);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      interval.current && clearInterval(interval.current);
+    };
+  }, []);
 
   const FETCHING_DETAILS = (
     <Box className="flex gap-3 justify-end">

@@ -24,6 +24,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BULK_DISCOVERY_DEFAULT_COLUMN_STATE } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 
 dayjs.extend(utc);
 
@@ -79,7 +80,14 @@ const BulkDiscover = () => {
       const successMessage = (
         <>
           Bulk Discover Job has been created.
-          <Button variant="text" onClick={() => navigate(`/jobs-list?source=${configName}&type=${JOBS_TYPE.DISCOVERY}`)}>
+          <Button
+            variant="text"
+            onClick={() =>
+              navigate(
+                `/jobs-list?source=${configName}&type=${JOBS_TYPE.DISCOVERY}`
+              )
+            }
+          >
             View Job Listing
           </Button>
         </>
@@ -115,6 +123,7 @@ const BulkDiscover = () => {
           </Box>
         </Card>
         <ExportPathsTable
+          defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
           allExportPaths={allExportPaths.filter(
             (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
           )}
