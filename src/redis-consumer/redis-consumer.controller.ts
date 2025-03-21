@@ -17,8 +17,8 @@ export class RedisConsumerController {
     @ApiResponse({ status: 400, description: 'Invalid input data.' })
     @ApiResponse({ status: 500, description: 'Internal server error.' })
     async start(@Body() consumerDto: ConsumerDto) {
-        const { jobRunId, readerName, consumerType } = consumerDto;
-         this.redisConsumerService.startConsumer(jobRunId, readerName, consumerType);
+        const { jobRunId } = consumerDto;
+         this.redisConsumerService.startConsumer(jobRunId);
         return { success: true, message: 'Consumer started successfully.' };
     }
 

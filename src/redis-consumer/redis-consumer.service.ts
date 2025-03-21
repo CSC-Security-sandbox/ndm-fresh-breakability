@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { DMError, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { OperationStatus } from 'src/enum/queues.enum';
 import { InventoryService } from 'src/inventory/inventory.service';
@@ -39,11 +39,15 @@ const getWorkflowId = (jobRunId: string, jobType: string) => {
 @Injectable()
 export class RedisConsumerService implements OnModuleInit {
     private redisClient: any;
+
     private consumers: Map<string, StreamStatus> = new Map();
     private isRunningMap: Map<string, boolean> = new Map();
     private accumulatedRecords: any[] = [];
     private readonly keyPrefix = 'consumer';
     private readonly activeConsumersSetKey = 'activeConsumers';
+    private logger = new Logger(this.constructor.name);
+    private batchSize: number = parseInt(process.env.BATCH_SIZE) || 300;
+    private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -58,23 +62,23 @@ export class RedisConsumerService implements OnModuleInit {
             this.consumers = await this.redisClient.get("consumers");
             await this.isPendingStart();
         } catch (error) {
-            console.error('Failed to initialize RedisConsumerService:', error);
+            this.logger.error('Failed to initialize RedisConsumerService:', error);
             throw error;
         }
     }
 
     async isPendingStart() {
         const data = await this.listActiveConsumers();
-        console.log("Active Consumers Data:", data);
+        this.logger.log("Active Consumers Data:", data);
 
-        if (data.length > 0) {
-            for (const item of data) {
-                const { jobRunId, consumerType, readerName } = item;
-                console.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
-                 this.startConsumer(jobRunId, readerName, consumerType);
-            }
-        }
+        await Promise.all(
+            data.map(({ jobRunId, consumerType, readerName }) => {
+                this.logger.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
+                return this.startConsumer(jobRunId, readerName, consumerType);
+            })
+        );
     }
+
 
     getConsumerKey(jobRunId: string, consumerType: string): string {
         return `${this.keyPrefix}:${jobRunId}:${consumerType}`;
@@ -88,79 +92,79 @@ export class RedisConsumerService implements OnModuleInit {
 
     async stopConsumer(jobRunId: string, consumerType?: string, all?: boolean) {
         if (all || !consumerType) {
-            console.log("Stopping all consumers for jobRunId:", jobRunId);
-    
+            this.logger.log("Stopping all consumers for jobRunId:", jobRunId);
+
             // Stop all consumers for the given jobRunId
             for (const type of Object.values(ConsumerType)) {
-                console.log("Stopping consumer type:", type);
-    
+                this.logger.log("Stopping consumer type:", type);
+
                 const key = this.getConsumerKey(jobRunId, type);
-                console.log("Consumer key:", key);
-    
+                this.logger.log("Consumer key:", key);
+
                 if (await this.keyExists(key)) {
-                    console.log("Key exists. Stopping consumer...");
-    
+                    this.logger.log("Key exists. Stopping consumer...");
+
                     // Update Redis state
                     await this.setKey(key, 'false');
-                    
+
                     // Fetch all members of the active consumers set
                     const activeMembers = await this.getSetMembers(this.activeConsumersSetKey);
-    
+
                     // Remove members that match the jobRunId and consumerType
                     for (const member of activeMembers) {
                         const [memberJobRunId, memberConsumerType] = member.split(':');
                         if (memberJobRunId === jobRunId && memberConsumerType === type) {
                             await this.removeFromSet(this.activeConsumersSetKey, member);
-                            console.log(`Removed member: ${member}`);
+                            this.logger.log(`Removed member: ${member}`);
                         }
                     }
-    
+
                     // Update local state
-                     this.isRunningMap.set(key, false);
-    
-                    console.log(`[${jobRunId}] Consumer ${type} is set to stop.`);
+                    this.isRunningMap.set(key, false);
+
+                    this.logger.log(`[${jobRunId}] Consumer ${type} is set to stop.`);
                 } else {
-                    console.log(`[${jobRunId}] Consumer ${type} not found.`);
+                    this.logger.log(`[${jobRunId}] Consumer ${type} not found.`);
                 }
             }
-    
-            console.log(`[${jobRunId}] All consumers have been stopped.`);
+
+            this.logger.log(`[${jobRunId}] All consumers have been stopped.`);
         } else {
-            console.log("Stopping specific consumer for jobRunId:", jobRunId, "and type:", consumerType);
-    
+            this.logger.log("Stopping specific consumer for jobRunId:", jobRunId, "and type:", consumerType);
+
             const key = this.getConsumerKey(jobRunId, consumerType);
-            console.log("Consumer key:", key);
-    
+            this.logger.log("Consumer key:", key);
+
             if (await this.keyExists(key)) {
-                console.log("Key exists. Stopping consumer...");
-    
+                this.logger.log("Key exists. Stopping consumer...");
+
                 // Update Redis state
                 await this.setKey(key, 'false');
-    
+
                 // Fetch all members of the active consumers set
                 const activeMembers = await this.getSetMembers(this.activeConsumersSetKey);
-    
+
                 // Remove members that match the jobRunId and consumerType
                 for (const member of activeMembers) {
                     const [memberJobRunId, memberConsumerType] = member.split(':');
                     if (memberJobRunId === jobRunId && memberConsumerType === consumerType) {
                         await this.removeFromSet(this.activeConsumersSetKey, member);
-                        console.log(`Removed member: ${member}`);
+                        this.logger.log(`Removed member: ${member}`);
                     }
                 }
-    
+
                 // Update local state
                 this.isRunningMap.set(key, false);
-    
-                console.log(`[${jobRunId}] Consumer ${consumerType} is set to stop.`);
-    
+
+                this.logger.log(`[${jobRunId}] Consumer ${consumerType} is set to stop.`);
+
                 // Check if all other consumers for this jobRunId are also false
                 const isAllStopped = await this.areAllConsumersStopped(jobRunId);
                 if (isAllStopped) {
-                    console.log(`[${jobRunId}] All consumers are now stopped.`);
+                    this.logger.log(`[${jobRunId}] All consumers are now stopped.`);
                 }
             } else {
-                console.warn(`[${jobRunId}] Consumer ${consumerType} not found.`);
+                this.logger.warn(`[${jobRunId}] Consumer ${consumerType} not found.`);
             }
         }
     }
@@ -180,24 +184,24 @@ export class RedisConsumerService implements OnModuleInit {
 
     async listActiveConsumers(): Promise<{ jobRunId: string; consumerType: string; readerName: string; val: boolean }[]> {
         const activeConsumerMembers = await this.getSetMembers(this.activeConsumersSetKey);
-    
-        const activeConsumers:any = [];
-    
+
+        const activeConsumers: any = [];
+
         for (const member of activeConsumerMembers) {
             try {
                 // Split the member into jobRunId, consumerType, and readerName
                 const [jobRunId, consumerType, readerName] = member.split(':');
-    
+
                 // Validate the fields
                 if (!jobRunId || !consumerType || !readerName) {
-                    console.warn(`Invalid member format: ${member}`);
+                    this.logger.warn(`Invalid member format: ${member}`);
                     continue; // Skip invalid members
                 }
-    
+
                 // Check if the consumer is active in Redis
                 const key = this.getConsumerKey(jobRunId, consumerType);
                 const isActive = await this.isConsumerRunning(key);
-    
+
                 // Add the consumer to the result if it is active
                 if (isActive) {
                     activeConsumers.push({
@@ -207,136 +211,158 @@ export class RedisConsumerService implements OnModuleInit {
                         val: isActive,
                     });
                 } else {
-                    // console.log(`Consumer ${member} is not active.`);
+                    // this.logger.log(`Consumer ${member} is not active.`);
 
                 }
             } catch (error) {
-                console.error(`Error processing member ${member}:`, error);
+                this.logger.error(`Error processing member ${member}:`, error);
             }
         }
-    
+
         return activeConsumers;
     }
 
-      async startConsumer(jobRunId: string, readerName: string, consumerType: string) {
-        setImmediate(async () => {
-             this.startConsumerfun(jobRunId, readerName, consumerType);
+    async startConsumer(jobRunId: string, readerName?: string, consumerType?: string) {
+        if (consumerType) {
+            setImmediate(() => {
+                this.startConsumerCall(jobRunId, readerName, consumerType);
+            });
+        } else {
+            await Promise.all(
+                Object.values(ConsumerType).map(async (element) => {
+                    this.logger.log(`[${jobRunId}] Starting consumer: ${element}`);
+                    this.isRunningMap.set(`${jobRunId}_${element}`, true);
+                    readerName = `${element}-reader`;
+                    setImmediate(() => this.startConsumerCall(jobRunId, readerName, element));
+                })
+            );
         }
-        );
     }
 
+    private async handleStopConsumer(jobRunId: string, consumerType: string | null) {
+        this.logger.log(`[${jobRunId}] Stopping consumer: ${consumerType}`);
 
-    async startConsumerfun(jobRunId: string, readerName: string, consumerType: string) {
-        if (!this.redisClient.isOpen) await this.redisClient.connect();
-
-        const contextProvider = JobContextFactory.getProvider("redis", this.redisClient);
-        const jobContext = await contextProvider.getJobContext(jobRunId);
-        if (!jobContext) {
-            await this.stopConsumer(jobRunId, consumerType);
-            throw new Error('jobContext is null');
+        if (consumerType === ConsumerType.files) {
+            await this.withRetry(() => this.stopConsumer(jobRunId, null, true));
+        } else {
+            await this.withRetry(() => this.stopConsumer(jobRunId, consumerType));
         }
-        const key = this.getConsumerKey(jobRunId, consumerType);
+    }
+    async startConsumerCall(jobRunId: string, readerName: string, consumerType: string) {
+        try {
+            if (!this.redisClient.isOpen) await this.redisClient.connect();
 
-        console.log(`[${jobRunId}] Starting consumer key: ${key}`);
-        await this.setKey(key, 'true');
-        const member = this.getConsumerSetMember(jobRunId, consumerType, readerName);
-        await this.addToSet(this.activeConsumersSetKey, member);
+            const contextProvider = JobContextFactory.getProvider("redis", this.redisClient);
+            const jobContext = await contextProvider.getJobContext(jobRunId);
+            if (!jobContext) {
+                await this.stopConsumer(jobRunId, consumerType);
+                throw new Error('jobContext is null');
+            }
+            const key = this.getConsumerKey(jobRunId, consumerType);
+            await this.setKey(key, 'true');
+            const member = this.getConsumerSetMember(jobRunId, consumerType, readerName);
+            await this.addToSet(this.activeConsumersSetKey, member);
 
-        const { pathId } = jobContext.jobConfig.sourceFileServer;
+            const { pathId } = jobContext.jobConfig.sourceFileServer;
 
-        while (await this.isConsumerRunning(key)) {
-            console.log('Active Consumers:', await this.listActiveConsumers());
-            console.log(`[${jobRunId}] Starting key: ${key}`);
-            let hasData = false;
-            const reader = this.getReader(jobContext, readerName, consumerType);
+            while (await this.isConsumerRunning(key)) {
+                // this.logger.log('Active Consumers:', await this.listActiveConsumers());
+                this.logger.log(`[${jobRunId}] Running Process for key: ${key}`);
+                let hasData = false;
+                const reader = this.getReader(jobContext, readerName, consumerType);
 
-            for await (const data of reader) {
-                hasData = true;
-                if (!(await this.isConsumerRunning(key))) {
-                    console.log(`[${jobRunId}] Stopping consumer: ${consumerType}`);
-                    if (consumerType === ConsumerType.files) {
-                        await this.stopConsumer(jobRunId, undefined, true);
-
-                    }else{
-                     await this.stopConsumer(jobRunId, consumerType);
+                for await (const data of reader) {
+                    hasData = true;
+                    if (!(await this.isConsumerRunning(key))) {
+                        return await this.handleStopConsumer(jobRunId, consumerType);
                     }
-                    return;
+                    await this.processData(data, consumerType, jobRunId, pathId, jobContext);
                 }
-
-                await this.processData(data, consumerType, jobRunId, pathId, jobContext);
+                if (!hasData) {
+                    this.logger.log(`[${jobRunId}]: ${key} No new data found, sleeping...`);
+                    await this.throttle(4000); // Sleep for 4 seconds
+                }
             }
-
-            if (!hasData) {
-                console.log(`[${jobRunId}] No new data found, sleeping...`);
-                await new Promise(resolve => setTimeout(resolve, 5000));
+            if (!(await this.isConsumerRunning(key))) {
+                return await this.handleStopConsumer(jobRunId, consumerType);
             }
+            this.logger.log(`[${jobRunId}] Consumer stopped`);
+        } catch (error) {
+            this.logger.error(`[${jobRunId}] Error starting consumer:`, error);
+            await this.stopConsumer(jobRunId, consumerType);
         }
 
 
-        console.log(`[${jobRunId}] Consumer stopped`);
+        this.logger.log(`[${jobRunId}] Consumer stopped`);
     }
-
+    private async throttle(ms: number) {
+        await new Promise(resolve => setTimeout(resolve, ms));
+    }
     private async processData(data: any, consumerType: string, jobRunId: string, pathId: string, jobContext: any) {
-        switch (consumerType) {
-            case ConsumerType.errors:
-                await this.handleErrors(data);
-                break;
-            case ConsumerType.tasks:
-                // Handle tasks
-                break;
-            case ConsumerType.migrationTask:
-                await this.inventoryService.saveTasks(data);
-                break;
-            case ConsumerType.updatedTask:
-                await this.inventoryService.saveTasks(data);
-                break;
-            case ConsumerType.directories:
-                this.stopConsumer(jobRunId, consumerType);
-                break;
-            case ConsumerType.files:
-                await this.handleFiles(data, jobRunId, pathId, jobContext);
-                break;
-            default:
-                console.warn(`[${jobRunId}] Unknown consumer type: ${consumerType}`);
-                break;
+        try {
+            switch (consumerType) {
+                case ConsumerType.errors:
+                    await this.handleErrors(data);
+                    break;
+                case ConsumerType.tasks:
+                    // Handle tasks
+                    break;
+                case ConsumerType.migrationTask:
+                    await this.inventoryService.saveTasks(data);
+                    break;
+                case ConsumerType.updatedTask:
+                    await this.inventoryService.saveTasks(data);
+                    break;
+                case ConsumerType.directories:
+                    this.stopConsumer(jobRunId, consumerType);
+                    break;
+                case ConsumerType.files:
+                    await this.handleFiles(data, jobRunId, pathId, jobContext);
+                    break;
+                default:
+                    this.logger.warn(`[${jobRunId}] Unknown consumer type: ${consumerType}`);
+                    break;
+            }
+        } catch (error) {
+            this.logger.error(`[${jobRunId}] Error processing data:`, error);
         }
     }
 
     private async handleFiles(data: any, jobRunId: string, pathId: string, jobContext: any) {
-        if (data.fileName === "LAST_FILE") {
-            console.log("data.fileName==========> ", data.fileName);
+        if (data.fileName === this.lastFile) {
+            this.logger.log("data.fileName==========> ", data.fileName);
             if (this.accumulatedRecords.length > 0) {
-                console.log(`Processing remaining ${this.accumulatedRecords.length} records before stopping.`);
+                this.logger.log(`Processing remaining ${this.accumulatedRecords.length} records before stopping.`);
                 await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
                 this.accumulatedRecords = []; // Clear after final processing
             }
 
             this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
-            await this.stopConsumer(jobRunId, undefined, true);
-            console.log(`[${jobRunId}] Stopping consumer`);
-            
-                    try{
-                    const jobType = jobContext.jobConfig.jobType;
-                    const workflowId = getWorkflowId(jobRunId, jobType);
-                    console.log("----- Kill signal send to workflow----");
-                    await this.workflowService.signalWorkflow({
-                        namespace: 'default',
-                        workflowExecution: { workflowId: workflowId },
-                        signalName: 'reportingSignal',
-                        input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
-                    });
-                    console.log("----- Kill signal Done to workflow----");
-                }
-                catch (error) {
-                    console.error(`Error signaling workflow:`, error);
-                }
-                console.log(`Killing all consumers for jobRunId: ${jobRunId}`);
+            await this.withRetry(() => this.stopConsumer(jobRunId, undefined, true));
+            this.logger.log(`[${jobRunId}] Stopping consumer`);
+
+            try {
+                const jobType = jobContext.jobConfig.jobType;
+                const workflowId = getWorkflowId(jobRunId, jobType);
+                this.logger.log("----- Kill signal send to workflow----");
+                await this.workflowService.signalWorkflow({
+                    namespace: 'default',
+                    workflowExecution: { workflowId: workflowId },
+                    signalName: 'reportingSignal',
+                    input: { payloads: [defaultDataConverter.payloadConverter.toPayload(`${jobType}_REPORTED`)] }
+                });
+                this.logger.log("----- Kill signal Done to workflow ----");
+            }
+            catch (error) {
+                this.logger.error(`Error signaling workflow:`, error);
+            }
+            this.logger.log(`Killing all consumers for jobRunId: ${jobRunId}`);
             return true;
         }
 
         // Accumulate records in a batch
         this.accumulatedRecords.push(data);
-        const batchSize = 300; // Adjust the batch size as needed
+        const batchSize = this.batchSize; // Adjust the batch size as needed
         if (this.accumulatedRecords.length >= batchSize) {
             await this.inventoryService.createInventory(this.accumulatedRecords, jobRunId, pathId);
             this.accumulatedRecords = []; // Reset the accumulator after processing
@@ -395,22 +421,45 @@ export class RedisConsumerService implements OnModuleInit {
 
     async removeFromSet(setKey: string, member: string): Promise<void> {
         try {
-             console.log("setKey", setKey);
-                console.log("member", member);
+            this.logger.log("setKey", setKey);
+            this.logger.log("member", member);
             const removed = await this.redisClient.sendCommand(['SREM', setKey, member]);
             if (removed > 0) {
-                console.log(`✅ Removed "${member}" from "${setKey}"`);
+                this.logger.log(`✅ Removed "${member}" from "${setKey}"`);
             } else {
-                console.warn(`⚠️ Member "${member}" not found in "${setKey}"`);
+                this.logger.warn(`⚠️ Member "${member}" not found in "${setKey}"`);
             }
         } catch (error) {
-            console.error(`❌ Error removing "${member}" from "${setKey}":`, error);
+            this.logger.error(`❌ Error removing "${member}" from "${setKey}":`, error);
         }
     }
-    
+
 
     async getSetMembers(setKey: string): Promise<string[]> {
-         console.log("setKey", setKey);
+        this.logger.log("setKey", setKey);
         return await this.redisClient.sMembers(setKey);
     }
+
+    private async withRetry<T>(
+        operation: () => Promise<T>,
+        maxRetries: number = 3,
+        initialDelay: number = 1000
+    ): Promise<T> {
+        let attempt = 0;
+        while (attempt < maxRetries) {
+            try {
+                return await operation();
+            } catch (error) {
+                attempt++;
+                if (attempt >= maxRetries) {
+                    throw error; // Re-throw after max retries
+                }
+                const delay = initialDelay * Math.pow(2, attempt - 1);
+                this.logger.warn(`Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        throw new Error('Max retries reached');
+    }
+
 }

@@ -5,8 +5,8 @@ export class ConsumerDto {
   jobRunId: string;
 
   @IsString()
-  readerName: string;
+  readerName?: string;
 
   @IsString()
-  consumerType: string;
+  consumerType?: string;
 }
