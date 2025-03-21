@@ -2,11 +2,10 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { ExcludeOrSkipParams, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
+import { ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
-import { platform } from "os";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -109,17 +108,12 @@ export function getFileType(stats: fs.Stats): FileType {
     }
   }
 
-export const getFileInfo = async (name: string, fullFilePath:string, relativePath: string, 
-  checksums?:{
-    sourceChecksum?: string,
-    targetChecksum?:string
-  }
-): Promise<any>  => {
+
+  export const getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
     let sid = undefined
-    if(process.platform == 'win32' && lStat.isFile())
+    if(getID && process.platform == 'win32' && lStat.isFile())
       sid = getSID(fullFilePath);
-
     const obj = new FileInfo(
         name,
         relativePath,
@@ -136,13 +130,16 @@ export const getFileInfo = async (name: string, fullFilePath:string, relativePat
         relativePath.split('/').length - 2,
         lStat.uid,
         lStat.gid,
-        sid
       );
     return {
       ...obj,
-      ...checksums
+      ...checksums,
+      sid
     }
 }
+
+
+
 
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(

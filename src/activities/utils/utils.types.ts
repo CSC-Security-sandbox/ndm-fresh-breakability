@@ -31,3 +31,14 @@ export enum Operation {
     STAMP_META = 'Update Metadata',
     STAMP_TIME = 'Update a-time',
 }
+
+export interface getFileInfoInput {
+    name: string;
+    fullFilePath: string;
+    relativePath: string;
+    checksums? :{
+        sourceChecksum?: string,
+        targetChecksum?:string
+    },
+    getID?: boolean
+}

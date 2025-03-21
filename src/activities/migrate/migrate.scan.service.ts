@@ -84,7 +84,7 @@ export class MigrationScanService {
                     jobType: jobContext.jobConfig.jobType
                 })) continue;
 
-                const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
+                const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
 
                 this.logger.debug(`Item : ${item}`);
                 this.logger.debug(`sourceContentPath : ${sourceContentPath}`);

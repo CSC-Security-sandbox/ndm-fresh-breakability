@@ -276,9 +276,14 @@ export class MigrationSyncService {
         syncTask.error++;
       }
       else {
-        const fileInfo: FileInfo = await getFileInfo(task.commands[i].fPath, `${task.sPath}${task.commands[i].fPath}`, task.commands[i].fPath, syncOperationOp.checksums);
-        const id = await jobContext.appendToFileList(fileInfo);
-        jobContext.filesInfo.lastId = id;
+
+        const fileInfo: FileInfo = await getFileInfo({
+          name: task.commands[i].fPath, fullFilePath:`${task.tPath}${task.commands[i].fPath}`,
+          relativePath: task.commands[i].fPath,checksums: syncOperationOp.checksums,
+          getID: jobContext.jobConfig.options.isIdentityMappingAvailable
+        });
+        jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
+      
         jobContext.filesInfo.numMessages++;
         task.commands[i].status = CommandStatus.COMPLETED
         syncTask.success++;

@@ -174,7 +174,7 @@ export class DiscoveryScanActivity{
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                const fileInfo: FileInfo = await getFileInfo(item, sourceContentPath, relativeSourcePath);
+                const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath :sourceContentPath, relativePath: relativeSourcePath});
                 
                 if(sourceStat.isDirectory()) {
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
