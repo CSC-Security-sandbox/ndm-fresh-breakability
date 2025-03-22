@@ -607,8 +607,8 @@ export class JobRunInitService {
         );
         this.logger.log(`Started consumer for ${consumerType}:`, response.data);
       } catch (error) {
-        this.logger.error(
-          `Failed to start consumer for ${consumerType}:`,
+        this.logger.error( 
+          `Failed to start consumer for ${consumerType}:`, 
           error.message
         );
       }
