@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { InventoryEntity } from '../entities/inventory.entity';
 import { ProjectEntity } from '../entities/project.entity';
 import { JobRunStatus, JobType } from '../constants/enums';
+import { query } from 'express';
 
 describe('OverviewService', () => {
   let service: OverviewService;
@@ -89,7 +90,11 @@ describe('OverviewService', () => {
         OverviewService,
         {
           provide: getRepositoryToken(InventoryEntity),
-          useValue: mockInventoryRepository
+          useValue: {
+            createQueryBuilder: jest.fn(() => mockInventoryRepository),
+            query: jest.fn(),
+          },
+
         },
         {
           provide: getRepositoryToken(ProjectEntity),
