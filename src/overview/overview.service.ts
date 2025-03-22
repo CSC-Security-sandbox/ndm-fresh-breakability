@@ -23,6 +23,7 @@ export class OverviewService {
     jobConfigId: string
   ) {
     const getStorageAndJobsOverviewStart = Date.now();
+    const schema = process.env.SCHEMA || 'datamigrator';
     const whereClause = {};
     if (projectId) {
       whereClause["id"] = projectId;
@@ -70,8 +71,7 @@ export class OverviewService {
     this.logger.log(
       `projectDetails query took ${projectQueryEnd - projectQueryStart} ms`
     );
-    this.logger.log(`projectDetails - ${JSON.stringify(projectDetails)}`);
-
+   
     let totalDiscoveredSize = 0;
     let totalMigratedSize = 0;
     let totalFileServers = projectDetails?.flatMap(
@@ -156,32 +156,19 @@ export class OverviewService {
       ...(completedDiscoveryJobRunIds ?? []),
     ];
     if (jobRunIds && jobRunIds.length > 0) {
-      const discoverySizeQueryBuilder = this.inventoryRepository
-        .createQueryBuilder()
-        .select(
-          'COALESCE(SUM(latest_inventory."fileSize"), 0)',
-          "totalDiscoveredSize"
-        )
-        .from((subQuery) => {
-          return subQuery
-            .select("latest_inventory.*")
-            .from((qb) => {
-              return qb
-                .select("inventory.path", "path")
-                .addSelect("COALESCE(inventory.fileSize,0)", "fileSize")
-                .addSelect(
-                  "ROW_NUMBER() OVER (PARTITION BY inventory.path ORDER BY inventory.createdAt DESC)",
-                  "row_num"
-                )
-                .from("inventory", "inventory")
-                .where("inventory.job_run_id IN (:...jobRunId)", {
-                  jobRunId: jobRunIds,
-                });
-            }, "latest_inventory")
-            .where("latest_inventory.row_num = 1");
-        }, "latest_inventory");
-
-      const discoveredSize = await discoverySizeQueryBuilder.getRawOne();
+      const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
+      const discoveredSize = await this.inventoryRepository.query(
+        `
+        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalDiscoveredSize"
+        FROM (
+          SELECT DISTINCT ON (i.path) i.file_size
+          FROM  ${schema}.inventory i
+          WHERE i.job_run_id IN (${placeholders})
+          ORDER BY i.path, i.created_at DESC
+        ) as latest_inventory
+        `,
+        jobRunIds
+      )
 
       const discoverySizeQueryBuilderEnd = Date.now();
 
@@ -189,7 +176,7 @@ export class OverviewService {
         `inventoryQueryBuilder query took ${discoverySizeQueryBuilderEnd - discoverySizeQueryBuilderStart} ms`
       );
 
-      totalDiscoveredSize = discoveredSize?.totalDiscoveredSize ?? 0;
+      totalDiscoveredSize = discoveredSize?.[0]?.totalDiscoveredSize ?? 0;
 
       this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
     }
@@ -205,28 +192,20 @@ export class OverviewService {
         totalMigratedSize = 0;
         return;
       }
-      const migrationQueryBuilder = this.inventoryRepository
-        .createQueryBuilder()
-        .select('SUM(subquery."maxFileSize")', "totalMigratedSize")
-        .from((subQuery) => {
-          return subQuery
-            .select("inventory.path", "path")
-            .addSelect("MAX(inventory.fileSize)", "maxFileSize")
-            .from("inventory", "inventory")
-            .where("inventory.job_run_id IN(:...jobRunId)", {
-              jobRunId: jobRunIds,
-            })
-            .groupBy("inventory.path");
-        }, "subquery");
-
-      const migratedSize = await migrationQueryBuilder.getRawOne();
-
-      const migrationQueryBuilderEnd = Date.now();
-      this.logger.log(
-        `migrationQueryBuilder query took ${migrationQueryBuilderEnd - migrationQueryBuilderStart} ms`
-      );
-
-      totalMigratedSize = migratedSize?.totalMigratedSize ?? 0;
+      const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
+      const migratedSize  =  await this.inventoryRepository.query(
+        `
+        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalDiscoveredSize"
+        FROM (
+          SELECT DISTINCT ON (i.path) i.file_size
+          FROM  ${schema}.inventory i
+          WHERE i.job_run_id IN (${placeholders})
+          ORDER BY i.path, i.created_at DESC
+        ) as latest_inventory
+        `,
+        jobRunIds
+      )
+        totalMigratedSize = migratedSize?.[0]?.totalMigratedSize ?? 0;
     }
 
     let totalPending = totalDiscoveredSize - totalMigratedSize;
