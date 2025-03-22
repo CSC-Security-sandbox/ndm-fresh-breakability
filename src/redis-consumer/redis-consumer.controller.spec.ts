@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RedisConsumerController } from './redis-consumer.controller';
 import { RedisConsumerService } from './redis-consumer.service';
 import { ConsumerDto } from './redis-consumer.dto';
-import { ConsumerType } from 'src/enum/redis-consumer.enum';
+import { ConsumerType } from '../enum/redis-consumer.enum';
 
 describe('RedisConsumerController', () => {
     let controller: RedisConsumerController;

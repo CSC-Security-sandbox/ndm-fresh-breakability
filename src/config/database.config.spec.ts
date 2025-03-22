@@ -1,10 +1,10 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import databaseConfig from "./database.config";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { TaskEntity } from "src/entities/task.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { TaskErrorEntity } from "src/entities/task-error.entity";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { TaskEntity } from "../entities/task.entity";
+import { OperationsEntity } from "../entities/operation.entity";
+import { TaskErrorEntity } from "../entities/task-error.entity";
+import { OperationErrorEntity } from "../entities/operation-error.entity";
 
 describe("DatabaseConfig", () => {
   let config;

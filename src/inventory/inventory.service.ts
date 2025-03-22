@@ -6,12 +6,12 @@ import {
   TaskError,
   TaskStatus,
 } from "@netapp-cloud-datamigrate/jobs-lib";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { TaskErrorEntity } from "src/entities/task-error.entity";
-import { TaskEntity } from "src/entities/task.entity";
-import { OperationStatus } from "src/enum/queues.enum";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { OperationErrorEntity } from "../entities/operation-error.entity";
+import { OperationsEntity } from "../entities/operation.entity";
+import { TaskErrorEntity } from "../entities/task-error.entity";
+import { TaskEntity } from "../entities/task.entity";
+import { OperationStatus } from "../enum/queues.enum";
 import { Repository, UpdateResult } from "typeorm";
 import { CreateInventory } from "./inventory.types";
 import { randomUUID } from "crypto";
@@ -146,7 +146,6 @@ export class InventoryService {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
         throw new Error("Invalid task data");
       }
-
       const {
         jobRunId,
         taskType,

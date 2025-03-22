@@ -1,10 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DMError, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
-import { InventoryService } from 'src/inventory/inventory.service';
-import { WorkflowService } from 'src/workflow/workflow.service';
-import { defaultDataConverter } from '@temporalio/common';
-import { ConsumerType, StreamStatus, WorkFlows } from 'src/enum/redis-consumer.enum';
+const originalLog = console.log;
+console.log = (...args) => {
+    if (!args[0]?.includes('@netapp-cloud-datamigrate/jobs-lib')) {
+        originalLog(...args); // Allow other logs
+    }
+};
 
+import { DMError, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { InventoryService } from '../inventory/inventory.service';
+import { WorkflowService } from '../workflow/workflow.service';
+import { defaultDataConverter } from '@temporalio/common';
+import { ConsumerType, StreamStatus, WorkFlows } from '../enum/redis-consumer.enum';
+import { Worker } from 'worker_threads';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+console.log('__dirname:', __dirname);
 
 
 const getWorkflowId = (jobRunId: string, jobType: string) => {
@@ -27,6 +37,13 @@ export class RedisConsumerService {
     private batchSize: number = parseInt(process.env.BATCH_SIZE) || 300;
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
     private processingQueue: Promise<void> = Promise.resolve();
+    /**
+     * description: Maximum number of concurrent workers
+     */
+    private MAX_CONCURRENT_WORKERS = 100; // Adjust as needed
+    private activeWorkers = 0;
+    private jobQueue = [];
+
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -39,11 +56,14 @@ export class RedisConsumerService {
             if (!this.redisClient.isOpen) await this.redisClient.connect();
             await this.redisClient.del("consumers");
             this.consumers = await this.redisClient.get("consumers");
-            await this.isPendingStart();
+            // await this.isPendingStart();
+            const workerPath = path.join(__dirname, 'consumerWorker.ts');
+            console.log("workerPath", workerPath);
         } catch (error) {
             this.logger.error('Failed to initialize RedisConsumerService:', error);
             throw error;
         }
+        //  console.log(path.resolve(__dirname, 'consumerWorker.js'));
     }
 
     async isPendingStart() {
@@ -195,20 +215,61 @@ export class RedisConsumerService {
         if (consumerType) {
             setImmediate(() => {
                 readerName = readerName || `${consumerType}-reader`;
-                this.startConsumerCall(jobRunId, readerName, consumerType);
+                this.startConsumerWithThreading(jobRunId, readerName, consumerType);
             });
         } else {
             Object.values(ConsumerType).forEach((consumerType) => {
-                this.logger.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
                 readerName = `${consumerType}-reader`;
                 console.log("readerName", readerName);
-                if (consumerType === ConsumerType.tasks || consumerType === ConsumerType.directories) {
+                this.logger.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
+                if (consumerType === ConsumerType.directories) {
                     return
                 }
-                setImmediate(() => this.startConsumerCall(jobRunId, readerName, consumerType));
+                if (this.activeWorkers < this.MAX_CONCURRENT_WORKERS) {
+                    setImmediate(() => this.startConsumerWithThreading(jobRunId, readerName, consumerType));
+                } else {
+                    const job = { jobRunId, readerName, consumerType };
+                    this.jobQueue.push(job); // Queue job if workers are at max capacity
+                }
             });
         }
     }
+
+    async startConsumerWithThreading(jobRunId: string, readerName: string, consumerType: string): Promise<void> {
+      console.log("startConsumerWithThreading", jobRunId, readerName, consumerType);
+     
+        return new Promise((resolve, reject) => {
+            const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js'); // Ensure correct path
+
+            const worker = new Worker(workerPath, {
+                workerData: {
+                    jobRunId,
+                    readerName,
+                    consumerType
+                },
+            });
+            worker.on('message', (result) => {
+                if (result.success) {
+                    resolve();
+                } else {
+                    reject(new Error(result.error));
+                }
+            });
+            worker.on('error', (error) => {
+                reject(error);
+            });
+    
+            worker.on('exit', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Worker stopped with exit code ${code}`));
+                }
+                if (this.jobQueue.length > 0 && this.activeWorkers < this.MAX_CONCURRENT_WORKERS) {
+                    const nextJob = this.jobQueue.shift();
+                    this.startConsumerWithThreading(nextJob.jobRunId, nextJob.readerName, nextJob.consumerType);
+                }
+            });
+        });
+    } 
 
     private async handleStopConsumer(jobRunId: string, consumerType: string | null) {
         this.logger.log(`[${jobRunId}] Stopping consumer: ${consumerType}`);
@@ -225,6 +286,8 @@ export class RedisConsumerService {
             if (!this.redisClient.isOpen) await this.redisClient.connect();
 
             const contextProvider = JobContextFactory.getProvider("redis", this.redisClient);
+          
+            
             const jobContext = await contextProvider.getJobContext(jobRunId);
             if (!jobContext) {
                 await this.stopConsumer(jobRunId, consumerType);
@@ -245,27 +308,21 @@ export class RedisConsumerService {
 
                 for await (const data of reader) {
                     hasData = true;
-                    // if (!(await this.isConsumerRunning(key))) {
-                    //     return await this.handleStopConsumer(jobRunId, consumerType);
-                    // }
                     await this.processData(data, consumerType, jobRunId, pathId, jobContext);
                 }
                 if (!hasData) {
                     this.logger.log(`[${jobRunId}]: ${key} No new data found, sleeping...`);
-                    await new Promise(resolve => setTimeout(resolve, 4000));
                     if (!(await this.isConsumerRunning(key))) {
                         return await this.handleStopConsumer(jobRunId, consumerType);
                     }
+                    await new Promise(resolve => setTimeout(resolve, 4000));
                 }
             }
-
             this.logger.log(`[${jobRunId}] Consumer stopped`);
         } catch (error) {
             this.logger.error(`[${jobRunId}] Error starting consumer:`, error);
             await this.stopConsumer(jobRunId, consumerType);
         }
-
-
         this.logger.log(`[${jobRunId}] Consumer stopped`);
     }
 
@@ -273,22 +330,28 @@ export class RedisConsumerService {
         try {
             switch (consumerType) {
                 case ConsumerType.errors:
+                    this.logger.error(`[${jobRunId}] Error data:`, data);
                     await this.handleErrors(data);
                     break;
                 case ConsumerType.tasks:
-                    // Handle tasks
+                    this.logger.error(`[${jobRunId}] tasks data:`, data);
+                    await this.inventoryService.saveTasks(data);
                     break;
                 case ConsumerType.migrationTask:
+                    this.logger.error(`[${jobRunId}] migrationTask data:`, data?.taskId, data?.taskType , data?.status);
+
                     await this.inventoryService.saveTasks(data);
                     break;
                 case ConsumerType.updatedTask:
+                    this.logger.error(`[${jobRunId}] updatedTask data:`, data);
+
                     await this.inventoryService.saveTasks(data);
                     break;
                 case ConsumerType.directories:
                     // await this.stopConsumer(jobRunId, consumerType);
                     break;
                 case ConsumerType.files:
-                    this.handleFiles(data, jobRunId, pathId, jobContext);
+                    await this.handleFiles(data, jobRunId, pathId, jobContext);
                     break;
                 default:
                     this.logger.warn(`[${jobRunId}] Unknown consumer type: ${consumerType}`);
@@ -310,7 +373,8 @@ export class RedisConsumerService {
                 }
 
                 this.isRunningMap.set(`${jobRunId}_${ConsumerType.files}`, false);
-                await this.stopConsumer(jobRunId, undefined, true);
+                // add delay 10 sec 
+                    await this.stopConsumer(jobRunId,null, true)
                 try {
                     const jobType = jobContext.jobConfig.jobType;
                     const workflowId = getWorkflowId(jobRunId, jobType);
@@ -340,6 +404,9 @@ export class RedisConsumerService {
     }
 
     private async handleErrors(data: any) {
+
+
+         console.log(data);
         const { operation, tasks } = data.error || {};
         if (operation) await this.inventoryService.saveOperationError(operation);
         if (tasks) await this.inventoryService.saveTaskError(tasks);

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ConsumerDto } from './redis-consumer.dto';
 import { RedisConsumerService } from './redis-consumer.service';
-import { ConsumerType } from 'src/enum/redis-consumer.enum';
+import { ConsumerType } from '../enum/redis-consumer.enum';
 
 @ApiTags('Redis Consumer') // Swagger tag for grouping APIs
 @Controller('redis-consumer')

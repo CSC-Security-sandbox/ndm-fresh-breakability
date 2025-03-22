@@ -3,11 +3,11 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { Logger } from "@nestjs/common";
 import { Repository } from "typeorm";
 import { InventoryService } from "./inventory.service";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { TaskEntity } from "src/entities/task.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { TaskErrorEntity } from "src/entities/task-error.entity";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { TaskEntity } from "../entities/task.entity";
+import { OperationsEntity } from "../entities/operation.entity";
+import { OperationErrorEntity } from "../entities/operation-error.entity";
+import { TaskErrorEntity } from "../entities/task-error.entity";
 import {
   ErrorType,
   OperationError,
@@ -15,7 +15,7 @@ import {
   TaskStatus,
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
-import { OperationStatus } from "src/enum/queues.enum";
+import { OperationStatus } from "../enum/queues.enum";
 
 describe("InventoryService", () => {
   let service: InventoryService;
