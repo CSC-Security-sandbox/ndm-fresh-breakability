@@ -49,6 +49,8 @@ import {
   FlattenedCutoverConfig,
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateRes,
+  PreChecks,
+  PreCheckWorkflowOPayload,
   SpeedTestEntry,
   SpeedTestJobRun
 } from "./jobconfig.types";
@@ -740,6 +742,99 @@ export class JobConfigService {
         destinationPathId: destId,
       }))
     );
+  }
+
+  async initiatePreCheck(data: JobConfigPrecheck): Promise<any> {
+    const traceId: string = uuidv4();
+    try {
+      const preCheckPayload:PreCheckWorkflowOPayload = {
+        preChecks: [],
+        settings: {
+          preserveAccessTime: data.preserveAccessTime,
+        },
+        serverCredentials: []
+      }
+      const pathIds: string[] = [];
+      data.migrateConfigs.forEach((config) => {
+        pathIds.push(config.sourcePathId);
+        pathIds.push(...config.destinationPathId);
+      })
+
+      const pathToWorkerMapping:VolumeEntity[] = await this.volumeRepo.find({
+        where: { id: In([...pathIds]) },
+        relations: {
+          fileServer: { workers: true},
+        },
+      });
+
+      pathToWorkerMapping.forEach((volume) => {
+        if(!preCheckPayload.serverCredentials.find((server) => server.id === volume.fileServer.id)){
+          preCheckPayload.serverCredentials.push({
+            id: volume.fileServer.id,
+            host: volume.fileServer.host,
+            userName: volume.fileServer.userName,
+            password: volume.fileServer.password,
+            protocol: volume.fileServer.protocol,
+            protocolVersion: volume.fileServer.protocolVersion.replace(/^v/, ''),
+            serverType: volume.fileServer.serverType,
+        })}
+      })
+
+      data.migrateConfigs.forEach((config) => {
+        const sourceVolume = pathToWorkerMapping.find(
+          (p) => p.id === config.sourcePathId
+        );
+        if(sourceVolume) {
+          const preChecks: PreChecks = {
+            pathId: config.sourcePathId,
+            destinations: [],
+            serverId: sourceVolume.fileServer.id,
+            pathName: sourceVolume.volumePath,
+          }
+          const workerIds = new Set<string>(sourceVolume.fileServer.workers.map((worker) => worker.workerId));
+          config.destinationPathId.forEach((destinationPathId) => {
+            const destinationVolume = pathToWorkerMapping.find(
+              (p) => p.id === destinationPathId
+            );
+            if(destinationVolume){
+              const workers: string[] = [];
+              destinationVolume.fileServer.workers.forEach((worker) => {
+                if(workerIds.has(worker.workerId)){
+                  workers.push(worker.workerId);
+                }
+              })
+              preChecks.destinations.push({
+                pathId: destinationPathId,
+                serverId: destinationVolume.fileServer.id,
+                pathName: destinationVolume.volumePath,
+                workers: workers
+              })
+            }
+          })
+        }
+      })
+
+      const preCheckWorkPayload: StartWorkFlowPayload = {
+        workflowId: WorkFlows.PRECHECK + "-" + traceId,
+        taskQueue: "ParentWorkflow-TaskQueue",
+        args: [
+          {
+            traceId: traceId,
+            payload: preCheckPayload,
+            options: new Options()
+          },
+        ],
+      }
+      const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK,preCheckWorkPayload );
+      return { workflowId: workflow.workflowId };
+    }catch (error) {
+      this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
+      return {
+        status: "error",
+        erros: ["PRECHECK_FAILED"],
+        message: `Failed to perform the precheck: ${error}`,
+      };
+    }
   }
 
   async precheck(data: JobConfigPrecheck) {

@@ -58,3 +58,31 @@ export interface PrecheckDestination {
   status: string;
   errors?: string[];
 }
+
+export interface ServerCredentials{
+  id: string;
+  host: string;
+  userName: string;
+  password: string;
+  protocol: string;
+  serverType: string;
+  protocolVersion: string;
+}
+export interface PreChecks {
+  pathId: string;
+  pathName: string;
+  serverId: string
+  destinations: {
+    pathId: string;
+    pathName: string;
+    serverId: string
+    workers: string[]
+  }[],
+}
+export interface PreCheckWorkflowOPayload {
+  serverCredentials: ServerCredentials[];
+  settings: {
+    preserveAccessTime: boolean;
+  },
+  preChecks: PreChecks[]
+}
