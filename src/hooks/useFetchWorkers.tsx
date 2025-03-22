@@ -6,7 +6,6 @@ import { useParams } from "react-router-dom";
 const useFetchWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const { jobRunId } = useParams();
-  // const [getAllWorkers, { error, isLoading }] = useLazyGetAllWorkersQuery();
 
   const {
     data: allWorkers,
