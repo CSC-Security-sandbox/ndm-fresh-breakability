@@ -24,7 +24,7 @@ vm_mem_size     = 32768
 vm_mem_hot_add  = false
 
 // Disk Settings
-vm_disk_size    = 512000
+vm_disk_size    = 204800
 
 // Default Account Credentials
 
