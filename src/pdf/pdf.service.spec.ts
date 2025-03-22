@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import { Browser, Page } from 'puppeteer';
 import * as hbs from "hbs";
+import { DiscoveryService } from 'src/discovery/discovery.service';
 
 jest.mock('puppeteer');
 
@@ -18,6 +19,7 @@ describe('PdfService', () => {
   let mockReportsRepo;
   let mockBrowser: Partial<Browser>;
   let mockPage: Partial<Page>;
+  let mockDiscoveryService: Partial<DiscoveryService>;
 
   beforeEach(async () => {
     mockInventoryRepo = {
@@ -52,6 +54,10 @@ describe('PdfService', () => {
         {
           provide: getRepositoryToken(ReportsEntity),
           useValue: mockReportsRepo,
+        },
+        {
+          provide: DiscoveryService,
+          useValue: mockDiscoveryService,
         },
       ],
     }).compile();
