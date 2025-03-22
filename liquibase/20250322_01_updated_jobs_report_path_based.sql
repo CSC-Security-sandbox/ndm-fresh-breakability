@@ -193,5 +193,8 @@ BEGIN
         ));
     END IF;
 
+    -- commit the transaction
+    COMMIT;
+
 END;
 $procedure$;
