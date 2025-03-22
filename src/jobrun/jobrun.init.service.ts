@@ -594,25 +594,25 @@ export class JobRunInitService {
     const START_CONSUMER_URL = this.configService.get<string>(
       "app.paths.startConsumer"
     );
-    // for (const consumerType of Object.values(ConsumerType)) {
+    for (const consumerType of Object.values(ConsumerType)) {
       const payload = {
         jobRunId: jobRunId,
-        // readerName: `${consumerType}-reader`,
-        // consumerType: consumerType,
+        readerName: `${consumerType}-reader`,
+        consumerType: consumerType,
       };
       try {
         const response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           payload
         );
-        // this.logger.log(`Started consumer for ${consumerType}:`, response.data);
+        this.logger.log(`Started consumer for ${consumerType}:`, response.data);
       } catch (error) {
-        this.logger.error( '',
-          // `Failed to start consumer for ${consumerType}:`, 
+        this.logger.error( 
+          `Failed to start consumer for ${consumerType}:`, 
           error.message
         );
       }
-    // }
+    }
   }
 
   getWorkFlowId(jobRunId: string, jobType: JobType): string {
