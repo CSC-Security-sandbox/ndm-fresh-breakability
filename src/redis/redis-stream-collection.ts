@@ -2,7 +2,7 @@ import { Serializable } from '../types/serializable';
 import { StreamCollection } from '../types/stream-collection';
 import { RedisClientType } from 'redis';
 import { encode, decode } from 'msgpack-lite';
-import { Logger } from '../utils/logging';
+
 
 export class RedisStreamCollection<T extends Serializable>
   implements StreamCollection<T>
@@ -12,7 +12,6 @@ export class RedisStreamCollection<T extends Serializable>
   streamKey: string;
   numMessages: number;
   lastId: string;
-  logger: Logger;
 
   constructor(
     jobRunId: string,
@@ -26,7 +25,6 @@ export class RedisStreamCollection<T extends Serializable>
     this.numMessages = numMessages;
     this.lastId = lastId;
     this.redisClient = redisClient;
-    this.logger = Logger.getLogger(jobRunId);
   }
 
   async init(): Promise<void> {
@@ -39,13 +37,13 @@ export class RedisStreamCollection<T extends Serializable>
         MKSTREAM: true,
       }).catch(err => {
         if (err.message.includes('BUSYGROUP')) {
-          this.logger.warn(`Consumer group ${this.jobRunId} already exists`);
+          console.warn(`Consumer group ${this.jobRunId} already exists`);
         } else {
           throw err;
         }
       })
     ) {
-      this.logger.info(
+      console.info(
         `Consumer group ${this.jobRunId} created for stream : ${this.streamKey}`,
       );
     }
@@ -55,12 +53,12 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async cleanup(): Promise<void> {
-    this.logger.info(`Cleaning up stream ${this.streamKey}`);
+    console.info(`Cleaning up stream ${this.streamKey}`);
     await this.redisClient.del(this.streamKey);
   }
 
   async close(): Promise<void> {
-    this.logger.info(`Closing collection ${this.streamKey}`);
+    console.info(`Closing collection ${this.streamKey}`);
   }
 
   async append(record: T): Promise<string> {
@@ -73,17 +71,17 @@ export class RedisStreamCollection<T extends Serializable>
       this.lastId = id;
       return id;
     } catch (err) {
-      this.logger.error(`Error writing record: ${err}`, err);
+      console.error(`Error writing record: ${err}`, err);
       throw err;
     }
   }
 
   async *read(readerName: string): AsyncGenerator<T> {
-    this.logger.info(
+    console.info(
       `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName} ${this.lastId}`,
     );
     const readerLastReadId = await this.redisClient.get(`${this.jobRunId}-${readerName}`);
-    this.logger.info(`Reader last read id: ${readerLastReadId}`);
+    console.info(`Reader last read id: ${readerLastReadId}`);
     let lastReadId = readerLastReadId || '0';
     //let numMessagesRead = 0;
     while (true) {
@@ -91,13 +89,13 @@ export class RedisStreamCollection<T extends Serializable>
         [{ key: this.streamKey, id: lastReadId }],
         { COUNT: 1, BLOCK: 500 },
       );
-      this.logger.info(`Results in read>>>>: ${JSON.stringify(results)}`);
+      console.info(`Results in read>>>>: ${JSON.stringify(results)}`);
       if (results) {
         for (const result of results) {
           for (const message of result.messages) {
             lastReadId = message.id;
             this.lastId = lastReadId;
-            this.logger.info(`>> Reading message: ${lastReadId}`);
+            console.info(`>> Reading message: ${lastReadId}`);
             //numMessagesRead++;
             yield decode(Buffer.from(message.message.obj, 'base64'));
           }
@@ -110,7 +108,7 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async *groupRead(readerName: string, batchSize: number): AsyncGenerator<T> {
-    this.logger.info(
+    console.info(
       `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}, Batch Size: ${batchSize}`,
     );
   
@@ -130,45 +128,45 @@ export class RedisStreamCollection<T extends Serializable>
           for (const message of result.messages) {
             lastReadId = message.id;
             this.lastId = lastReadId;
-            this.logger.info(`>> Reading message: ${lastReadId}`);
+            console.info(`>> Reading message: ${lastReadId}`);
             yield decode(Buffer.from(message.message.obj, 'base64'));
             messagesProcessed++;
           }
         }
         if (messagesProcessed >= batchSize) {
-          this.logger.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
+          console.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
           await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
           break;
         }
       }else{
-        this.logger.info(`>> No results, thus exiting`);
+        console.info(`>> No results, thus exiting`);
         await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
         break;
       }
   
      
   
-      // this.logger.info('>> No results');
+      // console.info('>> No results');
       // const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
-      // this.logger.info(`Group info: ${JSON.stringify(groupInfo)}`);
+      // console.info(`Group info: ${JSON.stringify(groupInfo)}`);
   
       // const consumerGroupInfo = groupInfo.find(
       //   (group) => group.name === this.jobRunId,
       // );
   
       // if (consumerGroupInfo) {
-      //   this.logger.info(
+      //   console.info(
       //     `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
       //   );
-      //   this.logger.info(`Last collection id : ${this.lastId}`);
+      //   console.info(`Last collection id : ${this.lastId}`);
   
       //   if (consumerGroupInfo.lastDeliveredId === this.lastId) {
-      //     this.logger.info(`>> Acking messages: ${lastReadId}`);
+      //     console.info(`>> Acking messages: ${lastReadId}`);
       //     await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
       //     break;
       //   }
       // } else {
-      //   this.logger.info(`Consumer group ${this.jobRunId} not found.`);
+      //   console.info(`Consumer group ${this.jobRunId} not found.`);
       // }
     }
   }
