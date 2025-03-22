@@ -6,3 +6,5 @@ inventory.yaml
 .vscode
 .DS_Store
 packer-provisioner-*
+/wininstaller/winsw.exe
+/wininstaller/worker.exe
