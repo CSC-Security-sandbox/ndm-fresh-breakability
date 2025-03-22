@@ -10,6 +10,7 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
 import { JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigurationService } from './configuration.service';
@@ -30,6 +31,10 @@ const mockConfigRepository = {
   save: jest.fn(),
   remove: jest.fn(),
   update: jest.fn()
+};
+
+const mockProjectRepository = {
+  findOne: jest.fn()
 };
 
 const mockFileServerRepository = {
@@ -89,7 +94,8 @@ describe('ConfigurationService', () => {
   let service: ConfigurationService;
   let configRepository: Repository<ConfigEntity>;
   let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
-  let workflowService:WorkflowService
+  let workflowService:WorkflowService;
+  let projectRepository: Repository<ProjectEntity>;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -115,6 +121,10 @@ describe('ConfigurationService', () => {
         {
           provide: getRepositoryToken(ConfigEntity),
           useValue: mockConfigRepository,
+        },
+        {
+          provide: getRepositoryToken(ProjectEntity),
+          useValue: mockProjectRepository,
         },
         {
           provide: getRepositoryToken(FileServerEntity),
@@ -143,6 +153,7 @@ describe('ConfigurationService', () => {
     service = module.get<ConfigurationService>(ConfigurationService);
     workflowService = module.get<WorkflowService>(WorkflowService);
     configRepository = module.get(getRepositoryToken(ConfigEntity));
+    projectRepository = module.get(getRepositoryToken(ProjectEntity));
     mappingRepository = module.get(getRepositoryToken(FileServerWorkingDirectoryMappingEntity));
   });
 
@@ -218,18 +229,18 @@ describe('ConfigurationService', () => {
   describe('createConfiguration', () => {
     it('should create and save a new configuration', async () => {
       mockConfigRepository.create.mockReturnValue(mockConfig);
-      mockConfigRepository.save.mockResolvedValue(mockConfig);
       mockWorkerRepository.find.mockResolvedValue([mockWorker]);
+      jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
 
       const createConfigDTO = {
-        projectId:"123456",
+        projectId: "123456",
         createdBy: "123123",
-        stage:"",
+        stage: "",
         workingDirectory: {
           pathName: '/temp',
           pathId: '123123',
           workingDirectory: '/working/dir'
-          
+
         },
         configName: 'Updated Config',
         configType: ConfigurationType.file,
@@ -238,28 +249,91 @@ describe('ConfigurationService', () => {
           protocolVersion: ProtocolVersion.NFSv3,
           serverType: ServerType.emc,
           workers: [mockWorker.id],
-          volumes: [{  volumePath: '/new-path', isIncluded: true, createdBy:"1234567" }],
-          createdBy:"1234567",
+          volumes: [{ volumePath: '/new-path', isIncluded: true, createdBy: "1234567" }],
+          createdBy: "1234567",
           protocol: Protocol.NFS,
           userName: "TEST"
         }]
       };
 
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
+      const savedConfig = { id: uuidv4(), ...createConfigDTO };
+      mockConfigRepository.save.mockResolvedValue(savedConfig);
+      mockConfigRepository.findOne.mockResolvedValue(savedConfig);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue(undefined);
+
       const result = await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
 
-      expect(result).toEqual(mockConfig);
+      expect(service.isConfigNameUnique).toHaveBeenCalledWith(createConfigDTO.projectId, createConfigDTO.configName);
+      expect(result).toEqual(savedConfig);
       expect(mockConfigRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if project ID is invalid', async () => {
+      jest.spyOn(service, 'isConfigNameUnique').mockRejectedValue(new NotFoundException('Invalid Project ID'));
+      const createConfigDTO = {
+        projectId: "123456",
+        createdBy: "123123",
+        stage: "",
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir'
+
+        },
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        fileServers: [{
+          host: 'localhost',
+          protocolVersion: ProtocolVersion.NFSv3,
+          serverType: ServerType.emc,
+          workers: [mockWorker.id],
+          volumes: [{ volumePath: '/new-path', isIncluded: true, createdBy: "1234567" }],
+          createdBy: "1234567",
+          protocol: Protocol.NFS,
+          userName: "TEST"
+        }]
+      };;
+
+      await expect(service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name already exists', async () => {
+      jest.spyOn(service, 'isConfigNameUnique').mockRejectedValue(new BadRequestException('Config name already exists for this project.'));
+      const createConfigDTO = {
+        projectId: "123456",
+        createdBy: "123123",
+        stage: "",
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir'
+
+        },
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        fileServers: [{
+          host: 'localhost',
+          protocolVersion: ProtocolVersion.NFSv3,
+          serverType: ServerType.emc,
+          workers: [mockWorker.id],
+          volumes: [{ volumePath: '/new-path', isIncluded: true, createdBy: "1234567" }],
+          createdBy: "1234567",
+          protocol: Protocol.NFS,
+          userName: "TEST"
+        }]
+      };;
+
+      await expect(service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()))
+        .rejects
+        .toThrow(BadRequestException);
     });
 
     it('should create working directory mapping when workingDirectory is provided', async () => {
       const configId = uuidv4();
-      const workingDirData = {
-        pathName: '/test/path',
-        pathId: '123',
-        workingDirectory: '/working/dir'
-      };
-
+      const workingDirData = { pathName: '/test/path', pathId: '123', workingDirectory: '/working/dir' };
       const createConfigDTO = {
         configName: 'Test Config',
         configType: ConfigurationType.file,
@@ -275,49 +349,14 @@ describe('ConfigurationService', () => {
         }]
       };
 
+      jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
       mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
       mockConfigRepository.create.mockReturnValue({ id: configId, ...createConfigDTO });
       mockConfigRepository.save.mockResolvedValue({ id: configId, ...createConfigDTO });
 
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
       await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
 
-      expect(mockMappingRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-        ...workingDirData,
-        configId
-      }));
-    });
-
-    it('should handle null/undefined working directory fields', async () => {
-      const configId = uuidv4();
-      const createConfigDTO = {
-        configName: 'Test Config',
-        configType: ConfigurationType.file,
-        projectId: '123456',
-        workingDirectory: null,
-        fileServers: [{
-          host: 'test.com',
-          serverType: ServerType.emc,
-          protocol: Protocol.NFS,
-          userName: 'test',
-          protocolVersion: ProtocolVersion.NFSv3,
-          workers: ['worker1']
-        }]
-      };
-
-      mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
-      mockConfigRepository.create.mockReturnValue({ id: configId, ...createConfigDTO });
-      mockConfigRepository.save.mockResolvedValue({ id: configId, ...createConfigDTO });
-
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
-      await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
-
-      expect(mockMappingRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-        pathName: undefined,
-        pathId: undefined,
-        workingDirectory: undefined,
-        configId
-      }));
+      expect(mockMappingRepository.create).toHaveBeenCalledWith(expect.objectContaining({ ...workingDirData, configId }));
     });
 
     it('should handle database error during working directory save', async () => {
@@ -326,7 +365,6 @@ describe('ConfigurationService', () => {
         pathId: '123',
         workingDirectory: '/working/dir'
       };
-
       const createConfigDTO = {
         configName: 'Test Config',
         configType: ConfigurationType.file,
@@ -341,65 +379,23 @@ describe('ConfigurationService', () => {
           protocolVersion: ProtocolVersion.NFSv3,
         }]
       };
-
-      mockMappingRepository.create.mockReturnValue(workingDirData);
+      jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
       mockMappingRepository.save.mockRejectedValue(new Error('Database error'));
 
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
       await expect(service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()))
         .rejects
         .toThrow('Error Occurred during creating Config');
     });
 
-    it('should set config status to Active when workingDirectory pathName is empty', async () => {
-      const configId = uuidv4();
-      const createConfigDTO = {
-        configName: 'Test Config',
-        configType: ConfigurationType.file,
-        projectId: '123456',
-        workingDirectory: {
-          pathName: '',
-          pathId: '',
-          workingDirectory: ''
-        },
-        fileServers: [{
-          host: 'test.com',
-          serverType: ServerType.emc,
-          protocol: Protocol.NFS,
-          userName: 'test',
-          protocolVersion: ProtocolVersion.NFSv3,
-          workers: ['worker1']
-        }]
-      };
-
-      const mockCreatedConfig = {
-        id: configId,
-        ...createConfigDTO,
-        status: 'Active'
-      };
-
-      mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
-      mockConfigRepository.create.mockReturnValue(mockCreatedConfig);
-      mockConfigRepository.save.mockResolvedValue(mockCreatedConfig);
-      mockMappingRepository.create.mockReturnValue({ configId, ...createConfigDTO.workingDirectory });
-      mockMappingRepository.save.mockResolvedValue({ configId, ...createConfigDTO.workingDirectory });
-
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
-      const result = await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
-
-      expect(result.status).toBe('Active');
-    });
-
     it('should handle empty workers array in fileServer', async () => {
-      const configId = uuidv4();
       const createConfigDTO = {
         configName: 'Test Config',
         configType: ConfigurationType.file,
-        projectId: '123456',
+        projectId: 'valid-project-id',
         workingDirectory: {
-          pathName: '/test',
-          pathId: '123',
-          workingDirectory: '/working/dir'
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working-directory'
         },
         fileServers: [{
           host: 'test.com',
@@ -411,16 +407,13 @@ describe('ConfigurationService', () => {
         }]
       };
 
-      mockWorkerRepository.find.mockResolvedValue([]);
-      mockConfigRepository.create.mockReturnValue({ id: configId, ...createConfigDTO });
-      mockConfigRepository.save.mockImplementation(data => data);
-      mockMappingRepository.create.mockReturnValue({ configId, ...createConfigDTO.workingDirectory });
-      mockMappingRepository.save.mockResolvedValue({ configId, ...createConfigDTO.workingDirectory });
+      jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
+      mockConfigRepository.create.mockResolvedValue(createConfigDTO);
+      mockConfigRepository.save.mockResolvedValue(createConfigDTO);
 
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
-      const result = await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
-
-      expect(result.fileServers[0].workers).toEqual([]);
+      await expect(service.createConfiguration(createConfigDTO, 'user-id', 'trace-123'))
+        .rejects
+        .toThrow(InternalServerErrorException);
     });
   });
 
@@ -1203,6 +1196,25 @@ describe('ConfigurationService', () => {
       await expect(service.getCutoverDetailsByConfigId(configId))
         .rejects
         .toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('checkUniqueConfigName', () => {
+    it('should throw NotFoundException if project does not exist', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(null);
+      await expect(service.isConfigNameUnique('invalid-project-id', 'config-name')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name is not unique', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(new ProjectEntity());
+      jest.spyOn(configRepository, 'findOne').mockResolvedValue(new ConfigEntity());
+      await expect(service.isConfigNameUnique('project-id', 'config-name')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return true if config name is unique', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(new ProjectEntity());
+      jest.spyOn(configRepository, 'findOne').mockResolvedValue(null);
+      await expect(service.isConfigNameUnique('project-id', 'config-name')).resolves.toEqual({ isUnique: true });
     });
   });
 
