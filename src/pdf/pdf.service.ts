@@ -101,7 +101,7 @@ export class PdfService {
               "--disable-dev-shm-usage",
               "--disable-accelerated-2d-canvas"
             ],
-            // executablePath: "/usr/bin/chromium-browser",
+            executablePath: "/usr/bin/chromium-browser",
             protocolTimeout: 60000,
           });
           const page = await browser.newPage();
