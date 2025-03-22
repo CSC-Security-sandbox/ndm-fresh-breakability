@@ -242,25 +242,66 @@ Notice the tags for `admin_service_liquibase_tag` and `admin_service_tag` are ch
 
 ### kubectl commands reference
 
-- To get the pods in `datamigrator` namespace
+- To get the pods in `datamigrator` namespace:
   ```sh
   kubectl get pods -n datamigrator
   ```
-- To get the logs for a pod in `datamigrator` namespace
+- To get the logs for a pod in `datamigrator` namespace:
   ```sh
   kubectl logs <podname> -n datamigrator
   ```
-- To describe a pod in `datamigrator` namespace
+- To describe a pod in `datamigrator` namespace:
   ```sh
-  kubectl describe <podname> -n datamigrator
+  kubectl describe pod <podname> -n datamigrator
   ```
-- To get all namespaces
+- To get all namespaces:
   ```sh
   kubectl get ns
   ```
-- To get the pods in any namespace
+- To get the pods in any namespace:
   ```sh
   kubectl get pods -n <NAMESPACE>
+  ```
+- To delete a pod in `datamigrator` namespace:
+  ```sh
+  kubectl delete pod <podname> -n datamigrator
+  ```
+- To get the events in `datamigrator` namespace:
+  ```sh
+  kubectl get events -n datamigrator
+  ```
+- To execute a command inside a running pod:
+  ```sh
+  kubectl exec -it <podname> -n datamigrator -- <command>
+  ```
+- To check the cluster nodes:
+  ```sh
+  kubectl get nodes
+  ```
+- To get the resource usage of pods in `datamigrator` namespace:
+  ```sh
+  kubectl top pods -n datamigrator
+  ```
+- To get the resource usage of nodes:
+  ```sh
+  kubectl top nodes
+  ```
+
+### Multipass commands reference
+- To list all instances:
+  ```sh
+  multipass list
+  ```
+
+- To open a shell session in an instance:
+  ```sh
+  multipass shell <instance-name>
+  ```
+
+- To delete an instance:
+  ```sh
+  multipass delete <instance-name>
+  multipass purge
   ```
 
 ### Unseal openbao
