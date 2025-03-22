@@ -1,6 +1,9 @@
 // Project Settings
 project_name = "datamigrator"
 
+// vSphere Credentials
+vsphere_insecure_connection = true
+
 // vSphere Settings
 vsphere_datacenter                     = "Datacenter"
 vsphere_cluster                        = "NDMCluster"

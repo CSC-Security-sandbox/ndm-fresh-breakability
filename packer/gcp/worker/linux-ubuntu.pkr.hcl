@@ -94,6 +94,13 @@ variable "bastion_host_port" {
   description = "Bastion host port"
 }
 
+// Local binary path
+
+variable "worker_binary_path" {
+  type        = string
+  description = "The path to the worker binary"
+}
+
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
@@ -151,7 +158,8 @@ build {
       "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
     ]
     extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false"
+      "--extra-vars", "display_skipped_hosts=false",
+      "--extra-vars", "local_binary_path=${var.worker_binary_path}"
     ]
   }
 
