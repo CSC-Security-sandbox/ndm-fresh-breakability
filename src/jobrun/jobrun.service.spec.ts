@@ -438,7 +438,10 @@ describe("JobRunService", () => {
         targetPathId: mockJobRun.jobConfig.targetPathId,
         jobType: JobType.CUT_OVER,
       },
-      { status: JobStatus.InActive }
+      { status: JobStatus.InActive ,
+        futureScheduleAt: null,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+      }
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
@@ -1809,6 +1812,7 @@ describe("JobRunService", () => {
       const jobConfigDetails = {
         id: '1',
         futureScheduleAt: '0 0 * * *',
+        jobType: JobType.MIGRATE
       };
 
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRunDetails as any);
