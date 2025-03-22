@@ -52,4 +52,10 @@
       <sqlFile path="liquibase/20250320_02_updated_jobs_report_path_based.sql" splitStatements="false"/>
    </changeSet>
 
+
+
+   <changeSet id="9012" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250322_01_updated_jobs_report_path_based.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>

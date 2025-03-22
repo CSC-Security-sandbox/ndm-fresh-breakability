@@ -8,16 +8,21 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { ReportType } from 'src/constants/enums';
+import { DiscoveryService } from '../discovery/discovery.service';
 
 @Injectable()
 export class PdfService {
     private logger: Logger = new Logger(PdfService.name);
     private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
-    constructor( @InjectRepository(InventoryEntity)
-    private readonly inventoryRepo: Repository<InventoryEntity>,
-    @InjectRepository(ReportsEntity)
-    private readonly reportsRepo: Repository<ReportsEntity>) {}
+    constructor( 
+      @InjectRepository(InventoryEntity)
+      private readonly inventoryRepo: Repository<InventoryEntity>,
+      @InjectRepository(ReportsEntity)
+      private readonly reportsRepo: Repository<ReportsEntity>,
+
+      private readonly discoveryService: DiscoveryService
+    ) {}
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
@@ -59,13 +64,24 @@ export class PdfService {
           limit 1;
           `,
           [jobRunId, 'JOBS_REPORT']
-        )
+        );
+
+        if(!data.length) {
+          // if report data is not found, should call report generation again and return error
+          this.logger.error(`Report data not found for jobRunId: ${jobRunId} and reportType: JOBS_REPORT`);
+          this.logger.log(`Calling discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}`);
+          this.discoveryService.createJobsPDFReportData(jobRunId);
+          this.logger.log(`Called discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}, try again later`);
+          throw new HttpException("Report data not found", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
         const reportData = JSON.parse(data[0].report_data);
         reportData.last_iteration = reportData.last_iteration || {};
         reportData.last_errors = reportData.last_errors || {};
         if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
         reportData.last_iteration.summary = reportData.summary[0];
         reportData.last_errors.summary = reportData.summary[0];
+        reportData.cutovers = reportData.summary.filter((item) => item.source.job_type === 'CUT_OVER') ?? [];
 
         // add customerInfo and report generation date
         reportData.customerInfo = {
