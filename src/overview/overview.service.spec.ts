@@ -4,7 +4,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { InventoryEntity } from '../entities/inventory.entity';
 import { ProjectEntity } from '../entities/project.entity';
 import { JobRunStatus, JobType } from '../constants/enums';
-import { query } from 'express';
 
 describe('OverviewService', () => {
   let service: OverviewService;
