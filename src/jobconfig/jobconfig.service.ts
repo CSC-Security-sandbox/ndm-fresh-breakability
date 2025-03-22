@@ -768,7 +768,7 @@ export class JobConfigService {
       });
 
       pathToWorkerMapping.forEach((volume) => {
-        if(!preCheckPayload.serverCredentials.find((server) => server.id === volume.fileServer.id)){
+        if(!preCheckPayload.serverCredentials.some((server) => server.id === volume.fileServer.id)){
           preCheckPayload.serverCredentials.push({
             id: volume.fileServer.id,
             host: volume.fileServer.host,
@@ -779,7 +779,7 @@ export class JobConfigService {
             serverType: volume.fileServer.serverType,
         })}
       })
-
+      
       data.migrateConfigs.forEach((config) => {
         const sourceVolume = pathToWorkerMapping.find(
           (p) => p.id === config.sourcePathId
@@ -787,9 +787,9 @@ export class JobConfigService {
         if(sourceVolume) {
           const preChecks: PreChecks = {
             pathId: config.sourcePathId,
-            destinations: [],
             serverId: sourceVolume.fileServer.id,
             pathName: sourceVolume.volumePath,
+            destinations: [],
           }
           const workerIds = new Set<string>(sourceVolume.fileServer.workers.map((worker) => worker.workerId));
           config.destinationPathId.forEach((destinationPathId) => {
@@ -811,6 +811,7 @@ export class JobConfigService {
               })
             }
           })
+          preCheckPayload.preChecks.push(preChecks);
         }
       })
 
