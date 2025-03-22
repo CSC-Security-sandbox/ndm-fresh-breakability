@@ -89,7 +89,11 @@ describe('OverviewService', () => {
         OverviewService,
         {
           provide: getRepositoryToken(InventoryEntity),
-          useValue: mockInventoryRepository
+          useValue: {
+            createQueryBuilder: jest.fn(() => mockInventoryRepository),
+            query: jest.fn(),
+          },
+
         },
         {
           provide: getRepositoryToken(ProjectEntity),
