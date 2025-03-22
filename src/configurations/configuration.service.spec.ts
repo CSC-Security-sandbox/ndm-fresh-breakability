@@ -40,7 +40,35 @@ const mockProjectRepository = {
 const mockFileServerRepository = {
   create: jest.fn(),
   save: jest.fn(),
-  update: jest.fn()
+  update: jest.fn(),
+  createQueryBuilder: jest.fn().mockReturnValue({
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue([
+      {
+        id: 'fileServer1',
+        protocol: 'NFS',
+        workers: [{ workerId: 'worker1', workerName: 'Worker 1' }],
+        config: {
+          id: 'config1',
+          configName: 'Config 1',
+          status: 'ACTIVE',
+          workingDirectory: { workingDirectory: '/path1' },
+        },
+      },
+      {
+        id: 'fileServer2',
+        protocol: 'SMB',
+        workers: [],
+        config: {
+          id: 'config2',
+          configName: 'Config 2',
+          status: 'DRAFT',
+          workingDirectory: { workingDirectory: '' },
+        },
+      },
+    ]),
+  }),
 };
 
 const mockVolumeRepository = {
@@ -827,6 +855,103 @@ describe('ConfigurationService', () => {
   });
 
 
+  describe('refresh', ()=>{
+    it('should throw NotFoundException if config is not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.refreshConfig('ed6aeaf2-d304-4973-8a5a-45e1af8a0c81', 'a8b5219a-79a2-44a4-b323-27dd28d5c0b9')).rejects.toThrow(NotFoundException);
+      expect(configRepository.findOne).toHaveBeenCalledWith({
+          where: { id: 'ed6aeaf2-d304-4973-8a5a-45e1af8a0c81' },
+          relations: { fileServers: { workers: true } },
+      });
+    });
+
+
+    it('should not proceed if no workers are found', async () => {
+      const mockConfig = {
+          id: 'config-id',
+          fileServers: [
+              {
+                  id: 'file-server-1',
+                  host: 'localhost',
+                  protocol: 'NFS',
+                  userName: 'user',
+                  password: 'pass',
+                  workers: [],
+              },
+          ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      const result = await service.refreshConfig('ed6aeaf2-d304-4973-8a5a-45e1af8a0c81', 'a8b5219a-79a2-44a4-b323-27dd28d5c0b9');
+
+      expect(result).toBeUndefined();
+    });
+
+
+    it('should start workflow and update file servers', async () => {
+      const mockConfig = {
+          id: 'config-id',
+          fileServers: [
+              {
+                  id: 'file-server-1',
+                  host: 'localhost',
+                  protocol: 'NFS',
+                  userName: 'user',
+                  password: 'pass',
+                  workers: [
+                      { workerId: 'worker-1' },
+                      { workerId: 'worker-2' },
+                  ],
+              },
+          ],
+      };
+
+      const mockWorkflow = { workflowId: 'workflow-123' };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockFileServerRepository.update.mockResolvedValue(null)
+      jest.spyOn(workflowService, 'startWorkflow').mockResolvedValue(mockWorkflow as any);
+      jest.spyOn(service, 'updateResult').mockResolvedValue(null);
+
+      const result = await service.refreshConfig('ed6aeaf2-d304-4973-8a5a-45e1af8a0c81', 'a8b5219a-79a2-44a4-b323-27dd28d5c0b9');
+
+      expect(result).toEqual({ workflowId: 'workflow-123' });
+    })
+
+    it('should return grouped file servers by config', async () => {
+      const result = await service.getAllFileServers();
+
+      expect(result).toEqual([
+        {
+          id: 'config1',
+          serverName: 'Config 1',
+          hasScratchPath: true,
+          status: 'ACTIVE',
+          fileServers: [
+            {
+              id: 'fileServer1',
+              protocol: 'NFS',
+              workers: [{ id: 'worker1', workerName: 'Worker 1' }],
+            },
+          ],
+        },
+        {
+          id: 'config2',
+          serverName: 'Config 2',
+          hasScratchPath: false,
+          status: 'DRAFT',
+          fileServers: [
+            {
+              id: 'fileServer2',
+              protocol: 'SMB',
+              workers: [],
+            },
+          ],
+        },
+      ]);
+    });
+  })
 
   describe('getCutoverDetailsByConfigId', () => {
     it('should throw BadRequestException for invalid UUID', async () => {
