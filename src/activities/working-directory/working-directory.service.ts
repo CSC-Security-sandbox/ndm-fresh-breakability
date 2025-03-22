@@ -6,7 +6,8 @@ import axios from "axios";
 import { WorkersConfig } from 'src/config/app.config';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
-
+import { writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
@@ -107,14 +108,8 @@ export class ValidateWorkingDirectoryActivity {
           this.logger.log(`Working Directory exists: ${fullPath}`);
           isDirectoryValid = true;
 
-          try {
-            fs.accessSync(fullPath, fs.constants.W_OK);
-            this.logger.log(`Write permission is available for: ${fullPath}`);
-            hasWritePermission = true;
-          } catch (err) {
-            this.logger.error(`No write permission for: ${fullPath}`);
-            hasWritePermission = false;
-          }
+          hasWritePermission = this.checkWritable(fullPath);
+
         } else {
           this.logger.log(`Working Directory does not exist: ${fullPath}`);
         }
@@ -135,6 +130,20 @@ export class ValidateWorkingDirectoryActivity {
     }
 
     return isDirectoryValid && hasWritePermission;
+  }
+ 
+  checkWritable(directoryPath: string): boolean {
+    const testFile = join(directoryPath, '.nfs_write_test');
+
+    try {
+      writeFileSync(testFile, '');
+      unlinkSync(testFile);
+      this.logger.log(`Success: Directory ${directoryPath} is writable.`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error: No write permission for directory ${directoryPath} - ${error.message}`);
+      return false;
+    }
   }
 
 }
