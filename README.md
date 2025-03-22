@@ -85,13 +85,64 @@ packer build -var-file=cloud-packer.json -var "worker_binary_path=/path/to/binar
 
 ## Building the Windows Worker Installer
 
-To build the Windows Worker installer, you need to:
+Follow these steps to create the installer:
 
-1. Download and install [Inno Setup](https://jrsoftware.org/isinfo.php)
-2. Download [WinSW](https://github.com/winsw/winsw/releases) (a suitable version, e.g., `WinSW-x64.exe
-`) and rename it to `winsw.exe`.
-3. Rename the binary to `worker.exe` and place the `winsw.exe` and `worker.exe` into the `wininstaller` directory.
-4. Open the `installer.iss` file in Inno Setup.
-5. Build the installer by running "Compile" from the "Build" menu, or pressing Ctrl+F9.
+### Install Inno Setup
 
-This will generate the `datamigrator-worker-setup.exe` installer in the `wininstaller` directory.
+- Download and install [Inno Setup](https://jrsoftware.org/isinfo.php).
+- This tool is used to build the Windows installer.
+
+### Download WinSW
+
+- Get a suitable version of [WinSW](https://github.com/winsw/winsw/releases), e.g., `WinSW-x64.exe`.
+- Rename the downloaded file to `winsw.exe`.
+
+### Prepare the Binaries
+
+- Rename your worker binary to `worker.exe`.
+- Place both `worker.exe` and `winsw.exe` into the `wininstaller` directory.
+
+### Open the Inno Setup Script
+
+- Launch Inno Setup.
+- Open the `installer.iss` script file from the `wininstaller` directory.
+
+### Build the Installer
+
+- In Inno Setup, go to the **Build** menu and click **Compile**, or press `Ctrl + F9`.
+- The installer `datamigrator-worker-setup.exe` will be generated inside the `wininstaller` directory.
+
+## Requirements
+
+### Microsoft Visual C++ Redistributable
+
+- The worker requires C++ Redistributable package to be installed on the machine.
+
+## Running the Installer
+
+- Run `datamigrator-worker-setup.exe`.
+- During setup, enter the following values when prompted:
+  - **Worker ID**
+  - **Worker Secret**
+  - **Control Plane IP**
+- Once installed, the Datamigrator Worker service starts automatically.
+- The installation directory is:
+  ```
+  C:\datamigrator
+  ```
+
+## Checking Logs
+
+### Log Location
+
+- Logs can be found at:
+  ```
+  C:\datamigrator\logs
+  ```
+
+### Tail Logs in Real-Time
+
+- Open **PowerShell** and run:
+  ```powershell
+  Get-Content -Path "C:\datamigrator\logs\DatamigratorWorker.out.log" -Wait
+  ```

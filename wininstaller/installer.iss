@@ -5,7 +5,7 @@
 AppId=MyProgram
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-DefaultDirName={autopf}\Datamigrator
+DefaultDirName={sd}\datamigrator
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=.
@@ -15,6 +15,7 @@ SolidCompression=yes
 PrivilegesRequired=admin
 SetupLogging=yes
 
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
@@ -22,7 +23,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "worker.exe"; DestDir: "{app}\binary"; Flags: ignoreversion
 Source: "winsw.exe"; DestDir: "{app}"; DestName: "DatamigratorWorker.exe"; Flags: ignoreversion
 Source: "service.xml"; DestDir: "{app}"; DestName: "DatamigratorWorker.xml"; Flags: ignoreversion
-Source: "start-worker.ps1"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\logs"
@@ -90,7 +90,7 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
-    ConfigPath := ExpandConstant('{app}\conf\worker.env');
+    ConfigPath := ExpandConstant('{app}\binary\.env');
     Log('Creating configuration file at: ' + ConfigPath);
     
     EnvContent :=
@@ -123,6 +123,7 @@ begin
       'NFS_LINUX_CHECK_MOUNT_PATH_CMD=''mount | grep ${PATH}''' + #13#10 +
       'NFS_UNIX_CHECK_MOUNT_PATH_CMD=''mount | grep ${PATH}''' + #13#10 +
       '' + #13#10 +
+
       '#  ----------------------------- SMB ----------------------------------#' + #13#10 +
       'SMB_WIN_VALIDATE_CRED_CMD=''net use \\${HOST} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
       '' + #13#10 +
@@ -130,15 +131,30 @@ begin
       'SMB_LINUX_LIST_PATH_CMD="smbclient -L ${HOST} -U ${USERNAME}%''${PASSWORD}''"' + #13#10 +
       'SMB_UNIX_LIST_PATH_CMD="smbclient -L ${HOST} -U ${USERNAME}%''${PASSWORD}''"' + #13#10 +
       '' + #13#10 +
-      'SMB_WIN_MOUNT_PATH_CMD=''net use \\${HOST}${MOUNT_PATH} /user:"${USERNAME}" "${PASSWORD}" /persistent:yes''' + #13#10 +
-      'SMB_WIN_CREATE_LINK_CMD=''powershell.exe New-Item -ItemType SymbolicLink -Path "${DIR_PATH}" -Target "\\${HOST}${MOUNT_PATH}"''' + #13#10 +
-      '' + #13#10 +
-      'SMB_WIN_UNMOUNT_PATH_CMD=''net use \\${HOST}${MOUNT_PATH} /delete'' + #13#10 + ''powershell.exe -Command "Remove-Item -Path ""${DIR_PATH}"" -Force"''' + #13#10 +
+      'SMB_WIN_MOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
+      'SMB_WIN_CREATE_LINK_PATH_CMD=''powershell.exe New-Item -ItemType SymbolicLink -Path "${DIR_PATH}" -Target "\\${HOST}\${MOUNT_PATH}"''' + #13#10 +
+      'SMB_WIN_UNMOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /delete''' + #13#10 +
+      'SMB_WIN_UNLINK_PATH_CMD=''powershell.exe -Command "Remove-Item ${DIR_PATH} -Recurse -Force -Confirm:$false"''' + #13#10 +
       'SMB_LINUX_MOUNT_PATH_CMD="mount -t cifs //${HOST}${MOUNT_PATH} ${DIR_PATH} -o username=${USERNAME},password=''${PASSWORD}''"' + #13#10 +
       'SMB_UNIX_MOUNT_PATH_CMD=''mount_smbfs //${USERNAME}:${PASSWORD}@${HOST}${PATH} ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}''' + #13#10 +
       '' + #13#10 +
       'SMB_LINUX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
-      'SMB_UNIX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''';
+      'SMB_UNIX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
+      'SMB_WIN_DISCONNECT_SESSION_CMD=''net use \\${HOST} /delete''' + #13#10 +
+      '' + #13#10 +
+
+      'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
+      '' + #13#10 +
+
+      '#  ----------------------------- NFS With Protocol ----------------------------------#' + #13#10 +
+      'NFS_LINUX_MOUNT_PATH_CMD=''mount -t nfs -o nfsvers=${PROTOCOL_VERSION} ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
+      'NFS_UNIX_MOUNT_PATH_CMD=''mount -t nfs -o nfsvers=${PROTOCOL_VERSION} ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
+      '' + #13#10 +
+
+      '#  ----------------------------- SMB With Protocol ----------------------------------#' + #13#10 +
+      'SMB_WIN_MOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
+      'SMB_LINUX_MOUNT_PATH_CMD="mount -t cifs //${HOST}${MOUNT_PATH} ${DIR_PATH} -o username=${USERNAME},password=''${PASSWORD}'',vers=${PROTOCOL_VERSION}"' + #13#10 +
+      'SMB_UNIX_MOUNT_PATH_CMD=''mount_smbfs -o vers=${PROTOCOL_VERSION} //${USERNAME}:${PASSWORD}@${HOST}${PATH} ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}''';
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin

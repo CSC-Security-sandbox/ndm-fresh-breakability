@@ -2,14 +2,13 @@
     <id>DatamigratorWorker</id>
     <name>Datamigrator Worker</name>
     <description>Datamigrator Worker Service</description>
-    <executable>powershell.exe</executable>
-    <arguments>-ExecutionPolicy Bypass -File "bin\start-worker.ps1"</arguments>
-    <logpath>logs</logpath>
-    <!-- <log mode="roll-by-size">
-        <sizeThreshold>10240</sizeThreshold>
+    <executable>%BASE%\binary\worker.exe</executable>
+    <workingdirectory>%BASE%\binary</workingdirectory>
+    <logpath>%BASE%\logs</logpath>
+    <log mode="roll-by-size">
+        <sizeThreshold>10240</sizeThreshold> 
         <keepFiles>8</keepFiles>
-    </log> -->
-    <log mode="none"/>
+    </log>
     <startmode>Automatic</startmode>
     <delayedAutoStart>true</delayedAutoStart>
     <onfailure action="restart" delay="10 sec"/>
