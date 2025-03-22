@@ -121,7 +121,7 @@ const ManageUsers = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_USER}
-          refreshFunc={refetch}
+          refetchTableData={refetch}
           isRefreshing={isFetching}
         />
       </Collapse>

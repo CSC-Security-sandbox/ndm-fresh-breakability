@@ -93,7 +93,7 @@ const JobsList = () => {
       showFilters={true}
       columnsToFilter={COLUMNS_TO_FILTER_DEFS}
       preSelectedFilter={preSelectedFilter}
-      refreshFunc={refetchJobList}
+      refetchTableData={refetchJobList}
       isRefreshing={isFetching}
     />
   );

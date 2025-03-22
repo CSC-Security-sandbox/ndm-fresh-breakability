@@ -81,12 +81,13 @@ export const useFileServerForm = () => {
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
 
-  const fetchWorkers = () => {
-    getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
+  const fetchWorkers = async () => {
+    await getAllWorkers({ projectId: selectedProjectId })
+    .unwrap()
+    .then((resp) => {
       const allWorkersWithNameAndId: WorkerIdWithNameType = {};
       resp?.data?.forEach((worker: GetAllWorkersApiType) => {
-        let workerId = worker.workerId;
-        allWorkersWithNameAndId[workerId] = worker.workerName;
+        allWorkersWithNameAndId[worker.workerId] = worker.workerName;
       });
       setWorkerIdWithName(allWorkersWithNameAndId);
       setAllWorkersList(resp?.data);
@@ -95,7 +96,7 @@ export const useFileServerForm = () => {
 
   // API TO GET ALL WORKERS
   useEffect(() => {
-    fetchWorkers();
+    (async () => await fetchWorkers());
     return () => {
       interval.current && clearInterval(interval.current);
     };

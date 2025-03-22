@@ -25,7 +25,7 @@ const RunningJobRunTable = () => {
         tableState={jobRunListPathTableState}
         label="Ongoing Job Runs"
         handleSelection={setReviewStepSelectedIds}
-        refreshFunc={refetch}
+        refetchTableData={refetch}
         isRefreshing={isFetching}
       />
 

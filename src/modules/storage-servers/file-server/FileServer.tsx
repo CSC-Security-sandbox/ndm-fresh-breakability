@@ -63,7 +63,7 @@ const FileServer = () => {
       rowMenu={rowMenu}
       content={ADD_NEW_FILE_SERVER}
       label="File Sever List"
-      refreshFunc={refetch}
+      refetchTableData={refetch}
       isRefreshing={isFetching}
     />
   );

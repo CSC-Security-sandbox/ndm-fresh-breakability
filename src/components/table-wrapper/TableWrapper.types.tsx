@@ -17,5 +17,5 @@ export type TableWrapperPropsType = {
   handleSelection?: Function;
   secondaryLabel?: string;
   isRefreshing?: boolean;
-  refreshFunc?: () => void;
+  refetchTableData?: () => void;
 };

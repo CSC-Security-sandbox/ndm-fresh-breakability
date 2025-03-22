@@ -13,5 +13,5 @@ export type TableWrapperWithoutFilterPropsType = {
   handleSelection?: Function;
   showMenu?: boolean;
   isRefreshing?: boolean;
-  refreshFunc?: () => void;
+  refetchTableData?: () => void;
 };

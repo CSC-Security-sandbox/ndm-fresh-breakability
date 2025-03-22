@@ -32,7 +32,7 @@ const TableWrapper = ({
   handleSelection,
   secondaryLabel,
   isRefreshing,
-  refreshFunc,
+  refetchTableData,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -137,8 +137,9 @@ const TableWrapper = ({
             {isRefreshing !== undefined && (
               <Button variant="icon"
                 isSubmitting={isRefreshing} 
-                onClick={!isRefreshing ? refreshFunc : undefined}
-                style={{ height: '16px', width: '16px', marginBottom: '4px' }} 
+                onClick={!isRefreshing ? refetchTableData : undefined}
+                className="w-[16px] h-[16px]"
+                style={{ marginBottom: '5px' }}
               >
                 <RefreshIcon />
               </Button>

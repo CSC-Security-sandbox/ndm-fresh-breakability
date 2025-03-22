@@ -21,7 +21,7 @@ const ValidateConnection = () => {
         isRowDisabled={checkDisabled}
         label="Workers"
         secondaryLabel={`| ${selectedWorkerIds.length} Associated`}
-        refreshFunc={refetch}
+        refetchTableData={refetch}
         isRefreshing={isFetching}
       />
     </Box>

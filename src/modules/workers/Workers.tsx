@@ -38,7 +38,7 @@ const Workers = () => {
       }
       isLoading={isLoading}
       label="Workers"
-      refreshFunc={refetch}
+      refetchTableData={refetch}
       isRefreshing={isFetching}
     />
   );

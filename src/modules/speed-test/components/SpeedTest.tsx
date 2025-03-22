@@ -52,6 +52,8 @@ const SpeedTest = () => {
     </PermissionAuth>
   );
 
+  console.log({isFetching})
+
   return (
     <Box className="w-full p-6">
       <TableWrapperWithoutFilter
@@ -60,7 +62,7 @@ const SpeedTest = () => {
         rowMenu={rowMenu}
         content={ADD_NEW_SPEED_TEST}
         label="Job Run Listing"
-        refreshFunc={refetch}
+        refetchTableData={refetch}
         isRefreshing={isFetching}
       />
     </Box>

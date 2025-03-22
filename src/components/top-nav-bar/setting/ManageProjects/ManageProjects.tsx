@@ -73,7 +73,7 @@ const ManageProject = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_PROJECT}
-          refreshFunc={refetch}
+          refetchTableData={refetch}
           isRefreshing={isFetching}
         />
       </Collapse>

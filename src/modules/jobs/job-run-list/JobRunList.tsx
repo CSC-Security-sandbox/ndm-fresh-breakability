@@ -158,7 +158,7 @@ const JobRunList = () => {
         showFilters={true}
         columnsToFilter={COLUMNS_TO_FILTER_DEFS}
         handleSelection={setJobRunListSelectedIds}
-        refreshFunc={refetch}
+        refetchTableData={refetch}
         isRefreshing={isFetching}
       />
     </>

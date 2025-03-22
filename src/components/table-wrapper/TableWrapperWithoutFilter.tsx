@@ -26,7 +26,7 @@ const TableWrapperWithoutFilter = ({
   handleSelection,
   showMenu = true,
   isRefreshing,
-  refreshFunc,
+  refetchTableData,
 }: TableWrapperWithoutFilterPropsType) => {
   // TABLE ATTRIBUTES
   const {
@@ -92,8 +92,9 @@ const TableWrapperWithoutFilter = ({
               {isRefreshing !== undefined && (
                 <Button variant="icon"
                   isSubmitting={isRefreshing} 
-                  onClick={!isRefreshing ? refreshFunc : undefined}
-                  style={{ height: '16px', width: '16px', marginBottom: '4px' }} 
+                  onClick={!isRefreshing ? refetchTableData : undefined}
+                  className="w-[16px] h-[16px]"
+                  style={{ marginBottom: '5px' }}
                 >
                   <RefreshIcon />
                 </Button>
