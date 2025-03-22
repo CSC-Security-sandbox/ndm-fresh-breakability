@@ -360,6 +360,8 @@ export class ConfigurationService {
         this.logger.debug("Config creation started");        
         const credentials:Credentials[] = []
         try {
+           await this.isConfigNameUnique(createConfig.projectId, createConfig.configName);
+
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
                 const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
                 credentials.push({
@@ -410,11 +412,15 @@ export class ConfigurationService {
             });
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
             this.refreshConfig(update.id, traceId);
-            await this.isConfigNameUnique(createConfig.projectId, createConfig.configName);
             return update;
-        }catch(error) {
-            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
-            throw new InternalServerErrorException('Error Occurred during creating Config')
+        } catch(error) {
+            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`);
+            
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            
+            throw new InternalServerErrorException('Error Occurred during creating Config');
         }
     }
 
