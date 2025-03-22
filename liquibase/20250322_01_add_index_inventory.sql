@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_inventory_jobrun_path_created_at ON inventory USING btree (job_run_id, path, created_at DESC) INCLUDE (file_size);
