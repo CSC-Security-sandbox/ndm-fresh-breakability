@@ -62,12 +62,11 @@ const TaskFilters = ({
   });
 
   const resetForm = () => {
-    preSelectedFilter = {};
     form.resetForm(
       columnsToFilter?.reduce(
         (filterForm, { accessor: fileName }) => ({
           ...filterForm,
-          [fileName]: getLabelValueObject(preSelectedFilter?.[fileName]),
+          [fileName]: getLabelValueObject(undefined),
         }),
         {}
       )
