@@ -39,7 +39,6 @@ export class WorkerOptionsService {
           getWorkerId: this.discoveryActivities.getWorkerId.bind(this.discoveryActivities),
           getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
           setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
-          checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
           generateDiscoveryReport: this.discoveryActivities.generateDiscoveryReport.bind(this.discoveryActivities),
           updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
           updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
@@ -71,7 +70,7 @@ export class WorkerOptionsService {
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
             updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
             syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),
-            checkForCommonWorkersAndExportPath: this.precheckActivity.checkForCommonWorkersAndExportPath.bind(this.precheckActivity),
+            preCheckPath: this.precheckActivity.preCheckPath.bind(this.precheckActivity),
             validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
             isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
         });
