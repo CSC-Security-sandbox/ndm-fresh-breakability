@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RedisService } from "src/redis/redis.service";
-import { generateDummyFileEntry } from '../utils/utils';
+import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
 import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
 import axios from 'axios';
 import { JobRunStatus } from "../discovery/enums";
@@ -32,7 +32,23 @@ export class CommonActivityService{
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobContext(traceId);
       const id = await jobContext.appendToFileList(generateDummyFileEntry);
-      jobContext.errorsInfo.lastId = id;
+      jobContext.filesInfo.lastId = id;
+      
+      const directoryId  = await jobContext.appendToDirList(generateDummyFileEntry);
+      jobContext.dirsInfo.lastId = directoryId;
+
+      const lastTask = await jobContext.appendToTaskList(generateDummyTaskEntry);
+      jobContext.tasksInfo.lastId = lastTask;
+
+      const migratedTask = await jobContext.appendToMigrationTask(generateDummyTaskEntry);
+      jobContext.migrateTask.lastId = migratedTask;
+
+      const updateTask = await jobContext.appendToUpdatedTaskList(generateDummyTaskEntry);
+      jobContext.updatedTaskInfo.lastId = updateTask;
+
+      const errorTask = await jobContext.appendToErrorList(generateDummyErrorEntry);
+      jobContext.errorsInfo.lastId = errorTask;
+      
       this.redisService.setJobContext(traceId, jobContext);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
