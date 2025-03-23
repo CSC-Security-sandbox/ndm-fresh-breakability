@@ -14,7 +14,7 @@ const SpeedTest = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: speedTestJobRunList, isLoading } = useGetSpeedTestJobsQuery({
+  const { data: speedTestJobRunList, isLoading, isFetching, refetch } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
   const jobStatus =
@@ -52,6 +52,8 @@ const SpeedTest = () => {
     </PermissionAuth>
   );
 
+  console.log({isFetching})
+
   return (
     <Box className="w-full p-6">
       <TableWrapperWithoutFilter
@@ -60,6 +62,8 @@ const SpeedTest = () => {
         rowMenu={rowMenu}
         content={ADD_NEW_SPEED_TEST}
         label="Job Run Listing"
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </Box>
   );

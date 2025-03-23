@@ -14,7 +14,7 @@ import { Collapse } from "@mui/material";
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList, isLoading } = useGetAllProjectsQuery(
+  const { data: projectList, isLoading, isFetching, refetch } = useGetAllProjectsQuery(
     accountDetails?.id
   );
   const [isCreateFormVisible, setIsCreateFormVisible] =
@@ -73,6 +73,8 @@ const ManageProject = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_PROJECT}
+          refetchTableData={refetch}
+          isRefreshing={isFetching}
         />
       </Collapse>
     </Box>

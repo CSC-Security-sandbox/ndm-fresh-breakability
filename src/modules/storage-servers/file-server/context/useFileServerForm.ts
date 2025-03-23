@@ -77,24 +77,26 @@ export const useFileServerForm = () => {
   const [mountPaths, setMountPaths] = useState<MountPathsOptionsListType[]>([]);
 
   // API
-  const [getAllWorkers] = useLazyGetAllWorkersQuery();
+  const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
 
+  const fetchWorkers = async () => {
+    await getAllWorkers({ projectId: selectedProjectId })
+    .unwrap()
+    .then((resp) => {
+      const allWorkersWithNameAndId: WorkerIdWithNameType = {};
+      resp?.data?.forEach((worker: GetAllWorkersApiType) => {
+        allWorkersWithNameAndId[worker.workerId] = worker.workerName;
+      });
+      setWorkerIdWithName(allWorkersWithNameAndId);
+      setAllWorkersList(resp?.data);
+    });
+  }
+
   // API TO GET ALL WORKERS
   useEffect(() => {
-    (async () => {
-      getAllWorkers({ projectId: selectedProjectId }).then((resp) => {
-        const allWorkersWithNameAndId: WorkerIdWithNameType = {};
-        resp?.data?.forEach((worker: GetAllWorkersApiType) => {
-          let workerId = worker.workerId;
-          allWorkersWithNameAndId[workerId] = worker.workerName;
-        });
-        setWorkerIdWithName(allWorkersWithNameAndId);
-        setAllWorkersList(resp?.data);
-      });
-    })();
-
+    (async () => await fetchWorkers());
     return () => {
       interval.current && clearInterval(interval.current);
     };
@@ -254,6 +256,8 @@ export const useFileServerForm = () => {
     nfsCredentialsForm,
     smbCredentialsForm,
     workersListTableStateProps,
+    isFetching,
+    refetch: fetchWorkers,
     jobConfigForm,
     // LOCAL STATE
     workerIdWithName,

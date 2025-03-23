@@ -38,7 +38,7 @@ const JobRunList = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: jobRunList, isLoading } = useGetJobRunsQuery({
+  const { data: jobRunList, isLoading, isFetching, refetch } = useGetJobRunsQuery({
     projectId: selectedProjectId,
   });
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(
@@ -158,6 +158,8 @@ const JobRunList = () => {
         showFilters={true}
         columnsToFilter={COLUMNS_TO_FILTER_DEFS}
         handleSelection={setJobRunListSelectedIds}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </>
   );

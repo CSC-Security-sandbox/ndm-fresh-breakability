@@ -13,6 +13,7 @@ import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/mo
 import React, { useEffect, useState } from "react";
 import Filters from "./Filters";
 import { TableWrapperPropsType } from "./TableWrapper.types";
+import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const TableWrapper = ({
   tableStateProps,
@@ -30,12 +31,14 @@ const TableWrapper = ({
   preSelectedFilter,
   handleSelection,
   secondaryLabel,
+  isRefreshing,
+  refetchTableData,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
     tableStateProps.rows || []
   );
-
+  
   useEffect(() => {
     const data = tableStateProps.rows || [];
     const filteredRows = [...data].filter((row: any) => {
@@ -129,6 +132,16 @@ const TableWrapper = ({
             {showDownload && (
               <Button variant="icon" style={{ margin: 20 }}>
                 <DownloadMonochromeIcon />
+              </Button>
+            )}
+            {isRefreshing !== undefined && (
+              <Button variant="icon"
+                isSubmitting={isRefreshing} 
+                onClick={!isRefreshing ? refetchTableData : undefined}
+                className="w-[16px] h-[16px]"
+                style={{ marginBottom: '5px' }}
+              >
+                <RefreshIcon />
               </Button>
             )}
           </TableWidgets>

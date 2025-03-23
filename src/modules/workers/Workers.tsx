@@ -9,7 +9,7 @@ import { notify } from "@components/notification/NotificationWrapper";
 
 const Workers = () => {
   const { selectedProjectId } = useSelectedProjectId();
-  const { workers, error, isLoading } = useFetchWorkers();
+  const { workers, error, isLoading, isFetching, refetch } = useFetchWorkers();
 
   const tableStateProps = {
     columns: WORKERS_COLUMN_DEF,
@@ -38,6 +38,8 @@ const Workers = () => {
       }
       isLoading={isLoading}
       label="Workers"
+      refetchTableData={refetch}
+      isRefreshing={isFetching}
     />
   );
 };

@@ -24,7 +24,6 @@ const JobsList = () => {
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
   );
-
   const source = searchParams.get("source");
   const jobType = searchParams.get("type");
   let preSelectedFilter: preSelectedFilterType = {};
@@ -36,8 +35,9 @@ const JobsList = () => {
     data: jobList,
     isLoading,
     isError,
+    isFetching,
+    refetch: refetchJobList,
   } = useGetJobConfigsQuery({ projectId: selectedProjectId });
-
   const [updateStatus] = useUpdateJobStatusMutation();
 
   const rowMenu = (row: any) => [
@@ -93,6 +93,8 @@ const JobsList = () => {
       showFilters={true}
       columnsToFilter={COLUMNS_TO_FILTER_DEFS}
       preSelectedFilter={preSelectedFilter}
+      refetchTableData={refetchJobList}
+      isRefreshing={isFetching}
     />
   );
 };

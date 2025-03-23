@@ -13,8 +13,10 @@ const RunningJobRunTable = () => {
     jobRunListPathTableState,
     reviewStepSelectedIds,
     setReviewStepSelectedIds,
+    isFetching = false,
+    refetch,
   } = useContext(BulkCutOverContext);
-
+  
   return (
     <Box className="px-8 mt-3">
       <ActionButtons selectedRowIds={reviewStepSelectedIds} rows={jobRunList} />
@@ -23,7 +25,10 @@ const RunningJobRunTable = () => {
         tableState={jobRunListPathTableState}
         label="Ongoing Job Runs"
         handleSelection={setReviewStepSelectedIds}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
+
 
       {jobRunList?.length > 0 && (
         <UserWarning

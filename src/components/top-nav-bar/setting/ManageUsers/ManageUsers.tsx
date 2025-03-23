@@ -21,7 +21,7 @@ import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
-  const { data: userData, isLoading } = useGetAllUsersQuery("");
+  const { data: userData, isLoading, isFetching, refetch } = useGetAllUsersQuery("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -121,6 +121,8 @@ const ManageUsers = () => {
             </PermissionAuth>
           }
           originalColumns={COL_DEF_FOR_USER}
+          refetchTableData={refetch}
+          isRefreshing={isFetching}
         />
       </Collapse>
     </Box>

@@ -12,4 +12,6 @@ export type TableWrapperWithoutFilterPropsType = {
   isRowDisabled?: (arg: any) => void;
   handleSelection?: Function;
   showMenu?: boolean;
+  isRefreshing?: boolean;
+  refetchTableData?: () => void;
 };
