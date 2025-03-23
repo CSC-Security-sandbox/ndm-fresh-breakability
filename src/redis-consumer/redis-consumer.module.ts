@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { RedisConsumerController } from './redis-consumer.controller';
 import { RedisConsumerService } from './redis-consumer.service';
-import { InventoryModule } from 'src/inventory/inventory.module';
-import { WorkflowModule } from 'src/workflow/workflow.module';
+import { InventoryModule } from '../inventory/inventory.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
   imports: [InventoryModule,WorkflowModule],

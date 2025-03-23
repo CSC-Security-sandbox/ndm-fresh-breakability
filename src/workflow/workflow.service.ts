@@ -20,15 +20,19 @@ export class WorkflowService {
             this.connection = await Connection.connect(this.configService.get<any>('temporal'));
             this.client = new Client({ connection: this.connection });
             return this.client;
+
         } catch (error) {
             console.log(`Error on getClient : ${error} ${this.configService.get<any>('temporal.address')}`)
-            return this.getClient()
+            throw error// return this.getClient()
         }
     }
 
     async signalWorkflow(request: any): Promise<any> {
         try {
             const client = await this.getClient();
+            if (!client) {
+                throw new Error('Client not found');
+            }
             return await client.workflowService.signalWorkflowExecution(request);
         } catch (error) {
             throw error;

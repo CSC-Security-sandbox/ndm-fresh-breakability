@@ -1,10 +1,10 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { TaskErrorEntity } from "src/entities/task-error.entity";
-import { TaskEntity } from "src/entities/task.entity";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { OperationErrorEntity } from "../entities/operation-error.entity";
+import { OperationsEntity } from "../entities/operation.entity";
+import { TaskErrorEntity } from "../entities/task-error.entity";
+import { TaskEntity } from "../entities/task.entity";
 import { InventoryService } from "./inventory.service";
 
 @Module({
@@ -17,7 +17,7 @@ import { InventoryService } from "./inventory.service";
       OperationErrorEntity,
     ]),
   ],
-  controllers: [],
+
   providers: [InventoryService],
   exports: [InventoryService],
 })

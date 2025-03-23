@@ -2,7 +2,7 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { TaskEntity } from './task.entity';
-import { OperationStatus, OperationType } from 'src/enum/queues.enum';
+import { OperationStatus, OperationType } from '../enum/queues.enum';
 import {  OperationErrorEntity } from './operation-error.entity';
 
 
