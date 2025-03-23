@@ -73,15 +73,8 @@ export const configApi = createApi({
     }),
 
     getUniqueFileServerNames: builder.query({
-      query: ({ projectId, configName, fileServerId }) => {
-        let query = `servers/check-unique?projectId=${projectId}&configName=${configName}`;
-
-        if (fileServerId) {
-          query += `&fileServerId=${fileServerId}`;
-        }
-
-        return query;
-      },
+      query: ({ projectId, configName }) =>
+        `servers/check-unique?projectId=${projectId}&configName=${configName}`,
     }),
   }),
 });

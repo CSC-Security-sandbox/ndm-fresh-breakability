@@ -107,7 +107,6 @@ const NextAndSubmitButton = () => {
         await getUniqueFileServerName({
           projectId: selectedProjectId,
           configName: serverTypeForm?.formState?.configName,
-          fileServerId: fileServerId,
         }).unwrap();
 
         handleNextClick();
