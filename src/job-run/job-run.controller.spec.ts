@@ -6,6 +6,7 @@ import { JobRunService } from './job-run.service';
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
   jobRunReportByJobRunId: jest.fn(),
+  getJobSubStatus: jest.fn(),
 };
 
 describe('JobRunController', () => {
@@ -33,15 +34,18 @@ describe('JobRunController', () => {
     const mockResponse = { id: jobRunId, status: 'Completed' };
     
     mockJobRunService.getJobStatsId.mockResolvedValue(mockResponse);
+    mockJobRunService.getJobSubStatus.mockResolvedValue(null);
 
     const result = await controller.getJobStatsId(jobRunId);
+
     expect(result).toEqual(serializeJobRunDetailsResponse(mockResponse));
     expect(mockJobRunService.getJobStatsId).toHaveBeenCalledWith(jobRunId);
   });
 
   it('should throw 404 error when job run is not found', async () => {
     const jobRunId = '1';
-    mockJobRunService.getJobStatsId.mockResolvedValue(null);
+    mockJobRunService.getJobStatsId.mockResolvedValue({ status: 'Completed' });
+    mockJobRunService.getJobSubStatus.mockResolvedValue({ subStatus: '' });
 
     try {
       await controller.getJobStatsId(jobRunId);
