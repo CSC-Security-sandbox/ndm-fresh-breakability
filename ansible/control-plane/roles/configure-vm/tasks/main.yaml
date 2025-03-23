@@ -53,7 +53,7 @@
       - software-properties-common
       - ca-certificates
       - snapd
-      - firewalld
+      - ufw
       - ntp
       - net-tools
       - acl
@@ -70,7 +70,7 @@
       - docker.io
     state: present
   when: local_cluster is defined
-  
+
 - name: 2.2.2. Ensure Docker is started
   service:
     name: docker
@@ -82,22 +82,22 @@
   file:
     path: /data
     state: directory
-    owner: '{{ vm_username }}'
-    group: '{{ vm_username }}'   
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
     mode: 0755
 
 - name: 2.4. Sets the /logs directory owner as {{ vm_username }}
   file:
     path: /logs
     state: directory
-    owner: '{{ vm_username }}'
-    group: '{{ vm_username }}'   
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
     mode: 0755
-  
+
 - name: 2.5. Sets default ACL for {{ vm_username }} on /data
   ansible.posix.acl:
     path: /data
-    entity: '{{ vm_username }}'
+    entity: "{{ vm_username }}"
     etype: user
     permissions: rwx
     default: true
@@ -106,12 +106,12 @@
 - name: 2.6. Sets default ACL for {{ vm_username }} on /logs
   ansible.posix.acl:
     path: /logs
-    entity: '{{ vm_username }}'
+    entity: "{{ vm_username }}"
     etype: user
     permissions: rwx
     default: true
     state: present
-  
+
 - name: 2.7. Set the hostname
   command: hostnamectl set-hostname datamigrator
 
