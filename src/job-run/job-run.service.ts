@@ -186,4 +186,8 @@ export class JobRunService {
       throw new NotFoundException(`Error while generating report for jobRunId: ${jobRunId}`);
     }
   }
+
+  async getJobSubStatus(jobRunId: string) {
+    return await this.jobRunRepo.findOne({ where: { id: jobRunId }, select: ["subStatus"] });
+  }
 }

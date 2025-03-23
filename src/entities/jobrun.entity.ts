@@ -17,6 +17,9 @@ export class JobRunEntity extends Base {
   @Column({ type: "varchar", name: "status" })
   status: JobRunStatus;
 
+  @Column({ type: 'text', name: "sub_status", nullable: true }) 
+  subStatus: string;
+
   @ApiProperty({ description: "Start time of the job" })
   @Column({ name: "start_time" })
   startTime: Date;
