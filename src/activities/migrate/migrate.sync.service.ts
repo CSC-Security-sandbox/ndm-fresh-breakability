@@ -5,11 +5,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
-import { basePrefix, dmError, formatDate, getFileInfo, isFatalError } from '../utils/utils';
+import { basePrefix, dmError, formatDate, getFileInfo, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { execSync } from 'child_process';
-import { Operation, Origin } from '../utils/utils.types';
+import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { CommonActivityService } from '../common/common.service';
+import { PowerShellService } from '../common/poweshell.service';
+import { CommandConfig, CommandPattern } from 'src/config/command.config';
 
 @Injectable()
 export class MigrationSyncService {
@@ -23,7 +25,8 @@ export class MigrationSyncService {
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
-    private readonly commonService: CommonActivityService
+    private readonly commonService: CommonActivityService,
+    private readonly powershellService: PowerShellService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -110,9 +113,10 @@ export class MigrationSyncService {
     if(metadata?.birthtime){
       try {
         if(process.platform == 'win32') {
-          const birthtime = new Date(metadata.birthtime).toISOString().replace(/T/, ' ').replace(/\..+/, '')
-          const birthtimeCommand = `powershell.exe -Command "(Get-Item '${targetPath}').CreationTime = '${birthtime}'"`;
-          execSync(birthtimeCommand);
+          const birthtime = new Date(metadata.birthtime).toLocaleString('sv-SE').replace(',', ''); 
+          const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birthtime}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          const output = await this.powershellService.runCommand(birthtimeCommand);
+          this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birthtime} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
           const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
           execSync(birthtimeCommand);
@@ -142,8 +146,7 @@ export class MigrationSyncService {
         }
        if(process.platform === 'win32') {
           try{
-            const getSIDCommand= `powershell.exe -Command "(Get-Acl '${sourcePath}').Owner"`;
-            metadata.sid = execSync(getSIDCommand, { encoding: "utf-8" }).trim();
+            metadata.sid = await this.getSID(sourcePath);
             this.logger.debug(`SID for ${sourcePath} is ${metadata.sid}`)
           }
           catch(error) {
@@ -155,9 +158,10 @@ export class MigrationSyncService {
           try{
             const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
             this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid} to ${sid}`)
-           if(sid) {
-             const powerShellCommand = `powershell.exe -Command "$acl = Get-Acl '${targetPath}'; $owner = New-Object System.Security.Principal.SecurityIdentifier('${sid}'); $acl.SetOwner($owner); Set-Acl -Path '${targetPath}' -AclObject $acl"`;
-             execSync(`powershell.exe -Command "${powerShellCommand}"`);
+            if(sid) {
+              const setSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.SET_SID_FOR_OBJECT)?.replaceAll('${PATH}', targetPath)?.replaceAll('${SID}', sid);
+              this.logger.debug(`sid command : ${setSIDCommand}`)
+              await this.powershellService.runCommand(setSIDCommand);
              this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
            } else {
              this.logger.debug(`SID not found for the file ${sourcePath}`)
@@ -276,8 +280,7 @@ export class MigrationSyncService {
         syncTask.error++;
       }
       else {
-
-        const fileInfo: FileInfo = await getFileInfo({
+        const fileInfo: FileInfo = await this.getFileInfo({
           name: task.commands[i].fPath, fullFilePath:`${task.tPath}${task.commands[i].fPath}`,
           relativePath: task.commands[i].fPath,checksums: syncOperationOp.checksums,
           getID: jobContext.jobConfig.options.isIdentityMappingAvailable
@@ -331,4 +334,38 @@ export class MigrationSyncService {
     await this.redisService.setJobContext(task.jobRunId, jobContext);
     return syncTask;
   }
+
+  getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
+      const lStat = await fs.promises.lstat(fullFilePath);
+      let sid = undefined
+      if(getID && process.platform == 'win32' && lStat.isFile())
+        sid = this.getSID(fullFilePath);
+      const obj = new FileInfo(
+          name,
+          relativePath,
+          relativePath,
+          lStat.isDirectory(),
+          lStat.size,
+          !lStat.isDirectory(),
+          lStat.birthtime,
+          lStat.mtime,
+          lStat.atime,
+          path.extname(fullFilePath),
+          getFilePermissions(lStat),
+          getFileType(lStat),
+          relativePath.split('/').length - 2,
+          lStat.uid,
+          lStat.gid,
+        );
+      return {
+        ...obj,
+        ...checksums,
+        sid
+      }
+  }
+  getSID = async (filePath: string) => {
+    const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
+    return await this.powershellService.runCommand(getSIDCommand);
+  }
+  
 }
