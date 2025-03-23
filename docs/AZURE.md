@@ -272,7 +272,7 @@ By following these steps, you should be able to successfully create and connect 
 
 - If you encounter an issue where openbao is sealed, follow these steps to unseal openbao.
 - SSH into the control plane server after opening SSH tunnel.
-- Replace openbao_UNSEAL_KEY with your key
+- Replace OPENBAO_UNSEAL_KEY with your key
   ```sh
   sudo su - datamigrator
   jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json
