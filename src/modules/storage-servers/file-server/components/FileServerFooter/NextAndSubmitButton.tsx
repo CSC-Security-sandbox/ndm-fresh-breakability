@@ -30,6 +30,7 @@ const NextAndSubmitButton = () => {
     validateConnectionLoader,
     disableNextButton,
     nfsValidatedWorkersIds,
+    editingFileServerDetails,
   } = useContext(CommonFileServerContext);
 
   const handleFinish = async () => {
@@ -74,11 +75,27 @@ const NextAndSubmitButton = () => {
   };
 
   const handleProceed = () => {
-    if (currentStepIndex === 0) {
+    const isConfigNameChanged =
+      editingFileServerDetails?.configName !==
+      serverTypeForm?.formState?.configName;
+
+    const isFirstStep = currentStepIndex === STEP_0_FILE_SERVER_NAME;
+
+    if (!isEditMode && isFirstStep) {
       checkUniqueFileServerName();
-    } else {
-      handleNextClick();
+      return;
     }
+
+    if (isEditMode) {
+      if (isFirstStep && isConfigNameChanged) {
+        checkUniqueFileServerName();
+      } else {
+        handleNextClick();
+      }
+      return;
+    }
+
+    handleNextClick();
   };
 
   const checkUniqueFileServerName = async () => {

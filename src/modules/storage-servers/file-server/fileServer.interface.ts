@@ -47,6 +47,7 @@ export interface FileServerStateContextType {
   setMountPaths: (arg: any[]) => void;
   isJobRunning: boolean;
   setIsJobRunning: (arg: boolean) => void;
+  editingFileServerDetails: ConfigPayloadType;
 }
 
 // THIS IS CHILD, ONLY FORM WILL BE STORED IN THIS CONTEXT

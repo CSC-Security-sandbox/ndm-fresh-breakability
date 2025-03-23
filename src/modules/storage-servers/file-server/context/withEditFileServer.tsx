@@ -190,6 +190,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
     const editFileServerHelpers = {
       handleEditConfiguration,
       ...fileServerForm,
+      editingFileServerDetails,
     };
 
     return <WrappedComponent {...props} {...editFileServerHelpers} />;
