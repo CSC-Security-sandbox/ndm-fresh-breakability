@@ -30,4 +30,8 @@
    <changeSet id="7007" author="aniketd">
       <sqlFile path="liquibase/20250311_01_alter_operation_errors_tables.sql"/>
    </changeSet>
+
+   <changeSet id="7008" author="anarvekar">
+      <sqlFile path="liquibase/20250322_01_add_index_inventory.sql"/>
+   </changeSet>
 </databaseChangeLog>
