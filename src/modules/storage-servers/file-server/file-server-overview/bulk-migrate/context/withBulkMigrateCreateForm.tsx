@@ -59,6 +59,7 @@ export function withBulkMigrateCreateForm(
   return function withBulkMigrateCreateFormComponent(props: any) {
     const interval = useRef<any | undefined>("");
     const navigate = useNavigate();
+    const timeIntervalInSeconds = 4000;
     const { selectedProjectId: projectId } = useSelectedProjectId();
     const [selectedMountPathsId, setSelectedMountPathsId] = useState<string[]>(
       []
@@ -279,7 +280,10 @@ export function withBulkMigrateCreateForm(
             const data = await getWorkerDetails({
               id: res?.workflowId,
             }).unwrap();
-            if (data?.status === ValidateConnectionStatus.COMPLETED) {
+            if (
+              data?.status === ValidateConnectionStatus.COMPLETED ||
+              data?.status === ValidateConnectionStatus.TERMINATED
+            ) {
               const precheckState = getPreCheckStatus(data);
               setPreCheckStatus(precheckState);
               setIsPrecheckLoading(false);
@@ -296,7 +300,7 @@ export function withBulkMigrateCreateForm(
               );
               showErrorOnFailure(error);
             }
-          }, 2000);
+          }, timeIntervalInSeconds);
         })
         .catch((e) => {
           showErrorOnFailure(e);
