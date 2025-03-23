@@ -40,6 +40,8 @@ export class JobRunController {
   @Get(":id")
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
+    const jobSubStatus = await this.jobRunService.getJobSubStatus(id);
+    response.status = !!jobSubStatus && jobSubStatus.subStatus || response.status;
     return serializeJobRunDetailsResponse(response);
   }
 
