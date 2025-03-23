@@ -81,18 +81,16 @@ const NextAndSubmitButton = () => {
 
     const isFirstStep = currentStepIndex === STEP_0_FILE_SERVER_NAME;
 
-    if (!isEditMode && isFirstStep) {
-      checkUniqueFileServerName();
-      return;
-    }
-
-    if (isEditMode) {
-      if (isFirstStep && isConfigNameChanged) {
+    if (isFirstStep) {
+      if (!isEditMode) {
         checkUniqueFileServerName();
-      } else {
-        handleNextClick();
+        return;
       }
-      return;
+
+      if (isEditMode && isConfigNameChanged) {
+        checkUniqueFileServerName();
+        return;
+      }
     }
 
     handleNextClick();
