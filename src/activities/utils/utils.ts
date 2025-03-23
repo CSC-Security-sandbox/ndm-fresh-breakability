@@ -159,9 +159,9 @@ export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => (dFile && sF
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 
-export const generateDummyTaskEntry: Task = new Task('1234', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');
+export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');
 
-export const generateDummyErrorEntry: DMError = new DMError({ taskId: '1234', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
+export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
   if (error.code) {
