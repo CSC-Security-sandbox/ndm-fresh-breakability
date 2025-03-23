@@ -140,31 +140,20 @@ export class InventoryService {
       throw new Error("Error while saving task error records to the database");
     }
   }
-
   async saveTasks(data: any) {
     try {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
+
         throw new Error("Invalid task data");
       }
-      const {
-        jobRunId,
-        taskType,
-        status,
-        sPathId,
-        tPathId,
-        commands,
-        workerId,
-        id,
-      } = data;
-
-      if (!id) {
+  
+      const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
+  
+      const taskId = id
+      if (!taskId) {
         this.logger.error("Task ID not found");
         return;
-      }
-
-      const taskId = id ?? randomUUID();
-      console.log(taskId);
-
+      }  
       // Create the task entity
       const task = this.taskRepo.create({
         id: taskId,
@@ -173,52 +162,42 @@ export class InventoryService {
         taskType,
         workerId,
       });
-
-      // Create operation entities in batches
-      const batchSize = 100; // Adjust the batch size as needed
+  
+      // Ensure commands is an array before proceeding
+      const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
-
-      if (commands && commands.length > 0) {
+  
+      if (Array.isArray(commands) && commands.length > 0) {
         for (let i = 0; i < commands.length; i += batchSize) {
-          const batch: OperationsEntity[] = commands
-            .slice(i, i + batchSize)
-            .map((command: any) => {
-              const operation = new OperationsEntity();
-              operation.id = command.commandId;
-              operation.taskId = taskId;
-              operation.jobRunId = jobRunId;
-              operation.sPathId = sPathId;
-              operation.tPathId = tPathId?.length ? tPathId : null;
-              operation.status = OperationStatus.IN_PROCESS;
-              operation.operationType = taskType;
-              operation.request = command;
-              operation.fPath = command?.fPath;
-              return operation;
-            });
+          const batch = commands.slice(i, i + batchSize).map((command: any) => ({
+            id: command.commandId,
+            taskId,
+            jobRunId,
+            sPathId,
+            tPathId: tPathId?.length ? tPathId : null,
+            status: OperationStatus.IN_PROCESS,
+            operationType: taskType,
+            request: command,
+            fPath: command?.fPath,
+          })) as OperationsEntity[];
+  
           operationBatches.push(batch);
         }
       }
-
-      // Save the task and operation batches
+  
+      // Save the task
       await this.taskRepo.save(task);
-
+      // Save all operation batches concurrently
       if (operationBatches.length > 0) {
-        for (const batch of operationBatches) {
-          await this.operationRepo.save(batch);
-        }
+        await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
       }
-
-      console.log(
-        `Task and operations saved successfully for jobRunId: ${jobRunId}`
-      );
+      console.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {
-      this.logger.error(
-        `Failed to save task records: ${err.message}`,
-        err.stack
-      );
+      this.logger.error(`❌ Failed to save task records: ${err.message}`, err.stack);
       throw new Error("Error while saving task records to the database");
     }
   }
+  
 
   async updateTask(
     taskId: string,
