@@ -17,3 +17,6 @@
     enabled: yes
     state: started
     masked: no
+
+- name: 2.4. Set the hostname
+  command: hostnamectl set-hostname datamigrator

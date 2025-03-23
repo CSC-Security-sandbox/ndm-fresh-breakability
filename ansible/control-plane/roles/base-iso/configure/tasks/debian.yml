@@ -1,6 +1,4 @@
 ---
-# Debian or derivative specific tasks.
-
 # Task for configuring SSH for public key authentication.
 - name: Configuring SSH for Public Key Authentication.
   ansible.builtin.lineinfile:
@@ -48,6 +46,12 @@
         path: /etc/cloud/cloud.cfg
         block: |
           disable_vmware_customization: false
+    - name: Replace lock_passwd setting in cloud.cfg
+      ansible.builtin.replace:
+        path: /etc/cloud/cloud.cfg
+        regexp: '(?i)lock_passwd:\s*True'
+        replace: 'lock_passwd: false'
+        backup: no
     - name: Set datasource_list in 90_dpkg.cfg
       ansible.builtin.copy:
         content: "datasource_list: [ VMware, OVF, None ]"
@@ -60,13 +64,6 @@
       when: ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 24
   when: enable_cloudinit == 'true'
 
-- name: Replacing dhcp with static for Debian
-  ansible.builtin.lineinfile:
-    path: /etc/network/interfaces
-    regexp: ^iface ens192 inet dhcp
-    state: absent
-  when: enable_cloudinit == 'true' and ansible_distribution == 'Debian'
-
 # Task for setting SSH keys to regenerate.
 - name: Setting SSH keys to regenerate.
   ansible.builtin.copy:
@@ -78,14 +75,3 @@
       fi
       exit 0
     mode: "0755"
-
-# Task to force setting guest operating system information for VMware Tools.
-- name: Setting guest operating system information for VMware Tools.
-  ansible.builtin.blockinfile:
-    path: /etc/vmware-tools/tools.conf
-    block: |
-      [guestosinfo]
-      short-name = other5xLinux64Guest
-    create: true
-    mode: "0644"
-  when: ansible_distribution == 'Debian'

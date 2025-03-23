@@ -14,6 +14,7 @@
     home: "/home/{{ vm_username }}"
     createhome: yes
     shell: /bin/bash
+    non_unique: true
 
 - name: 1.3. Set up sudo for '{{ vm_username }}' (with passwordless access)
   become: yes
@@ -29,12 +30,14 @@
     regexp: '^#?PermitRootLogin'
     line: 'PermitRootLogin no'
     state: present
+  when:
+    vm_deployment is not defined
 
-- name: 1.5. Disable password authentication for SSH
+- name: 1.5. Enable password authentication for SSH
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PasswordAuthentication'
-    line: 'PasswordAuthentication no'
+    line: 'PasswordAuthentication yes'
     state: present
 
 - name: 1.6. Validate sudoers file for '{{ vm_username }}'

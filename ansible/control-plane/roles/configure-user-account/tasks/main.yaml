@@ -33,14 +33,12 @@
   when:
     vm_deployment is not defined
 
-- name: 1.5. Disable password authentication for SSH
+- name: 1.5. Enable password authentication for SSH
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PasswordAuthentication'
-    line: 'PasswordAuthentication no'
+    line: 'PasswordAuthentication yes'
     state: present
-  when:
-    vm_deployment is not defined
 
 - name: 1.6. Validate sudoers file for '{{ vm_username }}'
   become: yes

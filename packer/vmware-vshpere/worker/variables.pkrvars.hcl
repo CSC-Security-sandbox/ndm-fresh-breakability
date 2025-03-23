@@ -2,7 +2,7 @@
 project_name = "datamigrator"
 
 // vSphere Credentials
-vsphere_insecure_connection = false
+vsphere_insecure_connection = true
 
 // vSphere Settings
 vsphere_datacenter                     = "Datacenter"
@@ -24,7 +24,7 @@ vm_mem_size     = 32768
 vm_mem_hot_add  = false
 
 // Disk Settings
-vm_disk_size    = 512000
+vm_disk_size    = 102400
 
 // Default Account Credentials
 
@@ -42,7 +42,7 @@ common_content_library_destroy     = true
 common_content_library_skip_export = false
 
 // OVF Export Settings
-common_ovf_export_enabled   = true
+common_ovf_export_enabled   = false
 common_ovf_export_overwrite = true
 
 // Removable Media Settings
