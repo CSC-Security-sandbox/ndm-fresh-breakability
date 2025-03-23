@@ -67,13 +67,13 @@ Ensure the following tools are installed on your macOS system:
 2. Here are the repos you need to clone and their branches:
     ```sh
     keycloak-customizations (main)
-    admin-service (temporal)
-    config-service (temporal)
+    admin-service (main)
+    config-service (main)
     datamigrator-ui (main)
-    db-writer (temporal)
+    db-writer (main)
     file-service (main)
-    jobs-service (temporal)
-    reports-service (temporal)
+    jobs-service (main)
+    reports-service (main)
     ```
 3. Run the build script:
     ```sh

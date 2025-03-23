@@ -24,13 +24,13 @@ Ensure the following tools are installed on your machine:
 
     **VMware vSphere:**
     ```bash
-    export PKR_vsphere_endpoint="your-vsphere-server"
-    export PKR_vsphere_username="your-username"
-    export PKR_vsphere_password="your-password"
-    export PKR_build_username="your-build-username"
-    export PKR_build_password="your-build-password"
-    export PKR_build_password_encrypted="your-encrypted-build-password"
-    export PKR_build_key="your-build-key"
+    export PKR_VAR_vsphere_endpoint="your-vsphere-server"
+    export PKR_VAR_vsphere_username="your-username"
+    export PKR_VAR_vsphere_password="your-password"
+    export PKR_VAR_build_username="your-build-username"
+    export PKR_VAR_build_password="your-build-password"
+    export PKR_VAR_build_password_encrypted="your-encrypted-build-password"
+    export PKR_VAR_build_key="your-build-key"
     ```
 
     Replace the placeholders with the actual values for your cloud provider.
