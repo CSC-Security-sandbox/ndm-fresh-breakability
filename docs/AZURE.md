@@ -18,190 +18,154 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 - **Subscription name**: MigrationAsAService-dev
 
 ### 2. Get Custom Images
-- Ensure you have the custom Packer-created images available in your Azure subscription. These images should be listed under your Images section.
-- Take images of worker and control plane in images service of azure.
-- The image name format is `datamigrator-worker-DATE-TIMESTAMP` & `datamigrator-control-plane-DATE-TIMESTAMP`
+- Locate the Shared Image Gallery:
+    - In the Azure Portal, search for "Azure Compute Galleries" in the search bar at the top.
+    - Select **Compute Galleries** from the search results.
+    - Click on the gallery named **datamigrator**.
+- Select the Image Definition:
+    - Inside the **datamigrator** gallery, you will see two image definitions:
+        - `ndm-control-plane` (for Control Plane VMs)
+        - `ndm-worker` (for Worker VMs)
+    - Click on the image definition you want to use (e.g., `ndm-control-plane`).
+- Choose the Latest Image Version:
+    - Inside the image definition, you will see a list of image versions in the format `YYYY.DD.MMhhmmss`.
+    - Identify the latest version (it will be marked as **Latest**).
+    - Click on the latest version to proceed.
+- Select **Create VM** from the panel.
 
-### 3. Create a VM
-- In the Azure Portal, select the image you want to create VM from.
-- Select "Create VM" from the panel.
+### 3. Create a Control Plane VM
+- Select the control plane latest image following the above steps.
+- Configure VM Settings:
+    - **Subscription**: MigrationAsAService-dev
+    - **Resource Group**: datamigrate-acr-resource-group
+    - **VM name**: Use your name as prefix for any VM you create. Prefer creating VM with name `<your-name>-<image-name>`.
+    - **Image**: Choose the custom Packer-created image for control plane.
+    - **Size**: Recommended size is 8 vCPU, 32GB RAM.
+    - **Administrator Account**:
+        - **Username**: Enter `ubuntu`.
+        - **SSH Public Key**: Paste your SSH public key or create a new one.
+    - **License type**: Other
+    - Click on **Next: Disks >**:
+        - **Delete with VM**: Optional, can be selected if you want to delete the OS disk along with the VM.
+    - Click on **Next: Networking >**:
+        - **Virtual Network (VNet)**: datamigrate-dev-vnet
+        - **Public IP**: Set to "None" to avoid assigning a public IP.
+        - **Delete NIC when VM is deleted**: Optional, can be selected if you want to delete the NIC along with the VM.
+    - If you created a new SSH key, at the end it will prompt you to download. Please keep the key safe as it cannot be downloaded again.
+    - Leave other options as they are.
 
-### 4. Configure VM Settings
-- **Subscription**: MigrationAsAService-dev
-- **Resource Group**: datamigrate-acr-resource-group
-- **VM name**: Use your name as prefix for any VM you create.
-- **Image**: Choose the custom Packer-created image for control plane or worker as required.
-- **Size**: Select size based on the image you are deploying. For control plane, select a larger image.
-- **Administrator Account**:
-    - **Username**: Enter `ubuntu`.
-    - **SSH Public Key**: Paste your SSH public key or create a new one. 
-- **License type**: Other
-- **Disks**: Select delete OS disk with VM.
-- **Virtual Network (VNet)**: datamigrate-dev-vnet
-- **Public IP**: Set to "None" to avoid assigning a public IP.
-- **Delete NIC when VM is deleted**: Select this option
-- If you created a new SSH key, at the end it will prompt you to download. Please keep the key safe as it cannot be downloaded again.
-- Leave other options as it is.
-
-NOTE: Use the same settings for data plane and control plane VMs.
+### 4. Create a Data Plane VM
+- Follow the same steps as above in the "Get Custom Images" section.
+- Configure VM Settings:
+    - **Subscription**: MigrationAsAService-dev
+    - **Resource Group**: datamigrate-acr-resource-group
+    - **VM name**: Use your name as prefix for any VM you create. Prefer creating VM with name `<your-name>-<image-name>`.
+    - **Image**: Choose the custom Packer-created image for worker.
+    - **Size**: Recommended size is 4 vCPU, 8GB RAM.
+    - **Administrator Account**:
+        - **Username**: Enter `ubuntu`.
+        - **SSH Public Key**: Paste your SSH public key or create a new one.
+    - **License type**: Other
+    - Click on **Next: Disks >**:
+        - **Delete with VM**: Optional, can be selected if you want to delete the OS disk along with the VM.
+    - Click on **Next: Networking >**:
+        - **Virtual Network (VNet)**: datamigrate-dev-vnet
+        - **Public IP**: Set to "None" to avoid assigning a public IP.
+        - **Delete NIC when VM is deleted**: Optional, can be selected if you want to delete the NIC along with the VM.
+    - If you created a new SSH key, at the end it will prompt you to download. Please keep the key safe as it cannot be downloaded again.
+    - Leave other options as they are.
 
 ### 5. Review and Create
-- Review all the settings and click "Review + Create" to deploy the VM.
-
-## Using Scripts to Create SSH Tunnels
-
-You can use the provided shell and PowerShell scripts to create SSH tunnels for both control plane and data plane VMs. These scripts will prompt you for the necessary inputs and set up the tunnels.
-
-### Shell Script
-
-- When you run the scripts, you will be promted for some user inputs. The azure credentials will be provided separately.
-- **Resource Group**: datamigrate-acr-resource-group
-- In the VM name, give the name of azure VMs you created.
-- Use your local laptops terminal to open the tunnel.
-
-- Save the following script as `create_tunnel.sh` and run it on a Unix-based system (like macOS or Linux):
-
-    ```sh
-    #!/bin/bash
-
-    # Prompt for user input
-    read -p "Enter Azure Username: " AZ_USERNAME
-    read -sp "Enter Azure Password: " AZ_PASSWORD
-    echo
-    read -p "Enter Azure Tenant ID: " AZ_TENANT
-    read -p "Enter Resource Group: " RESOURCE_GROUP
-    read -p "Enter Control Plane VM Name: " CONTROL_PLANE_VM
-    read -p "Enter Data Plane VM Name: " DATA_PLANE_VM
-    read -p "Enter SSH Key Path: " SSH_KEY_PATH
-
-    # Login to Azure
-    az login --service-principal --username "${AZ_USERNAME}" --password "${AZ_PASSWORD}" --tenant "${AZ_TENANT}"
-
-    # Get Control Plane VM Resource ID
-    CONTROL_PLANE_VM_ID=$(az vm show --resource-group $RESOURCE_GROUP --name $CONTROL_PLANE_VM --query id -o tsv)
-
-    # Open SSH tunnel for Control Plane VM
-    az network bastion tunnel --resource-group $RESOURCE_GROUP --target-resource-id $CONTROL_PLANE_VM_ID --resource-port 22 --port 3022 --name datamigrate-dev-vnet-bastion &
-
-    # Get Data Plane VM Resource ID
-    DATA_PLANE_VM_ID=$(az vm show --resource-group $RESOURCE_GROUP --name $DATA_PLANE_VM --query id -o tsv)
-
-    # Open SSH tunnel for Data Plane VM
-    az network bastion tunnel --resource-group $RESOURCE_GROUP --target-resource-id $DATA_PLANE_VM_ID --resource-port 22 --port 4022 --name datamigrate-dev-vnet-bastion &
-
-    echo "SSH tunnels created. Use the following commands to connect:"
-    echo "Control Plane VM: ssh -i $SSH_KEY_PATH ubuntu@localhost -p 3022"
-    echo "Data Plane VM: ssh -i $SSH_KEY_PATH ubuntu@localhost -p 4022"
-
-    # Wait for all background jobs to finish
-    wait
-    ```
-- To run the script, use the following command in your terminal:
-    ```sh
-    chmod +x create_tunnel.sh
-    ./create_tunnel.sh
-    ```
-
-### Powershell Script
-
-- Use your local laptops terminal to open the tunnel.
-- For windows, Save the following script as `create_tunnel.ps1` and run it:
-
-    ```sh
-    # Prompt for user input
-    $AZ_USERNAME = Read-Host "Enter Azure Username"
-    $AZ_PASSWORD = Read-Host "Enter Azure Password" -AsSecureString
-    $AZ_TENANT = Read-Host "Enter Azure Tenant ID"
-    $RESOURCE_GROUP = Read-Host "Enter Resource Group"
-    $CONTROL_PLANE_VM = Read-Host "Enter Control Plane VM Name"
-    $DATA_PLANE_VM = Read-Host "Enter Data Plane VM Name"
-    $SSH_KEY_PATH = Read-Host "Enter SSH Key Path"
-
-    # Convert secure string to plain text
-    $AZ_PASSWORD_PLAIN = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($AZ_PASSWORD))
-
-    # Login to Azure
-    az login --service-principal --username $AZ_USERNAME --password $AZ_PASSWORD_PLAIN --tenant $AZ_TENANT
-
-    # Get Control Plane VM Resource ID
-    $CONTROL_PLANE_VM_ID = az vm show --resource-group $RESOURCE_GROUP --name $CONTROL_PLANE_VM --query id -o tsv
-
-    # Open SSH tunnel for Control Plane VM
-    Start-Process -NoNewWindow -FilePath "az" -ArgumentList "network bastion tunnel --resource-group $RESOURCE_GROUP --target-resource-id $CONTROL_PLANE_VM_ID --resource-port 22 --port 3022 --name datamigrate-dev-vnet-bastion"
-
-    # Get Data Plane VM Resource ID
-    $DATA_PLANE_VM_ID = az vm show --resource-group $RESOURCE_GROUP --name $DATA_PLANE_VM --query id -o tsv
-
-    # Open SSH tunnel for Data Plane VM
-    Start-Process -NoNewWindow -FilePath "az" -ArgumentList "network bastion tunnel --resource-group $RESOURCE_GROUP --target-resource-id $DATA_PLANE_VM_ID --resource-port 22 --port 4022 --name datamigrate-dev-vnet-bastion"
-
-    Write-Output "SSH tunnels created. Use the following commands to connect:"
-    Write-Output "Control Plane VM: ssh -i $SSH_KEY_PATH ubuntu@localhost -p 3022"
-    Write-Output "Data Plane VM: ssh -i $SSH_KEY_PATH ubuntu@localhost -p 4022"
-
-    # Wait for all jobs to finish
-    Get-Job | Wait-Job
-    ```
-- To run the script, use the following command in your PowerShell:
-    ```sh
-    .\create_tunnel.ps1
-    ```
+- Review all the settings and click **Review + Create** to deploy the VM.
+- Click on **Create**.
+- If creating a new key pair, you will be prompted to **Generate new key pair**:
+    - Click on **Download private key and create resource**.
+    - Once clicked, a `.pem` file will be downloaded.
 
 ## Steps to Connect to Your VM
 
 ### Access Control Plane VM (When setting up control plane for the first time)
+1. Select the control plane VM from Azure portal.
+2. Click on **Connect** in the left pane and select **Bastion**.
+3. Select the following:
+    - **Authentication type**: SSH Private Key from Local File
+    - **User**: `ubuntu`
+    - **SSH key**: Select the SSH key you selected when creating the VM.
+    - **Open in new browser tab**: YES
+4. Click on **Connect**.
 
-### 1. SSH into the VM
+#### Troubleshooting Bastion Connection
+- If you encounter issues opening the SSH Bastion portal:
+    1. Visit the Azure Control Plane VM.
+    2. Click on **Help → Reset password**.
+    3. Select **Add SSH Public Key** from Mode.
+    4. Add username as `ubuntu`.
+    5. Set **SSH public key source** to **Use existing key stored in Azure**.
+    6. Select your existing created key under **Stored Key**.
+    7. Click on **Update**.
+    8. Retry connecting via Bastion.
 
-- Use your local laptops terminal.
-- Make sure SSH tunnel is opened by running the scripts mentioned above.
-- Use the following command to SSH into your VM:
-    ```sh
-    ssh -i <SSH-KEY> ubuntu@localhost -p 3022
-    ```
-
-### 2. Log In
+### Log In
 - Once connected, you will be logged into the VM as the `ubuntu` user.
-- Switch the user to `datamigrator`.
+- Switch the user to `datamigrator`:
     ```sh
     sudo su - datamigrator
     ```
-### 3.  Check service status
-- Check the status of boot service and logs using the following comamands. The service will be in disabled state at this point.
+
+### Check Service Status
+- Check the status of boot service and logs using the following commands. The service will be in a disabled state at this point:
     ```sh
     sudo systemctl status boot-microk8s.service
     ```
-### 4.  Start the boot service & boot Up the application
-- After logging in, start the application boot up. This may take a few minutes.
-- Start the boot service and check logs using the following comamands.
+
+### Start the Boot Service & Boot Up the Application
+- Start the application boot up. This may take a few minutes:
     ```sh
     sudo systemctl start boot-microk8s.service &
+    ```
+
+### View Boot Service Logs (Optional)
+- To check boot service logs:
+    ```sh
     tail -10f /var/log/datamigrator/microk8s-boot.log
     ```
 
-### 5. Verify Application Status
+### Verify Application Status
 - Once the boot setup is complete, use `kubectl` commands to verify that all the pods are up and running:
     ```sh
     kubectl get pods -n datamigrator
     ```
 
+### Steps for Connecting Worker VM (When setting up data plane for the first time)
+1. Login to a Windows VM for accessing the application. This is needed because NetApp Azure VMs are not accessible from the outside.
+2. Login to one of the following Windows VMs via Bastion:
+    - `ndm-alpha-windows-1` - `10.0.0.124`
+    - `ndm-alpha-windows-2` - `10.0.0.125`
+    - `ndm-alpha-windows-3` - `10.0.0.126`
+3. Bastion connection details:
+    - **Authentication type**: VM Password
+    - For username and password, reach out to Doshi, Anurag, or Patil, Praful.
+
 ### Steps for Worker VM (When setting up data plane for the first time)
 
-- Login to a windows VM for accessing the application. This is needed because netapp azure VM are not accessible from the outside, so we have a SMB server in the same network to access the application.
+- Login to a windows VM for accessing the application. This is needed because netapp azure VM are not accessible from the outside.
 - Navigate to the Datamigrator UI on the control plane IP: `https://IP_ADDRESS/`. The initial username is `admin@datamigrator.local` and password is `welcome`.
 - Create a project.
 - Click on "View instructions to set up worker".
-- Use your local laptops terminal.
-- Make sure SSH tunnel is opened by running the scripts mentioned above.
-- Use the following command to SSH into your VM:
-    ```sh
-    ssh -i <SSH-KEY> ubuntu@localhost -p 4022
-    ```
+- Connect to the worker VM SSH
+1. Select the worker VM from Azure portal.
+2. Click on **Connect** in the left pane and select **Bastion**.
+3. Select the following:
+    - **Authentication type**: SSH Private Key from Local File
+    - **User**: `ubuntu`
+    - **SSH key**: Select the SSH key you selected when creating the VM.
+    - **Open in new browser tab**: YES
+4. Click on **Connect**.
 - Login as the root user:
     ```sh
     sudo su -
     ```
-- Paste the instructions copied in step 3.
+- Paste the instructions copied from the control plane ui.
 - Verify the status of the worker:
     ```sh
     systemctl status datamigrator-worker.service
@@ -218,9 +182,8 @@ By following these steps, you should be able to successfully create, connect, an
 
 NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with your Control plane VM IP.
 
-1. Fetch the openbao root token. Use your local laptops terminal. Make sure SSH tunnel is opened by running the scripts mentioned above. SSH into the control plane server after opening SSH tunnel.
+1. Fetch the openbao root token. SSH into the control plane server from bastion connect from the Azure portal:
     ```sh
-    ssh -i <SSH-KEY> ubuntu@localhost -p 3022
     sudo su - datamigrator
     cat /opt/datamigrator/openbao/cluster-keys.json
     ```
@@ -247,25 +210,49 @@ By following these steps, you should be able to successfully create and connect 
 
 ### 3. kubectl commands reference
 
-- To get the pods in `datamigrator` namespace
+- To get the pods in `datamigrator` namespace:
   ```sh
   kubectl get pods -n datamigrator
   ```
-- To get the logs for a pod in `datamigrator` namespace
+- To get the logs for a pod in `datamigrator` namespace:
   ```sh
   kubectl logs <podname> -n datamigrator
   ```
-- To describe a pod in `datamigrator` namespace
+- To describe a pod in `datamigrator` namespace:
   ```sh
-  kubectl describe <podname> -n datamigrator
+  kubectl describe pod <podname> -n datamigrator
   ```
-- To get all namespaces
+- To get all namespaces:
   ```sh
   kubectl get ns
   ```
-- To get the pods in any namespace
+- To get the pods in any namespace:
   ```sh
   kubectl get pods -n <NAMESPACE>
+  ```
+- To delete a pod in `datamigrator` namespace:
+  ```sh
+  kubectl delete pod <podname> -n datamigrator
+  ```
+- To get the events in `datamigrator` namespace:
+  ```sh
+  kubectl get events -n datamigrator
+  ```
+- To execute a command inside a running pod:
+  ```sh
+  kubectl exec -it <podname> -n datamigrator -- <command>
+  ```
+- To check the cluster nodes:
+  ```sh
+  kubectl get nodes
+  ```
+- To get the resource usage of pods in `datamigrator` namespace:
+  ```sh
+  kubectl top pods -n datamigrator
+  ```
+- To get the resource usage of nodes:
+  ```sh
+  kubectl top nodes
   ```
 
 ### 4. Unseal openbao
