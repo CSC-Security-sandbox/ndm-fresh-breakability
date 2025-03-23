@@ -408,7 +408,7 @@ describe("JobRunService", () => {
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed }
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.REJECTED }
     );
   });
 
@@ -445,7 +445,7 @@ describe("JobRunService", () => {
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed }
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.APPROVED }
     );
   });
 
@@ -1722,6 +1722,7 @@ describe("JobRunService", () => {
          "jobConfigId": true,
          "startTime": true,
          "status": true,
+         "subStatus": true,
          "tasks":  {
            "createdAt": true,
            "id": true,
