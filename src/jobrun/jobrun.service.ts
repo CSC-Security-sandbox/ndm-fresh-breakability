@@ -118,7 +118,7 @@ export class JobRunService {
     }
     await this.jobRunRepo.update(
       { id: jobRunId },
-      { status: JobRunStatus.Completed }
+      { status: JobRunStatus.Completed, subStatus: status }
     );
   }
 
@@ -348,6 +348,7 @@ export class JobRunService {
       select: {
         id: true,
         status: true,
+        subStatus: true,
         startTime: true,
         endTime: true,
         jobConfigId: true,
@@ -392,7 +393,7 @@ export class JobRunService {
     const jobRunDetails: JobRunDetailsDTO = {
       jobRunId: jobRun.id,
       jobConfigId: jobRun.jobConfigId,
-      status: jobRun.status,
+      status: jobRun.subStatus || jobRun.status,
       startTime: jobRun.startTime,
       endTime: jobRun.endTime,
       jobType: jobConfigDetails.jobType,
@@ -492,6 +493,7 @@ export class JobRunService {
         "targetVolume.volumePath AS targetVolumePath",
         "targetFileServer.protocol AS targetFileServerProtocol",
         "targetConfig.configName AS targetConfigName",
+        "jobRun.subStatus AS subStatus",
         "jobRun.status AS status",
         "jobRun.startTime AS startTime",
         "jobRun.endTime AS endTime",
@@ -514,7 +516,7 @@ export class JobRunService {
 
         const response: JobRunsDTO = {
           jobRunId: jobRun.jobrunid,
-          status: jobRun.status,
+          status: jobRun.substatus || jobRun.status,
           startTime: jobRun.starttime,
           endTime: jobRun.endtime,
           jobType: jobRun.jobtype,
