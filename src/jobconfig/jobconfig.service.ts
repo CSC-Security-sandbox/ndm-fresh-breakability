@@ -507,13 +507,13 @@ export class JobConfigService {
     if (!bulkMigrate?.migrateConfigs) {
       return [];
     }
-    if (bulkMigrate?.sidMapping) {
+    if (typeof bulkMigrate?.sidMapping === "string") {
       templateType = TemplateType.SID;
       const sidMapping = await this.decodeBase64(bulkMigrate.sidMapping);
       parsedMappings = await this.parseBlobData(sidMapping, templateType);
     }
  
-    if (bulkMigrate?.gidMapping) {
+    if (typeof bulkMigrate?.gidMapping === "string") {
       templateType = TemplateType.GID;
       const gidMapping = await this.decodeBase64(bulkMigrate.gidMapping);
       parsedMappings = await this.parseBlobData(gidMapping, templateType);
@@ -1425,19 +1425,26 @@ export class JobConfigService {
       blobData: string,
       templateType: TemplateType
     ): Promise<ParsedMapping[]> {
-      return blobData
+      const parsedData = blobData
         ?.trim()
         ?.split("\n")
         ?.map((line) => line.split(","))
         ?.map((columns) => {
           if (templateType === TemplateType.SID) {
+            if (columns.length !== 2) {
+              throw new Error("Invalid SID mapping data: Expected 2 columns.");
+            }
             const [sourceMapping, targetMapping] = columns;
             return { sourceMapping, targetMapping };
           } else if (templateType === TemplateType.GID) {
+            if (columns.length !== 4) {
+              throw new Error("Invalid GID mapping data: Expected 4 columns.");
+            }
             const [sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid] = columns;
             return { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid };
           }
         });
+        return parsedData;
     }
   
     async saveIdentityMappingsWithMap(
