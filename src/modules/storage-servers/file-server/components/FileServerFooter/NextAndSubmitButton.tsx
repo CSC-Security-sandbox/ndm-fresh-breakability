@@ -99,7 +99,10 @@ const NextAndSubmitButton = () => {
   };
 
   const checkUniqueFileServerName = async () => {
-    if (currentStepIndex === 0 && serverTypeForm?.formState?.configName) {
+    if (
+      currentStepIndex === STEP_0_FILE_SERVER_NAME &&
+      serverTypeForm?.formState?.configName
+    ) {
       try {
         await getUniqueFileServerName({
           projectId: selectedProjectId,
