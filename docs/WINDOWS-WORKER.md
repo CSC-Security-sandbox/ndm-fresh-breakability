@@ -57,5 +57,5 @@ Follow these steps to create the installer:
 
 - Tail Logs in Real-Time. Open **PowerShell** and run:
   ```powershell
-  Get-Content -Path "C:\datamigrator\logs\DatamigratorWorker.out.log" -Wait
+  Get-Content -Path "C:\datamigrator\logs\<log_file_name>" -Wait
   ```
