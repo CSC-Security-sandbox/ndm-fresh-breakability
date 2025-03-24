@@ -43,7 +43,7 @@ export const createValidateConnectionPayload = (
   }
   return {
     fileServer: {
-      hostname: (hostCredentialsForm?.formState?.host).trim(),
+      hostname: hostCredentialsForm?.formState?.host,
       protocols,
     },
     workerIds,
