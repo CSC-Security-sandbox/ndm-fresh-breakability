@@ -1,15 +1,22 @@
 import { Box } from "@components/container/index";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
-import { ReactNode } from "react";
+import { ReactNode, useContext } from "react";
 import NextAndSubmitButton from "./NextAndSubmitButton";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 const FileServerFooter = ({ content }: { content?: ReactNode }) => {
   const navigate = useNavigate();
   const { currentStepIndex, gotoPreviousStep } = useWizard();
+  const { setDisableNextButton } = useContext(CommonFileServerContext);
 
   const handleCancel = () => {
     navigate("/file-server");
+  };
+
+  const handleBack = () => {
+    gotoPreviousStep();
+    setDisableNextButton(false);
   };
 
   return (
@@ -18,7 +25,7 @@ const FileServerFooter = ({ content }: { content?: ReactNode }) => {
       <Box className="flex justify-end gap-4">
         <Button
           color="secondary"
-          onClick={gotoPreviousStep}
+          onClick={handleBack}
           disabled={currentStepIndex === 0}
           style={{ width: 152 }}
         >

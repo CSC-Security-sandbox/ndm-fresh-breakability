@@ -1,6 +1,9 @@
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
+import { useLazyGetUniqueFileServerNamesQuery } from "@api/configApi";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
+import { notify } from "@components/notification/NotificationWrapper";
 
 const STEP_0_FILE_SERVER_NAME = 0;
 const STEP_1_CREDENTIALS = 1;
@@ -9,6 +12,9 @@ const STEP_3_WORKING_DIRECTORY = 3;
 
 const NextAndSubmitButton = () => {
   const { currentStepIndex, goToNextStep } = useWizard();
+  const [getUniqueFileServerName, { data }] =
+    useLazyGetUniqueFileServerNamesQuery();
+  const { selectedProjectId } = useSelectedProjectId();
 
   const {
     handleEditConfiguration,
@@ -24,6 +30,7 @@ const NextAndSubmitButton = () => {
     validateConnectionLoader,
     disableNextButton,
     nfsValidatedWorkersIds,
+    editingFileServerDetails,
   } = useContext(CommonFileServerContext);
 
   const handleFinish = async () => {
@@ -67,6 +74,47 @@ const NextAndSubmitButton = () => {
     }
   };
 
+  const handleProceed = () => {
+    const isConfigNameChanged =
+      editingFileServerDetails?.configName !==
+      serverTypeForm?.formState?.configName;
+
+    const isFirstStep = currentStepIndex === STEP_0_FILE_SERVER_NAME;
+
+    if (isFirstStep) {
+      if (!isEditMode) {
+        checkUniqueFileServerName();
+        return;
+      }
+
+      if (isEditMode && isConfigNameChanged) {
+        checkUniqueFileServerName();
+        return;
+      }
+    }
+
+    handleNextClick();
+  };
+
+  const checkUniqueFileServerName = async () => {
+    if (
+      currentStepIndex === STEP_0_FILE_SERVER_NAME &&
+      serverTypeForm?.formState?.configName
+    ) {
+      try {
+        await getUniqueFileServerName({
+          projectId: selectedProjectId,
+          configName: serverTypeForm?.formState?.configName,
+        }).unwrap();
+
+        handleNextClick();
+      } catch (err) {
+        console.log(err?.data?.message || "File Server creation error");
+        notify.error("File Server Name already exists");
+      }
+    }
+  };
+
   const handleNextClick = async () => {
     if (selectedWorkerIds?.length === 0) {
       goToNextStep();
@@ -103,7 +151,7 @@ const NextAndSubmitButton = () => {
         </Button>
       ) : (
         <Button
-          onClick={handleNextClick}
+          onClick={handleProceed}
           disabled={getDisableStatus()}
           isSubmitting={validateConnectionLoader}
           style={{ width: 152 }}

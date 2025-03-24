@@ -71,6 +71,11 @@ export const configApi = createApi({
     getSpeedTestFileServers: builder.query<SpeedTestConfigType[], void>({
       query: () => "servers/file-servers",
     }),
+
+    getUniqueFileServerNames: builder.query({
+      query: ({ projectId, configName }) =>
+        `servers/check-unique?projectId=${projectId}&configName=${configName}`,
+    }),
   }),
 });
 
@@ -86,4 +91,5 @@ export const {
   useGetAllCutOverPathsQuery,
   useLazyGetAllCutOverPathsQuery,
   useGetSpeedTestFileServersQuery,
+  useLazyGetUniqueFileServerNamesQuery,
 } = configApi;
