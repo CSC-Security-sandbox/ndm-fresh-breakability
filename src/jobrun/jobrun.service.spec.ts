@@ -408,7 +408,7 @@ describe("JobRunService", () => {
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed }
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.REJECTED }
     );
   });
 
@@ -438,11 +438,14 @@ describe("JobRunService", () => {
         targetPathId: mockJobRun.jobConfig.targetPathId,
         jobType: JobType.CUT_OVER,
       },
-      { status: JobStatus.InActive }
+      { status: JobStatus.InActive ,
+        futureScheduleAt: null,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+      }
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed }
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.APPROVED }
     );
   });
 
@@ -1719,6 +1722,7 @@ describe("JobRunService", () => {
          "jobConfigId": true,
          "startTime": true,
          "status": true,
+         "subStatus": true,
          "tasks":  {
            "createdAt": true,
            "id": true,
@@ -1809,6 +1813,7 @@ describe("JobRunService", () => {
       const jobConfigDetails = {
         id: '1',
         futureScheduleAt: '0 0 * * *',
+        jobType: JobType.MIGRATE
       };
 
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRunDetails as any);

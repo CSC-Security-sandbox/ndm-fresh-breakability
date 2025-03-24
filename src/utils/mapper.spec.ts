@@ -55,5 +55,23 @@ describe('nextDate', () => {
 
       expect(() => nextDate('OTHER_JOB_TYPE', null, 'invalid-cron')).toThrow('Invalid cron expression');
   });
+
+  // add test cases for CUT_OVER job type
+    it('should return runDate if jobType is CUT_OVER and runDate is in the future', () => {
+        const futureDate = new Date(Date.now() + 1000 * 60 * 60); 
+        const result = nextDate(JobType.CUT_OVER, futureDate, '');
+        expect(result).toBe(futureDate);
+    });
+
+    it('should return null if jobType is CUT_OVER and runDate is not in the future', () => {
+        const pastDate = new Date(Date.now() - 1000 * 60 * 60); // 1 hour in the past
+        const result = nextDate(JobType.CUT_OVER, pastDate, '');
+        expect(result).toBeNull();
+    });
+
+    it('should return null if jobType is CUT_OVER and runDate is null', () => {
+        const result = nextDate(JobType.CUT_OVER, null, '');
+        expect(result).toBeNull();
+    });
 })
 });

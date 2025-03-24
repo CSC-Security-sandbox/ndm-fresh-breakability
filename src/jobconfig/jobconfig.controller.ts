@@ -88,7 +88,7 @@ export class JobConfigController {
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/precheck')
   async precheck(@Body() precheckData: JobConfigPrecheck) { 
-     return  await this.jobConfigService.precheck(precheckData);
+     return  await this.jobConfigService.initiatePreCheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
