@@ -280,10 +280,7 @@ export function withBulkMigrateCreateForm(
             const data = await getWorkerDetails({
               id: res?.workflowId,
             }).unwrap();
-            if (
-              data?.status === ValidateConnectionStatus.COMPLETED ||
-              data?.status === ValidateConnectionStatus.TERMINATED
-            ) {
+            if (data?.status === ValidateConnectionStatus.COMPLETED) {
               const precheckState = getPreCheckStatus(data);
               setPreCheckStatus(precheckState);
               setIsPrecheckLoading(false);
