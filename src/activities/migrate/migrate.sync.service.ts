@@ -13,6 +13,7 @@ import { CommonActivityService } from '../common/common.service';
 import { PowerShellService } from '../common/poweshell.service';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 
+
 @Injectable()
 export class MigrationSyncService {
   readonly workerId: string;
@@ -20,6 +21,7 @@ export class MigrationSyncService {
   readonly pushTaskDirSize: number;
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number = 3;
+  readonly maxConcurrency: number = 10;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -30,6 +32,7 @@ export class MigrationSyncService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+    this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 100;
     this.fetchTaskBatch = 50;
     this.pushTaskDirSize = 500;
     this.CHUNK_SIZE = 1024 * 1024;
@@ -259,41 +262,56 @@ export class MigrationSyncService {
     jobContext.migrateTask.lastId = await jobContext.appendToUpdatedTaskList(task);
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-    for (let i = 0;  i < task.commands.length; i++) {
-      if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-      const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-      const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
-      const scanInput: SyncOperationInput = {
-        sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
-        targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
-        ops: task.commands[i].ops,
-        command: task.commands[i],
-        jobContext
-      };
-      const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-      task.commands[i].ops = syncOperationOp.ops;
-      if (syncOperationOp.errors.size > 0) {
-        task.commands[i].retryCount++;
-        syncTask.retryCount = Math.max(task.commands[i].retryCount,  syncTask.retryCount)
-        task.commands[i].status = CommandStatus.ERROR;
-        syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
-        syncTask.error++;
-      }
-      else {
-        const fileInfo: FileInfo = await this.getFileInfo({
-          name: task.commands[i].fPath, fullFilePath:`${task.tPath}${task.commands[i].fPath}`,
-          relativePath: task.commands[i].fPath,checksums: syncOperationOp.checksums,
-          getID: jobContext.jobConfig.options.isIdentityMappingAvailable
-        });
-        jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
-      
-        jobContext.filesInfo.numMessages++;
-        task.commands[i].status = CommandStatus.COMPLETED
-        syncTask.success++;
-        await this.redisService.setJobContext(task.jobRunId, jobContext);
-        this.logger.debug(`Migrated ${task.commands[i].fPath} successfully`);
-      }
+    const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+    const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+
+    for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
+      const batch = task.commands.slice(i, i + this.maxConcurrency);
+  
+      await Promise.allSettled(
+          batch.map(async (command) => {
+              if (command.status === CommandStatus.COMPLETED) return;
+  
+              const scanInput: SyncOperationInput = {
+                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                  ops: command.ops,
+                  command,
+                  jobContext
+              };
+  
+              const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
+              command.ops = syncOperationOp.ops;
+  
+              if (syncOperationOp.errors.size > 0) {
+                  command.retryCount++;
+                  syncTask.retryCount = Math.max(command.retryCount, syncTask.retryCount);
+                  command.status = CommandStatus.ERROR;
+                  syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
+                  syncTask.error++;
+              } else {
+                  const fileInfo: FileInfo = await this.getFileInfo({
+                      name: command.fPath,
+                      fullFilePath: `${task.tPath}${command.fPath}`,
+                      relativePath: command.fPath,
+                      checksums: syncOperationOp.checksums,
+                      getID: jobContext.jobConfig.options.isIdentityMappingAvailable
+                  });
+  
+                  jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
+                  jobContext.filesInfo.numMessages++;
+                  command.status = CommandStatus.COMPLETED;
+                  syncTask.success++;
+  
+                  await this.redisService.setJobContext(task.jobRunId, jobContext);
+                  this.logger.debug(`Migrated ${command.fPath} successfully`);
+              }
+          })
+      );
     }
+  
+
+
 
     this.logger.debug(`syncTask.retryCount  : ${syncTask.retryCount }`)
 
