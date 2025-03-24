@@ -20,11 +20,13 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { JobRunService } from 'src/jobrun/jobrun.service';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity,IdentityMappingEntity,IdentityConfigCrossMappingEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity,IdentityMappingEntity,IdentityConfigCrossMappingEntity,OperationErrorEntity]),
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]

@@ -35,4 +35,7 @@
       <sqlFile path="liquibase/20250323_01_create_substatus_view.sql"/>
    </changeSet>
 
+   <changeSet id="5020" author="anarvekar">
+      <sqlFile path="liquibase/20250324_03_alter_jobrun_table_add_column_jobstats.sql"/>
+   </changeSet>
 </databaseChangeLog>

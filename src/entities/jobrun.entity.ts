@@ -8,6 +8,7 @@ import { InventoryEntity } from './inventory.entity';
 import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
 import { WorkerConfiguration } from 'src/constants/types';
+import { JobRunStats } from 'src/jobrun/dto/jobstats';
 
 
 @Entity({ name: 'jobrun' })
@@ -79,4 +80,7 @@ export class JobRunEntity extends Base {
 
   @Column({ type: 'text', nullable: true, name: 'workflow_id' })
   workFlowId: string;
+
+  @Column({ type: 'json', nullable: true, name: 'job_stats' }) 
+  jobStats: JobRunStats
 }
