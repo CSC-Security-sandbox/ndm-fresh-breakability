@@ -14,20 +14,6 @@ admin_service_tag: "latest"
 db_writer_service_liquibase_tag: "latest"
 keycloak_customizations_tag: "latest"
 
-# datamigrator_ui_tag: "latest"
-# config_service_tag: "latest-temporal"
-# config_service_liquibase_tag: "latest-temporal"
-# db_writer_service_tag: "latest-temporal"
-# db_writer_service_liquibase_tag: "latest-temporal"
-# admin_service_liquibase_tag: "latest-temporal"
-# jobs_service_tag: "latest-temporal"
-# jobs_service_liquibase_tag: "latest-temporal"
-# file_service_tag: "latest"
-# reports_service_tag: "latest-temporal"
-# reports_service_liquibase_tag: "latest-temporal"
-# admin_service_tag: "latest-temporal"
-# keycloak_customizations_tag: "latest"
-
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
 
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
@@ -93,34 +79,34 @@ users:
 microk8s_bin_path: ""
 
 ports_to_open:
-  - 22/tcp
-  - 80/tcp
-  - 8080/tcp
-  - 53/tcp
-  - 53/udp
-  - 123/udp
-  - 179/tcp
-  - 443/tcp
-  - 2379-2381/tcp
-  - 5432/tcp
-  - 6379/tcp
-  - 6443/tcp
-  - 6781-6784/tcp
-  - 6781-6784/udp
-  - 7233/tcp
-  - 8090-8091/tcp
-  - 8472/udp
-  - 9153/tcp
-  - 10248-10260/tcp
-  - 4789/udp
-  - 5473/tcp
-  - 8443/tcp
-  - 8472/udp
-  - 9099/tcp
-  - 27017-27019/tcp
-  - 30000-65535/tcp
-  - 9000-9005/tcp
-  - 16443/tcp
+  - tcp 22
+  - tcp 80
+  - tcp 8080
+  - tcp 53
+  - udp 53
+  - udp 123
+  - tcp 179
+  - tcp 443
+  - tcp 2379:2381
+  - tcp 5432
+  - tcp 6379
+  - tcp 6443
+  - tcp 6781:6784
+  - udp 6781:6784
+  - tcp 7233
+  - tcp 8090:8091
+  - udp 8472
+  - tcp 9153
+  - tcp 10248:10260
+  - udp 4789
+  - tcp 5473
+  - tcp 8443
+  - udp 8472
+  - tcp 9099
+  - tcp 27017:27019
+  - tcp 30000:65535
+  - tcp 9000:9005
+  - tcp 16443
 
 postgres_version: 16.2.5
 postgres_data_volume_size: 30Gi

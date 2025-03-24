@@ -3,24 +3,36 @@
   apt:
     update_cache: yes
 
-- name: 3.2. Start firewalld
-  command: systemctl start firewalld.service
+- name: 3.3. Set default deny incoming policy
+  ufw:
+    direction: incoming
+    policy: deny
 
-- name: 3.3. Enable firewalld
-  command: systemctl enable firewalld.service
+- name: 3.4. Set default allow outgoing policy
+  ufw:
+    direction: outgoing
+    policy: allow
 
-- name: 3.4. Check status of firewalld
-  command: systemctl status firewalld.service
-
-- name: 3.5. Add firewall rules for the public zone (ports)
-  command: firewall-cmd --permanent --zone=public --add-port={{ item }}
+- name: 3.5. Allow specific ports
+  ufw:
+    rule: allow
+    proto: "{{ item.split(' ')[0] }}"
+    port: "{{ item.split(' ')[1] }}"
   loop: "{{ ports_to_open }}"
 
-- name: 3.6. Add service cidr in trusted zone
-  command: firewall-cmd --permanent --zone=trusted --add-source={{ service_cidr }}
+- name: 3.6. Allow service cidr
+  ufw:
+    rule: allow
+    from_ip: "{{ service_cidr }}"
 
-- name: 3.7. Add pod cidr in trusted zone
-  command: firewall-cmd --permanent --zone=trusted --add-source={{ pod_network_cidr }}
+- name: 3.7. Allow pod cidr
+  ufw:
+    rule: allow
+    from_ip: "{{ pod_network_cidr }}"
 
-- name: 3.8.reload_firewall
-  command: firewall-cmd --reload
+- name: 3.8. Enable ufw (do this after rules are in place)
+  ufw:
+    state: enabled
+
+- name: 3.9. Ensure ufw is running (status)
+  command: ufw status verbose
