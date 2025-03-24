@@ -27,7 +27,15 @@ const JobsAction = ({
         <Box className="text-lg">File Server Overview:</Box>
         <Box className="text-lg font-semibold flex gap-3">
           {fileServerDetails?.configName}
-          <EditIcon size="24" className="cursor-pointer" onClick={handleEdit} />
+          <PermissionAuth
+            permissionName={USER_PERMISSION_TYPE_ENUM.ManageConfig}
+          >
+            <EditIcon
+              size="24"
+              className="cursor-pointer"
+              onClick={handleEdit}
+            />
+          </PermissionAuth>
         </Box>
       </Box>
       <Box className="flex justify-end gap-2">

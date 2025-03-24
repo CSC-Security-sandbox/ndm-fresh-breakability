@@ -21,8 +21,8 @@ const FileServer = () => {
       projectId,
     });
 
-  const canManageJob: boolean = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.ManageJob
+  const canManageConfig: boolean = hasPermission(
+    USER_PERMISSION_TYPE_ENUM.ManageConfig
   );
 
   const rowMenu = (row: any) => {
@@ -32,13 +32,13 @@ const FileServer = () => {
         onClick: () => {
           navigate(`/edit-file-server/${row?.id}`);
         },
-        disabled: !canManageJob,
+        disabled: !canManageConfig,
       },
     ];
   };
 
   const ADD_NEW_FILE_SERVER = (
-    <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
+    <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageConfig}>
       <Button className="ml-4" onClick={() => navigate("/new-file-server")}>
         <Box className="flex items-stretch">
           <AddIcon fontSize="small" size="20" />

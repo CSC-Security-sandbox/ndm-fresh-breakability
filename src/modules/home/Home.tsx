@@ -48,9 +48,7 @@ const Home = () => {
   return (
     <Box className="p-6">
       <Box className="flex justify-end gap-2">
-        <PermissionAuth
-          permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}
-        >
+        <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageConfig}>
           <Button onClick={handleAddFileServerButton}>Add File Server</Button>
           <WorkerInstallation
             label="View Instruction To Setup Worker"
