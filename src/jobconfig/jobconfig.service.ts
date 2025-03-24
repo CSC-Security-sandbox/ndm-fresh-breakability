@@ -1039,7 +1039,7 @@ export class JobConfigService {
         return {
           jobRunId: jobRun.id,
           isReportReady: jobRun.isReportReady,
-          status: jobRun.status,
+          status: jobRun.subStatus || jobRun.status,
           startTime: jobRun.startTime,
           endTime: jobRun.endTime,
           jobType: jobConfig.jobType,

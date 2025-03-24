@@ -27,7 +27,16 @@
       <sqlFile path="liquibase/20250315_01_create_identity_mapping_tables.sql"/>
    </changeSet>
 
-   <changeSet id="5018" author="shivam6">
+   <changeSet id="5018" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250323_02_alter_jobrun_table_add_column_substatus.sql"/>
+   </changeSet>
+
+   <changeSet id="5019" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250323_01_create_substatus_view.sql"/>
+   </changeSet>
+
+   <changeSet id="5020" author="shivam6">
       <sqlFile path="liquibase/20250324_01_alter_cross_mapping_table.sql"/>
    </changeSet>
+
 </databaseChangeLog>

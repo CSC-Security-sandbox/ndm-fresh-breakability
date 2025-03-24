@@ -19,6 +19,7 @@ import { ScheduleStatus } from 'src/constants/status';
 import { JobRunConfig } from './jobrun.types';
 import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import axios from 'axios';
 
 
 describe('JobRunInitService', () => {
@@ -758,4 +759,45 @@ describe('createInitialTask', () => {
       });
     });
   });
+describe('startStreamConsumer', () => {
+  const jobRunId = 'jobRunId';
+  const START_CONSUMER_URL = 'http://mock-start-consumer-url';
+
+  beforeEach(() => {
+    jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+      if (key === 'app.paths.startConsumer') {
+        return START_CONSUMER_URL;
+      }
+      return null;
+    });
+  });
+
+  it('should start the consumer successfully on the first attempt', async () => {
+    const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+    jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
+
+    await service.startStreamConsumer(jobRunId);
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    expect(axios.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle unexpected errors gracefully', async () => {
+    const mockError = new Error('Unexpected error');
+    jest.spyOn(axios, 'post').mockRejectedValue(mockError);
+
+    await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+      `Failed to start consumer for ${jobRunId}: Unexpected error`
+    );
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    expect(axios.post).toHaveBeenCalledTimes(2);
+  });
+})
 });

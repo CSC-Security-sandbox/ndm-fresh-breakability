@@ -1,0 +1,1 @@
+ALTER TABLE jobrun ADD COLUMN sub_status TEXT;

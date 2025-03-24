@@ -591,27 +591,21 @@ export class JobRunInitService {
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {
-    const START_CONSUMER_URL = this.configService.get<string>(
-      "app.paths.startConsumer"
-    );
-    for (const consumerType of Object.values(ConsumerType)) {
-      const payload = {
-        jobRunId: jobRunId,
-        readerName: `${consumerType}-reader`,
-        consumerType: consumerType,
-      };
-      try {
-        const response = await axios.post(
-          `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-          payload
-        );
-        this.logger.log(`Started consumer for ${consumerType}:`, response.data);
-      } catch (error) {
-        this.logger.error( 
-          `Failed to start consumer for ${consumerType}:`, 
-          error.message
-        );
+    try {
+      const START_CONSUMER_URL = this.configService.get<string>("app.paths.startConsumer");
+      let response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, { jobRunId });
+      let count = 0;
+      while (response.status !== 201 && count < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, { jobRunId });
+        count++;
       }
+      if (response.status !== 201) throw new Error(`Failed to start consumer after retries, ${response.data}`);
+      this.logger.log(`Started consumer for ${jobRunId}:`, response.data);
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to start consumer for ${jobRunId}:`, error.message);
+      throw new Error(`Failed to start consumer for ${jobRunId}: ${error.message}`);
     }
   }
 
