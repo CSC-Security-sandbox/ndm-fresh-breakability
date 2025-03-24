@@ -844,7 +844,7 @@ describe('JobConfigService', () => {
           destinationPathId: ["destinationPath1"],
         },
       ],
-      sidMapping: "base64EncodedSidMapping", // Simulate a valid sidMapping
+      sidMapping: "base64EncodedSidMapping",
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
@@ -871,28 +871,22 @@ describe('JobConfigService', () => {
 
     const mockSavedIdentityMapping = { id: "identityMappingId1" };
 
-    // Mock the decodeBase64 method
     jest
       .spyOn(service, "decodeBase64")
       .mockResolvedValue(mockDecodedSidMapping);
 
-    // Mock the parseBlobData method
     jest.spyOn(service, "parseBlobData").mockResolvedValue(mockParsedMappings);
 
-    // Mock the jobConfigRepo.find method
     jest
       .spyOn(jobConfigRepo, "find")
       .mockResolvedValue(mockExistingJobConfigs as any);
 
-    // Mock the identityMappingRepo.save method
     jest
       .spyOn(identityMappingRepo, "save")
       .mockResolvedValue(mockSavedIdentityMapping as any);
 
-    // Call the method
     await service.createBulkMigrate(mockBulkMigrate as any);
 
-    // Assertions
     expect(service.decodeBase64).toHaveBeenCalledWith(
       mockBulkMigrate.sidMapping
     );
@@ -911,7 +905,7 @@ describe('JobConfigService', () => {
         destinationPathId: ['destinationPath1'],
       },
     ],
-    gidMapping: 'base64EncodedGidMapping', // Simulate a valid gidMapping
+    gidMapping: 'base64EncodedGidMapping',
     options: {
       excludeFilePatterns: '*.tmp',
       preserveAccessTime: true,
