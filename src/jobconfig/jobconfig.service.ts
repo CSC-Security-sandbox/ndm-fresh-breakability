@@ -61,6 +61,9 @@ import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
 import { RedisService } from "src/redis/redis.service";
+import { JobRunService } from "src/jobrun/jobrun.service";
+import { JobRunStats } from "src/jobrun/dto/jobstats";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -101,7 +104,9 @@ export class JobConfigService {
     @InjectRepository(IdentityMappingEntity)
     private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(IdentityConfigCrossMappingEntity)
-    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>
+    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo: Repository<OperationErrorEntity>,
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -1027,16 +1032,7 @@ export class JobConfigService {
 
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
-        const inventoryCounts = await this.inventoryRepo
-          .createQueryBuilder("inventory")
-          .select([
-            "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-            "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-            "SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END) AS totalSize"
-          ])
-          .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRun.id })
-          .getRawOne();
-        return {
+        const partialPayload={
           jobRunId: jobRun.id,
           isReportReady: jobRun.isReportReady,
           status: jobRun.subStatus || jobRun.status,
@@ -1046,16 +1042,34 @@ export class JobConfigService {
           timeElapsed: jobRun.endTime
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
+        }
+        const jobRunStats = jobRun.jobStats;
+        if(jobRun.status===JobRunStatus.Completed){
+          this.logger.log(`Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats`);
+          return {
+            ...partialPayload,
+            scannedFilesCount: BigInt(
+              jobRunStats.fileCount || "0"
+            )?.toString(),
+            scannedDirectoriesCount: BigInt(
+              jobRunStats.directories || "0"
+            )?.toString(),
+            totalScannedSize: jobRunStats.totalSize || "0",
+            errors: jobRunStats.errors,
+        }
+      }
+      this.logger.log(`Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`);
+      const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        return {
+          ...partialPayload,
           scannedFilesCount: BigInt(
-            inventoryCounts.filecount || "0"
+            inventoryCounts.fileCount || "0"
           )?.toString(),
           scannedDirectoriesCount: BigInt(
-            inventoryCounts.directorycount || "0"
+            inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(
-            Number(inventoryCounts.totalsize || "0")
-          ),
-          errors: [],
+          totalScannedSize: inventoryCounts.totalSize || "0",
+          errors: inventoryCounts.errors,
         };
       })
     );
@@ -1083,10 +1097,10 @@ export class JobConfigService {
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
       aggregateData: {
-        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => a + b,0),
-        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => a + b,0n)?.toString(),
-        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => a + b,0n)?.toString(),
-        totalScannedSize: runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => a + b,0),
+        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
+        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
+        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
+        totalScannedSize: this.covertBytes(runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)),
       },
       errors: [],
     };
@@ -1636,5 +1650,58 @@ export class JobConfigService {
           ],
         },
       ];
+    }
+    async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
+      const jobRun = await this.jobRunRepo.findOne({
+        where: { id: jobRunId },
+        relations: ["jobConfig"],
+      });
+      if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      const inventorySummary = await this.inventoryRepo
+        .createQueryBuilder("inventory")
+        .select([
+          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+          "SUM(inventory.fileSize) AS totalFileSize",
+        ])
+        .where("inventory.jobRunId = :jobRunId", { jobRunId })
+        .groupBy("inventory.isDirectory")
+        .getRawMany();
+      const jobRunStatus = {
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+      };
+     
+      console.log("inventorySummary", JSON.stringify(inventorySummary));
+      for (let i = 0; i < inventorySummary.length; i++) {
+        jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
+        jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
+        jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
+      }
+      const response = {
+        ...jobRunStatus,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+      return response;
+    }
+    async getErrorCounts(jobRunId: string){
+      const countQuery = this.operationErrorRepo
+      .createQueryBuilder("oe")
+      .innerJoin("oe.operation", "o")
+      .where("o.jobRunId = :jobRunId", { jobRunId })
+      .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+      .groupBy("oe.errorType");
+    let errorTypeCounts;
+    try {
+      errorTypeCounts = await countQuery.getRawMany();
+    } catch (error) {
+      this.logger.error(
+        "Error occurred while fetching error type counts:",
+        error
+      );
+      errorTypeCounts = [];
+    }
+    return errorTypeCounts;
     }
 }

@@ -39,4 +39,7 @@
       <sqlFile path="liquibase/20250324_01_alter_cross_mapping_table.sql"/>
    </changeSet>
 
+   <changeSet id="5021" author="anarvekar">
+      <sqlFile path="liquibase/20250324_03_alter_jobrun_table_add_column_jobstats.sql"/>
+   </changeSet>
 </databaseChangeLog>
