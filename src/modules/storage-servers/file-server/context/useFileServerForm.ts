@@ -86,7 +86,7 @@ export const useFileServerForm = () => {
       .unwrap()
       .then((resp) => {
         const allWorkersWithNameAndId: WorkerIdWithNameType = {};
-        resp?.data?.forEach((worker: GetAllWorkersApiType) => {
+        resp?.forEach((worker: GetAllWorkersApiType) => {
           allWorkersWithNameAndId[worker.workerId] = worker.workerName;
         });
         setWorkerIdWithName(allWorkersWithNameAndId);
@@ -179,6 +179,8 @@ export const useFileServerForm = () => {
             interval.current && clearInterval(interval.current);
             resolve({ errorMessageList });
             setDisableNextButton(false);
+          } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
+            // do something
           } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
             clearInterval(interval.current);
             setValidateConnectionLoader(false);

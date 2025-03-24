@@ -1,17 +1,8 @@
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { WORKERS_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { WorkersTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
-import { useEffect } from "react";
 
-const WorkersTable = ({
-  fileServerDetails,
-  allWorkersList,
-}: WorkersTablePropsType) => {
-  useEffect(() => {
-    if (fileServerDetails?.fileServers) {
-    }
-  }, [fileServerDetails]);
-
+const WorkersTable = ({ allWorkersList }: WorkersTablePropsType) => {
   const tableStateProps = {
     columns: WORKERS_PATHS_TABLE_COLS_DEF,
     rows: allWorkersList,
