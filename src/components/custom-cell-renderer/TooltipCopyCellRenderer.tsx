@@ -8,7 +8,9 @@ const TooltipCopyCellRenderer = (value: string) => {
   const [ textCopied, setTextCopied ] = useState<boolean>(false);
 
   useEffect(() => {
-    setTextCopied(false);
+    if(textCopied) {
+      setTextCopied(false);
+    }
   }, [textCopied]);
 
   const copyText = () => {
