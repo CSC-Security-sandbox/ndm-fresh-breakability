@@ -198,6 +198,19 @@ export class RedisConsumerService {
                 // Check if all consumers for this jobRunId are stopped
                 const isAllStopped = await this.areAllConsumersStopped(jobRunId);
                 if (isAllStopped) {
+
+                    const contextProvider = JobContextFactory.getProvider('redis', this.redisClient);
+                    const jobContext = await contextProvider.getJobContext(jobRunId);
+                    if (jobContext) {
+                        this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
+                        try {
+                            await jobContext.cleanup();
+                            this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
+                        } catch (error) {
+                            this.logger.error(`[${jobRunId}] Error during job cleanup: ${error.message}`);
+                        }
+                    }
+
                     this.logger.log(`[${jobRunId}] All consumers are now stopped.`);
                 }
             } else {
@@ -225,7 +238,7 @@ export class RedisConsumerService {
             const value = await this.getKey(key);
 
             // If any consumer is still active (not marked as 'false'), return false
-            if (value !== 'false') {
+            if (value !== 'false' && value !== null) {
                 return false;
             }
         }
@@ -458,11 +471,9 @@ export class RedisConsumerService {
                 case ConsumerType.tasks:
                 case ConsumerType.migrationTask:
                 case ConsumerType.updatedTask:
-                    // If a specific task ID is found, stop multiple consumers
                     if (data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                         await this.stopConsumer(jobRunId, consumerType);
-                        // await this.stopConsumer(jobRunId, ConsumerType.migrationTask);
-                        // await this.stopConsumer(jobRunId, ConsumerType.updatedTask);
+                        this.logger.log(`${consumerType} : killing `)
                     } else {
                         // Save task data to inventory service
                         await this.inventoryService.saveTasks(data);
