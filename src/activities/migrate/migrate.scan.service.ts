@@ -155,42 +155,6 @@ export class MigrationScanService {
         const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
         const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
      
-        // for (let i = 0;  i < task.commands.length; i++) {
-        //     if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-        //     const scanInput: ScanContentInput = {
-        //         excludePatterns: excludePatterns,
-        //         sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
-        //         sourcePrefix: baseSourcePrefixPath,
-        //         targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
-        //         jobRunId: task.jobRunId,
-        //         command: task.commands[i],
-        //         jobContext,
-        //         skipFile
-        //     };
-
-        //     const result = await this.scanContent(scanInput);
-        //     this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
-            
-        //     scanPath.files += result.files;
-        //     scanPath.folders += result.directory;
-
-        //     command.push(...result.command);
-        //     if(command.length >= this.maxMigrationCommand) {
-        //         const chunk = command.splice(0, this.maxMigrationCommand);
-        //         await this.publishMigrationTask({ jobContext, commands: chunk });
-        //     }
-
-        //     if (result.isGeneratedTask) 
-        //         scanPath.isTaskCreated = true;
-        //     if (result.error)  {
-        //         task.commands[i].retryCount++;
-        //         task.commands[i].status = CommandStatus.ERROR, scanPath.errors.add(result.error), scanPath.error++;
-        //     }
-        //     else  
-        //         scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
-        //     scanPath.retryCount = Math.max(task.commands[i].retryCount,  scanPath.retryCount)
-        // }      
-
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             const batch = task.commands.slice(i, i + this.maxConcurrency);
         
