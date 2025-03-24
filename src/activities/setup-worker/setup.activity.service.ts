@@ -154,7 +154,7 @@ export class SetupActivityService {
       const jobState: JobState = await this.redisService.getJobState(jobRunId);
       if(jobState.status !== JobStatus.Paused) {
         this.logger.log(`[${jobRunId}] - Cleaning up job context`);
-        await context.cleanup();
+        // await context.cleanup();
         this.logger.log(`[${jobRunId}] - Job context cleaned up`);
       }
       return {
