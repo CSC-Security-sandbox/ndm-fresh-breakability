@@ -80,7 +80,6 @@ export class RedisStreamCollection<T extends Serializable>
         [{ key: this.streamKey, id: lastReadId }],
         { COUNT: 1, BLOCK: 500 },
       );
-      console.info(`Results in read>>>>: ${JSON.stringify(results)}`);
       if (results) {
         for (const result of results) {
           for (const message of result.messages) {
