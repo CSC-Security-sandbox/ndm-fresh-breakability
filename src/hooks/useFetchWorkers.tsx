@@ -11,6 +11,8 @@ const useFetchWorkers = () => {
     data: allWorkers,
     error: getAllWorkersError,
     isLoading: isGetAllWorkersLoading,
+    isFetching: isFetchingAllWorkers,
+    refetch: refetchAllWorkers,
   } = useGetAllWorkersQuery(
     { projectId: selectedProjectId },
     { skip: !selectedProjectId }
@@ -28,6 +30,8 @@ const useFetchWorkers = () => {
     isLoading: jobRunId
       ? isGetFileServerWorkersLoading
       : isGetAllWorkersLoading,
+    isFetching: isFetchingAllWorkers,
+    refetch: refetchAllWorkers,
   };
 };
 

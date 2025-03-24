@@ -11,6 +11,7 @@ import {
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useEffect } from "react";
 import { TableWrapperWithoutFilterPropsType } from "./TableWrapperWithoutFilter.types";
+import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const TableWrapperWithoutFilter = ({
   tableState,
@@ -24,6 +25,8 @@ const TableWrapperWithoutFilter = ({
   isRowDisabled,
   handleSelection,
   showMenu = true,
+  isRefreshing,
+  refetchTableData,
 }: TableWrapperWithoutFilterPropsType) => {
   // TABLE ATTRIBUTES
   const {
@@ -84,6 +87,16 @@ const TableWrapperWithoutFilter = ({
                   onClick={() => alert("DOWNLOAD CALLED")}
                 >
                   <DownloadMonochromeIcon />
+                </Button>
+              )}
+              {isRefreshing !== undefined && (
+                <Button variant="icon"
+                  isSubmitting={isRefreshing} 
+                  onClick={!isRefreshing ? refetchTableData : undefined}
+                  className="w-[16px] h-[16px]"
+                  style={{ marginBottom: '5px' }}
+                >
+                  <RefreshIcon />
                 </Button>
               )}
             </TableWidgets>

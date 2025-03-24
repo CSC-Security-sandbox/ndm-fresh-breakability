@@ -40,7 +40,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const [getJobRunsApi] = useLazyGetJobRunsQuery();
+    const [getJobRunsApi, { isFetching }] = useLazyGetJobRunsQuery();
     const { fileServerDetails } = useFileServerDetails();
     const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
     const [allCutOverPaths, setAllCutOverPaths] = useState<
@@ -64,24 +64,26 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       })();
     }, [fileServerDetails]);
 
+    const fetchJobRuns = async () => {
+      try {
+        const _jobRunList: JobRunApiType[] = await getJobRunsApi({
+          projectId,
+        }).unwrap();
+        const _JobRunListWithId = _jobRunList
+          .map((jobRun) => ({
+            ...jobRun,
+            id: jobRun.jobRunId,
+          }))
+          .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING);
+        setJobRunList(_JobRunListWithId);
+      } catch (error) {
+        notify?.error("Something went wrong");
+        console.error("Failed to fetch job runs:", error);
+      }
+    }
+
     useEffect(() => {
-      (async () => {
-        try {
-          const _jobRunList: JobRunApiType[] = await getJobRunsApi({
-            projectId,
-          }).unwrap();
-          const _JobRunListWithId = _jobRunList
-            .map((jobRun) => ({
-              ...jobRun,
-              id: jobRun.jobRunId,
-            }))
-            .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING);
-          setJobRunList(_JobRunListWithId);
-        } catch (error) {
-          notify?.error("Something went wrong");
-          console.error("Failed to fetch job runs:", error);
-        }
-      })();
+      fetchJobRuns();
     }, [projectId, getJobRunsApi]);
 
     // SELECT PATH (STEP 1)
@@ -134,6 +136,8 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       setReviewStepSelectedIds,
       handleCreateJobCutOverApi,
       isSubmittingBulkCutover,
+      isFetching,
+      refetch: fetchJobRuns,
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };

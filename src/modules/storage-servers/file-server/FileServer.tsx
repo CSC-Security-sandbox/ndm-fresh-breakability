@@ -16,7 +16,7 @@ const FileServer = () => {
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
-  const { data: configByProject, isLoading } =
+  const { data: configByProject ,isLoading, isFetching, refetch } =
     useGetAllFileServersOfProjectQuery({
       projectId,
     });
@@ -63,6 +63,8 @@ const FileServer = () => {
       rowMenu={rowMenu}
       content={ADD_NEW_FILE_SERVER}
       label="File Sever List"
+      refetchTableData={refetch}
+      isRefreshing={isFetching}
     />
   );
 };

@@ -5,7 +5,7 @@ import { useContext } from "react";
 import WorkersWithErrorAccordion from "./components/WorkersWithErrorAccordion";
 
 const ValidateConnection = () => {
-  const { workersListTableStateProps, selectedWorkerIds } = useContext(
+  const { workersListTableStateProps, selectedWorkerIds, isFetching, refetch } = useContext(
     CommonFileServerContext
   );
 
@@ -21,6 +21,8 @@ const ValidateConnection = () => {
         isRowDisabled={checkDisabled}
         label="Workers"
         secondaryLabel={`| ${selectedWorkerIds.length} Associated`}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </Box>
   );
