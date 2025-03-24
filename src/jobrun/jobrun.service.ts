@@ -79,8 +79,8 @@ export class JobRunService {
       where: { id: jobRunId },
       relations: { jobConfig: true },
     });
+    if(!jobRun) throw new NotFoundException(`Job Run ${jobRunId} not found`);
     if (status === CutOverStatus.REJECTED) {
-      if (jobRun) {
         await this.jobConfigRepo.update(
           {
             sourcePathId: jobRun.jobConfig.sourcePathId,
@@ -101,9 +101,6 @@ export class JobRunService {
             futureScheduleAt: null,
           }
         );
-      }else{
-        this.logger.error(`[cutOverApproval] Job Run ${jobRunId} not found`);
-      }
     } else {
       await this.jobConfigRepo.update(
         {

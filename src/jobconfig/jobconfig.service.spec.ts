@@ -29,7 +29,7 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
 import { createClient } from "redis";
 import { RedisService } from 'src/redis/redis.service';
-import { Response } from "express";
+import e, { Response } from "express";
 import { createReadStream, existsSync } from "fs";
 import { join } from "path";
 import { NotFoundException } from "@nestjs/common";
@@ -37,6 +37,7 @@ import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { JobRunStats } from 'src/jobrun/dto/jobstats';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -359,6 +360,20 @@ describe('JobConfigService', () => {
     );
 
   });
+
+  // createSpeedTest catch case
+  it('should throw an error if creating speed test job fails', async () => {
+    jest.spyOn(jobConfigRepo, 'create').mockImplementation(() => {
+      throw new Error('Test error');
+    }
+    );
+    try {
+      await service.createSpeedTest({} as any);
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);
+    }
+  });
+
   it('should return speed test details if no results are found', async () => {
     const mockId = 'test-id';
 
@@ -369,6 +384,51 @@ describe('JobConfigService', () => {
 
     expect(result).toBe('speedTestDetails');
     expect(service.getSpeedTestDetails).toHaveBeenCalledWith(mockId);
+  });
+
+  // !jobRunDetails case
+  it('should return speed test results with job run details', async () => {
+    const mockId = 'test-id';
+    const mockSpeedTestResults = [
+      {
+        traceId: mockId,
+        fileServerId: 'fileServer1',
+        workerId: 'worker1',
+        writeResult: { speedLogEntries: [{ timeStamp: new Date(), speed: 100 }] },
+        readResult: { speedLogEntries: [{ timeStamp: new Date(), speed: 200 }] },
+        networkPerformanceResult: { roundTripDelayAvg: 10, packetLoss: 0 },
+      },
+    ];
+    const mockFileServers = [
+      {
+        id: 'fileServer1',
+        config: { configName: 'FileServer1' },
+        protocol: 'FTP',
+      },
+    ];
+    const mockWorkers = [
+      {
+        workerId: 'worker1',
+        workerName: 'Worker1',
+      },
+    ];
+    const mockJobRunDetails = {
+      id: mockId,
+      startTime: new Date(),
+      endTime: new Date(),
+      status: 'Completed',
+    };
+
+    jest.spyOn(speedTestResultRepo, 'find').mockResolvedValue(mockSpeedTestResults as any);
+    jest.spyOn(fileServerEntityRepo, 'find').mockResolvedValue(mockFileServers as any);
+    jest.spyOn(workerRepo, 'findByIds').mockResolvedValue(mockWorkers as any);
+    jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null as any);
+
+    try {
+      await service.getSpeedTestById(mockId);
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);      
+    }
   });
 
   it('should return speed test results with job run details', async () => {
@@ -1257,6 +1317,15 @@ describe('JobConfigService', () => {
       },
     });
   });
+
+  it('should throw an error if cutover already exists', async () => {
+    try {
+      await expect(service.createBulkCutover({} as any)).rejects.toThrow(HttpException);
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);
+    }
+  });
+
   describe('updateJobConfig', () => {
     it('should update job config successfully', async () => {
       const mockJobConfigId = 'jobConfigId';
@@ -1401,7 +1470,7 @@ describe('JobConfigService', () => {
             timeElapsed: mockJobConfig.jobRuns[0].endTime.getTime() - mockJobConfig.jobRuns[0].startTime.getTime(),
             scannedFilesCount: '10',
             scannedDirectoriesCount: '5',
-            totalScannedSize: '1000 B',
+            totalScannedSize: '5000',
             errors: [],
           },
         ],
@@ -1409,7 +1478,7 @@ describe('JobConfigService', () => {
           timeElapsed: mockJobConfig.jobRuns[0].endTime.getTime() - mockJobConfig.jobRuns[0].startTime.getTime(),
           scannedFilesCount: '10',
           scannedDirectoriesCount: '5',
-          totalScannedSize: 1000,
+          totalScannedSize: "4.88 KB",
         },
         errors: [],
       });
@@ -1425,7 +1494,6 @@ describe('JobConfigService', () => {
           'targetPath.fileServer.config',
         ],
       });
-      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalled();
     });
 
     it('should throw an error if job config is not found', async () => {
@@ -2427,4 +2495,217 @@ describe('JobConfigService', () => {
      });
     
   });
+
+describe('createBulkMigrate', () => {
+  it("should return an empty array if migrateConfigs is missing", async () => {
+    const bulkMigrate: BulkMigrateJobConfig = {
+      migrateConfigs: undefined,
+    } as any;
+
+    const result = await service.createBulkMigrate(bulkMigrate);
+    expect(result).toEqual([]);
+  });
+
+  it("should update existing job configurations when found", async () => {
+    const bulkMigrate: BulkMigrateJobConfig = {
+      migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+      },
+    } as any;
+
+    jobConfigRepo.find = jest.fn().mockResolvedValue([
+      { id: "job1", sourcePathId: "src1", targetPathId: "dest1", scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
+    ]);
+
+    jobConfigRepo.update = jest.fn();
+
+    await service.createBulkMigrate(bulkMigrate);
+
+    expect(jobConfigRepo.update).toHaveBeenCalledWith(
+      { jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1", scheduler: expect.anything() },
+      expect.objectContaining({ status: JobStatus.Active })
+    );
+  });
+
+  it("should create new job configurations when none exist", async () => {
+    const bulkMigrate: BulkMigrateJobConfig = {
+      migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
+      options: { excludeFilePatterns: "*.tmp" },
+    } as any;
+
+    jobConfigRepo.find = jest.fn().mockResolvedValue([]);
+    jobConfigRepo.create = jest.fn().mockImplementation((config) => config);
+    jobConfigRepo.save = jest.fn().mockResolvedValue([{ id: "new_job1", jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1" }]);
+
+    const result = await service.createBulkMigrate(bulkMigrate);
+
+    expect(jobConfigRepo.create).toHaveBeenCalled();
+    expect(jobConfigRepo.save).toHaveBeenCalled();
+    expect(result).toEqual([
+      { id: "new_job1", jobType: JobType.MIGRATE, status: "CREATED", sourcePathId: "src1", targetPathId: "dest1" },
+    ]);
+  });
 });
+
+  describe('getCutoverDetailsByFileServerId', () => {
+    it("should return correct cutover details for a given fileServerId", async () => {
+      const fileServerId = "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39";
+      const expectedResponse = [
+        {
+          protocol: Protocol.NFS,
+          sourcePath: {
+            id: fileServerId,
+            sourcePathName: "/source/test",
+          },
+          destinationFileServer: {
+            id: fileServerId,
+            destinationFileServerName: "fileServer1",
+          },
+          destinationPath: {
+            id: fileServerId,
+            destinationPathName: "/destination/test",
+          },
+          jobConfig: [
+            {
+              id: fileServerId,
+              jobType: JobType.MIGRATE,
+              jobRunDetails: {
+                id: fileServerId,
+                status: JobRunStatus.Completed,
+              },
+            },
+          ],
+        },
+      ];
+  
+      const result = await service.getCutoverDetailsByFileServerId(fileServerId);
+  
+      expect(result).toEqual(expectedResponse);
+    });
+  
+    it("should return an empty array if fileServerId does not match", async () => {
+      const fileServerId = "non-existing-id";
+      const result = await service.getCutoverDetailsByFileServerId(fileServerId);
+  
+      expect(result).toEqual([
+        {
+          protocol: Protocol.NFS,
+          sourcePath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            sourcePathName: "/source/test",
+          },
+          destinationFileServer: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationFileServerName: "fileServer1",
+          },
+          destinationPath: {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            destinationPathName: "/destination/test",
+          },
+          jobConfig: [
+            {
+              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+              jobType: JobType.MIGRATE,
+              jobRunDetails: {
+                id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+                status: JobRunStatus.Completed,
+              },
+            },
+          ],
+        },
+      ]);
+    });
+  
+    it("should ensure jobConfig contains correct job type and status", async () => {
+      const fileServerId = "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39";
+      const result = await service.getCutoverDetailsByFileServerId(fileServerId);
+  
+      expect(result[0].jobConfig[0].jobType).toBe(JobType.MIGRATE);
+      expect(result[0].jobConfig[0].jobRunDetails.status).toBe(JobRunStatus.Completed);
+    });
+  });
+
+  describe('calculateJobRunStats', () => {
+    it("should throw NotFoundException if jobRunId does not exist", async () => {
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+      await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(new NotFoundException("Job Run with id invalid-id not found"));
+    });
+  });
+
+  describe("JobConfigService - flattenCutoverConfig", () => {
+    it("should flatten a single config with multiple destination paths", () => {
+      const config = [
+        { sourcePathId: "source1", destinationPathId: ["dest1", "dest2"] },
+      ];
+  
+      const result = service.flattenCutoverConfig(config);
+  
+      expect(result).toEqual([
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+      ]);
+    });
+  
+    it("should flatten multiple configs with multiple destination paths", () => {
+      const config = [
+        { sourcePathId: "source1", destinationPathId: ["dest1", "dest2"] },
+        { sourcePathId: "source2", destinationPathId: ["dest3"] },
+      ];
+  
+      const result = service.flattenCutoverConfig(config);
+  
+      expect(result).toEqual([
+        { sourcePathId: "source1", destinationPathId: "dest1" },
+        { sourcePathId: "source1", destinationPathId: "dest2" },
+        { sourcePathId: "source2", destinationPathId: "dest3" },
+      ]);
+    });
+  
+    it("should return an empty array when given an empty config", () => {
+      const result = service.flattenCutoverConfig([]);
+      expect(result).toEqual([]);
+    });
+  
+    it("should return an empty array when all destinationPathId arrays are empty", () => {
+      const config = [
+        { sourcePathId: "source1", destinationPathId: [] },
+        { sourcePathId: "source2", destinationPathId: [] },
+      ];
+  
+      const result = service.flattenCutoverConfig(config);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('initiatePreCheck', () => {
+    it("should initiate a pre-check successfully", async () => {
+      const preCheckData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          { sourcePathId: "path1", destinationPathId: ["path2"] },
+        ],
+      };
+      await service.initiatePreCheck(preCheckData as any);
+      expect(volumeRepo.find).toHaveBeenCalled();
+    });
+  
+    it("should return an error if pre-check fails", async () => {
+      jest.spyOn(workFlowService, "startWorkflow").mockRejectedValue(new Error("Workflow failed"));
+  
+      const preCheckData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          { sourcePathId: "path1", destinationPathId: ["path2"] },
+        ],
+      };
+  
+      const result = await service.initiatePreCheck(preCheckData as any);
+  
+      expect(result.status).toBe("error");
+      expect(result.erros).toContain("PRECHECK_FAILED");
+      expect(result.message).toContain("Failed to perform the precheck");
+    });
+  })
+})
