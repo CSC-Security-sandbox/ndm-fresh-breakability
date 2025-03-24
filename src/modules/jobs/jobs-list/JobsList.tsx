@@ -20,13 +20,13 @@ import { getJobListFlaternList } from "./listing.utils";
 
 const JobsList = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const canManageJob: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageJob
   );
   const source = searchParams.get("source");
   const jobType = searchParams.get("type");
-  let preSelectedFilter: preSelectedFilterType = {};
+  const preSelectedFilter: preSelectedFilterType = {};
   if (source) preSelectedFilter.sourceServerName = source;
   if (jobType) preSelectedFilter.jobType = jobType;
 
@@ -80,6 +80,10 @@ const JobsList = () => {
     defaultColumnState,
     defaultSortState: { sortOrder: "desc", column: "createdAt" },
   };
+
+  if (isError) {
+    notify.error("Failed to fetch job list.");
+  }
 
   return (
     <TableWrapper

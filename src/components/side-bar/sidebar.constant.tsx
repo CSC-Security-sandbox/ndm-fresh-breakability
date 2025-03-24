@@ -1,8 +1,4 @@
-import {
-  AppIcon,
-  WorkspaceIcon,
-  CommunitiesIcon,
-} from "@netapp/bxp-style/react-icons/General";
+import { AppIcon, WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
 import { MoveIcon } from "@netapp/bxp-style/react-icons/Action";
 import {
   GcpStorageIcon,

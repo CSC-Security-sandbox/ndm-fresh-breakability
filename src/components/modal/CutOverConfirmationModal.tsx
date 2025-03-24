@@ -5,7 +5,6 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Text,
   useForm,
 } from "@netapp/bxp-design-system-react";
 import {

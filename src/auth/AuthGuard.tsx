@@ -32,8 +32,12 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const client_id = window?.env?.VITE_KEYCLOAK_CLIENT_ID || import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-    const client_secret = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const client_id =
+      window?.env?.VITE_KEYCLOAK_CLIENT_ID ||
+      import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+    const client_secret =
+      window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
+      import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
     const body = {
       refresh_token,
       client_id,
@@ -72,7 +76,9 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     }
 
     return () => {
-      refreshTimeoutRef.current && clearTimeout(refreshTimeoutRef.current);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
     };
   }, [auth.isAuthenticated]);
 
@@ -83,32 +89,35 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   }, [auth]);
 
   const getAccounts = async () => {
-    if (localStorage.getItem("account_id") === null || localStorage.getItem("account_id") === undefined) {
+    if (
+      localStorage.getItem("account_id") === null ||
+      localStorage.getItem("account_id") === undefined
+    ) {
       await getAllAccounts("")
-      .unwrap()
-      .then((response) => {
-        localStorage.setItem("account_id", response?.[0]?.id);
-      });
+        .unwrap()
+        .then((response) => {
+          localStorage.setItem("account_id", response?.[0]?.id);
+        });
     }
-  }
+  };
 
   const getProjects = () => {
     getAllProjects(localStorage.getItem("account_id"))
-    .unwrap()
-    .then((resp) => {
-      dispatch(setAllProjectList(resp));
-      let selected_project_id =
-        localStorage.getItem("selected_project_id") || undefined;
-      if (selected_project_id) {
-        const projectIdFound = resp.find(
-          (row: ProjectApiType) => row.id === selected_project_id
-        );
-        if (!projectIdFound) selected_project_id = undefined;
-      }
-      dispatch(setProject(selected_project_id || resp?.[0]?.id));
-      setIsPageReady(true);
-    });
-  }
+      .unwrap()
+      .then((resp) => {
+        dispatch(setAllProjectList(resp));
+        let selected_project_id =
+          localStorage.getItem("selected_project_id") || undefined;
+        if (selected_project_id) {
+          const projectIdFound = resp.find(
+            (row: ProjectApiType) => row.id === selected_project_id
+          );
+          if (!projectIdFound) selected_project_id = undefined;
+        }
+        dispatch(setProject(selected_project_id || resp?.[0]?.id));
+        setIsPageReady(true);
+      });
+  };
 
   useEffect(() => {
     if (auth.isAuthenticated) {

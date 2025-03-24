@@ -35,12 +35,14 @@ const Filters = ({
   const getLabelValueObject = (value?: string, formatter?: Function) =>
     value ? [{ label: formatter ? formatter(value) : value, value }] : [];
 
-
   const form = useForm(
     columnsToFilter?.reduce(
-      (filterForm, { accessor: fileName, label: label, formatter: formatter }) => ({
+      (filterForm, { accessor: fileName, formatter: formatter }) => ({
         ...filterForm,
-        [fileName]: getLabelValueObject(preSelectedFilter?.[fileName], formatter),
+        [fileName]: getLabelValueObject(
+          preSelectedFilter?.[fileName],
+          formatter
+        ),
       }),
       {}
     )
@@ -72,7 +74,7 @@ const Filters = ({
       columnsToFilter?.reduce(
         (filterForm, { accessor: fileName }) => ({
           ...filterForm,
-          [fileName]: getLabelValueObject(preSelectedFilter?.[fileName]),
+          [fileName]: getLabelValueObject(),
         }),
         {}
       )

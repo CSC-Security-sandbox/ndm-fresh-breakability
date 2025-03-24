@@ -6,7 +6,6 @@ interface CreateProjectButtonPropsType {
 }
 
 const CreateProjectButton = ({
-  showCreateProject,
   setShowCreateProject,
 }: CreateProjectButtonPropsType) => {
   return (

@@ -31,6 +31,7 @@ import {
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import {
   BulkMigrateContextType,
+  bulkMigrateCreateApiType,
   DestinationPathsOptionsType,
   FormFileUploadType,
   MappingStepFormikFormType,
@@ -236,8 +237,17 @@ export function withBulkMigrateCreateForm(
           ) {
             return `${optionForm.formState.incremental_sync_schedule_daily.minute()} ${optionForm.formState.incremental_sync_schedule_daily.hour()} * * *`;
           } else {
-            //TODO: need to handle case for weekly
-            return "* * * * *";
+            if (
+              optionForm.formState.incremental_sync_schedule_weekly ===
+              INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY
+            ) {
+              return `0 0 * * ${
+                +optionForm.formState.incremental_sync_schedule_weekly_day
+                  .value - 1
+              }`;
+            } else {
+              return `0 0 * * ${optionForm.formState.incremental_sync_schedule_weekly_weekday.value}`;
+            }
           }
         }
         case INCREMENTAL_SYNC_SCHEDULE_ENUM.OFF:
@@ -289,6 +299,11 @@ export function withBulkMigrateCreateForm(
               if (precheckState.errors.length === 0) {
                 handleSubmit(onSuccessfulSubmit);
               }
+            } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
+              const error = new Error(
+                `Seems like pre-check got terminated, please try again.`
+              );
+              showErrorOnFailure(error);
             }
 
             if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
@@ -310,7 +325,7 @@ export function withBulkMigrateCreateForm(
       const uid_mapping: FormFileUploadType | undefined =
         optionForm.formState.upload_uid_mapping;
 
-      const body = {
+      const body: bulkMigrateCreateApiType = {
         firstRunAt:
           mappingStepForm.values.scheduleTime === "start_now"
             ? new Date().toISOString()
@@ -322,20 +337,22 @@ export function withBulkMigrateCreateForm(
         ),
         sid_mapping:
           protocolForm.formState.protocol.value === ProtocolType.SMB &&
-          sid_mapping &&
-          (await convertFileToBase64(
-            new Blob([sid_mapping?.contents], {
-              type: "text/csv;charset=utf-8",
-            })
-          )),
-        gidMapping:
+          sid_mapping
+            ? await convertFileToBase64(
+                new Blob([sid_mapping?.contents], {
+                  type: "text/csv;charset=utf-8",
+                })
+              )
+            : undefined,
+        gid_mapping:
           protocolForm.formState.protocol.value === ProtocolType.NFS &&
-          uid_mapping &&
-          (await convertFileToBase64(
-            new Blob([uid_mapping.contents], {
-              type: "text/csv;charset=utf-8",
-            })
-          )),
+          uid_mapping
+            ? await convertFileToBase64(
+                new Blob([uid_mapping.contents], {
+                  type: "text/csv;charset=utf-8",
+                })
+              )
+            : undefined,
         options: {
           excludeOlderThan:
             optionForm.formState?.migrate_file_option ===

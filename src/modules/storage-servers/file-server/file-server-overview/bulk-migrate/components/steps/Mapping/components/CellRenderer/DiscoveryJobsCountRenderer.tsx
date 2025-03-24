@@ -1,7 +1,5 @@
-import React from "react";
 import {
   JOBS_TYPE,
-  VolumeType,
   BlueXpTableRowType,
   JOB_STATUS_TYPE_ENUM,
 } from "@/types/app.type";

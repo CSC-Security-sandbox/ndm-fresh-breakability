@@ -66,7 +66,7 @@ const TaskFilters = ({
       columnsToFilter?.reduce(
         (filterForm, { accessor: fileName }) => ({
           ...filterForm,
-          [fileName]: getLabelValueObject(undefined),
+          [fileName]: getLabelValueObject(),
         }),
         {}
       )

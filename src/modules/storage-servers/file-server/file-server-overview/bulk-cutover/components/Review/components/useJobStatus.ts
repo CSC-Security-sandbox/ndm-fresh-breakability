@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, ReactNode } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useUpdateJobRunStatusMutation } from "@api/jobsApi";
 import { JOB_ACTION_STATUS_ENUM } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";

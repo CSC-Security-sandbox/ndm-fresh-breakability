@@ -13,7 +13,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import {
   DOW_OPTIONS,
-  WEEK_OPTIONS,
+  // WEEK_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
@@ -87,7 +87,9 @@ const ScheduleOptions = () => {
                   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.WEEKDAY
                 }
               />
-              <Box>of every</Box>
+              <Box>of every Week</Box>
+              {/* TODO: Following part is not supported as cron expression, check for backend solution */}
+              {/* <Box>of every</Box>
               <FormFieldSelect
                 name="incremental_sync_schedule_weekly_day_week"
                 form={optionForm}
@@ -99,7 +101,7 @@ const ScheduleOptions = () => {
                   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.WEEKDAY
                 }
               />
-              <Box>week(s)</Box>
+              <Box>week(s)</Box> */}
             </Box>
           </RadioButton>
           <RadioButton
@@ -119,7 +121,9 @@ const ScheduleOptions = () => {
                   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY
                 }
               />
-              <Text>of every</Text>
+              <Box>of every Week</Box>
+              {/* TODO: Following part is not supported as cron expression, check for backend solution */}
+              {/* <Text>of every</Text>
               <FormFieldSelect
                 name="incremental_sync_schedule_weekly_weekday_week"
                 form={optionForm}
@@ -131,7 +135,7 @@ const ScheduleOptions = () => {
                   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY
                 }
               />
-              <Text>week(s)</Text>
+              <Text>week(s)</Text> */}
             </Box>
           </RadioButton>
         </Box>

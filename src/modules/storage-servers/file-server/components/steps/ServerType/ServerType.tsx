@@ -1,5 +1,4 @@
 import { Box } from "@components/container/index";
-import RequiredLabel from "@components/layout/RequiredLabel";
 import {
   FormFieldInputNew,
   FormFieldSelect,

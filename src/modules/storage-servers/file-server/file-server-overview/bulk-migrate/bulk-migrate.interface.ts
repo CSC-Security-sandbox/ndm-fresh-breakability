@@ -163,3 +163,17 @@ export interface createPathMappingApiPayload {
 export interface UploadMappingTableDetailsType {
   toggleRowSelection: Function;
 }
+
+export interface bulkMigrateCreateApiType {
+  firstRunAt: string | Dayjs;
+  futureRunSchedule: string;
+  migrateConfigs: createPathMappingApiPayload[];
+  options: {
+    excludeOlderThan?: Dayjs;
+    excludeFilePatterns: string;
+    preserveAccessTime: boolean;
+    skipFile: string;
+  };
+  sid_mapping?: any;
+  gid_mapping?: any;
+}

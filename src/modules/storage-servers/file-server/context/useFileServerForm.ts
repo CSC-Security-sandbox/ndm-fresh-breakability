@@ -149,6 +149,16 @@ export const useFileServerForm = () => {
     pageSize: 10,
   };
 
+  const showErrorOnFailure = (error: Error) => {
+    setValidateConnectionLoader(false);
+    interval.current && clearInterval(interval.current);
+
+    notify.error(
+      `Failed to perform validaton, reason - ${error?.message || "unknown"}`
+    );
+    console.error({ level: "File Server - Validate connection.", error });
+  };
+
   const handleValidateConnection = async () => {
     let retryCount = 0;
     if (selectedWorkerIds.length === 0) return [];
@@ -180,10 +190,11 @@ export const useFileServerForm = () => {
             resolve({ errorMessageList });
             setDisableNextButton(false);
           } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
-            // do something
+            const error = new Error(
+              "Request got terminated, please try again."
+            );
+            showErrorOnFailure(error);
           } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
-            clearInterval(interval.current);
-            setValidateConnectionLoader(false);
             let message = "Worker(s) are not responding.";
             try {
               const incompleteWorkers = data?.status?.data.filter(
@@ -203,14 +214,14 @@ export const useFileServerForm = () => {
                 error,
               });
             }
-            notify.error(message);
+
+            const error = new Error(message);
+            showErrorOnFailure(error);
           }
         }, 2000);
       });
     } catch (error: any) {
-      setValidateConnectionLoader(false);
-      notify.error("Something went wrong...");
-      console.error({ level: "File Server validation", error });
+      showErrorOnFailure(error);
     }
   };
 
