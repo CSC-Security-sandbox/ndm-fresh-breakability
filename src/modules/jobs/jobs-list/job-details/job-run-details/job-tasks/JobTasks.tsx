@@ -24,6 +24,9 @@ import { TASKS_COLUMN_DEFS } from "./tasks.constants";
 import { BreadcrumbsArrowIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const JobTasks = () => {
+  const [searchParams] = useSearchParams();
+  const status = searchParams.get("status");
+
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
   const navigate = useNavigate();
   const [tableRows, setTableRows] = useState([]);
@@ -32,9 +35,11 @@ const JobTasks = () => {
   const pageSize = 10; // rows per page
   const pageCount = Math.ceil(totalCount / pageSize);
   const rowsCountArray = Array(totalCount);
-  const [getJobTasks, { data: jobTaskData, isLoading }] =
+  const [getJobTasks, { data: jobTaskData, isFetching: isLoading }] =
     useLazyGetJobTasksQuery();
-  const [currentFilters, setCurrentFilters] = useState<any>({});
+  const [currentFilters, setCurrentFilters] = useState<any>(
+    status ? { status: [{ label: toTitleCase(status), value: status }] } : {}
+  );
   const { selectedProjectId } = useSelectedProjectId();
   const { data: workers } = useGetAllWorkersQuery<{
     data: WorkerApiType[];
@@ -42,13 +47,8 @@ const JobTasks = () => {
     projectId: selectedProjectId,
   });
 
-  const [searchParams] = useSearchParams();
-
-  const status = searchParams.get("status");
-  const taskType = searchParams.get("type");
   let preSelectedFilter: any = {};
   if (status) preSelectedFilter.status = status;
-  if (taskType) preSelectedFilter.taskType = taskType;
 
   const { rowState, pagination, toggleSort, sortState, gotoPage } = useTable({
     columns: TASKS_COLUMN_DEFS,
@@ -62,7 +62,7 @@ const JobTasks = () => {
 
   useEffect(() => {
     fetchRecords();
-  }, [pagination.pageIndex, sortState, currentFilters, taskType]);
+  }, [pagination.pageIndex, sortState, currentFilters]);
 
   const fetchRecords = async () => {
     let payload: any = {

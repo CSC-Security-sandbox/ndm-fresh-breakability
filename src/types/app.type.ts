@@ -660,6 +660,7 @@ export type RemoveCellRendererPropType = {
 export enum ValidateConnectionStatus {
   RUNNING = "RUNNING",
   COMPLETED = "COMPLETED",
+  TERMINATED = "TERMINATED",
 }
 
 export enum WorkerConnectionStatus {

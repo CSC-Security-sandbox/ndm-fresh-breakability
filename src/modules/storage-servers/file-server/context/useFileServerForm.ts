@@ -83,20 +83,27 @@ export const useFileServerForm = () => {
 
   const fetchWorkers = async () => {
     await getAllWorkers({ projectId: selectedProjectId })
-    .unwrap()
-    .then((resp) => {
-      const allWorkersWithNameAndId: WorkerIdWithNameType = {};
-      resp?.data?.forEach((worker: GetAllWorkersApiType) => {
-        allWorkersWithNameAndId[worker.workerId] = worker.workerName;
+      .unwrap()
+      .then((resp) => {
+        const allWorkersWithNameAndId: WorkerIdWithNameType = {};
+        resp?.data?.forEach((worker: GetAllWorkersApiType) => {
+          allWorkersWithNameAndId[worker.workerId] = worker.workerName;
+        });
+        setWorkerIdWithName(allWorkersWithNameAndId);
+        setAllWorkersList(resp);
+      })
+      .catch((error: any) => {
+        console.error({
+          level:
+            "Unable to fetch workers for the selected project in file server form",
+          error,
+        });
       });
-      setWorkerIdWithName(allWorkersWithNameAndId);
-      setAllWorkersList(resp?.data);
-    });
-  }
+  };
 
   // API TO GET ALL WORKERS
   useEffect(() => {
-    (async () => await fetchWorkers());
+    fetchWorkers();
     return () => {
       interval.current && clearInterval(interval.current);
     };
