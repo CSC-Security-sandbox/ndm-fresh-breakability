@@ -32,22 +32,16 @@ export class RedisStreamCollection<T extends Serializable>
       await this.cleanup();
     }
 
-    if (
-      await this.redisClient.xGroupCreate(this.streamKey, this.jobRunId, '0', {
-        MKSTREAM: true,
-      }).catch(err => {
-        if (err.message.includes('BUSYGROUP')) {
-          console.warn(`Consumer group ${this.jobRunId} already exists`);
-        } else {
-          throw err;
-        }
-      })
-    ) {
-      console.info(
-        `Consumer group ${this.jobRunId} created for stream : ${this.streamKey}`,
-      );
-    }
-
+    await this.redisClient.xGroupCreate(this.streamKey, this.jobRunId, '0', {
+      MKSTREAM: true,
+    }).catch(err => {
+      if (err.message.includes('BUSYGROUP')) {
+        console.warn(`Consumer group ${this.jobRunId} already exists`);
+      } else {
+        throw err;
+      }
+    })
+   
     this.numMessages = 0;
     this.lastId = '0-0';
   }
@@ -77,11 +71,8 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async *read(readerName: string): AsyncGenerator<T> {
-    console.info(
-      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName} ${this.lastId}`,
-    );
     const readerLastReadId = await this.redisClient.get(`${this.jobRunId}-${readerName}`);
-    console.info(`Reader last read id: ${readerLastReadId}`);
+    // console.info(`Reader last read id: ${readerLastReadId}`);
     let lastReadId = readerLastReadId || '0';
     //let numMessagesRead = 0;
     while (true) {
@@ -95,7 +86,7 @@ export class RedisStreamCollection<T extends Serializable>
           for (const message of result.messages) {
             lastReadId = message.id;
             this.lastId = lastReadId;
-            console.info(`>> Reading message: ${lastReadId}`);
+            // console.info(`>> Reading message: ${lastReadId}`);
             //numMessagesRead++;
             yield decode(Buffer.from(message.message.obj, 'base64'));
           }
@@ -108,9 +99,9 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async *groupRead(readerName: string, batchSize: number): AsyncGenerator<T> {
-    console.info(
-      `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}, Batch Size: ${batchSize}`,
-    );
+    // console.info(
+    //   `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}, Batch Size: ${batchSize}`,
+    // );
   
     let lastReadId = '0';
     let messagesProcessed = 0;
@@ -128,7 +119,7 @@ export class RedisStreamCollection<T extends Serializable>
           for (const message of result.messages) {
             lastReadId = message.id;
             this.lastId = lastReadId;
-            console.info(`>> Reading message: ${lastReadId}`);
+            // console.info(`>> Reading message: ${lastReadId}`);
             yield decode(Buffer.from(message.message.obj, 'base64'));
             messagesProcessed++;
           }
