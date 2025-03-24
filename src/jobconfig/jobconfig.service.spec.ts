@@ -29,6 +29,8 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
 import { createClient } from "redis";
 import { RedisService } from 'src/redis/redis.service';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { JobRunStats } from 'src/jobrun/dto/jobstats';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -51,6 +53,7 @@ describe('JobConfigService', () => {
   let projectRepo: Repository<ProjectEntity>;
   let identityMappingRepo: any;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
+  let operationErrorRepo: Repository<OperationErrorEntity>;
   let redisService:RedisService
  
   
@@ -258,6 +261,17 @@ describe('JobConfigService', () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(OperationErrorEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        }
         
       ],
     }).compile();
@@ -279,6 +293,7 @@ describe('JobConfigService', () => {
     projectRepo = module.get<Repository<ProjectEntity>>(getRepositoryToken(ProjectEntity));
     identityMappingRepo = module.get<Repository<IdentityMappingEntity>>(getRepositoryToken(IdentityMappingEntity));
     identityCrossMappingRepo = module.get<Repository<IdentityConfigCrossMappingEntity>>(getRepositoryToken(IdentityConfigCrossMappingEntity));
+    operationErrorRepo = module.get<Repository<OperationErrorEntity>>(getRepositoryToken(OperationErrorEntity));
   });
 
   it('should create a speed test job successfully', async () => {
@@ -1121,6 +1136,12 @@ describe('JobConfigService', () => {
         directorycount: '5',
         totalsize: '1000',
       };
+      const mockInventoryStats: JobRunStats = {
+        fileCount: "10",
+        directories: "5",
+        totalSize: "5000",
+        errors: [],
+      };
 
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
       jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
@@ -1128,6 +1149,7 @@ describe('JobConfigService', () => {
         where: jest.fn().mockReturnThis(),
         getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
       } as any);
+      jest.spyOn(service,'calculateJobRunStats').mockReturnValue(Promise.resolve(mockInventoryStats))
 
       const result = await service.getJobConfigById(mockJobConfigId);
 
