@@ -460,9 +460,9 @@ export class RedisConsumerService {
                 case ConsumerType.updatedTask:
                     // If a specific task ID is found, stop multiple consumers
                     if (data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
-                        await this.stopConsumer(jobRunId, ConsumerType.tasks);
-                        await this.stopConsumer(jobRunId, ConsumerType.migrationTask);
-                        await this.stopConsumer(jobRunId, ConsumerType.updatedTask);
+                        await this.stopConsumer(jobRunId, consumerType);
+                        // await this.stopConsumer(jobRunId, ConsumerType.migrationTask);
+                        // await this.stopConsumer(jobRunId, ConsumerType.updatedTask);
                     } else {
                         // Save task data to inventory service
                         await this.inventoryService.saveTasks(data);
