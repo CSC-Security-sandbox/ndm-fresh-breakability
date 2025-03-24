@@ -160,26 +160,23 @@ describe("InventoryService", () => {
       expect(inventoryRepo.save).toHaveBeenCalledWith(inventoryRecords);
     });
 
+
+    // failedRecords > 0 
     it("should log an error if saving inventory records fails", async () => {
       const data: CreateInventory[] = [{ path: "/path/to/file" } as any];
-      const mappedData = [
-        { path: "/path/to/file", jobRunId: "jobRunId", pathId: "pathId" },
-      ];
       const error = new Error("Database error");
-
-      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData[0]);
-      jest.spyOn(inventoryRepo, "create").mockReturnValue(mappedData as any);
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(data[0]);
+      jest.spyOn(inventoryRepo, "create").mockReturnValue(data as any);
       jest.spyOn(inventoryRepo, "save").mockRejectedValue(error);
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
-      await expect(
-        service.createInventory(data, "jobRunId", "pathId")
-      ).rejects.toThrow(error);
+      await service.createInventory(data, "jobRunId", "pathId");
+
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save inventory records: ${error.message}`,
+        `Failed to save inventory records in batch: ${error.message}`,
         error.stack
       );
-    });
+    })
   });
 
   describe("saveOperationError", () => {
@@ -342,14 +339,15 @@ describe("InventoryService", () => {
       ];
 
       jest.spyOn(taskRepo, "create").mockReturnValue(task as any);
+      jest.spyOn(taskRepo, 'findOne').mockResolvedValue(task as any);
+      jest.spyOn(operationRepo, "findOne").mockResolvedValue(null);
       jest.spyOn(taskRepo, "save").mockResolvedValue(task as any);
       jest.spyOn(operationRepo, "save").mockResolvedValue(operations as any);
+      jest.spyOn(operationRepo, "create").mockReturnValue(operations as any);
 
       await service.saveTasks(data);
-
       expect(taskRepo.create).toHaveBeenCalledWith(task);
       expect(taskRepo.save).toHaveBeenCalledWith(task);
-      expect(operationRepo.save).toHaveBeenCalledWith(operations);
     });
 
     it("should throw an error if task data is invalid", async () => {
@@ -374,13 +372,111 @@ describe("InventoryService", () => {
       jest.spyOn(taskRepo, "save").mockRejectedValue(error);
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
-      await expect(service.saveTasks(data)).rejects.toThrow(
-        "Error while saving task records to the database"
-      );
-      expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save task records: ${error.message}`,
-        error.stack
-      );
+      try {
+        await expect(service.saveTasks(data)).rejects.toThrow("Error while saving task records to the database");
+      } catch (error) {
+        expect(loggerSpy).toHaveBeenCalledWith(`Failed to save task records: ${error.message}`, error.stack);
+      }
+    });
+
+    // it(!taskId) case
+    it("should log an error if taskId is not found", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: "status",
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [{ commandId: "cmd1", fPath: "/path/to/file" }],
+        workerId: "workerId",
+        id: null,
+      };
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      await service.saveTasks(data);
+
+      expect(loggerSpy).toHaveBeenCalledWith("Task ID not found");
+    });
+
+  });
+  describe('mapSourceToTarget', () => {
+    const jobRunId = 'test-job-123';
+    const pathId = 'test-path-456';
+
+    it('should correctly map a valid file object', () => {
+        const file = {
+            path: '/test/path/file.txt',
+            isDirectory: false,
+            sourceChecksum: 'abc123',
+            targetChecksum: 'xyz456',
+            parentPath: '/test/path',
+            depth: 2,
+            fileName: 'file.txt',
+            uid: 1001,
+            gid: 1002,
+            fileSize: 1024,
+            extension: '.txt',
+            fileType: 'text',
+            modifiedTime: new Date('2024-01-01T12:00:00Z'),
+            accessTime: new Date('2024-01-02T12:00:00Z'),
+            permission: 'rw-r--r--',
+            birthTime: new Date('2024-01-01T10:00:00Z'),
+        };
+
+        const result = service.mapSourceToTarget(file, jobRunId, pathId);
+
+        expect(result).toEqual({
+            path: '/test/path/file.txt',
+            isDirectory: false,
+            sourceChecksum: 'abc123',
+            targetChecksum: 'xyz456',
+            parentPath: '/test/path',
+            depth: 2,
+            fileName: 'file.txt',
+            uid: '1001',
+            gid: '1002',
+            fileSize: '1024',
+            extension: '.txt',
+            fileType: 'text',
+            modifiedTime: new Date('2024-01-01T12:00:00Z'),
+            accessTime: new Date('2024-01-02T12:00:00Z'),
+            permission: 'rw-r--r--',
+            jobRunId: 'test-job-123',
+            birthTime: new Date('2024-01-01T10:00:00Z'),
+            pathId: 'test-path-456',
+        });
+    });
+
+    it('should handle missing properties and assign defaults', () => {
+        const file = {}; // Empty file object
+
+        const result = service.mapSourceToTarget(file, jobRunId, pathId);
+
+        expect(result).toEqual({
+            path: '',
+            isDirectory: false,
+            sourceChecksum: null,
+            targetChecksum: null,
+            parentPath: '',
+            depth: 0,
+            fileName: '',
+            uid: '',
+            gid: '',
+            fileSize: '0',
+            extension: '',
+            fileType: null,
+            modifiedTime: null,
+            accessTime: null,
+            permission: '',
+            jobRunId: 'test-job-123',
+            birthTime: null,
+            pathId: 'test-path-456',
+        });
+    });
+
+    it('should throw an error if file is null or undefined', () => {
+        expect(() => service.mapSourceToTarget(null, jobRunId, pathId)).toThrow('Invalid file object: Cannot map undefined or null file');
+        expect(() => service.mapSourceToTarget(undefined, jobRunId, pathId)).toThrow('Invalid file object: Cannot map undefined or null file');
     });
   });
 

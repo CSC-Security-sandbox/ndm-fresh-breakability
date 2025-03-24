@@ -143,60 +143,45 @@ export class InventoryService {
   async saveTasks(data: any) {
     try {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
+
         throw new Error("Invalid task data");
       }
   
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
   
-      if (!id) {
+      const taskId = id
+      if (!taskId) {
         this.logger.error("Task ID not found");
         return;
-      }
-      let task = await this.taskRepo.findOne({ where: { id } });
-      if (task) {
-        task.status = task.status != 'COMPLETED' ? status : task.status;
-        task.workerId = workerId;
-      } else {
-        task = this.taskRepo.create({
-          id,
-          jobRunId,
-          status,
-          taskType,
-          workerId,
-        });
-      }
+      }  
+      // Create the task entity
+      const task = this.taskRepo.create({
+        id: taskId,
+        jobRunId,
+        status,
+        taskType,
+        workerId,
+      });
   
+      // Ensure commands is an array before proceeding
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
   
       if (Array.isArray(commands) && commands.length > 0) {
         for (let i = 0; i < commands.length; i += batchSize) {
-          const batch = await Promise.all(
-            commands.slice(i, i + batchSize).map(async (command: any) => {
-              const existingOperation = await this.operationRepo.findOne({ where: { id: command.commandId } });
+          const batch = commands.slice(i, i + batchSize).map((command: any) => ({
+            id: command.commandId,
+            taskId,
+            jobRunId,
+            sPathId,
+            tPathId: tPathId?.length ? tPathId : null,
+            status: OperationStatus.IN_PROCESS,
+            operationType: taskType,
+            request: command,
+            fPath: command?.fPath,
+          })) as OperationsEntity[];
   
-              if (existingOperation) {
-                // Update existing operation
-                existingOperation.status = OperationStatus.IN_PROCESS;
-                existingOperation.request = command;
-                existingOperation.fPath = command?.fPath;
-                return existingOperation;
-              } else {
-                // Create new operation if not found
-                return this.operationRepo.create({
-                  id: command.commandId,
-                  taskId: id,
-                  jobRunId,
-                  sPathId,
-                  tPathId: tPathId?.length ? tPathId : null,
-                  status: OperationStatus.IN_PROCESS,
-                  operationType: taskType,
-                  request: command,
-                  fPath: command?.fPath,
-                }) as OperationsEntity;
-              }
-            })
-          );
+          operationBatches.push(batch);
         }
       }
   
