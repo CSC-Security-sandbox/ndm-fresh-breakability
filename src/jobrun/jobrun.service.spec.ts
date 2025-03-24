@@ -331,7 +331,7 @@ describe("JobRunService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
-        
+
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         {
           provide: WorkflowService,
@@ -713,6 +713,7 @@ describe("JobRunService", () => {
         sourcePath: { volumePath: "src" },
         targetPath: { volumePath: "tgt" },
       } as any;
+
       const mockWorkers = {
         connection: {
           sourceCredential: {
@@ -739,17 +740,28 @@ describe("JobRunService", () => {
         workers: ["worker1", "worker2"],
       };
 
-      jest.spyOn(initService, "getJobConfig").mockResolvedValue(mockWorkers as any);
       jest
-        .spyOn(workerJobRunMapRepo, "create")
-        .mockImplementation((data) => data as any);
+        .spyOn(initService, "getJobConfig")
+        .mockResolvedValue(mockWorkers as any);
+
       jest
         .spyOn(jobRunRepo, "create")
         .mockImplementation((data) => data as any);
       jest.spyOn(jobRunRepo, "save").mockResolvedValue({ id: "1" } as any);
-      jest.spyOn(initService, "buildJobContext").mockImplementation()
+
+      jest
+        .spyOn(workerJobRunMapRepo, "create")
+        .mockImplementation((data) => data as any);
+
+      jest.spyOn(initService, "buildJobContext").mockImplementation(jest.fn());
+
+      jest
+        .spyOn(initService, "startStreamConsumer")
+        .mockResolvedValue(undefined);
+
       const result = await initService.createJobRun(mockJob, new Date());
-      expect(result).toEqual({ "id": "1"});
+
+      expect(result).toEqual({ id: "1" });
     });
 
     it("should log a warning if no workers exist", async () => {
@@ -1903,37 +1915,48 @@ describe("JobRunService", () => {
   }); 
   describe('resumeJobRuns', () =>{
    
-    it('should resume job runs and update statuses correctly', async () => {
-      const jobRuns = ['jobRunId1'];
+    it("should resume job runs and update statuses correctly", async () => {
+      const jobRuns = ["jobRunId1"];
       const jobContextMock = {
-        jobConfig: { jobType: 'SOME_JOB_TYPE' },
-        jobState: { status: 'RUNNING',tasks_total: 1 },
+        jobConfig: { jobType: "SOME_JOB_TYPE" },
+        jobState: { status: "RUNNING", tasks_total: 1 },
         appendToFileList: jest.fn(),
         cleanup: jest.fn(),
       };
-    
-     jest.spyOn(redisService, 'getJobContext').mockResolvedValue(jobContextMock as any);
-     jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue({ id: 'jobRunId1', status: JobRunStatus.Paused } as any);
-    
-     jest.spyOn(jobRunInitService,'getJobConfig').mockResolvedValue({jobType:JobType.MIGRATE,workers:1} as any)   
-      const result = await service.resumeJobRuns(jobRuns);   
+
+      jest
+        .spyOn(redisService, "getJobContext")
+        .mockResolvedValue(jobContextMock as any);
+      jest
+        .spyOn(jobRunRepo, "findOne")
+        .mockResolvedValue({
+          id: "jobRunId1",
+          status: JobRunStatus.Paused,
+        } as any);
+      jest
+        .spyOn(jobRunInitService, "getJobConfig")
+        .mockResolvedValue({ jobType: JobType.MIGRATE, workers: 1 } as any);
+
+      jest.spyOn(service, "resumeJobRun").mockResolvedValue(undefined);
+
+      const result = await service.resumeJobRuns(jobRuns);
+
       expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
         where: { jobRunId: In(jobRuns) },
         select: { workerId: true },
       });
       expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
         { jobRunId: In(jobRuns) },
-        { isActive: true },
+        { isActive: true }
       );
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: In(jobRuns), status: JobRunStatus.Paused },
-        { status: JobRunStatus.Running },
+        { status: JobRunStatus.Running }
       );
-  
+
       expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
-      expect(result).toEqual({ details: 'Operation Completed Successfully' });
-
-  });
+      expect(result).toEqual({ details: "Operation Completed Successfully" });
+    });
 });
 });
