@@ -18,9 +18,9 @@ import { VolumeEntity } from '../entities/volume.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { JobType, JobStatus, JobRunStatus, TemplateType } from 'src/constants/enums';
+import { JobType, JobStatus, JobRunStatus, TemplateType, Protocol, WorkFlows } from 'src/constants/enums';
 import * as winston from 'winston';
-import { BadRequestException, HttpException } from '@nestjs/common';
+import { BadRequestException, HttpException, Options } from '@nestjs/common';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { nextDate } from 'src/utils/mapper';
@@ -29,6 +29,12 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { ParsedMapping } from 'src/utils/indentity-mapping.type';
 import { createClient } from "redis";
 import { RedisService } from 'src/redis/redis.service';
+import { Response } from "express";
+import { createReadStream, existsSync } from "fs";
+import { join } from "path";
+import { NotFoundException } from "@nestjs/common";
+import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -52,6 +58,7 @@ describe('JobConfigService', () => {
   let identityMappingRepo: any;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
   let redisService:RedisService
+  let workFlowService: WorkflowService;
  
   
 
@@ -267,6 +274,7 @@ describe('JobConfigService', () => {
     }).compile();
 
     service = module.get<JobConfigService>(JobConfigService);
+    workFlowService = module.get<WorkflowService>(WorkflowService);
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(getRepositoryToken(JobConfigEntity));
     speedTestConfigRepo = module.get<Repository<SpeedTestConfigEntity>>(getRepositoryToken(SpeedTestConfigEntity));
     speedTestConfigWorkerRepo = module.get<Repository<SpeedTestConfigWorkerEntity>>(getRepositoryToken(SpeedTestConfigWorkerEntity));
@@ -935,22 +943,16 @@ describe('JobConfigService', () => {
 
   const mockSavedIdentityMapping = { id: 'identityMappingId1' };
 
-  // Mock the decodeBase64 method
   jest.spyOn(service, 'decodeBase64').mockResolvedValue(mockDecodedGidMapping);
 
-  // Mock the parseBlobData method
   jest.spyOn(service, 'parseBlobData').mockResolvedValue(mockParsedMappings);
 
-  // Mock the jobConfigRepo.find method
   jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
 
-  // Mock the identityMappingRepo.save method
   jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(mockSavedIdentityMapping as any);
 
-  // Call the method
   await service.createBulkMigrate(mockBulkMigrate as any);
 
-  // Assertions
   expect(service.decodeBase64).toHaveBeenCalledWith(mockBulkMigrate.gidMapping);
   expect(service.parseBlobData).toHaveBeenCalledWith(
     mockDecodedGidMapping,
@@ -965,7 +967,7 @@ describe('JobConfigService', () => {
     const mockRedisClient = {
       isOpen: true,
       connect: jest.fn(),
-      exists: jest.fn().mockResolvedValue(true), // Simulate that the key exists
+      exists: jest.fn().mockResolvedValue(true),
       del: jest.fn(),
     };
 
@@ -995,8 +997,6 @@ describe('JobConfigService', () => {
       expect(mockRedisClient.del).toHaveBeenCalledWith(`${jobRun.id}:mapping`);
     });
   });
-
-
 
   it("should delete Redis keys for job runs", async () => {
     const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
@@ -1163,6 +1163,24 @@ describe('JobConfigService', () => {
         firstRunAt: expect.any(Date),
       },
     ]);
+  });
+
+  it("should flatten cutover config correctly", () => {
+    const mockCutoverConfig = [
+      {
+        sourcePathId: "sourcePath1",
+        destinationPathId: ["destinationPath1", "destinationPath2"],
+      },
+    ];
+
+    const expectedFlattenedConfig = [
+      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
+      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath2" },
+    ];
+
+    const result = service.flattenCutoverConfig(mockCutoverConfig);
+
+    expect(result).toEqual(expectedFlattenedConfig);
   });
 
   it('should throw an error if cutover already exists', async () => {
@@ -1939,6 +1957,21 @@ describe('JobConfigService', () => {
     }));
   
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+  });
+
+  it("should throw NotFoundException if no project is found for the given project ID", async () => {
+    const mockProjectId = "739bb103-99fa-41c0-afa7-22bdc0c10d26";
+
+    jest.spyOn(require("class-validator"), "isUUID").mockReturnValue(true);
+
+    jest.spyOn(projectRepo, "findOne").mockResolvedValue(null);
+
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
+      NotFoundException
+    );
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
+      `Project for id ${mockProjectId} not found.`
+    );
   });
 
   it('should throw NotFoundException if no project is found for the given project ID', async () => {
