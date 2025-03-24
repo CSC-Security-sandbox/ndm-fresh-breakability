@@ -75,11 +75,12 @@ describe('JobConfigService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobConfigService,
+        RedisService,
         WorkflowService,
         { provide: ConfigService, useValue: configService },
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: LoggerService, useValue: loggerService },
-        { provide: 'winston', useValue: winston },
+        { provide: "winston", useValue: winston },
         {
           provide: getRepositoryToken(JobConfigEntity),
           useValue: {
@@ -247,7 +248,8 @@ describe('JobConfigService', () => {
             find: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
-        },{
+        },
+        {
           provide: getRepositoryToken(IdentityConfigCrossMappingEntity),
           useValue: {
             findOne: jest.fn(),
@@ -256,6 +258,8 @@ describe('JobConfigService', () => {
             remove: jest.fn(),
             find: jest.fn(),
             createQueryBuilder: jest.fn(),
+            exists: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
           },
         },
         
@@ -752,6 +756,7 @@ describe('JobConfigService', () => {
     jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 1 } as any);
     jest.spyOn(jobConfigRepo, 'create').mockImplementation((data) => data as any);
     jest.spyOn(jobConfigRepo, 'save').mockResolvedValue(mockJobConfigEntities as any);
+    jest.spyOn(identityCrossMappingRepo, 'exists').mockResolvedValue(false);
 
     const result = await service.createBulkMigrate(mockBulkMigrate as any);
 
@@ -822,6 +827,211 @@ describe('JobConfigService', () => {
     ]);
   });
 
+
+  it("should process sidMapping when it is a valid string", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: "sourcePath1",
+          destinationPathId: ["destinationPath1"],
+        },
+      ],
+      sidMapping: "base64EncodedSidMapping", // Simulate a valid sidMapping
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        skipFile: false,
+      },
+      firstRunAt: new Date(),
+      futureRunSchedule: "0 0 * * *",
+    };
+
+    const mockDecodedSidMapping = "decodedSidMapping";
+    const mockParsedMappings = [
+      { sourceMapping: "source1", targetMapping: "target1" },
+    ];
+
+    const mockExistingJobConfigs = [
+      {
+        sourcePathId: "sourcePath1",
+        targetPathId: "destinationPath1",
+        scheduler: ScheduleStatus.SCHEDULING,
+        id: "jobConfigId1",
+      },
+    ];
+
+    const mockSavedIdentityMapping = { id: "identityMappingId1" };
+
+    // Mock the decodeBase64 method
+    jest
+      .spyOn(service, "decodeBase64")
+      .mockResolvedValue(mockDecodedSidMapping);
+
+    // Mock the parseBlobData method
+    jest.spyOn(service, "parseBlobData").mockResolvedValue(mockParsedMappings);
+
+    // Mock the jobConfigRepo.find method
+    jest
+      .spyOn(jobConfigRepo, "find")
+      .mockResolvedValue(mockExistingJobConfigs as any);
+
+    // Mock the identityMappingRepo.save method
+    jest
+      .spyOn(identityMappingRepo, "save")
+      .mockResolvedValue(mockSavedIdentityMapping as any);
+
+    // Call the method
+    await service.createBulkMigrate(mockBulkMigrate as any);
+
+    // Assertions
+    expect(service.decodeBase64).toHaveBeenCalledWith(
+      mockBulkMigrate.sidMapping
+    );
+    expect(service.parseBlobData).toHaveBeenCalledWith(
+      mockDecodedSidMapping,
+      TemplateType.SID
+    );
+    expect(identityMappingRepo.save).toHaveBeenCalled();
+  });
+
+  it('should process gidMapping when it is a valid string', async () => {
+  const mockBulkMigrate = {
+    migrateConfigs: [
+      {
+        sourcePathId: 'sourcePath1',
+        destinationPathId: ['destinationPath1'],
+      },
+    ],
+    gidMapping: 'base64EncodedGidMapping', // Simulate a valid gidMapping
+    options: {
+      excludeFilePatterns: '*.tmp',
+      preserveAccessTime: true,
+      excludeOlderThan: new Date(),
+      skipFile: false,
+    },
+    firstRunAt: new Date(),
+    futureRunSchedule: '0 0 * * *',
+  };
+
+  const mockDecodedGidMapping = 'decodedGidMapping';
+  const mockParsedMappings = [
+    {
+      sourceMappingGid: "source1",
+      targetMappingGid: "target1",
+      sourceMappingUid: "source1",
+      targetMappingUid: "target1",
+    },
+  ];
+
+  const mockExistingJobConfigs = [
+    {
+      sourcePathId: 'sourcePath1',
+      targetPathId: 'destinationPath1',
+      scheduler: ScheduleStatus.SCHEDULING,
+      id: 'jobConfigId1',
+    },
+  ];
+
+  const mockSavedIdentityMapping = { id: 'identityMappingId1' };
+
+  // Mock the decodeBase64 method
+  jest.spyOn(service, 'decodeBase64').mockResolvedValue(mockDecodedGidMapping);
+
+  // Mock the parseBlobData method
+  jest.spyOn(service, 'parseBlobData').mockResolvedValue(mockParsedMappings);
+
+  // Mock the jobConfigRepo.find method
+  jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
+
+  // Mock the identityMappingRepo.save method
+  jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(mockSavedIdentityMapping as any);
+
+  // Call the method
+  await service.createBulkMigrate(mockBulkMigrate as any);
+
+  // Assertions
+  expect(service.decodeBase64).toHaveBeenCalledWith(mockBulkMigrate.gidMapping);
+  expect(service.parseBlobData).toHaveBeenCalledWith(
+    mockDecodedGidMapping,
+    TemplateType.GID
+  );
+  expect(identityMappingRepo.save).toHaveBeenCalled();
+});
+
+  it("should delete Redis keys for job runs when keys exist", async () => {
+    const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
+
+    const mockRedisClient = {
+      isOpen: true,
+      connect: jest.fn(),
+      exists: jest.fn().mockResolvedValue(true), // Simulate that the key exists
+      del: jest.fn(),
+    };
+
+    jest
+      .spyOn(redisService, "getClient")
+      .mockResolvedValue(mockRedisClient as any);
+
+    const jobRunIdsToDeleteKey = mockJobRunIds;
+    const redisClient = await redisService.getClient();
+    for (const jobRun of jobRunIdsToDeleteKey) {
+      const redisKey = `${jobRun.id}:mapping`;
+      if (!redisClient.isOpen) await redisClient.connect();
+
+      const redisKeyExists = await redisClient.exists(redisKey);
+      if (redisKeyExists) {
+        await redisClient.del(redisKey);
+        console.log(`Deleted redis key: ${redisKey}`);
+      }
+    }
+
+    expect(mockRedisClient.exists).toHaveBeenCalledTimes(mockJobRunIds.length);
+    expect(mockRedisClient.del).toHaveBeenCalledTimes(mockJobRunIds.length);
+    mockJobRunIds.forEach((jobRun) => {
+      expect(mockRedisClient.exists).toHaveBeenCalledWith(
+        `${jobRun.id}:mapping`
+      );
+      expect(mockRedisClient.del).toHaveBeenCalledWith(`${jobRun.id}:mapping`);
+    });
+  });
+
+
+
+  it("should delete Redis keys for job runs", async () => {
+    const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
+
+    const mockRedisClient = {
+      isOpen: true,
+      connect: jest.fn(),
+      exists: jest.fn().mockResolvedValue(true),
+      del: jest.fn(),
+    };
+
+    jest
+      .spyOn(redisService, "getClient")
+      .mockResolvedValue(mockRedisClient as any);
+
+    const jobRunIdsToDeleteKey = mockJobRunIds;
+    const redisClient = await redisService.getClient();
+    for (const jobRun of jobRunIdsToDeleteKey) {
+      const redisKey = `${jobRun.id}:mapping`;
+      if (!redisClient.isOpen) await redisClient.connect();
+
+      const redisKeyExists = await redisClient.exists(redisKey);
+      if (redisKeyExists) {
+        await redisClient.del(redisKey);
+        console.log(`Deleted redis key: ${redisKey}`);
+      }
+    }
+
+    expect(mockRedisClient.del).toHaveBeenCalledTimes(mockJobRunIds.length);
+    mockJobRunIds.forEach((jobRun) => {
+      expect(mockRedisClient.del).toHaveBeenCalledWith(`${jobRun.id}:mapping`);
+    });
+  });
+
+  
   it('should handle empty migrateConfigs', async () => {
     const mockBulkMigrate = {
       migrateConfigs: [],
@@ -1963,7 +2173,7 @@ describe('JobConfigService', () => {
   
         expect(findOneSpy).toHaveBeenCalledWith({
           where: {
-            jobConfigId: jobConfigIds[0],
+            jobConfigId: jobConfigIds[0], isOrphan:false
           },
         });
         expect(createCrossMappingSpy).toHaveBeenCalledWith({
@@ -2037,6 +2247,7 @@ describe('JobConfigService', () => {
         expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
           where: {
             jobConfigId: jobConfigIds[0],
+            isOrphan:false
           },
         });
         expect(identityCrossMappingRepo.create).toHaveBeenCalledWith({
@@ -2069,7 +2280,8 @@ describe('JobConfigService', () => {
           createdAt: undefined,
           updatedAt: undefined,
           createdBy: '',
-          updatedBy: ''
+          updatedBy: '',
+          isOrphan:false,
         });
         const saveIdentityCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
   

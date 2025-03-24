@@ -470,7 +470,7 @@ export class JobRunInitService {
       if (jobConfigId) {
         const identityCrossMappings =
           await this.identityConfigCrossMappingRepo.find({
-            where: { jobConfigId: jobConfigId.jobConfigId },
+            where: { jobConfigId: jobConfigId.jobConfigId, isOrphan:false },
           });
         if (identityCrossMappings.length > 0) {
           isIdentityMapping = true;

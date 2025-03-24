@@ -573,7 +573,7 @@ describe('JobRunInitService', () => {
         select: { jobConfigId: true },
       });
       expect(identityConfigCrossMappingRepo.find).toHaveBeenCalledWith({
-        where: { jobConfigId: mockJobConfigId.jobConfigId },
+        where: { jobConfigId: mockJobConfigId.jobConfigId, isOrphan:false },
       });
       // expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
       //   identityMap: [],

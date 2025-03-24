@@ -20,11 +20,13 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { RedisModule } from 'src/redis/redis.module';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity,IdentityMappingEntity,IdentityConfigCrossMappingEntity]),
+        RedisModule
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]

@@ -26,4 +26,8 @@
    <changeSet id="5017" author="shivam6">
       <sqlFile path="liquibase/20250315_01_create_identity_mapping_tables.sql"/>
    </changeSet>
+
+   <changeSet id="5018" author="shivam6">
+      <sqlFile path="liquibase/20250324_01_alter_cross_mapping_table.sql"/>
+   </changeSet>
 </databaseChangeLog>

@@ -60,6 +60,7 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
+import { RedisService } from "src/redis/redis.service";
 
 @Injectable()
 export class JobConfigService {
@@ -95,6 +96,7 @@ export class JobConfigService {
     @InjectRepository(VolumeEntity)
     private readonly volumeRepo: Repository<VolumeEntity>,
     private readonly workFlowService: WorkflowService,
+    private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     @InjectRepository(IdentityMappingEntity)
     private identityMappingRepo: Repository<IdentityMappingEntity>,
@@ -564,9 +566,49 @@ export class JobConfigService {
               scheduler: ScheduleStatus.SCHEDULING,
             }
           );
+          const jobConfigIds = existingJobConfigs.map(
+            (jobConfig) => jobConfig.id
+          );
+          this.logger.log("id pushed", ...jobConfigIds);
+
+          if (!bulkMigrate?.sidMapping && !bulkMigrate?.gidMapping) {
+            for (const jobConfigId of jobConfigIds) {
+              const entryExists = await this.identityCrossMappingRepo.exists({
+                where: {
+                  jobConfigId: jobConfigId,
+                },
+              });
+
+              if (entryExists) {
+                await this.identityCrossMappingRepo.update(
+                  { jobConfigId: jobConfigId },
+                  { isOrphan: true }
+                );
+                console.log(
+                  `Marked is_orphan as true for job_config_id: ${jobConfigId}`
+                );
+
+                const jobRunIdsToDeleteKey = await this.jobRunRepo.find({where : {jobConfigId: jobConfigId, status:JobRunStatus.Completed}, select:{id:true}})
+                
+                const redisClient = await this.redisService.getClient();
+                for (const jobRun of jobRunIdsToDeleteKey) {
+                  const redisKey = `${jobRun.id}:mapping`;
+                  if (!redisClient.isOpen) await redisClient.connect();
+
+                  const redisKeyExists = await redisClient.exists(redisKey)
+                  if(redisKeyExists) {
+                    await redisClient.del(redisKey);
+                    console.log(`Deleted redis key: ${redisKey}`);
+                  }
+                }
+
+              } else {
+                console.log(`No entry found for job_config_id: ${jobConfigId}`);
+              }
+            }
+          }
+
           if (parsedMappings.length > 0) {
-            const jobConfigIds = existingJobConfigs.map((jobConfig) => jobConfig.id);
-            this.logger.log("id pushed", ...jobConfigIds)
             jobConfigIdsToUpdate.push(...jobConfigIds);
           }
         } else {
@@ -1547,6 +1589,7 @@ export class JobConfigService {
         const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
           where: {
             jobConfigId: jobConfigId,
+            isOrphan:false
           },
         });
   

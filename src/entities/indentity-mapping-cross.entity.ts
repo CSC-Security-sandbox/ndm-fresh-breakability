@@ -39,4 +39,8 @@ export class IdentityConfigCrossMappingEntity extends Base {
   })
   @JoinColumn({ name: "job_config_id" })
   jobConfig: JobConfigEntity;
+
+  @ApiProperty({ description: "Indicates if the mapping is orphaned" })
+  @Column({ type: "boolean", default: false, name: "is_orphan" })
+  isOrphan: boolean;
 }
