@@ -15,6 +15,7 @@
       "@store/*": ["./src/store/*"],
       "@modules/*": ["./src/modules/*"],
       "@auth/*": ["./src/auth/*"],
+      "@routes/*": ["src/routes/*"],
       "@/*": ["./src/*"]
     },
     "target": "ESNext",

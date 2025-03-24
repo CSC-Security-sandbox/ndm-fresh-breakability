@@ -23,7 +23,12 @@ const TabHeaderWrapper = () => {
 
   const { currantPath, blueXpTabHeaderProps } = useMemo(() => {
     const allKeys = Object.keys(HEADER_WITH_PATHNAME);
-    const currantPath = allKeys.find((row) => pathname.includes(row)) || "";
+    const currantPath =
+      allKeys.find((row) => {
+        const regex = new RegExp(`^${row.replace(/:\w+/g, "[^/]+")}$`);
+        return regex.test(pathname);
+      }) || "";
+
     const blueXpTabHeaderProps = HEADER_WITH_PATHNAME[currantPath || ""];
     return { currantPath, blueXpTabHeaderProps };
   }, [pathname]);
