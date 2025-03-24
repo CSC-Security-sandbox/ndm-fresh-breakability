@@ -36,7 +36,7 @@ const StorageChart = ({
     <>
       <Box>
         {totalSize.toString().length > 3 && (
-          <Tooltip>{`${totalSize} ${unit}`}----</Tooltip>
+          <Tooltip>{`${totalSize} ${unit}`}</Tooltip>
         )}
         <DoughnutChart
           unit={unit && unit.toUpperCase()}

@@ -6,7 +6,7 @@ import { Box } from "@components/container/index";
 import { ERROR_COLUMN_DEF } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 import { ErrorsListTablePropsType } from "@modules/jobs/job-task-errors/JobTaskErrorsTabs.interface";
 import { Table, TablePager, useTable } from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { notify } from "@components/notification/NotificationWrapper";
 import { JobErrorType, JobRunErrorsApiType } from "@/types/app.type";
@@ -33,7 +33,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
 
   useEffect(() => {
     (async () => {
-      let queryParams: string = `page${1}&limit=10&sort=createdAt&order=DESC&jobRunId=${jobRunId}&errorType=${currentErrorType}`;
+      const queryParams: string = `page${1}&limit=10&sort=createdAt&order=DESC&jobRunId=${jobRunId}&errorType=${currentErrorType}`;
       try {
         const _errorDetails: JobRunErrorsApiType = await getJobRunErrorsApi(
           queryParams

@@ -10,7 +10,6 @@ import { useMemo, useState } from "react";
 dayjs.extend(utc);
 const today = dayjs();
 const todayStartOfTheDay = today.startOf("day");
-const yesterday = dayjs().subtract(1, "day");
 
 const DateTimePickerWrapper = ({
   bulkDiscoveryForm,

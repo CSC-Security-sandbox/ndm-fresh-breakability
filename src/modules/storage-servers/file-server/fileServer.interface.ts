@@ -1,6 +1,5 @@
 import {
   BlueXpFormType,
-  BlueXpTableStateType,
   GetAllWorkersApiType,
   ValidateConnectionApiType,
 } from "@/types/app.type";

@@ -5,9 +5,8 @@ import { useContext } from "react";
 import WorkersWithErrorAccordion from "./components/WorkersWithErrorAccordion";
 
 const ValidateConnection = () => {
-  const { workersListTableStateProps, selectedWorkerIds, isFetching, refetch } = useContext(
-    CommonFileServerContext
-  );
+  const { workersListTableStateProps, selectedWorkerIds, isFetching, refetch } =
+    useContext(CommonFileServerContext);
 
   const checkDisabled = (row: any) => {
     return row.status !== "Online";

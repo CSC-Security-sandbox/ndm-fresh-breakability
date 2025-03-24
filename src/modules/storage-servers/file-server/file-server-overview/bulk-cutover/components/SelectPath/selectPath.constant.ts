@@ -48,4 +48,4 @@ export const SELECT_PATH_COL_DEFS = [
 export const SELECT_PATH_WARNING_MESSAGE = `I understand that Cutover requires downtime for the duration of the final sync. I have stopped the applications relying on the source shares/exports and removed write access before 
 proceeding. I understand that failure to disconnect active clients may result in data-loss.`;
 
-export const REVIEW_WARNING_MESSAGE = `I am okay to initiate Bulk cutover, with current jobs running in parallel. `;
+export const REVIEW_WARNING_MESSAGE = `I am okay to initiate Bulk cutover, with current jobs running in parallel.`;

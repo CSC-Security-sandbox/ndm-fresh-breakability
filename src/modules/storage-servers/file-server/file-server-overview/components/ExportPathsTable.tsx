@@ -67,10 +67,12 @@ const ExportPathsTable = ({
           notify.success("Successfully refreshed the mount / share paths.");
           setDisableRefresh(false);
           clearInterval(interval.current);
-          return;
-        }
-
-        if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+        } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
+          const error = new Error(
+            `Seems like request to refresh paths got terminated, please try again.`
+          );
+          showErrorOnRefetchFailure(error);
+        } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
           const error = new Error(
             `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
           );

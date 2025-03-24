@@ -117,7 +117,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
       fileServerForm?.setSelectedWorkerIds(nfsAndSmbWorkersList);
       // nfsAndSmbVolumeList.forEach();
       fileServerForm?.setMountPaths(nfsAndSmbVolumeList);
-      let isJobRunning = isAnyJobRunReady(editingFileServerDetails);
+      const isJobRunning = isAnyJobRunReady(editingFileServerDetails);
       fileServerForm?.setIsJobRunning(isJobRunning);
     }, [editingFileServerDetails]);
 

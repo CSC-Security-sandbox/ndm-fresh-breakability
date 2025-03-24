@@ -9,7 +9,7 @@ interface ShowWhenProps extends ShowPropsType {
 }
 
 export const Show = (props: ShowPropsType) => {
-  let whenComponents: ReactNode[] = [];
+  const whenComponents: ReactNode[] = [];
   let otherwise: ReactNode | null = null;
 
   Children.forEach(props.children, (child) => {

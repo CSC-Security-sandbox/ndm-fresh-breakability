@@ -1,4 +1,3 @@
-import { Box } from "@components/container";
 import BulkMigrate from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/BulkMigrate";
 
 const BulkMigratePage = () => {

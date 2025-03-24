@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { SettingsIcon } from "@netapp/bxp-style/react-icons/Action";
+import { useState } from "react";
 import {
   InnerTab,
   Span,
@@ -23,7 +22,7 @@ const SettingsContent = () => {
   //making active tab should be users
   const handleDefaultTab = () => {
     setCurrentTab(1);
-  }
+  };
 
   return (
     <Card className="h-full w-[70rem]">
@@ -71,7 +70,7 @@ const SettingsContent = () => {
             <ManageProject />
           </TabPanel>
           <TabPanel value={currentTab} index={3}>
-            <CreateSMTP handleDefaultTab={handleDefaultTab}/>
+            <CreateSMTP handleDefaultTab={handleDefaultTab} />
           </TabPanel>
         </Layout.Content>
       </Layout.Page>

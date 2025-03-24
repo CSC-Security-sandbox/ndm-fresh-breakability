@@ -9,7 +9,7 @@ import { SMB_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-serv
 import ProtocolAccordion from "./ProtocolAccordion";
 
 const SMBCredentials = () => {
-  const { smbCredentialsForm, hostCredentialsForm, isJobRunning } = useContext(
+  const { smbCredentialsForm, isJobRunning } = useContext(
     CommonFileServerContext
   );
 
