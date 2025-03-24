@@ -262,42 +262,6 @@ export class MigrationSyncService {
     jobContext.migrateTask.lastId = await jobContext.appendToUpdatedTaskList(task);
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-    // for (let i = 0;  i < task.commands.length; i++) {
-    //   if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-    //   const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-    //   const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
-    //   const scanInput: SyncOperationInput = {
-    //     sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
-    //     targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
-    //     ops: task.commands[i].ops,
-    //     command: task.commands[i],
-    //     jobContext
-    //   };
-    //   const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-    //   task.commands[i].ops = syncOperationOp.ops;
-    //   if (syncOperationOp.errors.size > 0) {
-    //     task.commands[i].retryCount++;
-    //     syncTask.retryCount = Math.max(task.commands[i].retryCount,  syncTask.retryCount)
-    //     task.commands[i].status = CommandStatus.ERROR;
-    //     syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
-    //     syncTask.error++;
-    //   }
-    //   else {
-    //     const fileInfo: FileInfo = await this.getFileInfo({
-    //       name: task.commands[i].fPath, fullFilePath:`${task.tPath}${task.commands[i].fPath}`,
-    //       relativePath: task.commands[i].fPath,checksums: syncOperationOp.checksums,
-    //       getID: jobContext.jobConfig.options.isIdentityMappingAvailable
-    //     });
-    //     jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
-      
-    //     jobContext.filesInfo.numMessages++;
-    //     task.commands[i].status = CommandStatus.COMPLETED
-    //     syncTask.success++;
-    //     await this.redisService.setJobContext(task.jobRunId, jobContext);
-    //     this.logger.debug(`Migrated ${task.commands[i].fPath} successfully`);
-    //   }
-    // }
-
     const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
     const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
 
