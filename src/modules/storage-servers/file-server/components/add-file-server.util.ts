@@ -120,11 +120,11 @@ const getFileServerDetails = (
   workers: string[]
 ) => {
   if (credentialsForm.dirty && credentialsForm.isValid) {
-    const host = hostCredentialsForm?.formState.host.trim();
+    const hostName = hostCredentialsForm?.formState.host.trim();
     return {
       serverType: serverTypeForm?.formState?.serverType?.value,
       ...credentialsForm.formState,
-      host,
+      host: hostName,
       protocolVersion: credentialsForm?.formState.protocolVersion?.value,
       password: credentialsForm.formState?.password,
       volumes,
