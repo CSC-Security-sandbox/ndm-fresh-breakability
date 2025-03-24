@@ -11,6 +11,11 @@ const TooltipCopyCellRenderer = (value: string) => {
     setTextCopied(false);
   }, [textCopied]);
 
+  const copyText = () => {
+    copyToClipboard(value);
+    setTextCopied(true);
+  }
+
   return (
     <Box className="Table-module_cell-value__ss5_Y">
       {value}
@@ -18,7 +23,7 @@ const TooltipCopyCellRenderer = (value: string) => {
         <Tooltip placement="center">
           <Text className="flex">
             {value}
-            <CopyIcon onClick={() => {copyToClipboard(value), setTextCopied(true)}}/>
+            <CopyIcon onClick={copyText}/>
           </Text>
         </Tooltip>
       }
