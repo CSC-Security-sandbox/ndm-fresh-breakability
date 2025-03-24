@@ -9,12 +9,16 @@ import {
 } from "@/types/app.type";
 import { getJobType, toTitleCase } from "@/utils/common.utils";
 import React from "react";
+import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
   {
     header: "Job Run ID",
     accessor: "jobRunId",
     width: 100,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) => TooltipCopyCellRenderer(value),
   },
   {
     header: "Job Type",
