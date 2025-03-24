@@ -21,12 +21,16 @@ import OverallAverageSpeedCellRenderer from "@modules/speed-test/components/spee
 import AverageSpeedCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/AverageSpeedCellRenderer";
 import SpeedTestChevronCellRenderer from "@modules/speed-test/components/speed-test-details/cellRenderer/SpeedTestChevronCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
+import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 
 export const SPEED_TEST_COLUMN_DEF = [
   {
     header: "Job Run Id",
     accessor: "jobRunId",
     id: 1,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<SpeedTestJobsType, SpeedTestJobsType["jobRunId"]>) => TooltipCopyCellRenderer(value),
   },
   {
     header: "Start Time",

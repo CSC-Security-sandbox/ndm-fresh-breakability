@@ -3,11 +3,15 @@ import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumbe
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
 import { BlueXpTableRowType, JobRunApiType } from "@/types/app.type";
+import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
   {
     header: "Job Run ID",
     accessor: "jobRunId",
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) => TooltipCopyCellRenderer(value),
   },
   {
     header: "Start Date & Time",

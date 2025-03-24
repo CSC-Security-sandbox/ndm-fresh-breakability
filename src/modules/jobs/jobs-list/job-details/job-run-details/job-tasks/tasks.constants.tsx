@@ -2,6 +2,7 @@ import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer"
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import { BlueXpTableRowType, TasksApiType } from "@/types/app.type";
 import { toTitleCase } from "@/utils/common.utils";
+import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 
 export const TASKS_COLUMN_DEFS = [
   {
@@ -12,6 +13,9 @@ export const TASKS_COLUMN_DEFS = [
     sort: {
       enabled: false,
     },
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<TasksApiType, TasksApiType["id"]>) => TooltipCopyCellRenderer(value),
   },
   {
     header: "Status",
