@@ -13,12 +13,13 @@ import { ValidateConnectionActivity } from './validate-connection/validate-conne
 import { ValidateWorkingDirectoryActivity } from './working-directory/working-directory.service';
 import { PrecheckActivity } from './precheck/precheck-activity';
 import { CommonActivityService } from './common/common.service';
+import { PowerShellService } from './common/poweshell.service';
 
 
 @Module({
   imports: [HttpModule, ConfigModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService],
 })
 export class ActivitiesModule {}
