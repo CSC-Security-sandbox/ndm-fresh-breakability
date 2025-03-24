@@ -105,9 +105,11 @@ export class InventoryService {
         fileName: data.errorFiles?.fileName ?? null,
         filePath: data.errorFiles?.filePath ?? null,
         createdAt: new Date(),
+        error_type : data?.errorType || null
       });
 
       await this.operationErrorRepo.save(operationError);
+      this.logger.log(`Successfully saved operation operationError record`);
     } catch (err) {
       this.logger.error(
         `Failed to save operation error records: ${err.message}`,
@@ -129,6 +131,7 @@ export class InventoryService {
         errorMessage: data.errorMessage,
         taskId: data.taskId,
         createdAt: new Date(),
+        error_type : data?.errorType || null
       });
 
       await this.taskErrorRepo.save(taskError);
@@ -140,6 +143,8 @@ export class InventoryService {
       throw new Error("Error while saving task error records to the database");
     }
   }
+
+
   async saveTasks(data: any) {
     try {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
@@ -165,7 +170,8 @@ export class InventoryService {
           workerId,
         });
       }
-  
+      await this.taskRepo.save(task);
+
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
   
@@ -201,15 +207,13 @@ export class InventoryService {
       }
   
       // Save the task
-      await this.taskRepo.save(task);
       // Save all operation batches concurrently
       if (operationBatches.length > 0) {
         await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
       }
-      console.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
+      this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {
       this.logger.error(`❌ Failed to save task records: ${err.message}`, err.stack);
-      throw new Error("Error while saving task records to the database");
     }
   }
   

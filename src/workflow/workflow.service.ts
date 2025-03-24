@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection } from '@temporalio/client';
 
@@ -8,7 +8,8 @@ export class WorkflowService {
 
     private client: Client | null = null;
     private connection: Connection | null = null;
-
+    private readonly logger = new Logger(WorkflowService.name);
+    
     constructor(
         private readonly configService: ConfigService,
     ) { }
@@ -22,7 +23,7 @@ export class WorkflowService {
             return this.client;
 
         } catch (error) {
-            console.log(`Error on getClient : ${error} ${this.configService.get<any>('temporal.address')}`)
+            this.logger.log(`Error on getClient : ${error} ${this.configService.get<any>('temporal.address')}`)
             throw error// return this.getClient()
         }
     }
