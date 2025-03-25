@@ -40,7 +40,7 @@ const DefaultCreateProjectForm = ({
   return (
     <Box className="h-screen">
       <TabHeader label="Project Details" />
-      <Layout.Content style={{ padding: 40 }}>
+      <Layout.Content className="p-[40px] h-[80vh]">
         <Card className="p-6 m-6">
           <Box className="w-4/6">
             <FormFieldInputNew
