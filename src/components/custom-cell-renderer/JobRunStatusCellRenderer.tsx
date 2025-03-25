@@ -13,6 +13,7 @@ const getStyleForStatus = (
     case JOB_STATUS_TYPE_ENUM.ERRORED:
     case JOB_STATUS_TYPE_ENUM.FAILED:
     case TASK_STATUS_TYPE_ENUM.ERRORED:
+    case JOB_STATUS_TYPE_ENUM.REJECTED:
       return "bg-red-500";
 
     case JOB_STATUS_TYPE_ENUM.PAUSED:
@@ -27,6 +28,7 @@ const getStyleForStatus = (
     case JOB_STATUS_TYPE_ENUM.COMPLETED:
     case JOB_STATUS_TYPE_ENUM.READY:
     case TASK_STATUS_TYPE_ENUM.COMPLETED:
+    case JOB_STATUS_TYPE_ENUM.APPROVED:
     default:
       return "bg-notification-success";
   }

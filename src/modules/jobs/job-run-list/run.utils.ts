@@ -82,9 +82,13 @@ export const getReportActions = (
   type: "rowMenu" | "button" = "rowMenu"
 ) => {
   const isReportReady =
-    (row.status === JOB_STATUS_TYPE_ENUM.COMPLETED ||
-      row.status === JOB_STATUS_TYPE_ENUM.BLOCKED) &&
-    row.isReportReady;
+    [
+      JOB_STATUS_TYPE_ENUM.COMPLETED,
+      JOB_STATUS_TYPE_ENUM.BLOCKED,
+      JOB_STATUS_TYPE_ENUM.APPROVED,
+      JOB_STATUS_TYPE_ENUM.REJECTED,
+    ].includes(row.status) && row.isReportReady;
+
   switch (row.jobType) {
     case JOBS_TYPE.DISCOVERY:
       return [
