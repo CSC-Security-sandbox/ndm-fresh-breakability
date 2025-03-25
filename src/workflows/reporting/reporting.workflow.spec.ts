@@ -1,109 +1,254 @@
-import * as wf from '@temporalio/workflow';
-import { ReportingWorkflow } from './reporting.workflow';
-import { JobReportType } from './reporting.types';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { CommonActivityService } from 'src/activities/common/common.service';
-
-jest.mock('src/activities/migrate/migrate.taskmanager.service');
-jest.mock('src/activities/discovery/discovery.activities');
-jest.mock('src/activities/common/common.service');
-
-const mockGenerateDiscoveryReport = jest.fn();
-const mockGenerateCOCReport = jest.fn();
-const mockUpdateStatus = jest.fn();
-const mockGetJobState = jest.fn();
-const mockGenerateJobsReport = jest.fn();
-
-(DiscoveryActivity as jest.Mock).mockImplementation(() => ({
-  generateDiscoveryReport: mockGenerateDiscoveryReport,
-}));
-
-(MigrationTaskService as jest.Mock).mockImplementation(() => ({
-  generateCOCReport: mockGenerateCOCReport,
-}));
-
-(CommonActivityService as jest.Mock).mockImplementation(() => ({
-  updateStatus: mockUpdateStatus,
-  getJobState: mockGetJobState,
-  generateJobsReport: mockGenerateJobsReport,
-}));
+import { WorkflowHandle } from '@temporalio/client';
+import * as workflow from './reporting.workflow';
+import { JobReportType, JobRunStatus } from 'src/activities/discovery/enums';
+import { mock, when, instance, verify, reset, anything, capture } from 'ts-mockito';
 
 describe('ReportingWorkflow', () => {
-  const traceId = 'trace-id';
-  const signal = wf.defineSignal<[string], string>('reportSignal');
+  let testEnv: TestWorkflowEnvironment;
+  let handle: WorkflowHandle;
+  const traceId = 'test-trace-id';
+  const signal = workflow.isReportedQuery;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  // Mock activities
+  const mockDiscoveryActivity = mock<workflow.DiscoveryActivity>();
+  const mockMigrationTaskService = mock<workflow.MigrationTaskService>();
+  const mockCommonActivityService = mock<workflow.CommonActivityService>();
+
+  beforeAll(async () => {
+    testEnv = await TestWorkflowEnvironment.createLocal();
   });
 
-  it('should handle CUT_OVER report type', async () => {
-    const jobState = { failedWorkers: [], workers: ['worker1'] };
-    mockGetJobState.mockResolvedValue(jobState);
-    const expectedStatus = JobRunStatus.Completed;
+  afterAll(async () => {
+    await testEnv.teardown();
+  });
 
-    // Simulate the signal for CUT_OVER
-    await signal(JobReportType.CUT_OVER);
+  beforeEach(async () => {
+    // Reset all mocks before each test
+    reset(mockDiscoveryActivity);
+    reset(mockMigrationTaskService);
+    reset(mockCommonActivityService);
 
-    const result = await ReportingWorkflow(traceId, signal);
+    // Setup workflow dependencies
+    jest.doMock('@temporalio/workflow', () => ({
+      ...jest.requireActual('@temporalio/workflow'),
+      proxyActivities: () => ({
+        generateDiscoveryReport: instance(mockDiscoveryActivity).generateDiscoveryReport,
+        generateCOCReport: instance(mockMigrationTaskService).generateCOCReport,
+        updateStatus: instance(mockCommonActivityService).updateStatus,
+        getJobState: instance(mockCommonActivityService).getJobState,
+        generateJobsReport: instance(mockCommonActivityService).generateJobsReport,
+      }),
+    }));
 
-    expect(mockUpdateStatus).toHaveBeenCalledWith({ jobRunId: traceId, status: expectedStatus });
-    expect(mockGenerateCOCReport).toHaveBeenCalledWith(traceId);
-    expect(mockGenerateJobsReport).toHaveBeenCalledWith(traceId);
+    // Create workflow handle
+    handle = await testEnv.workflow.start(workflow.ReportingWorkflow, {
+      args: [traceId, signal],
+      workflowId: 'test-workflow-id',
+      taskQueue: 'test-task-queue',
+    });
+  });
+
+  it('should wait for signal and complete for DISCOVER report type with success', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockDiscoveryActivity.generateDiscoveryReport(traceId))
+      .thenResolve();
+
+    // Send signal
+    await handle.signal(signal, JobReportType.DISCOVER);
+
+    // Check result
+    const result = await handle.result();
     expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.getJobState(traceId)).once();
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.Completed
+    })).once();
+    verify(mockDiscoveryActivity.generateDiscoveryReport(traceId)).once();
   });
 
-  it('should handle DISCOVER report type', async () => {
-    const jobState = { failedWorkers: [], workers: ['worker1'] };
-    mockGetJobState.mockResolvedValue(jobState);
-    const expectedStatus = JobRunStatus.Completed;
+  it('should wait for signal and complete for DISCOVER report type with error', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1', 'worker2'], failedWorkers: ['worker1', 'worker2'] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockDiscoveryActivity.generateDiscoveryReport(traceId))
+      .thenResolve();
 
-    // Simulate the signal for DISCOVER
-    await signal(JobReportType.DISCOVER);
+    // Send signal
+    await handle.signal(signal, JobReportType.DISCOVER);
 
-    const result = await ReportingWorkflow(traceId, signal);
-
-    expect(mockUpdateStatus).toHaveBeenCalledWith({ jobRunId: traceId, status: expectedStatus });
-    expect(mockGenerateDiscoveryReport).toHaveBeenCalledWith(traceId);
+    // Check result
+    const result = await handle.result();
     expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.Errored
+    })).once();
   });
 
-  it('should handle MIGRATE report type', async () => {
-    const jobState = { failedWorkers: [], workers: ['worker1'] };
-    mockGetJobState.mockResolvedValue(jobState);
-    const expectedStatus = JobRunStatus.Completed;
+  it('should wait for signal and complete for MIGRATE report type with success', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockMigrationTaskService.generateCOCReport(traceId))
+      .thenResolve();
 
-    // Simulate the signal for MIGRATE
-    await signal(JobReportType.MIGRATE);
+    // Send signal
+    await handle.signal(signal, JobReportType.MIGRATE);
 
-    const result = await ReportingWorkflow(traceId, signal);
-
-    expect(mockUpdateStatus).toHaveBeenCalledWith({ jobRunId: traceId, status: expectedStatus });
-    expect(mockGenerateCOCReport).toHaveBeenCalledWith(traceId);
+    // Check result
+    const result = await handle.result();
     expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.Completed
+    })).once();
+    verify(mockMigrationTaskService.generateCOCReport(traceId)).once();
   });
 
-  it('should throw an error for unknown report type', async () => {
-    const jobState = { failedWorkers: [], workers: ['worker1'] };
-    mockGetJobState.mockResolvedValue(jobState);
+  it('should wait for signal and complete for MIGRATE report type with error', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1', 'worker2'], failedWorkers: ['worker1', 'worker2'] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockMigrationTaskService.generateCOCReport(traceId))
+      .thenResolve();
 
-    // Simulate the signal for an unknown report type
-    await signal('UNKNOWN_TYPE');
+    // Send signal
+    await handle.signal(signal, JobReportType.MIGRATE);
 
-    await expect(ReportingWorkflow(traceId, signal)).rejects.toThrow('Unknown REPORT TYPE');
+    // Check result
+    const result = await handle.result();
+    expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.Errored
+    })).once();
+  });
+
+  it('should wait for signal and complete for CUT_OVER report type with success', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockMigrationTaskService.generateCOCReport(traceId))
+      .thenResolve();
+    
+    when(mockCommonActivityService.generateJobsReport(traceId))
+      .thenResolve();
+
+    // Send signal
+    await handle.signal(signal, JobReportType.CUT_OVER);
+
+    // Check result
+    const result = await handle.result();
+    expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.BLOCKED
+    })).once();
+    verify(mockMigrationTaskService.generateCOCReport(traceId)).once();
+    verify(mockCommonActivityService.generateJobsReport(traceId)).once();
+  });
+
+  it('should wait for signal and complete for CUT_OVER report type with error', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1', 'worker2'], failedWorkers: ['worker1', 'worker2'] });
+    
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    
+    when(mockMigrationTaskService.generateCOCReport(traceId))
+      .thenResolve();
+    
+    when(mockCommonActivityService.generateJobsReport(traceId))
+      .thenResolve();
+
+    // Send signal
+    await handle.signal(signal, JobReportType.CUT_OVER);
+
+    // Check result
+    const result = await handle.result();
+    expect(result).toBe('REPORTING COMPLETED');
+
+    // Verify activities were called correctly
+    verify(mockCommonActivityService.updateStatus({
+      jobRunId: traceId,
+      status: JobRunStatus.Errored
+    })).once();
+  });
+
+  it('should throw error for unknown report type', async () => {
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
+
+    // Send invalid signal
+    await expect(handle.signal(signal, 'UNKNOWN_TYPE')).rejects.toThrow();
+
+    // Verify workflow failed
+    await expect(handle.result()).rejects.toThrow('Unknown REPORT TYPE');
   });
 
   it('should handle workflow cancellation', async () => {
-    const jobState = { failedWorkers: [], workers: ['worker1'] };
-    mockGetJobState.mockResolvedValue(jobState);
+    // Mock activities
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
 
-    // Simulate cancellation
-    const cancelSignal = wf.defineSignal('cancel');
-    wf.setHandler(cancelSignal, () => {
-      throw new wf.CancelledFailure('Workflow was cancelled');
-    });
+    // Cancel workflow before sending signal
+    await handle.cancel();
 
-    await expect(ReportingWorkflow(traceId, cancelSignal)).rejects.toThrow(wf.CancelledFailure);
+    // Verify workflow was cancelled
+    await expect(handle.result()).rejects.toThrow('Workflow cancelled');
+  });
+
+  it('isReportedQuery should return correct state', async () => {
+    // Initially should be false (blocked)
+    let isReported = await handle.query(workflow.isReportedQuery);
+    expect(isReported).toBe(false);
+
+    // After signal should be true
+    when(mockCommonActivityService.getJobState(traceId))
+      .thenResolve({ workers: ['worker1'], failedWorkers: [] });
+    when(mockCommonActivityService.updateStatus(anything()))
+      .thenResolve();
+    when(mockDiscoveryActivity.generateDiscoveryReport(traceId))
+      .thenResolve();
+
+    await handle.signal(signal, JobReportType.DISCOVER);
+    
+    isReported = await handle.query(workflow.isReportedQuery);
+    expect(isReported).toBe(true);
   });
 });
