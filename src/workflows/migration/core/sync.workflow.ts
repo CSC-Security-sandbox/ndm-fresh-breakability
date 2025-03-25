@@ -1,9 +1,8 @@
+import * as wf from '@temporalio/workflow';
 import { ContinueAsNew, continueAsNew, proxyActivities } from "@temporalio/workflow";
+import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
-import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
-import * as wf from '@temporalio/workflow';
-import { CommonActivityService } from "src/activities/common/common.service";
 
 
 
@@ -31,6 +30,7 @@ export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, wo
         while (true) {
             iteration++;
             const jobState = await getJobStateActivity(jobRunId);
+            log(jobRunId,`Iteration number ${iteration} for sync jobState = ${JSON.stringify(jobState)}`)
             if(jobState.status !== JobRunStatus.Running) {
               return { message: `Job status changed to ${jobState.status}` };
             }
@@ -39,6 +39,7 @@ export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, wo
 
             if (noTaskFound) {
                 const jobState = await getJobStateActivity(jobRunId);
+                log(jobRunId,`Iteration number when noTaskFound ${iteration} for sync jobState = ${JSON.stringify(jobState)}`)
                 const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
                 const newJobState = { ...jobState, workers_agreed: uniqueAgreedWorkers };
                 await setJobStateActivity(jobRunId, newJobState);
