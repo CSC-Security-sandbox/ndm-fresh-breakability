@@ -23,6 +23,7 @@ export default registerAs(
     maxMigrationCommand: process.env.MAX_MIGRATION_COMMAND || 100,
     scanTaskDirBatch : process.env.SCAN_TASK_DIR_BATCH || 500,
     fetchTaskBatchMigration: process.env.FETCH_TASK_BATCH_MIGRATION || 1,
+    maxConcurrency: process.env.MAX_CONCURRENCY || 100,
   }),
 );
 
