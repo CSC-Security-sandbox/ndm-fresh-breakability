@@ -43,7 +43,7 @@ const WorkerInstallation = ({
   };
 
   return (
-    <Button onClick={showWorkerInstructions}>
+    <Button onClick={showWorkerInstructions} className="ml-4">
       {label || "Worker Installation"}
     </Button>
   );
