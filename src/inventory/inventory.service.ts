@@ -172,7 +172,7 @@ export class InventoryService {
           workerId,
         });
       }
-      await this.taskRepo.save(task);
+      await this.taskRepo.upsert(task, ['id']);  
 
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
