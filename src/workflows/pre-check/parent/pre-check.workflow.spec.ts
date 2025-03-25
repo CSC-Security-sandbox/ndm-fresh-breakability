@@ -145,7 +145,7 @@ jest.mock('@temporalio/workflow', () => ({
                     return Promise.resolve({
                         pathId: serverPaths.pathId,
                         status: PreCheckStatus.FAILED,
-                        errorCode: PreCheckErrorCodes.UNKNOWN_ERROR,
+                        errorCode: PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND ,
                         workerId: 'worker-1'
                     });
             }

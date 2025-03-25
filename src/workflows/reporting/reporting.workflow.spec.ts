@@ -1,6 +1,6 @@
 import { WorkflowHandle } from '@temporalio/client';
 import * as workflow from './reporting.workflow';
-import { JobReportType, JobRunStatus } from 'src/activities/discovery/enums';
+import { JobReportType, JobRunStatus } from '../../activities/discovery/enums';
 import { mock, when, instance, verify, reset, anything, capture } from 'ts-mockito';
 
 describe('ReportingWorkflow', () => {

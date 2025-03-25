@@ -3,7 +3,7 @@ import { MigrationScanService } from './migrate.scan.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
-import { Command, CommandStatus, JobContext, Logger, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, CommandStatus, FileServerDetails, JobContext, Logger, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
@@ -324,9 +324,7 @@ describe('MigrationScanService', () => {
           deserialize: function (json: string): void {}
         },
         jobRunId: jobRunId,
-        jobState: JobState.RUNNING,
         jobRunStatus: 'someStatus',
-        errorsInfo: { jobRunId: 'job-1', streamKey: '', numMessages: 0, lastId: '', errors: [] },
         appendToUpdatedTaskList: jest.fn(),
       };
 
@@ -352,8 +350,8 @@ describe('MigrationScanService', () => {
       const jobRunId = 'job-1';
       const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn() };
       const task = { commands: [{ status: CommandStatus.IN_PROCESS, fPath: 'file.txt' }] };
-      mockRedisService.getJobContext.mockResolvedValue(jobContext);
-      mockCommonService.fetchOneTask.mockResolvedValue(task);
+      mockRedisService.getJobContext = jest.fn().mockResolvedValue(jobContext);
+      mockCommonService.fetchOneTask = jest.fn().mockResolvedValue(task);
       (service.scanContent as jest.Mock).mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'some-error' });
 
       const result = await service.scanPath({ jobRunId });
@@ -366,7 +364,7 @@ describe('MigrationScanService', () => {
     it('should build a command if content is updated', () => {
       const sFile = { size: 100, mtime: new Date(), isDirectory: () => false };
       const fPath = 'file.txt';
-      const command = service.buildCommand(sFile as any, fPath);
+      const command:any = service.buildCommand(sFile as any, fPath);
       expect(command).toBeDefined();
       expect(command.cmd[0].cmd).toBe('COPY_CONTENT');
     });
