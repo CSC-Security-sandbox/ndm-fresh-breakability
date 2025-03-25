@@ -29,7 +29,8 @@ import { JobConfigService } from './jobconfig.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { JobRunStats } from 'src/jobrun/dto/jobstats';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
-
+import { v4 as uuid } from 'uuid';
+import { start } from 'repl';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -53,10 +54,10 @@ describe('JobConfigService', () => {
   let identityMappingRepo: any;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
   let operationErrorRepo: Repository<OperationErrorEntity>;
-  let redisService:RedisService
+  let redisService: RedisService
   let workFlowService: WorkflowService;
- 
-  
+
+
 
   beforeEach(async () => {
     configService = {
@@ -276,7 +277,7 @@ describe('JobConfigService', () => {
             createQueryBuilder: jest.fn(),
           },
         }
-        
+
       ],
     }).compile();
 
@@ -419,7 +420,7 @@ describe('JobConfigService', () => {
     try {
       await service.getSpeedTestById(mockId);
     } catch (error) {
-      expect(error).toBeInstanceOf(HttpException);      
+      expect(error).toBeInstanceOf(HttpException);
     }
   });
 
@@ -554,7 +555,7 @@ describe('JobConfigService', () => {
 
     await expect(service.getSpeedTestDetails(mockJobRunId)).rejects.toThrow(`JobRun with id ${mockJobRunId} not found`);
   });
-  
+
   it('should store speed test result successfully', async () => {
     const mockSpeedTest = {
       traceId: 'traceId',
@@ -715,7 +716,7 @@ describe('JobConfigService', () => {
         jobType: JobType.DISCOVER,
         sourcePath: In(mockBulkDiscovery.sourcePathIds),
       },
-      select: { sourcePathId: true, scheduler: true ,id:true,status:true},
+      select: { sourcePathId: true, scheduler: true, id: true, status: true },
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -772,7 +773,7 @@ describe('JobConfigService', () => {
         jobType: JobType.DISCOVER,
         sourcePath: In(mockBulkDiscovery.sourcePathIds),
       },
-      select: { sourcePathId: true, scheduler: true,id:true ,status:true},
+      select: { sourcePathId: true, scheduler: true, id: true, status: true },
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -850,7 +851,7 @@ describe('JobConfigService', () => {
         sourcePathId: 'sourcePath1',
         targetPathId: 'destinationPath1',
       },
-      select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true,status:true },
+      select: { sourcePathId: true, targetPathId: true, scheduler: true, id: true, status: true },
     });
     expect(jobConfigRepo.update).toHaveBeenCalledWith(
       {
@@ -887,7 +888,7 @@ describe('JobConfigService', () => {
     });
     expect(jobConfigRepo.save).toHaveBeenCalledWith([
       {
-        status: JobStatus.Active,   
+        status: JobStatus.Active,
         excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
         jobType: JobType.MIGRATE,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
@@ -964,63 +965,118 @@ describe('JobConfigService', () => {
     expect(identityMappingRepo.save).toHaveBeenCalled();
   });
 
+  // columns.length !== 4 case
+  it("should throw an error if parsed mappings do not have 4 columns", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: "sourcePath1",
+          destinationPathId: ["destinationPath1"],
+        },
+      ],
+      sidMapping: "base64EncodedSidMapping",
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        skipFile: false,
+      },
+      firstRunAt: new Date(),
+      futureRunSchedule: "0 0 * * *",
+    };
+
+    const mockDecodedSidMapping = "decodedSidMapping";
+    const mockParsedMappings = [{ sourceMapping: "source1", targetMapping: "target1" }];
+
+    const mockExistingJobConfigs = [
+      {
+        sourcePathId: "sourcePath1",
+        targetPathId: "destinationPath1",
+        scheduler: ScheduleStatus.SCHEDULING,
+        id: "jobConfigId1",
+      },
+    ];
+
+    const mockSavedIdentityMapping = { id: "identityMappingId1" };
+
+    jest
+      .spyOn(service, "decodeBase64")
+      .mockResolvedValue(mockDecodedSidMapping);
+
+    jest.spyOn(service, "parseBlobData").mockResolvedValue(mockParsedMappings);
+
+    jest
+      .spyOn(jobConfigRepo, "find")
+      .mockResolvedValue(mockExistingJobConfigs as any);
+
+    jest
+      .spyOn(identityMappingRepo, "save")
+      .mockResolvedValue(mockSavedIdentityMapping as any);
+
+    try {
+      await service.createBulkMigrate(mockBulkMigrate as any);
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);
+    }
+  });
+
   it('should process gidMapping when it is a valid string', async () => {
-  const mockBulkMigrate = {
-    migrateConfigs: [
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: 'sourcePath1',
+          destinationPathId: ['destinationPath1'],
+        },
+      ],
+      gidMapping: 'base64EncodedGidMapping',
+      options: {
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        skipFile: false,
+      },
+      firstRunAt: new Date(),
+      futureRunSchedule: '0 0 * * *',
+    };
+
+    const mockDecodedGidMapping = 'decodedGidMapping';
+    const mockParsedMappings = [
+      {
+        sourceMappingGid: "source1",
+        targetMappingGid: "target1",
+        sourceMappingUid: "source1",
+        targetMappingUid: "target1",
+      },
+    ];
+
+    const mockExistingJobConfigs = [
       {
         sourcePathId: 'sourcePath1',
-        destinationPathId: ['destinationPath1'],
+        targetPathId: 'destinationPath1',
+        scheduler: ScheduleStatus.SCHEDULING,
+        id: 'jobConfigId1',
       },
-    ],
-    gidMapping: 'base64EncodedGidMapping',
-    options: {
-      excludeFilePatterns: '*.tmp',
-      preserveAccessTime: true,
-      excludeOlderThan: new Date(),
-      skipFile: false,
-    },
-    firstRunAt: new Date(),
-    futureRunSchedule: '0 0 * * *',
-  };
+    ];
 
-  const mockDecodedGidMapping = 'decodedGidMapping';
-  const mockParsedMappings = [
-    {
-      sourceMappingGid: "source1",
-      targetMappingGid: "target1",
-      sourceMappingUid: "source1",
-      targetMappingUid: "target1",
-    },
-  ];
+    const mockSavedIdentityMapping = { id: 'identityMappingId1' };
 
-  const mockExistingJobConfigs = [
-    {
-      sourcePathId: 'sourcePath1',
-      targetPathId: 'destinationPath1',
-      scheduler: ScheduleStatus.SCHEDULING,
-      id: 'jobConfigId1',
-    },
-  ];
+    jest.spyOn(service, 'decodeBase64').mockResolvedValue(mockDecodedGidMapping);
 
-  const mockSavedIdentityMapping = { id: 'identityMappingId1' };
+    jest.spyOn(service, 'parseBlobData').mockResolvedValue(mockParsedMappings);
 
-  jest.spyOn(service, 'decodeBase64').mockResolvedValue(mockDecodedGidMapping);
+    jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
 
-  jest.spyOn(service, 'parseBlobData').mockResolvedValue(mockParsedMappings);
+    jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(mockSavedIdentityMapping as any);
 
-  jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
+    await service.createBulkMigrate(mockBulkMigrate as any);
 
-  jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(mockSavedIdentityMapping as any);
-
-  await service.createBulkMigrate(mockBulkMigrate as any);
-
-  expect(service.decodeBase64).toHaveBeenCalledWith(mockBulkMigrate.gidMapping);
-  expect(service.parseBlobData).toHaveBeenCalledWith(
-    mockDecodedGidMapping,
-    TemplateType.GID
-  );
-  expect(identityMappingRepo.save).toHaveBeenCalled();
-});
+    expect(service.decodeBase64).toHaveBeenCalledWith(mockBulkMigrate.gidMapping);
+    expect(service.parseBlobData).toHaveBeenCalledWith(
+      mockDecodedGidMapping,
+      TemplateType.GID
+    );
+    expect(identityMappingRepo.save).toHaveBeenCalled();
+  });
 
   it("should delete Redis keys for job runs when keys exist", async () => {
     const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
@@ -1090,7 +1146,7 @@ describe('JobConfigService', () => {
     });
   });
 
-  
+
   it('should handle empty migrateConfigs', async () => {
     const mockBulkMigrate = {
       migrateConfigs: [],
@@ -1423,7 +1479,7 @@ describe('JobConfigService', () => {
         totalSize: "5000",
         errors: [],
       };
-      const mockInvetoryReturnValue=[{
+      const mockInvetoryReturnValue = [{
         filecount: '10',
         directorycount: '5',
         totalsize: '5000',
@@ -1436,7 +1492,7 @@ describe('JobConfigService', () => {
         getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
         //getRawMany: jest.fn().mockResolvedValue(mockInvetoryReturnValue),
       } as any);
-      jest.spyOn(service,'calculateJobRunStats').mockReturnValue(Promise.resolve(mockInventoryStats))
+      jest.spyOn(service, 'calculateJobRunStats').mockReturnValue(Promise.resolve(mockInventoryStats))
 
       const result = await service.getJobConfigById(mockJobConfigId);
 
@@ -1509,6 +1565,48 @@ describe('JobConfigService', () => {
           'targetPath.fileServer',
           'targetPath.fileServer.config',
         ],
+      });
+    });
+
+    // jobRun.status===JobRunStatus.Completed case
+    it('should return jobStats for jobRun.status===JobRunStatus.Completed', async () => {
+      const mockJobConfig = {
+        id: 'jobConfigId',
+        jobRuns: [
+          {
+            id: 'jobRunId1',
+            status: JobRunStatus.Completed,
+            timeElapsed: 0,
+            startTime: new Date(),
+            endTime: new Date(),
+            jobStats: {
+              fileCount: '10',
+              directories: '5',
+              totalSize: '1000',
+            }
+          },
+          {
+            id: 'jobRunId2',
+            status: JobRunStatus.Completed,
+            timeElapsed: 0,
+            startTime: new Date(),
+            endTime: new Date(),
+            jobStats: {
+              fileCount: '20',
+              directories: '10',
+              totalSize: '2000',
+            }
+          }
+        ]
+      }
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfigById('jobConfigId');
+      expect(result.aggregateData).toEqual({
+        timeElapsed: 0,
+        scannedFilesCount: '30',
+        scannedDirectoriesCount: '15',
+        totalScannedSize: '2.93 KB',
       });
     });
   });
@@ -1902,7 +2000,7 @@ describe('JobConfigService', () => {
     });
   });
   describe('covertBytes', () => {
-     it('should convert bytes to appropriate units', () => {
+    it('should convert bytes to appropriate units', () => {
       expect(service.covertBytes(500)).toBe('500 B');
       expect(service.covertBytes(1024)).toBe('1.00 KB');
       expect(service.covertBytes(1048576)).toBe('1.00 MB');
@@ -1937,7 +2035,7 @@ describe('JobConfigService', () => {
         [TemplateType.SID]: 'template2.csv',
         [TemplateType.UID]: 'template3.csv',
       };
-    
+
       expect(service.getTemplateFilename('INVALID_TYPE' as TemplateType)).toBeUndefined();
     });
   });
@@ -2009,7 +2107,7 @@ describe('JobConfigService', () => {
 
     it('should return an empty array if no job configs are found for the given project ID', async () => {
       const mockProjectId = 'projectId';
-    
+
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         leftJoin: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -2021,22 +2119,31 @@ describe('JobConfigService', () => {
         addGroupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       } as any);
-    
+
       const result = await service.getAllJobConfig(mockProjectId);
-    
+
       expect(result).toEqual([]);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith('jobconfig');
     });
   });
   it('should throw BadRequestException if projectId is not a valid UUID', async () => {
     const mockProjectId = 'invalid-uuid';
-  
+
     jest.mock('class-validator', () => ({
       ...jest.requireActual('class-validator'),
       isUUID: jest.fn(() => false),
     }));
-  
+
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
+  });
+
+  // NotFoundException case
+  it('should throw NotFoundException if project is not found', async () => {
+    const mockProjectId = uuid();
+    jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
+    const getConfigsByProjectIdSpy = jest.spyOn(service, 'getConfigsByProjectId');
+    await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(NotFoundException);
+    expect(getConfigsByProjectIdSpy).toHaveBeenCalledWith(mockProjectId);
   });
 
   it("should throw NotFoundException if no project is found for the given project ID", async () => {
@@ -2056,10 +2163,10 @@ describe('JobConfigService', () => {
 
   it('should throw NotFoundException if no project is found for the given project ID', async () => {
     const mockProjectId = 'valid-uuid';
-  
+
     jest.spyOn(require('class-validator'), 'isUUID').mockReturnValue(true);
     jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
-  
+
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
   });
   it('should handle cases where targetPath is null in job configs', async () => {
@@ -2082,7 +2189,7 @@ describe('JobConfigService', () => {
         totalRuns: 5,
       },
     ];
-  
+
     jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
       leftJoin: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -2094,11 +2201,11 @@ describe('JobConfigService', () => {
       addGroupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
     } as any);
-  
+
     jest.spyOn(require('src/utils/mapper'), 'nextDate').mockReturnValue(new Date());
-  
+
     const result = await service.getAllJobConfig(mockProjectId);
-  
+
     expect(result).toEqual([
       {
         jobConfigId: 'jobConfigId1',
@@ -2120,7 +2227,7 @@ describe('JobConfigService', () => {
   });
   it('should return an empty array if no job configs are found', async () => {
     const mockProjectId = 'projectId';
-  
+
     jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
       leftJoin: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -2132,42 +2239,39 @@ describe('JobConfigService', () => {
       addGroupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue([]),
     } as any);
-  
+
     const result = await service.getAllJobConfig(mockProjectId);
-  
+
     expect(result).toEqual([]);
   });
-  
+
   it('should throw BadRequestException if projectId is invalid', async () => {
     const mockProjectId = 'invalid-uuid';
-  
+
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
   });
 
   it('should throw NotFoundException if project is not found', async () => {
     const mockProjectId = 'valid-uuid';
-  
+
     jest.spyOn(projectRepo, 'findOne').mockResolvedValue(null);
     const getConfigsByProjectIdSpy = jest.spyOn(service, 'getConfigsByProjectId');
-  
+
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
     expect(getConfigsByProjectIdSpy).toHaveBeenCalledWith(mockProjectId);
   });
   describe('JobConfigService', () => {
-   
+
     describe('decodeBase64', () => {
-      it('should decode a valid base64 string', async () => {
-        const base64String = 'SGVsbG8gd29ybGQ=';
-        const expectedOutput = 'Hello world';
-        jest.spyOn(service,'decodeBase64').mockResolvedValue(expectedOutput);
-        const result = await service.decodeBase64(base64String);
-  
-        expect(result).toEqual(expectedOutput);
+      it("should decode a valid Base64 string", async () => {
+        const input = "data:text/plain;base64,SGVsbG8gd29ybGQ="; // "Hello world" in Base64
+        const result = await service.decodeBase64(input);
+        expect(result).toBe("Hello world");
       });
-  
+
       it('should throw an error for an invalid base64 string', async () => {
         const base64String = 'InvalidBase64String';
-  
+
         await expect(service.decodeBase64(base64String)).rejects.toThrowError('Invalid Base64 format');
       });
     });
@@ -2181,11 +2285,11 @@ describe('JobConfigService', () => {
         { sourceMapping: 'source2', targetMapping: 'target2' },
       ];
       const identityMap = 'identityMap1';
-      const savedIdentityMapping = { id: '1' , sourceMapping: 'source1', targetMapping: 'target1' , identityType: 'SID'};
-      const savedCrossMapping = { id: '2' , jobConfigId: '1', identityMappingId: 'identityMap1'};
+      const savedIdentityMapping = { id: '1', sourceMapping: 'source1', targetMapping: 'target1', identityType: 'SID' };
+      const savedCrossMapping = { id: '2', jobConfigId: '1', identityMappingId: 'identityMap1' };
 
       identityMappingRepo.create = jest.fn().mockReturnValue(savedIdentityMapping);
-      identityMappingRepo.save=jest.fn().mockResolvedValue(savedIdentityMapping);
+      identityMappingRepo.save = jest.fn().mockResolvedValue(savedIdentityMapping);
 
       await service.saveIdentityMappingsWithMap(jobConfigIds, parsedData, identityMap, TemplateType.SID);
 
@@ -2233,15 +2337,15 @@ describe('JobConfigService', () => {
     });
 
     it('should return an empty array if blob data is empty', async () => {
-      const mockBlobData = 'dummyData'; 
-      const mockParsedData: ParsedMapping[] = []; 
+      const mockBlobData = 'dummyData';
+      const mockParsedData: ParsedMapping[] = [];
 
       jest.spyOn(service, 'parseBlobData').mockResolvedValue(mockParsedData);
 
       const templateType = TemplateType.SID;
       const result = await service.parseBlobData(mockBlobData, templateType);
 
-      expect(result).toEqual(mockParsedData); 
+      expect(result).toEqual(mockParsedData);
     });
 
     it('should return an empty array if blob data is undefined', async () => {
@@ -2249,9 +2353,9 @@ describe('JobConfigService', () => {
 
       const blobData = undefined;
       const templateType = TemplateType.SID;
-  
+
       const result = await service.parseBlobData(blobData, templateType);
-  
+
       expect(result).toEqual([]);
     });
     describe('updateMappingsWithMap', () => {
@@ -2266,7 +2370,7 @@ describe('JobConfigService', () => {
 
         const identityMap = 'identityMap';
         const templateType = TemplateType.SID;
-  
+
         const createSpy = jest.spyOn(identityMappingRepo, 'create');
         const saveSpy = jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(
           { id: '1', sourceMapping: 'sourceMapping', targetMapping: 'targetMapping', identityType: templateType } as any
@@ -2275,7 +2379,7 @@ describe('JobConfigService', () => {
         const createCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'create');
         const saveCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
         await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, templateType);
-  
+
         expect(createSpy).toHaveBeenCalledWith({
           identityType: templateType,
           identityMap: identityMap,
@@ -2283,16 +2387,55 @@ describe('JobConfigService', () => {
           targetMapping: parsedData[0].targetMapping,
         });
         expect(saveSpy).toHaveBeenCalled();
-  
+
         expect(findOneSpy).toHaveBeenCalledWith({
           where: {
-            jobConfigId: jobConfigIds[0], isOrphan:false
+            jobConfigId: jobConfigIds[0], isOrphan: false
           },
         });
         expect(createCrossMappingSpy).toHaveBeenCalledWith({
           identityMappingId: identityMap,
           jobConfigId: jobConfigIds[0],
         });
+        expect(saveCrossMappingSpy).toHaveBeenCalled();
+      });
+
+      // if(existingCrossMapping) case
+      it('should update identity mappings and cross mappings if existingCrossMapping is found', async () => {
+        const jobConfigIds = ['1', '2'];
+        const parsedData = [
+          {
+            sourceMapping: 'sourceMapping',
+            targetMapping: 'targetMapping',
+          },
+        ];
+        const identityMap = 'identityMap';
+        const templateType = TemplateType.SID;
+
+        const createSpy = jest.spyOn(identityMappingRepo, 'create');
+        const saveSpy = jest.spyOn(identityMappingRepo, 'save').mockResolvedValue(
+          { id: '1', sourceMapping: 'sourceMapping', targetMapping: 'targetMapping', identityType: templateType } as any
+        );
+        const findOneSpy = jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue({} as any);
+        const createCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'create');
+        const saveCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
+
+        await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, templateType);
+
+        expect(createSpy).toHaveBeenCalledWith({
+          identityType: templateType,
+          identityMap: identityMap,
+          sourceMapping: parsedData[0].sourceMapping,
+          targetMapping: parsedData[0].targetMapping,
+        });
+        expect(saveSpy).toHaveBeenCalled();
+
+        expect(findOneSpy).toHaveBeenCalledWith({
+          where: {
+            jobConfigId: jobConfigIds[0], isOrphan: false
+          },
+        });
+        expect(createCrossMappingSpy).not.toHaveBeenCalled();
         expect(saveCrossMappingSpy).toHaveBeenCalled();
       });
     });
@@ -2347,9 +2490,9 @@ describe('JobConfigService', () => {
 
         identityMappingRepo.create.mockReturnValue({});
         identityMappingRepo.save.mockReturnValue({ id: '1' });
-    
+
         await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, TemplateType.GID);
-  
+
         expect(identityMappingRepo.create).toHaveBeenCalledWith({
           identityType: TemplateType.GID,
           identityMap: identityMap,
@@ -2360,7 +2503,7 @@ describe('JobConfigService', () => {
         expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
           where: {
             jobConfigId: jobConfigIds[0],
-            isOrphan:false
+            isOrphan: false
           },
         });
         expect(identityCrossMappingRepo.create).toHaveBeenCalledWith({
@@ -2381,7 +2524,7 @@ describe('JobConfigService', () => {
         ];
         const identityMap = 'identityMap';
         const templateType = TemplateType.SID;
-  
+
         const createIdentityMappingSpy = jest.spyOn(identityMappingRepo, 'create').mockReturnValue({});
         const saveIdentityMappingSpy = jest.spyOn(identityMappingRepo, 'save').mockResolvedValue({});
         const createIdentityCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'create').mockReturnValue({
@@ -2394,12 +2537,12 @@ describe('JobConfigService', () => {
           updatedAt: undefined,
           createdBy: '',
           updatedBy: '',
-          isOrphan:false,
+          isOrphan: false,
         });
         const saveIdentityCrossMappingSpy = jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
-  
+
         await service.updateMappingsWithMap(jobConfigIds, parsedData, identityMap, templateType);
-  
+
         expect(createIdentityMappingSpy).toHaveBeenCalledWith({
           identityType: templateType,
           identityMap: identityMap,
@@ -2407,7 +2550,7 @@ describe('JobConfigService', () => {
           targetMapping: parsedData[0].targetMapping,
         });
         expect(saveIdentityMappingSpy).toHaveBeenCalled();
-  
+
         expect(createIdentityCrossMappingSpy).toHaveBeenCalledWith({
           identityMappingId: identityMap,
           jobConfigId: jobConfigIds[0],
@@ -2415,11 +2558,11 @@ describe('JobConfigService', () => {
         expect(saveIdentityCrossMappingSpy).toHaveBeenCalled();
       });
     });
-     describe('getNoticeBoardDetailsByProjectId', () => {
+    describe('getNoticeBoardDetailsByProjectId', () => {
       it('should return correct counts for different job statuses', async () => {
         const projectId = '123e4567-e89b-12d3-a456-426614174000';
-    
-      
+
+
         jest.spyOn(jobRunRepo, 'createQueryBuilder').mockImplementation(() => {
           return {
             innerJoin: jest.fn().mockReturnThis(),
@@ -2427,34 +2570,34 @@ describe('JobConfigService', () => {
             andWhere: jest.fn().mockReturnThis(),
             getCount: jest
               .fn()
-              .mockResolvedValueOnce(5) 
-              .mockResolvedValueOnce(2) 
-              .mockResolvedValueOnce(3) 
+              .mockResolvedValueOnce(5)
+              .mockResolvedValueOnce(2)
+              .mockResolvedValueOnce(3)
           } as any;
         });
-    
+
         jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockImplementation(() => {
           return {
             innerJoin: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
             andWhere: jest.fn().mockReturnThis(),
-            getCount: jest.fn().mockResolvedValue(4), 
+            getCount: jest.fn().mockResolvedValue(4),
           } as any;
         });
-    
+
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
-    
+
         expect(result).toEqual({
           countErroredJobRuns: 5,
           countBlockedCutoverJobRuns: 5,
           countRecentJobConfigs: 4,
           countCompletedJobRuns: 5,
         });
-    
+
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
         expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
       });
-    
+
       it('should return zero counts when no job runs exist', async () => {
         const projectId = '123e4567-e89b-12d3-a456-426614174000';
 
@@ -2466,7 +2609,7 @@ describe('JobConfigService', () => {
             getCount: jest.fn().mockResolvedValue(0),
           } as any;
         });
-    
+
         jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockImplementation(() => {
           return {
             innerJoin: jest.fn().mockReturnThis(),
@@ -2475,75 +2618,103 @@ describe('JobConfigService', () => {
             getCount: jest.fn().mockResolvedValue(0),
           } as any;
         });
-    
+
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
-    
+
         expect(result).toEqual({
           countErroredJobRuns: 0,
           countBlockedCutoverJobRuns: 0,
           countRecentJobConfigs: 0,
           countCompletedJobRuns: 0,
         });
-    
+
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
         expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
       });
-     });
-    
+    });
+
   });
 
-describe('createBulkMigrate', () => {
-  it("should return an empty array if migrateConfigs is missing", async () => {
-    const bulkMigrate: BulkMigrateJobConfig = {
-      migrateConfigs: undefined,
-    } as any;
+  describe('createBulkMigrate', () => {
+    it("should return an empty array if migrateConfigs is missing", async () => {
+      const bulkMigrate: BulkMigrateJobConfig = {
+        migrateConfigs: undefined,
+      } as any;
 
-    const result = await service.createBulkMigrate(bulkMigrate);
-    expect(result).toEqual([]);
+      const result = await service.createBulkMigrate(bulkMigrate);
+      expect(result).toEqual([]);
+    });
+
+    it("should update existing job configurations when found", async () => {
+      const bulkMigrate: BulkMigrateJobConfig = {
+        migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
+        options: {
+          excludeFilePatterns: "*.tmp",
+          preserveAccessTime: true,
+        },
+      } as any;
+
+      jobConfigRepo.find = jest.fn().mockResolvedValue([
+        { id: "job1", sourcePathId: "src1", targetPathId: "dest1", scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
+      ]);
+
+      jobConfigRepo.update = jest.fn();
+
+      await service.createBulkMigrate(bulkMigrate);
+
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1", scheduler: expect.anything() },
+        expect.objectContaining({ status: JobStatus.Active })
+      );
+    });
+
+    it("should create new job configurations when none exist", async () => {
+      const bulkMigrate: BulkMigrateJobConfig = {
+        migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
+        options: { excludeFilePatterns: "*.tmp" },
+      } as any;
+
+      jobConfigRepo.find = jest.fn().mockResolvedValue([]);
+      jobConfigRepo.create = jest.fn().mockImplementation((config) => config);
+      jobConfigRepo.save = jest.fn().mockResolvedValue([{ id: "new_job1", jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1" }]);
+
+      const result = await service.createBulkMigrate(bulkMigrate);
+
+      expect(jobConfigRepo.create).toHaveBeenCalled();
+      expect(jobConfigRepo.save).toHaveBeenCalled();
+      expect(result).toEqual([
+        { id: "new_job1", jobType: JobType.MIGRATE, status: "CREATED", sourcePathId: "src1", targetPathId: "dest1" },
+      ]);
+    });
+
+    it('should handle SID mapping', async () => {
+      jest.spyOn(service, 'decodeBase64').mockResolvedValue('decoded-data');
+      jest.spyOn(service, 'parseBlobData').mockResolvedValue([{ some: 'parsedData' }] as any);
+
+      const bulkMigrate = { migrateConfigs: [], sidMapping: 'someBase64' };
+      await service.createBulkMigrate(bulkMigrate as any);
+
+      expect(service.decodeBase64).toHaveBeenCalledWith('someBase64');
+      expect(service.parseBlobData).toHaveBeenCalled();
+    });
+
+    it('should handle GID mapping', async () => {
+      jest.spyOn(service, 'decodeBase64').mockResolvedValue('decoded-gid');
+      jest.spyOn(service, 'parseBlobData').mockResolvedValue([{ some: 'parsedGidData' }] as any);
+
+      const bulkMigrate = { migrateConfigs: [], gidMapping: 'gidBase64' };
+      await service.createBulkMigrate(bulkMigrate as any);
+
+      expect(service.decodeBase64).toHaveBeenCalledWith('gidBase64');
+      expect(service.parseBlobData).toHaveBeenCalled();
+    });
+
+    it('should continue when destinationPathId is missing', async () => {
+      const bulkMigrate = { migrateConfigs: [{ sourcePathId: 'source-1' }] };
+      const result = await service.createBulkMigrate(bulkMigrate as any);
+      expect(result).toEqual([]);
+    });
   });
-
-  it("should update existing job configurations when found", async () => {
-    const bulkMigrate: BulkMigrateJobConfig = {
-      migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
-      options: {
-        excludeFilePatterns: "*.tmp",
-        preserveAccessTime: true,
-      },
-    } as any;
-
-    jobConfigRepo.find = jest.fn().mockResolvedValue([
-      { id: "job1", sourcePathId: "src1", targetPathId: "dest1", scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
-    ]);
-
-    jobConfigRepo.update = jest.fn();
-
-    await service.createBulkMigrate(bulkMigrate);
-
-    expect(jobConfigRepo.update).toHaveBeenCalledWith(
-      { jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1", scheduler: expect.anything() },
-      expect.objectContaining({ status: JobStatus.Active })
-    );
-  });
-
-  it("should create new job configurations when none exist", async () => {
-    const bulkMigrate: BulkMigrateJobConfig = {
-      migrateConfigs: [{ sourcePathId: "src1", destinationPathId: ["dest1"] }],
-      options: { excludeFilePatterns: "*.tmp" },
-    } as any;
-
-    jobConfigRepo.find = jest.fn().mockResolvedValue([]);
-    jobConfigRepo.create = jest.fn().mockImplementation((config) => config);
-    jobConfigRepo.save = jest.fn().mockResolvedValue([{ id: "new_job1", jobType: JobType.MIGRATE, sourcePathId: "src1", targetPathId: "dest1" }]);
-
-    const result = await service.createBulkMigrate(bulkMigrate);
-
-    expect(jobConfigRepo.create).toHaveBeenCalled();
-    expect(jobConfigRepo.save).toHaveBeenCalled();
-    expect(result).toEqual([
-      { id: "new_job1", jobType: JobType.MIGRATE, status: "CREATED", sourcePathId: "src1", targetPathId: "dest1" },
-    ]);
-  });
-});
 
   describe('getCutoverDetailsByFileServerId', () => {
     it("should return correct cutover details for a given fileServerId", async () => {
@@ -2575,16 +2746,16 @@ describe('createBulkMigrate', () => {
           ],
         },
       ];
-  
+
       const result = await service.getCutoverDetailsByFileServerId(fileServerId);
-  
+
       expect(result).toEqual(expectedResponse);
     });
-  
+
     it("should return an empty array if fileServerId does not match", async () => {
       const fileServerId = "non-existing-id";
       const result = await service.getCutoverDetailsByFileServerId(fileServerId);
-  
+
       expect(result).toEqual([
         {
           protocol: Protocol.NFS,
@@ -2613,11 +2784,11 @@ describe('createBulkMigrate', () => {
         },
       ]);
     });
-  
+
     it("should ensure jobConfig contains correct job type and status", async () => {
       const fileServerId = "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39";
       const result = await service.getCutoverDetailsByFileServerId(fileServerId);
-  
+
       expect(result[0].jobConfig[0].jobType).toBe(JobType.MIGRATE);
       expect(result[0].jobConfig[0].jobRunDetails.status).toBe(JobRunStatus.Completed);
     });
@@ -2642,7 +2813,7 @@ describe('createBulkMigrate', () => {
         endTime: new Date(),
         status: 'Completed',
       };
-      
+
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
 
       jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
@@ -2653,9 +2824,9 @@ describe('createBulkMigrate', () => {
         getRawMany: jest.fn().mockResolvedValue([]),
       } as any);
       jest.spyOn(service, 'getErrorCounts').mockResolvedValue(0);
-      
+
       const result = await service.calculateJobRunStats(jobRunId);
-  
+
       expect(result).toEqual({
         fileCount: '0',
         directories: '0',
@@ -2663,7 +2834,53 @@ describe('createBulkMigrate', () => {
         errors: 0,
       });
     });
-  
+
+    // for (let i = 0; i < inventorySummary.length; i++) case
+    it('should return correct values for inventory summary', async () => {
+      const jobRunId = '12345';
+      const mockInventoryCounts = {
+        filecount: '10',
+        directorycount: '5',
+        totalsize: '1000',
+      };
+      const mockJobRun = {
+        id: 'mockJobRunId',
+        jobConfigId: 'jobConfigId',
+        startTime: new Date(),
+        endTime: new Date(),
+        status: 'Completed',
+      };
+      const inventorySummary = [
+        {
+          directories: '5',
+          fileCount: '10',
+          totalSize: '1000',
+        },
+        {
+          directories: '3',
+          fileCount: '6',
+          totalSize: '600',
+        }
+      ]
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
+      jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(inventorySummary),
+      } as any);
+      jest.spyOn(service, 'getErrorCounts').mockResolvedValue(0);
+
+      const result = await service.calculateJobRunStats(jobRunId);
+      expect(result).toEqual({
+        fileCount: '0',
+        directories: '0',
+        totalSize: '0',
+        errors: 0,
+      });
+    });
   });
 
   describe("JobConfigService - flattenCutoverConfig", () => {
@@ -2671,41 +2888,41 @@ describe('createBulkMigrate', () => {
       const config = [
         { sourcePathId: "source1", destinationPathId: ["dest1", "dest2"] },
       ];
-  
+
       const result = service.flattenCutoverConfig(config);
-  
+
       expect(result).toEqual([
         { sourcePathId: "source1", destinationPathId: "dest1" },
         { sourcePathId: "source1", destinationPathId: "dest2" },
       ]);
     });
-  
+
     it("should flatten multiple configs with multiple destination paths", () => {
       const config = [
         { sourcePathId: "source1", destinationPathId: ["dest1", "dest2"] },
         { sourcePathId: "source2", destinationPathId: ["dest3"] },
       ];
-  
+
       const result = service.flattenCutoverConfig(config);
-  
+
       expect(result).toEqual([
         { sourcePathId: "source1", destinationPathId: "dest1" },
         { sourcePathId: "source1", destinationPathId: "dest2" },
         { sourcePathId: "source2", destinationPathId: "dest3" },
       ]);
     });
-  
+
     it("should return an empty array when given an empty config", () => {
       const result = service.flattenCutoverConfig([]);
       expect(result).toEqual([]);
     });
-  
+
     it("should return an empty array when all destinationPathId arrays are empty", () => {
       const config = [
         { sourcePathId: "source1", destinationPathId: [] },
         { sourcePathId: "source2", destinationPathId: [] },
       ];
-  
+
       const result = service.flattenCutoverConfig(config);
       expect(result).toEqual([]);
     });
@@ -2728,33 +2945,209 @@ describe('createBulkMigrate', () => {
         },
       });
     });
-  
+
     it("should return an error if pre-check fails", async () => {
       jest.spyOn(workFlowService, "startWorkflow").mockRejectedValue(new Error("Workflow failed"));
-  
+
       const preCheckData = {
         preserveAccessTime: true,
         migrateConfigs: [
           { sourcePathId: "path1", destinationPathId: ["path2"] },
         ],
       };
-  
+
       const result = await service.initiatePreCheck(preCheckData as any);
-  
+
       expect(result.status).toBe("error");
       expect(result.erros).toContain("PRECHECK_FAILED");
       expect(result.message).toContain("Failed to perform the precheck");
     });
-    
+
+    it("should handle missing volume mappings", async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: "source1",
+            destinationPathId: ["dest1"],
+          },
+        ],
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({} as any);
+
+      try {
+        const result = await service.initiatePreCheck(mockData);
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+      }
+    });
+
+    it('should call startWorkflow and return a workflowId', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          { sourcePathId: 'source-1', destinationPathId: ['dest-1'] },
+        ],
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([
+        {
+          id: 'source-1',
+          fileServer: {
+            id: 'server-1',
+            workers: [{ workerId: 'worker-1' }],
+            protocolVersion: 'v3',
+          },
+        },
+      ] as any);
+
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+
+      const result = await service.initiatePreCheck(mockData);
+      expect(result).toEqual({ workflowId: 'mock-workflow-id' });
+    });
+
+    it('should handle unexpected errors gracefully', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockRejectedValue(new Error('Database Error'));
+
+      const result = await service.initiatePreCheck(mockData);
+
+      expect(result).toEqual({
+        status: 'error',
+        erros: ['PRECHECK_FAILED'],
+        message: 'Failed to perform the precheck: Error: Database Error',
+      });
+    });
+
+    it('should handle when workflow service fails', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(workFlowService, 'startWorkflow').mockRejectedValue(new Error('Workflow Error'));
+
+      const result = await service.initiatePreCheck(mockData);
+
+      expect(result).toEqual({
+        status: 'error',
+        erros: ['PRECHECK_FAILED'],
+        message: 'Failed to perform the precheck: Error: Workflow Error',
+      });
+    });
+
+    it('should handle case where source and destination have no common workers', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'source-1',
+          fileServer: {
+            id: 'server-1',
+            workers: [{ workerId: 'worker-1' }],
+            protocolVersion: 'v3',
+          },
+        },
+        {
+          id: 'dest-1',
+          fileServer: {
+            id: 'server-2',
+            workers: [{ workerId: 'worker-2' }],
+            protocolVersion: 'v3',
+          },
+        },
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockVolumes as any);
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+
+      const result = await service.initiatePreCheck(mockData);
+      expect(result).toEqual({ workflowId: 'mock-workflow-id' });
+    });
+
+    it('should handle case where destination path is not found', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'source-1',
+          volumePath: '/source/path',
+          fileServer: {
+            id: 'server-1',
+            workers: [{ workerId: 'worker-1' }],
+            protocolVersion: 'v3',
+          },
+        },
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockVolumes as any);
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+
+      const result = await service.initiatePreCheck(mockData);
+
+      expect(result).toEqual({ workflowId: 'mock-workflow-id' });
+    });
+
+    it('should handle case when no path is found in volumeRepo', async () => {
+      const mockData = {
+        preserveAccessTime: true,
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+      };
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+      const result = await service.initiatePreCheck(mockData);
+      expect(result).toEqual({ workflowId: 'mock-workflow-id' });
+      expect(workFlowService.startWorkflow).toHaveBeenCalled();
+    });
   })
+
   describe('getErrorCounts', () => {
     it('should return 0 if error count is not found', async () => {
-     const mockError=[
-      {
-        errorType: 'Error',
-        count: 0
-      }
-     ]
+      const mockError = [
+        {
+          errorType: 'Error',
+          count: 0
+        }
+      ]
       const jobRunId = '12345';
       jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
         innerJoin: jest.fn().mockReturnThis(),
@@ -2764,26 +3157,135 @@ describe('createBulkMigrate', () => {
         getRawMany: jest.fn().mockResolvedValue(mockError),
       } as any);
       const result = await service.getErrorCounts(jobRunId);
-  
+
       expect(result).toEqual(mockError);
     });
     it('should throw error', async () => {
-      const mockError=[
-       {
-         errorType: 'Error',
-         count: 0
-       }
+      const mockError = [
+        {
+          errorType: 'Error',
+          count: 0
+        }
       ]
-       const jobRunId = '12345';
-       jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
-         innerJoin: jest.fn().mockReturnThis(),
-         where: jest.fn().mockReturnThis(),
-         select: jest.fn().mockReturnThis(),
-         groupBy: jest.fn().mockReturnThis(),
-         getRawMany: jest.fn().mockRejectedValue(new Error('Database error')),
-       } as any);
-       const result = await service.getErrorCounts(jobRunId);
-       expect(result).toEqual([]);
-     });
+      const jobRunId = '12345';
+      jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockRejectedValue(new Error('Database error')),
+      } as any);
+      const result = await service.getErrorCounts(jobRunId);
+      expect(result).toEqual([]);
+    });
   });
+
+  describe('precheck', () => {
+    it('should successfully perform precheck', async () => {
+      const mockData = {
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+        preserveAccessTime: true,
+      };
+
+      const mockVolumes = [
+        {
+          id: 'source-1',
+          volumePath: '/mnt/source',
+          fileServer: {
+            id: 'server-1',
+            host: 'localhost',
+            userName: 'user',
+            password: 'pass',
+            protocol: 'sftp',
+            protocolVersion: 'v1',
+            serverType: 'Linux',
+            workers: [],
+          },
+        },
+        {
+          id: 'dest-1',
+          volumePath: '/mnt/dest',
+          fileServer: {
+            id: 'server-2',
+            host: 'remotehost',
+            userName: 'remoteUser',
+            password: 'remotePass',
+            protocol: 'ftp',
+            protocolVersion: 'v2',
+            serverType: 'Windows',
+            workers: [],
+          },
+        },
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockVolumes as any);
+      configService.get.mockReturnValue('/base/path');
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+
+      const result = await service.precheck(mockData);
+
+      expect(volumeRepo.find).toHaveBeenCalledWith({
+        where: { id: In(['source-1', 'dest-1']) },
+        relations: { fileServer: { workers: true } },
+      });
+      expect(result).toEqual({ workflowId: 'mock-workflow-id' });
+    });
+
+    it('should return error when destination path is not found', async () => {
+      const mockData = {
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-2'], // Non-existent destination
+          },
+        ],
+        preserveAccessTime: true,
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([
+        {
+          id: 'source-1',
+          volumePath: '/mnt/source',
+          fileServer: { id: 'server-1', host: 'localhost' },
+        },
+      ] as any);
+
+      const result = await service.precheck(mockData);
+
+      expect(result.erros).toEqual(['PRECHECK_FAILED']);
+    });
+
+    it('should handle workflow service failure', async () => {
+      const mockData = {
+        migrateConfigs: [
+          { sourcePathId: 'source-1', destinationPathId: ['dest-1'] },
+        ],
+        preserveAccessTime: true,
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([
+        {
+          id: 'source-1',
+          volumePath: '/mnt/source',
+          fileServer: { id: 'server-1', host: 'localhost' },
+        },
+        {
+          id: 'dest-1',
+          volumePath: '/mnt/dest',
+          fileServer: { id: 'server-2', host: 'remotehost' },
+        },
+      ] as any);
+
+      jest.spyOn(workFlowService, 'startWorkflow').mockRejectedValue(new Error('Workflow Error'));
+
+      const result = await service.precheck(mockData);
+
+      expect(result.status).toEqual('error');
+    });
+  })
 })
