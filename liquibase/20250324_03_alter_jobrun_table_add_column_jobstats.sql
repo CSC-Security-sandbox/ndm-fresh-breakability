@@ -1,0 +1,1 @@
+ALTER TABLE jobrun ADD COLUMN  IF NOT EXISTS job_stats json;

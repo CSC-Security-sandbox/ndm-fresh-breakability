@@ -6,7 +6,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { FileServerEntity } from '../entities/fileserver.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RedisService } from '../redis/redis.service';
-import { DeepPartial, LessThan, Repository } from 'typeorm';
+import { DeepPartial, In, LessThan, Repository } from 'typeorm';
 import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from 'src/entities/speed-test-job-config.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
@@ -14,13 +14,13 @@ import { JobStatus as JS } from 'src/constants/enums';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { ConfigService } from '@nestjs/config';
-import { JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider, Task} from '@netapp-cloud-datamigrate/jobs-lib';
+import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider, Task} from '@netapp-cloud-datamigrate/jobs-lib';
 import { ScheduleStatus } from 'src/constants/status';
 import { JobRunConfig } from './jobrun.types';
 import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
-
+import { Readable } from "stream";
 
 describe('JobRunInitService', () => {
   let service: JobRunInitService;
@@ -574,7 +574,7 @@ describe('JobRunInitService', () => {
         select: { jobConfigId: true },
       });
       expect(identityConfigCrossMappingRepo.find).toHaveBeenCalledWith({
-        where: { jobConfigId: mockJobConfigId.jobConfigId },
+        where: { jobConfigId: mockJobConfigId.jobConfigId, isOrphan:false },
       });
       // expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
       //   identityMap: [],
@@ -800,4 +800,145 @@ describe('startStreamConsumer', () => {
     expect(axios.post).toHaveBeenCalledTimes(2);
   });
 })
+
+
+describe("buildJobContext", () => {
+  it("should process identity cross mappings and store them in Redis", async () => {
+    const jobRunId = "jobRunId";
+    const jobRunConfig = {
+      jobType: JobType.MIGRATE,
+      workers: ["worker1"],
+      connection: {
+        sourceCredential: {
+          protocol: Protocol.NFS,
+          host: "sourceHost",
+          username: "sourceUser  ",
+          password: "sourcePass",
+          pathId: "sourcePathId",
+          path: "/source/path",
+          workingDirectory: "/source/workingDir",
+          protocolVersion: "v3",
+        },
+        targetCredential: {
+          protocol: Protocol.SMB,
+          host: "targetHost",
+          username: "targetUser  ",
+          password: "targetPass",
+          pathId: "targetPathId",
+          path: "/target/path",
+          workingDirectory: "/target/workingDir",
+          protocolVersion: "v2",
+        },
+      },
+    };
+
+    const jobConfigId = { jobConfigId: "jobConfigId1" };
+    jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobConfigId as any);
+
+    const identityCrossMappings: IdentityConfigCrossMappingEntity[] = [
+      {
+        id: "crossMappingId1",
+        identityMappingId: "mappingId1",
+        jobConfigId: "jobConfigId1",
+        jobConfig: {} as any,
+        isOrphan: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        identityMapping: new IdentityMappingEntity(),
+        createdBy: "",
+        updatedBy: "",
+      },
+      {
+        id: "crossMappingId2",
+        identityMappingId: "mappingId2",
+        jobConfigId: "jobConfigId2",
+        jobConfig: {} as any,
+        isOrphan: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        identityMapping: new IdentityMappingEntity(),
+        createdBy: "",
+        updatedBy: "",
+      },
+    ];
+
+    const identityMappings: IdentityMappingEntity[] = [
+      {
+        id: "identityMappingId1",
+        identityMap: "identityMap1",
+        sourceMapping: "source1",
+        targetMapping: "target1",
+        identityType: "SID",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: "",
+        updatedBy: "",
+      },
+      {
+        id: "identityMappingId2",
+        identityMap: "identityMap2",
+        sourceMapping: "source2",
+        targetMapping: "target2",
+        identityType: "GID",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: "",
+        updatedBy: "",
+      },
+    ];
+
+    const redisClientMock = {
+      isOpen: true,
+      connect: jest.fn(),
+      hSet: jest.fn(),
+      exists: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+      xGroupCreate: jest.fn().mockResolvedValue(1),
+      set: jest.fn().mockResolvedValue(1),
+      xAdd: jest.fn().mockResolvedValue(1),
+    };
+
+    jest
+      .spyOn(identityConfigCrossMappingRepo, "find")
+      .mockResolvedValue(identityCrossMappings);
+    jest
+      .spyOn(identityMappingRepo, "findBy")
+      .mockResolvedValue(identityMappings);
+    jest
+      .spyOn(redisService, "getClient")
+      .mockResolvedValue(redisClientMock as any);
+
+    // Mock the Readable stream to avoid testing it directly
+    jest
+      .spyOn(Readable.prototype, "on")
+      .mockImplementation((event, callback) => {
+        if (event === "data") {
+          // Simulate the "data" event for each identity mapping
+          identityMappings.forEach((mapping) => {
+            callback(JSON.stringify(mapping));
+          });
+        } else if (event === "end") {
+          // Simulate the "end" event
+          callback();
+        }
+        return {} as any; // Return a mock object to allow chaining
+      });
+
+    await service.buildJobContext(jobRunId, jobRunConfig as any);
+
+    // Ensure hSet was called for each identity mapping
+    expect(redisClientMock.hSet).toHaveBeenCalledTimes(identityMappings.length);
+    identityMappings.forEach((mapping) => {
+      const mapType =
+        mapping.identityType.toLowerCase() === "sid"
+          ? IdentityTypes.SID
+          : IdentityTypes.GID;
+      expect(redisClientMock.hSet).toHaveBeenCalledWith(
+        `${jobRunId}:mapping`,
+        `${mapType}:${mapping.sourceMapping}`,
+        mapping.targetMapping
+      );
+    });
+  });
+});
 });

@@ -60,6 +60,10 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
+import { RedisService } from "src/redis/redis.service";
+import { JobRunService } from "src/jobrun/jobrun.service";
+import { JobRunStats } from "src/jobrun/dto/jobstats";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -95,11 +99,14 @@ export class JobConfigService {
     @InjectRepository(VolumeEntity)
     private readonly volumeRepo: Repository<VolumeEntity>,
     private readonly workFlowService: WorkflowService,
+    private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     @InjectRepository(IdentityMappingEntity)
     private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(IdentityConfigCrossMappingEntity)
-    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>
+    private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo: Repository<OperationErrorEntity>,
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -507,13 +514,13 @@ export class JobConfigService {
     if (!bulkMigrate?.migrateConfigs) {
       return [];
     }
-    if (bulkMigrate?.sidMapping) {
+    if (typeof bulkMigrate?.sidMapping === "string") {
       templateType = TemplateType.SID;
       const sidMapping = await this.decodeBase64(bulkMigrate.sidMapping);
       parsedMappings = await this.parseBlobData(sidMapping, templateType);
     }
  
-    if (bulkMigrate?.gidMapping) {
+    if (typeof bulkMigrate?.gidMapping === "string") {
       templateType = TemplateType.GID;
       const gidMapping = await this.decodeBase64(bulkMigrate.gidMapping);
       parsedMappings = await this.parseBlobData(gidMapping, templateType);
@@ -564,9 +571,49 @@ export class JobConfigService {
               scheduler: ScheduleStatus.SCHEDULING,
             }
           );
+          const jobConfigIds = existingJobConfigs.map(
+            (jobConfig) => jobConfig.id
+          );
+          this.logger.log("id pushed", ...jobConfigIds);
+
+          if (!bulkMigrate?.sidMapping && !bulkMigrate?.gidMapping) {
+            for (const jobConfigId of jobConfigIds) {
+              const entryExists = await this.identityCrossMappingRepo.exists({
+                where: {
+                  jobConfigId: jobConfigId,
+                },
+              });
+
+              if (entryExists) {
+                await this.identityCrossMappingRepo.update(
+                  { jobConfigId: jobConfigId },
+                  { isOrphan: true }
+                );
+               this.logger.log(
+                  `Marked is_orphan as true for job_config_id: ${jobConfigId}`
+                );
+
+                const jobRunIdsToDeleteKey = await this.jobRunRepo.find({where : {jobConfigId: jobConfigId, status:JobRunStatus.Completed}, select:{id:true}})
+                
+                const redisClient = await this.redisService.getClient();
+                for (const jobRun of jobRunIdsToDeleteKey) {
+                  const redisKey = `${jobRun.id}:mapping`;
+                  if (!redisClient.isOpen) await redisClient.connect();
+
+                  const redisKeyExists = await redisClient.exists(redisKey)
+                  if(redisKeyExists) {
+                    await redisClient.del(redisKey);
+                   this.logger.log(`Deleted redis key: ${redisKey}`);
+                  }
+                }
+
+              } else {
+               this.logger.log(`No entry found for job_config_id: ${jobConfigId}`);
+              }
+            }
+          }
+
           if (parsedMappings.length > 0) {
-            const jobConfigIds = existingJobConfigs.map((jobConfig) => jobConfig.id);
-            this.logger.log("id pushed", ...jobConfigIds)
             jobConfigIdsToUpdate.push(...jobConfigIds);
           }
         } else {
@@ -985,16 +1032,7 @@ export class JobConfigService {
 
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
-        const inventoryCounts = await this.inventoryRepo
-          .createQueryBuilder("inventory")
-          .select([
-            "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-            "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-            "SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END) AS totalSize"
-          ])
-          .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRun.id })
-          .getRawOne();
-        return {
+        const partialPayload={
           jobRunId: jobRun.id,
           isReportReady: jobRun.isReportReady,
           status: jobRun.subStatus || jobRun.status,
@@ -1004,16 +1042,34 @@ export class JobConfigService {
           timeElapsed: jobRun.endTime
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
+        }
+        const jobRunStats = jobRun.jobStats;
+        if(jobRun.status===JobRunStatus.Completed){
+          this.logger.log(`Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats`);
+          return {
+            ...partialPayload,
+            scannedFilesCount: BigInt(
+              jobRunStats.fileCount || "0"
+            )?.toString(),
+            scannedDirectoriesCount: BigInt(
+              jobRunStats.directories || "0"
+            )?.toString(),
+            totalScannedSize: jobRunStats.totalSize || "0",
+            errors: jobRunStats.errors,
+        }
+      }
+      this.logger.log(`Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`);
+      const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        return {
+          ...partialPayload,
           scannedFilesCount: BigInt(
-            inventoryCounts.filecount || "0"
+            inventoryCounts.fileCount || "0"
           )?.toString(),
           scannedDirectoriesCount: BigInt(
-            inventoryCounts.directorycount || "0"
+            inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(
-            Number(inventoryCounts.totalsize || "0")
-          ),
-          errors: [],
+          totalScannedSize: inventoryCounts.totalSize || "0",
+          errors: inventoryCounts.errors,
         };
       })
     );
@@ -1041,10 +1097,10 @@ export class JobConfigService {
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
       aggregateData: {
-        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => a + b,0),
-        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => a + b,0n)?.toString(),
-        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => a + b,0n)?.toString(),
-        totalScannedSize: runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => a + b,0),
+        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
+        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
+        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
+        totalScannedSize: this.covertBytes(runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)),
       },
       errors: [],
     };
@@ -1133,7 +1189,7 @@ export class JobConfigService {
         .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
         .getCount();
 
-    console.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
+   this.logger.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
 
     return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
   }
@@ -1301,7 +1357,7 @@ export class JobConfigService {
   }
 
   async precheckValidation(precheckData: MigrateConfig[]) {
-    console.log("precheckData",JSON.stringify(precheckData));
+   this.logger.log("precheckData",JSON.stringify(precheckData));
     const results = new Map<string,any>();
     for (const config of precheckData) {
       if(!results.has(config.sourcePathId)){
@@ -1321,7 +1377,7 @@ export class JobConfigService {
           fileServer: { workers: true},
         },
       });
-      console.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
+     this.logger.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
       const sourceVolume = pathToWorkerMapping.find(
         (p) => p.id === config.sourcePathId
       );
@@ -1378,7 +1434,7 @@ export class JobConfigService {
         const commonWorkers = sourceWorkers.filter((sw) =>
           destinationWorkers.some((dw) => dw.workerId === sw.workerId)
         );
-        console.log("commonWorkers",JSON.stringify(commonWorkers)); 
+       this.logger.log("commonWorkers",JSON.stringify(commonWorkers)); 
         if (commonWorkers.length === 0)
           {
             const data = results.get(config.sourcePathId);
@@ -1425,19 +1481,26 @@ export class JobConfigService {
       blobData: string,
       templateType: TemplateType
     ): Promise<ParsedMapping[]> {
-      return blobData
+      const parsedData = blobData
         ?.trim()
         ?.split("\n")
         ?.map((line) => line.split(","))
         ?.map((columns) => {
           if (templateType === TemplateType.SID) {
+            if (columns.length !== 2) {
+              throw new Error("Invalid SID mapping data: Expected 2 columns.");
+            }
             const [sourceMapping, targetMapping] = columns;
             return { sourceMapping, targetMapping };
           } else if (templateType === TemplateType.GID) {
+            if (columns.length !== 4) {
+              throw new Error("Invalid GID mapping data: Expected 4 columns.");
+            }
             const [sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid] = columns;
             return { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid };
           }
         });
+        return parsedData;
     }
   
     async saveIdentityMappingsWithMap(
@@ -1446,7 +1509,7 @@ export class JobConfigService {
       identityMap: string,
       templateType: TemplateType
     ) {
-      console.log("reached for saving mappings");
+     this.logger.log("reached for saving mappings");
   
       for (const mapping of parsedData) {
         if (templateType === TemplateType.SID) {
@@ -1458,7 +1521,7 @@ export class JobConfigService {
             targetMapping: targetMapping,
           });
           const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
         } else if (templateType === TemplateType.GID) {
           const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
   
@@ -1469,7 +1532,7 @@ export class JobConfigService {
             targetMapping: targetMappingGid,
           });
           const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
   
           const uidMappingEntity = this.identityMappingRepo.create({
             identityType: TemplateType.UID,
@@ -1478,7 +1541,7 @@ export class JobConfigService {
             targetMapping: targetMappingUid,
           });
           const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
         }
       }
   
@@ -1512,7 +1575,7 @@ export class JobConfigService {
             targetMapping: targetMapping,
           });
           const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
         } else if (templateType === TemplateType.GID) {
           const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
   
@@ -1523,7 +1586,7 @@ export class JobConfigService {
             targetMapping: targetMappingGid,
           });
           const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
   
           const uidMappingEntity = this.identityMappingRepo.create({
             identityType: TemplateType.UID,
@@ -1532,7 +1595,7 @@ export class JobConfigService {
             targetMapping: targetMappingUid,
           });
           const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
         }
       }
   
@@ -1540,13 +1603,14 @@ export class JobConfigService {
         const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
           where: {
             jobConfigId: jobConfigId,
+            isOrphan:false
           },
         });
   
         if (existingCrossMapping) {
           existingCrossMapping.identityMappingId = identityMap;
           await this.identityCrossMappingRepo.save(existingCrossMapping);
-          console.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
+         this.logger.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
         } else {
           const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
             identityMappingId: identityMap,
@@ -1586,5 +1650,58 @@ export class JobConfigService {
           ],
         },
       ];
+    }
+    async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
+      const jobRun = await this.jobRunRepo.findOne({
+        where: { id: jobRunId },
+        relations: ["jobConfig"],
+      });
+      if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      const inventorySummary = await this.inventoryRepo
+        .createQueryBuilder("inventory")
+        .select([
+          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
+          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
+          "SUM(inventory.fileSize) AS totalFileSize",
+        ])
+        .where("inventory.jobRunId = :jobRunId", { jobRunId })
+        .groupBy("inventory.isDirectory")
+        .getRawMany();
+      const jobRunStatus = {
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+      };
+     
+     this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
+      for (let i = 0; i < inventorySummary.length; i++) {
+        jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
+        jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
+        jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
+      }
+      const response = {
+        ...jobRunStatus,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+      return response;
+    }
+    async getErrorCounts(jobRunId: string){
+      const countQuery = this.operationErrorRepo
+      .createQueryBuilder("oe")
+      .innerJoin("oe.operation", "o")
+      .where("o.jobRunId = :jobRunId", { jobRunId })
+      .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+      .groupBy("oe.errorType");
+    let errorTypeCounts;
+    try {
+      errorTypeCounts = await countQuery.getRawMany();
+    } catch (error) {
+      this.logger.error(
+        "Error occurred while fetching error type counts:",
+        error
+      );
+      errorTypeCounts = [];
+    }
+    return errorTypeCounts;
     }
 }

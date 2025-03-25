@@ -119,7 +119,7 @@ export class BulkMigrateJobConfig {
     description: 'BLOB data for SID mappings (Excel file content)',
   })
   @IsOptional()
-  sidMapping: string;
+  sidMapping: string | boolean;
 
   @ApiProperty({
     type: 'string',
@@ -127,7 +127,7 @@ export class BulkMigrateJobConfig {
     description: 'BLOB data for GID mappings (Excel file content)',
   })
   @IsOptional()
-  gidMapping: string;
+  gidMapping: string | boolean;
 
   @ApiProperty({
     type: MigrateJobConfigOptions,

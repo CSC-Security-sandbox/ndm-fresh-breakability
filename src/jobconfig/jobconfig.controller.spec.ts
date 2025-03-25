@@ -20,6 +20,7 @@ describe('JobConfigController', () => {
     precheck: jest.fn(),
     getAllJobConfig: jest.fn(),
     getJobConfigById: jest.fn(),
+    initiatePreCheck: jest.fn(),
     getConfigsByProjectId: jest.fn(),
     updateJobConfig: jest.fn(),
     deleteJobConfig: jest.fn(),
@@ -202,12 +203,12 @@ describe('JobConfigController', () => {
       }
       const expectedResult: any = { "workflowId": "133" };
 
-      mockJobConfigService.precheck.mockResolvedValue(expectedResult);
+      mockJobConfigService.initiatePreCheck.mockResolvedValue(expectedResult);
 
       const result = await controller.precheck(precheckData);
 
       expect(result).toEqual(expectedResult);
-      expect(service.precheck).toHaveBeenCalledWith(precheckData);
+      expect(service.initiatePreCheck).toHaveBeenCalledWith(precheckData);
     });
     describe('checkCommonWorkersAndValidatePaths', () => {
       it('should return the result of precheck validation', async () => {
