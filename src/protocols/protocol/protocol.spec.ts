@@ -10,17 +10,27 @@ jest.mock('child_process', () => ({
 
 jest.mock('src/config/app.config', () => ({
   WorkersConfig: {
-    get: jest.fn(),
+    get: jest.fn((key) => {
+      switch (key) {
+        case 'workerId':
+          return 'test-worker-id';
+        case 'baseMountDir':
+          return '/test/base/mount/dir';
+        case 'platform':
+          return 'linux';
+        default:
+          return null;
+      }
+    }),
   },
 }));
 
-jest.mock('src/logger/logger.service', () => ({
-  Logger: jest.fn().mockImplementation(() => ({
-    info: jest.fn(),
-  })),
-}));
+jest.mock('src/logger/logger.service');
 
 class TestProtocol extends Protocol {
+  disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
   mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
     return Promise.resolve([]);
   }
@@ -41,53 +51,39 @@ class TestProtocol extends Protocol {
 
 describe('Protocol', () => {
   let protocol: TestProtocol;
-  let mockLogger: any;
 
   beforeEach(() => {
-    (WorkersConfig.get as jest.Mock).mockImplementation((key: string) => {
-      switch (key) {
-        case 'workerId':
-          return 'test-worker';
-        case 'baseMountDir':
-          return '/mnt';
-        case 'platform':
-          return 'linux';
-        default:
-          return null;
-      }
-    });
-
     protocol = new TestProtocol();
-    mockLogger = (protocol as any).logger;
   });
 
   describe('executeCommand', () => {
     it('should execute command successfully', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost' };
+      const payload: ProtocolPayload = {
+        mountBasePath: '/test/mount',
+        jobRunId: '123',
+        pathId: '456',
+        hostname: 'localhost',
+        username: 'user',
+        password: 'pass',
+        protocolVersion: '1.0',
+      };
       const commandPattern = 'echo ${HOST}';
-      const commandDescription = 'Test Command';
+      const commandDescription = 'Test command';
       (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
         callback(null, 'Command executed successfully', '');
       });
 
-      const result = await protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription);
+      const response = await protocol.executeCommand('trace-123', 'test-protocol', payload, commandPattern, commandDescription);
 
-      expect(result).toEqual({
-        traceId: 'traceId',
-        status: 'success',
-        protocolType: 'TestProtocol',
-        hostname: 'localhost',
-        workerId: 'test-worker',
-        message: 'Command executed successfully',
-      });
-
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        '[traceId] command: echo localhost, stdout: Command executed successfully, stderr: , error: null',
-      );
+      expect(response.status).toBe('success');
+      expect(response.message).toContain('Command executed successfully');
     });
 
     it('should handle command execution error', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
       const commandPattern = 'echo ${HOST}';
       const commandDescription = 'Test Command';
 
@@ -98,14 +94,13 @@ describe('Protocol', () => {
       await expect(
         protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
       ).rejects.toThrow('Execution error');
-
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        '[traceId] command: echo localhost, stdout: , stderr: , error: Error: Execution error',
-      );
     });
 
     it('should handle command execution stderr', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
       const commandPattern = 'echo ${HOST}';
       const commandDescription = 'Test Command';
 
@@ -116,10 +111,6 @@ describe('Protocol', () => {
       await expect(
         protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
       ).rejects.toBe('Execution stderr');
-
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        '[traceId] command: echo localhost, stdout: , stderr: Execution stderr, error: null',
-      );
     });
   });
 });

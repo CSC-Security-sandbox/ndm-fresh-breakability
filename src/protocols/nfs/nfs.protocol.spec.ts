@@ -41,7 +41,10 @@ describe('NFSProtocol', () => {
       };
       (net.Socket as any).mockImplementation(() => mockSocket);
 
-      const options: ProtocolPayload = { hostname: 'localhost' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
       const result = await nfsProtocol.validateConnection('traceId', options);
 
       expect(result).toBe('Connection established');
@@ -70,7 +73,10 @@ describe('NFSProtocol', () => {
         return 'Unhandled error';
       });
 
-      const options: ProtocolPayload = { hostname: 'localhost' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
 
       await expect(nfsProtocol.validateConnection('traceId', options)).rejects.toThrow('Handled connection error');
       expect(mockLogger.error).toHaveBeenCalledWith('Error during connection: Connection error');
@@ -87,7 +93,10 @@ describe('NFSProtocol', () => {
       };
       (net.Socket as any).mockImplementation(() => mockSocket);
 
-      const options: ProtocolPayload = { hostname: 'localhost' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
 
       const promise = nfsProtocol.validateConnection('traceId', options);
       jest.advanceTimersByTime(2000);
@@ -99,7 +108,10 @@ describe('NFSProtocol', () => {
 
   describe('getProtocolVersions', () => {
     it('should get protocol versions successfully', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
       const mockResponse = { message: 'NFSv3\nNFSv4' };
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
       (parseProtocolVersions as any).mockReturnValue(['NFSv3', 'NFSv4']);
@@ -114,7 +126,10 @@ describe('NFSProtocol', () => {
 
   describe('listPaths', () => {
     it('should list paths successfully', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
       const mockResponse = { message: '/export/path1\n/export/path2' };
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
       (parseExports as any).mockReturnValue(['/export/path1', '/export/path2']);

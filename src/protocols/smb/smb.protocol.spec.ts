@@ -5,12 +5,13 @@ import { ConfigService } from '@nestjs/config';
 import { WorkersConfig } from 'src/config/app.config';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { Runtime, RuntimeOptions } from '@temporalio/worker';
+import { Logger } from '@nestjs/common';
 
 jest.mock('./smb.utils');
 
 describe('SMBProtocol', () => {
   let smbProtocol: SMBProtocol;
-  let mockLogger: any;
+  let mockLogger: Partial<Logger>;
 
   beforeEach(() => {
     jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
@@ -29,24 +30,28 @@ describe('SMBProtocol', () => {
     CommandConfig.configService = configService;
 
     mockLogger = {
+      log: jest.fn(),
       info: jest.fn(),
+      warn: jest.fn(),
       error: jest.fn(),
     };
-    smbProtocol = new SMBProtocol();
-    (smbProtocol as any).logger = mockLogger;
+    smbProtocol = new SMBProtocol(mockLogger as Logger);
     (smbProtocol as any).platform = 'win32';
     (smbProtocol as any).workerId = 'defaultWorkerId';
   });
 
   describe('validateConnection', () => {
     it('should establish a connection successfully', async () => {
-      jest.spyOn(smbProtocol as any, 'executeCommand').mockResolvedValue('Connection established');
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
-      const result = await smbProtocol.validateConnection('traceId', options);
+      const traceId = 'trace-id';
+      const payload: ProtocolPayload = { hostname: 'test-host', ... }; // Fill in with necessary properties
 
-      expect(result).toBe(undefined);
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type SMB from defaultWorkerId');
-//      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Connection established for Protocol: SMB');
+      // Mock the listPaths method to simulate successful connection
+      jest.spyOn(smbProtocol, 'listPaths').mockResolvedValueOnce('Connection established');
+
+      await smbProtocol.validateConnection(traceId, payload);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(`[${traceId}] Getting list paths for ${payload.hostname} of type SMB from ${smbProtocol.workerId}`);
+      expect(smbProtocol.listPaths).toHaveBeenCalledWith(traceId, payload);
     });
 
     it('should handle connection error', async () => {
@@ -59,7 +64,10 @@ describe('SMBProtocol', () => {
         return 'Unhandled error';
       });
 
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
 
       await expect(smbProtocol.validateConnection('traceId', options)).rejects.toThrow('');
       //expect(mockLogger.error).toHaveBeenCalledWith('Error during connection: Connection error');
@@ -67,7 +75,10 @@ describe('SMBProtocol', () => {
 
     it('should handle connection timeout', async () => {
       jest.useFakeTimers();
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
 
       const promise = smbProtocol.validateConnection('traceId', options);
       jest.advanceTimersByTime(2000);
@@ -79,7 +90,10 @@ describe('SMBProtocol', () => {
 
   describe('listShares', () => {
     it('should list shares successfully for windows', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -109,7 +123,10 @@ describe('SMBProtocol', () => {
 
   describe('listSharesforLinMac', () => {
     it('should list shares successfully for linux and mac', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -138,7 +155,10 @@ describe('SMBProtocol', () => {
 
     describe('getProtocolVersions', () => {
       it('should get protocol versions successfully', async () => {
-        const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+        const payload: ProtocolPayload = {
+          hostname: 'localhost', username: 'user', password: 'pass',
+          protocolVersion: ''
+        };
         jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
           if (key == CommandPattern.VERSION_DETAIL) {
             return CommandPattern.VERSION_DETAIL;
@@ -156,7 +176,10 @@ describe('SMBProtocol', () => {
       });
 
       it('should handle error during getting protocol versions', async () => {
-        const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+        const payload: ProtocolPayload = {
+          hostname: 'localhost', username: 'user', password: 'pass',
+          protocolVersion: ''
+        };
         jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
           if (key == CommandPattern.VERSION_DETAIL) {
             return CommandPattern.VERSION_DETAIL;
@@ -171,7 +194,10 @@ describe('SMBProtocol', () => {
     });
   describe('listPathLinMac', () => {
     it('should list shares successfully for linux and mac', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -189,7 +215,10 @@ describe('SMBProtocol', () => {
     });
 
     it('should handle error during listing shares', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -206,7 +235,10 @@ describe('SMBProtocol', () => {
   });
 
   describe('listPaths', () => {
-    const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+    const payload: ProtocolPayload = {
+      hostname: 'localhost', username: 'user', password: 'pass',
+      protocolVersion: ''
+    };
 
     it('should list paths for darwin platform', async () => {
       jest.spyOn(smbProtocol, 'listPathLinMac').mockResolvedValue(['share1', 'share2']);
@@ -247,7 +279,10 @@ describe('SMBProtocol', () => {
 
   describe('listPathLinMac', () => {
     it('should list shares successfully for linux and mac', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -265,7 +300,10 @@ describe('SMBProtocol', () => {
     });
 
     it('should handle error during listing shares', async () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
       jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
         if (key == CommandPattern.LIST_PATHS) {
           return CommandPattern.LIST_PATHS;
@@ -280,7 +318,10 @@ describe('SMBProtocol', () => {
       expect(mockLogger.error).toHaveBeenCalledWith('Error during SMB connection: NT_STATUS_ACCESS_DENIED');
     });
     describe('listPathWindows', () => {
-      const payload: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass' };
+      const payload: ProtocolPayload = {
+        hostname: 'localhost', username: 'user', password: 'pass',
+        protocolVersion: ''
+      };
 
       it('should list shares successfully for windows', async () => {
         jest.spyOn(CommandConfig, 'getSMBCommand').mockImplementation((platform: string, key: string) => {
