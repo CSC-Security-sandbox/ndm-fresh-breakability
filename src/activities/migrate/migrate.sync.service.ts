@@ -13,6 +13,7 @@ import { CommonActivityService } from '../common/common.service';
 import { PowerShellService } from '../common/poweshell.service';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 
+
 @Injectable()
 export class MigrationSyncService {
   readonly workerId: string;
@@ -20,6 +21,7 @@ export class MigrationSyncService {
   readonly pushTaskDirSize: number;
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number = 3;
+  readonly maxConcurrency: number = 10;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -30,6 +32,7 @@ export class MigrationSyncService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+    this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 100;
     this.fetchTaskBatch = 50;
     this.pushTaskDirSize = 500;
     this.CHUNK_SIZE = 1024 * 1024;
@@ -113,10 +116,15 @@ export class MigrationSyncService {
     if(metadata?.birthtime){
       try {
         if(process.platform == 'win32') {
-          const birthtime = new Date(metadata.birthtime).toLocaleString('sv-SE').replace(',', ''); 
-          const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birthtime}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          const birthtime = new Date(metadata.birthtime) 
+          var dateString = new Date(
+            birthtime.getTime() - birthtime.getTimezoneOffset() * 60000
+          );
+          var birth_time = dateString.toISOString().replace("T", " ").substr(0, 19);
+          const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          this.logger.debug(`Setting birthtime for ${targetPath} to ${birth_time} using command : ${birthtimeCommand} and {metadata.birthtime} is ${metadata.birthtime}`)
           const output = await this.powershellService.runCommand(birthtimeCommand);
-          this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birthtime} and metadata.birthtime is ${metadata.birthtime}`)
+          this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birth_time} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
           const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
           execSync(birthtimeCommand);
@@ -245,57 +253,70 @@ export class MigrationSyncService {
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
        
     const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
-    this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
     if(!task) {
       syncTask.noTaskFound = true;
       return syncTask;
     }
+
+    this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
     task.status = TaskStatus.RUNNING
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
         task.commands[i].status = CommandStatus.IN_PROCESS
 
+    this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
+    
     jobContext.migrateTask.lastId = await jobContext.appendToUpdatedTaskList(task);
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-    for (let i = 0;  i < task.commands.length; i++) {
-      if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-      const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-      const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
-      const scanInput: SyncOperationInput = {
-        sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
-        targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
-        ops: task.commands[i].ops,
-        command: task.commands[i],
-        jobContext
-      };
-      const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-      task.commands[i].ops = syncOperationOp.ops;
-      if (syncOperationOp.errors.size > 0) {
-        task.commands[i].retryCount++;
-        syncTask.retryCount = Math.max(task.commands[i].retryCount,  syncTask.retryCount)
-        task.commands[i].status = CommandStatus.ERROR;
-        syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
-        syncTask.error++;
-      }
-      else {
-        const fileInfo: FileInfo = await this.getFileInfo({
-          name: task.commands[i].fPath, fullFilePath:`${task.tPath}${task.commands[i].fPath}`,
-          relativePath: task.commands[i].fPath,checksums: syncOperationOp.checksums,
-          getID: jobContext.jobConfig.options.isIdentityMappingAvailable
-        });
-        jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
-      
-        jobContext.filesInfo.numMessages++;
-        task.commands[i].status = CommandStatus.COMPLETED
-        syncTask.success++;
-        await this.redisService.setJobContext(task.jobRunId, jobContext);
-        this.logger.debug(`Migrated ${task.commands[i].fPath} successfully`);
-      }
-    }
+    const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+    const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
 
-    this.logger.debug(`syncTask.retryCount  : ${syncTask.retryCount }`)
+    for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
+      const batch = task.commands.slice(i, i + this.maxConcurrency);
+  
+      await Promise.allSettled(
+          batch.map(async (command) => {
+              if (command.status === CommandStatus.COMPLETED) return;
+  
+              const scanInput: SyncOperationInput = {
+                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                  ops: command.ops,
+                  command,
+                  jobContext
+              };
+  
+              const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
+              command.ops = syncOperationOp.ops;
+  
+              if (syncOperationOp.errors.size > 0) {
+                  command.retryCount++;
+                  syncTask.retryCount = Math.max(command.retryCount, syncTask.retryCount);
+                  command.status = CommandStatus.ERROR;
+                  syncOperationOp.errors.forEach(error => syncTask.errors.add(error));
+                  syncTask.error++;
+              } else {
+                  const fileInfo: FileInfo = await this.getFileInfo({
+                      name: command.fPath,
+                      fullFilePath: `${task.tPath}${command.fPath}`,
+                      relativePath: command.fPath,
+                      checksums: syncOperationOp.checksums,
+                      getID: jobContext.jobConfig.options.isIdentityMappingAvailable
+                  });
+  
+                  jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
+                  jobContext.filesInfo.numMessages++;
+                  command.status = CommandStatus.COMPLETED;
+                  syncTask.success++;
+  
+                  await this.redisService.setJobContext(task.jobRunId, jobContext);
+                  this.logger.debug(`[${jobRunId}] Migrated ${command.fPath} successfully`);
+              }
+          })
+      );
+    }
 
     if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
       task.status = TaskStatus.ERRORED 
@@ -320,15 +341,16 @@ export class MigrationSyncService {
       if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
         task.status = TaskStatus.ERRORED;
       if(syncTask.retryCount < this.maxRetryCount && !syncTask.isFatal) {
-        this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+        this.logger.debug(`[${jobRunId}] Appending to Retry => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
         jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);
       }
       else if(syncTask.isFatal){
-        this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+        this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
         task.status = TaskStatus.ERRORED;
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
       }
     }else {
+      this.logger.debug(`[${jobRunId}] Completed Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
       jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
     }
     await this.redisService.setJobContext(task.jobRunId, jobContext);

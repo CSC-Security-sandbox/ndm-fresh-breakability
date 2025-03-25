@@ -34,7 +34,12 @@ describe('Command Config', () => {
     const config = cmdConfig();
     expect(config).toEqual({
       nfs: {
-        win: { listPath: undefined },
+        win32: {
+          listPath: undefined,
+          mountPath: undefined,
+          unmountPath: undefined,
+          versionDetails: undefined,
+        },
         linux: {
           listPath: undefined,
           mountPath: undefined,
@@ -47,9 +52,17 @@ describe('Command Config', () => {
         },
       },
       smb: {
-        win: {
+        win32: {
           validateCred: undefined,
           listPath: undefined,
+          mountPath: undefined,
+          serSIDforObject: undefined,
+          unlinkPath: undefined,
+          unmountPath: undefined,
+          versionDetails: undefined,
+          disconnectSession: undefined,
+          getSIDforObject: undefined,
+          linkPath: undefined,
         },
         linux: {
           listPath: undefined,
@@ -74,7 +87,12 @@ describe('Command Config', () => {
     const config = cmdConfig();
     expect(config).toEqual({
       nfs: {
-        win: { listPath: 'showmount -e ${HOST}' },
+        win32: {
+          listPath: 'showmount -e ${HOST}',
+          mountPath: undefined,
+          unmountPath: undefined,
+          versionDetails: undefined,
+        },
         linux: {
           listPath: 'showmount -e ${HOST}',
           mountPath: 'mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}',
@@ -87,9 +105,17 @@ describe('Command Config', () => {
         },
       },
       smb: {
-        win: {
-          validateCred: 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}',
+        win32: {
+          disconnectSession: undefined,
+          getSIDforObject: undefined,
+          linkPath: undefined,
           listPath: undefined,
+          mountPath: undefined,
+          serSIDforObject: undefined,
+          unlinkPath: undefined,
+          unmountPath: undefined,
+          validateCred: 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}',
+          versionDetails: undefined,
         },
         linux: {
           listPath: 'smbclient -L ${HOST} -U ${USERNAME}%${PASSWORD}',
@@ -110,7 +136,12 @@ describe('Command Config', () => {
     const config = cmdConfig();
     expect(config).toEqual({
       nfs: {
-        win: { listPath: 'showmount -e ${HOST}' },
+        win32: {
+          listPath: 'showmount -e ${HOST}',
+          mountPath: undefined,
+          unmountPath: undefined,
+          versionDetails: undefined,
+        },
         linux: {
           listPath: undefined,
           mountPath: undefined,
@@ -123,9 +154,17 @@ describe('Command Config', () => {
         },
       },
       smb: {
-        win: {
+        win32: {
           validateCred: undefined,
           listPath: undefined,
+          mountPath: undefined,
+          serSIDforObject: undefined,
+          unlinkPath: undefined,
+          unmountPath: undefined,
+          versionDetails: undefined,
+          disconnectSession: undefined,
+          getSIDforObject: undefined,
+          linkPath: undefined,
         },
         linux: {
           listPath: undefined,
@@ -139,6 +178,7 @@ describe('Command Config', () => {
     });
   });
 });
+
 it('should return undefined for non-existent SMB command', () => {
     const configService = new ConfigService();
     const commandConfig = new CommandConfig(configService);

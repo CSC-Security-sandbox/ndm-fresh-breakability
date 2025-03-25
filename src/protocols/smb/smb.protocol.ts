@@ -3,7 +3,6 @@ import { ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
-// import { WorkersConfig } from 'src/config/app.config';
 import * as fs from 'fs';
 
 
@@ -26,7 +25,7 @@ export class SMBProtocol extends Protocol {
       ProtocolTypes.SMB,
       payload,
       this.getCommandPattern(CommandPattern.VERSION_DETAIL),
-      'SMB Get Protocols',
+      'SMB Get Protocol Versions',
     ).then((response) => {
       this.logger.info(`[${traceId}] ${response.message}`);
       return parseProtocolVersions(response.message);
@@ -34,8 +33,7 @@ export class SMBProtocol extends Protocol {
   }
 
   // --------------------------- List Paths MAC and LINUX-------------------------- //
-  async listPathLinMac (traceId: string, payload: ProtocolPayload) {
-    this.logger.info( `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`);
+  async listPathLinMac (traceId: string, payload: ProtocolPayload): Promise<any> {
     try {
       const response:CommandOutput = await this.executeCommand(
         traceId,
@@ -58,7 +56,6 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- List Paths WINDOWS -------------------------- //
   async listPathWindows (traceId: string, payload: ProtocolPayload) {
-    this.logger.info( `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`);
     try {
       const result = await this.executeCommand(
         traceId,
@@ -90,7 +87,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<any> {
-    this.logger.log(`platform: ${this.platform}`)
+    this.logger.info(`[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}, platform: ${this.platform}`);
     switch(this.platform){
       case 'darwin':
         return await this.listPathLinMac(traceId, payload)
