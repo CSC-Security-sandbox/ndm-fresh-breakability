@@ -147,7 +147,7 @@ export class MigrationScanService {
             if(task.commands[i].status !== CommandStatus.COMPLETED)
                 task.commands[i].status = CommandStatus.IN_PROCESS
         
-        this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} ${task?.status} ${task.commands?.length}`);
+        this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
       
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
