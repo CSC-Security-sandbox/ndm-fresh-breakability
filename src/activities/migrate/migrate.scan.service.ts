@@ -17,7 +17,7 @@ export class MigrationScanService {
     readonly workerJobServiceUrl: string;
     readonly maxRetryCount: number = 3;
     readonly maxMigrationCommand : number = 1000;
-
+    readonly maxConcurrency: number = 10;
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly logger: Logger,
@@ -27,7 +27,7 @@ export class MigrationScanService {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand');
-        
+        this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 100;   
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {
@@ -140,7 +140,7 @@ export class MigrationScanService {
             return scanPath;
         }
 
-        const command :Command[] = []
+        const commands :Command[] = []
       
         task.status = TaskStatus.RUNNING;
         for (let i = 0;  i < task.commands.length; i++) 
@@ -154,45 +154,58 @@ export class MigrationScanService {
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
         const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
-
-        for (let i = 0;  i < task.commands.length; i++) {
-            if(task.commands[i].status === CommandStatus.COMPLETED) continue;
-            const scanInput: ScanContentInput = {
-                excludePatterns: excludePatterns,
-                sourcePath: `${baseSourcePrefixPath}${task.commands[i].fPath}`,
-                sourcePrefix: baseSourcePrefixPath,
-                targetPath: `${baseTargetPrefixPath}${task.commands[i].fPath}`,
-                jobRunId: task.jobRunId,
-                command: task.commands[i],
-                jobContext,
-                skipFile
-            };
-
-            const result = await this.scanContent(scanInput);
-            this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
-            
-            scanPath.files += result.files;
-            scanPath.folders += result.directory;
-
-            command.push(...result.command);
-            if(command.length >= this.maxMigrationCommand) {
-                const chunk = command.splice(0, this.maxMigrationCommand);
-                await this.publishMigrationTask({ jobContext, commands: chunk });
-            }
-
-            if (result.isGeneratedTask) 
-                scanPath.isTaskCreated = true;
-            if (result.error)  {
-                task.commands[i].retryCount++;
-                task.commands[i].status = CommandStatus.ERROR, scanPath.errors.add(result.error), scanPath.error++;
-            }
-            else  
-                scanPath.success++, task.commands[i].status = CommandStatus.COMPLETED
-            scanPath.retryCount = Math.max(task.commands[i].retryCount,  scanPath.retryCount)
-        }      
-
-        if(command.length > 0) {
-            const chunk = command.splice(0, this.maxMigrationCommand);
+     
+        for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
+            const batch = task.commands.slice(i, i + this.maxConcurrency);
+        
+            await Promise.allSettled(
+                batch.map(async (command) => {
+                    if (command.status === CommandStatus.COMPLETED) return;
+        
+                    const scanInput: ScanContentInput = {
+                        excludePatterns,
+                        sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                        sourcePrefix: baseSourcePrefixPath,
+                        targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                        jobRunId: task.jobRunId,
+                        command,
+                        jobContext,
+                        skipFile
+                    };
+        
+                    const result = await this.scanContent(scanInput);
+                    this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
+        
+                    scanPath.files += result.files;
+                    scanPath.folders += result.directory;
+        
+                    commands.push(...result.command);
+                    if (commands.length >= this.maxMigrationCommand) {
+                        const chunk = commands.splice(0, this.maxMigrationCommand);
+                        await this.publishMigrationTask({ jobContext, commands: chunk });
+                    }
+        
+                    if (result.isGeneratedTask) {
+                        scanPath.isTaskCreated = true;
+                    }
+        
+                    if (result.error) {
+                        command.retryCount++;
+                        command.status = CommandStatus.ERROR;
+                        scanPath.errors.add(result.error);
+                        scanPath.error++;
+                    } else {
+                        scanPath.success++;
+                        command.status = CommandStatus.COMPLETED;
+                    }
+        
+                    scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
+                })
+            );
+        }
+        
+        if(commands.length > 0) {
+            const chunk = commands.splice(0, this.maxMigrationCommand);
             await this.publishMigrationTask({ jobContext, commands: chunk });
         }
         
