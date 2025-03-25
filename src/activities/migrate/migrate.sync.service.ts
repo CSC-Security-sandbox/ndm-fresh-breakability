@@ -118,6 +118,7 @@ export class MigrationSyncService {
         if(process.platform == 'win32') {
           const birthtime = new Date(metadata.birthtime).toLocaleString('sv-SE').replace(',', ''); 
           const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birthtime}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          this.logger.debug(`Setting birthtime for ${targetPath} to ${birthtime} using command : ${birthtimeCommand} and {metadata.birthtime} is ${metadata.birthtime}`)
           const output = await this.powershellService.runCommand(birthtimeCommand);
           this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birthtime} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
