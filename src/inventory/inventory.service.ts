@@ -32,71 +32,71 @@ export class InventoryService {
     @InjectRepository(OperationErrorEntity)
     private readonly operationErrorRepo: Repository<OperationErrorEntity>,
 
-        @InjectRepository(TaskErrorEntity)
-        private readonly taskErrorRepo: Repository<TaskErrorEntity>
-    ) {
+    @InjectRepository(TaskErrorEntity)
+    private readonly taskErrorRepo: Repository<TaskErrorEntity>
+  ) {
 
-    }
-    mapSourceToTarget(file: any, jobRunId: string, pathId: string): any {
-        if (!file) {
-            throw new Error('Invalid file object: Cannot map undefined or null file');
-        }
-        return {
-            path: file.path ?? '',
-            isDirectory: file.isDirectory ?? false,
-            sourceChecksum: file?.sourceChecksum ?? null,
-            targetChecksum: file?.targetChecksum ?? null,
-            parentPath: file?.parentPath ?? '',
-            depth: file?.depth ?? 0,
-            fileName: file?.fileName ?? '',
-            uid: file?.uid ? file.uid.toString() : '',
-            gid: file?.gid ? file.gid.toString() : '',
-            fileSize: file?.fileSize ? BigInt(file.fileSize).toString() : '0',
-            extension: file?.extension ?? '',
-            fileType: file?.fileType ?? null,
-            modifiedTime: file?.modifiedTime ?? null,
-            accessTime: file?.accessTime ?? null,
-            permission: file?.permission ?? '',
-            jobRunId: jobRunId,
-            birthTime: file?.birthTime ?? null,
-            pathId: pathId,
-        };
-    }
-
-
-    async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
-      if (!data || data.length === 0) {
-          this.logger.warn('No inventory data received, skipping insert.');
-          return;
-      }
-  
-      const batchSize = 500; // Adjust batch size as needed
-      const failedRecords: CreateInventory[] = [];
-  
-      for (let i = 0; i < data.length; i += batchSize) {
-          const batch = data.slice(i, i + batchSize);
-          try {
-              const mappedData = batch.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
-              const inventoryRecords = this.inventoryRepo.create(mappedData);
-              await this.inventoryRepo.save(inventoryRecords);
-              this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);
-          } catch (err) {
-              this.logger.error(`Failed to save inventory records in batch: ${err.message}`, err.stack);
-              failedRecords.push(...batch);
-          }
-      }
-  
-      if (failedRecords.length > 0) {
-          this.logger.error(`Total failed records: ${failedRecords.length}. Logging them separately.`);
-          failedRecords.forEach(record => this.logger.error(`Failed Record: ${JSON.stringify(record)}`));
-      }
   }
- 
-    async saveOperationError(data: OperationError) {
-        try {
-            if (!data || !data.operationId) {
-                throw new Error('Invalid operation error data');
-            }
+  mapSourceToTarget(file: any, jobRunId: string, pathId: string): any {
+    if (!file) {
+      throw new Error('Invalid file object: Cannot map undefined or null file');
+    }
+    return {
+      path: file.path ?? '',
+      isDirectory: file.isDirectory ?? false,
+      sourceChecksum: file?.sourceChecksum ?? null,
+      targetChecksum: file?.targetChecksum ?? null,
+      parentPath: file?.parentPath ?? '',
+      depth: file?.depth ?? 0,
+      fileName: file?.fileName ?? '',
+      uid: file?.uid ? file.uid.toString() : '',
+      gid: file?.gid ? file.gid.toString() : '',
+      fileSize: file?.fileSize ? BigInt(file.fileSize).toString() : '0',
+      extension: file?.extension ?? '',
+      fileType: file?.fileType ?? null,
+      modifiedTime: file?.modifiedTime ?? null,
+      accessTime: file?.accessTime ?? null,
+      permission: file?.permission ?? '',
+      jobRunId: jobRunId,
+      birthTime: file?.birthTime ?? null,
+      pathId: pathId,
+    };
+  }
+
+
+  async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
+    if (!data || data.length === 0) {
+      this.logger.warn('No inventory data received, skipping insert.');
+      return;
+    }
+
+    const batchSize = 500; // Adjust batch size as needed
+    const failedRecords: CreateInventory[] = [];
+
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize);
+      try {
+        const mappedData = batch.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
+        const inventoryRecords = this.inventoryRepo.create(mappedData);
+        await this.inventoryRepo.save(inventoryRecords);
+        this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);
+      } catch (err) {
+        this.logger.error(`Failed to save inventory records in batch: ${err.message}`, err.stack);
+        failedRecords.push(...batch);
+      }
+    }
+
+    if (failedRecords.length > 0) {
+      this.logger.error(`Total failed records: ${failedRecords.length}. Logging them separately.`);
+      failedRecords.forEach(record => this.logger.error(`Failed Record: ${JSON.stringify(record)}`));
+    }
+  }
+
+  async saveOperationError(data: OperationError) {
+    try {
+      if (!data || !data.operationId) {
+        throw new Error('Invalid operation error data');
+      }
 
       const operationError = this.operationErrorRepo.create({
         errorCode: data.errorCode,
@@ -105,9 +105,11 @@ export class InventoryService {
         fileName: data.errorFiles?.fileName ?? null,
         filePath: data.errorFiles?.filePath ?? null,
         createdAt: new Date(),
+        error_type: data?.errorType || null
       });
 
       await this.operationErrorRepo.save(operationError);
+      this.logger.log(`Successfully saved operation operationError record`);
     } catch (err) {
       this.logger.error(
         `Failed to save operation error records: ${err.message}`,
@@ -129,6 +131,7 @@ export class InventoryService {
         errorMessage: data.errorMessage,
         taskId: data.taskId,
         createdAt: new Date(),
+        error_type: data?.errorType || null
       });
 
       await this.taskErrorRepo.save(taskError);
@@ -140,33 +143,40 @@ export class InventoryService {
       throw new Error("Error while saving task error records to the database");
     }
   }
+
+
   async saveTasks(data: any) {
     try {
       if (!data || !data.jobRunId || !data.taskType || !data.status) {
 
         throw new Error("Invalid task data");
       }
-  
+
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
-  
+
       const taskId = id
       if (!taskId) {
         this.logger.error("Task ID not found");
         return;
-      }  
-      // Create the task entity
-      const task = this.taskRepo.create({
-        id: taskId,
-        jobRunId,
-        status,
-        taskType,
-        workerId,
-      });
-  
-      // Ensure commands is an array before proceeding
+      }
+      let task = await this.taskRepo.findOne({ where: { id } });
+      if (task) {
+        task.status = task.status != 'COMPLETED' ? status : task.status;
+        task.workerId = workerId;
+      } else {
+        task = this.taskRepo.create({
+          id,
+          jobRunId,
+          status,
+          taskType,
+          workerId,
+        });
+      }
+      await this.taskRepo.upsert(task, ['id']);
+
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
-  
+
       if (Array.isArray(commands) && commands.length > 0) {
         for (let i = 0; i < commands.length; i += batchSize) {
           const batch = commands.slice(i, i + batchSize).map((command: any) => ({
@@ -180,24 +190,22 @@ export class InventoryService {
             request: command,
             fPath: command?.fPath,
           })) as OperationsEntity[];
-  
+
           operationBatches.push(batch);
         }
       }
-  
+
       // Save the task
-      await this.taskRepo.save(task);
       // Save all operation batches concurrently
       if (operationBatches.length > 0) {
         await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
       }
-      console.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
+      this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {
       this.logger.error(`❌ Failed to save task records: ${err.message}`, err.stack);
-      throw new Error("Error while saving task records to the database");
     }
   }
-  
+
 
   async updateTask(
     taskId: string,

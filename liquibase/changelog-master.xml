@@ -34,4 +34,8 @@
    <changeSet id="7008" author="anarvekar">
       <sqlFile path="liquibase/20250322_01_add_index_inventory.sql"/>
    </changeSet>
+
+    <changeSet id="7009" author="vbikkad">
+      <sqlFile path="liquibase/20250325_01_remove_constraint_on_task_errors.sql"/>
+   </changeSet>
 </databaseChangeLog>

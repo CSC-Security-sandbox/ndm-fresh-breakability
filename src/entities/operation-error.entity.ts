@@ -27,6 +27,9 @@ export class OperationErrorEntity {
 
   @Column({ type: "text", name: 'file_path' })
   filePath: string;
+
+  @Column({ type: "text", name: 'error_type' })
+  error_type: string;
   
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

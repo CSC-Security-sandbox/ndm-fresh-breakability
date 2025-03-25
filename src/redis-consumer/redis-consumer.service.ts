@@ -61,7 +61,7 @@ export class RedisConsumerService {
             this.consumers = await this.redisClient.get("consumers");
 
             // Path to the worker file (used for worker thread execution)
-            const workerPath = path.join(__dirname, 'consumerWorker.ts');
+            const workerPath = path.join(__dirname, 'consumerWorker.js');
 
             // Start pending consumer processes if necessary (uncomment when needed)
             // await this.isPendingStart(); 
@@ -198,6 +198,19 @@ export class RedisConsumerService {
                 // Check if all consumers for this jobRunId are stopped
                 const isAllStopped = await this.areAllConsumersStopped(jobRunId);
                 if (isAllStopped) {
+
+                    const contextProvider = JobContextFactory.getProvider('redis', this.redisClient);
+                    const jobContext = await contextProvider.getJobContext(jobRunId);
+                    if (jobContext) {
+                        this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
+                        try {
+                            await jobContext.cleanup();
+                            this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
+                        } catch (error) {
+                            this.logger.error(`[${jobRunId}] Error during job cleanup: ${error.message}`);
+                        }
+                    }
+
                     this.logger.log(`[${jobRunId}] All consumers are now stopped.`);
                 }
             } else {
@@ -225,7 +238,7 @@ export class RedisConsumerService {
             const value = await this.getKey(key);
 
             // If any consumer is still active (not marked as 'false'), return false
-            if (value !== 'false') {
+            if (value !== 'false' && value !== null) {
                 return false;
             }
         }
@@ -355,7 +368,7 @@ export class RedisConsumerService {
             // Handle worker exit events
             worker.on('exit', (code) => {
                 if (code !== 0) {
-                    console.error(`Worker stopped unexpectedly with exit code ${code}`);
+                    this.logger.error(`Worker stopped unexpectedly with exit code ${code}`);
                 }
 
                 // If job queue has pending jobs and worker slots are available, start the next job
@@ -448,21 +461,23 @@ export class RedisConsumerService {
             switch (consumerType) {
                 case ConsumerType.errors:
                     // If a specific task ID is encountered, stop the "errors" consumer
-                    if (data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
-                        await this.stopConsumer(jobRunId, ConsumerType.errors);
-                    } else {
-                        await this.handleErrors(data);
+                    try {
+                        if (data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
+                            await this.stopConsumer(jobRunId, ConsumerType.errors);
+                        } else {
+                            await this.handleErrors(data);
+                        }
+                    } catch (e) {
+                        this.logger.error(`${jobRunId} :${consumerType} Data updating error`)
                     }
                     break;
 
                 case ConsumerType.tasks:
                 case ConsumerType.migrationTask:
                 case ConsumerType.updatedTask:
-                    // If a specific task ID is found, stop multiple consumers
                     if (data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                         await this.stopConsumer(jobRunId, consumerType);
-                        // await this.stopConsumer(jobRunId, ConsumerType.migrationTask);
-                        // await this.stopConsumer(jobRunId, ConsumerType.updatedTask);
+                        this.logger.log(`${consumerType} : killing `)
                     } else {
                         // Save task data to inventory service
                         await this.inventoryService.saveTasks(data);
@@ -570,12 +585,9 @@ export class RedisConsumerService {
      */
     private async handleErrors(data: any): Promise<void> {
         try {
-            if (!data || !data.error) {
-                this.logger.warn("handleErrors: Received invalid or empty error data.");
-                return;
-            }
 
-            const { operation, tasks } = data.error || {};
+
+            const { operation, tasks } = data || {};
 
             // Save operation error if present
             if (operation) {
