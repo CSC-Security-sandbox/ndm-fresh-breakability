@@ -253,17 +253,20 @@ export class MigrationSyncService {
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
        
     const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
-    this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
     if(!task) {
       syncTask.noTaskFound = true;
       return syncTask;
     }
+
+    this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
     task.status = TaskStatus.RUNNING
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
         task.commands[i].status = CommandStatus.IN_PROCESS
 
+    this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
+    
     jobContext.migrateTask.lastId = await jobContext.appendToUpdatedTaskList(task);
     await this.redisService.setJobContext(task.jobRunId, jobContext);
 
@@ -309,16 +312,11 @@ export class MigrationSyncService {
                   syncTask.success++;
   
                   await this.redisService.setJobContext(task.jobRunId, jobContext);
-                  this.logger.debug(`Migrated ${command.fPath} successfully`);
+                  this.logger.debug(`[${jobRunId}] Migrated ${command.fPath} successfully`);
               }
           })
       );
     }
-  
-
-
-
-    this.logger.debug(`syncTask.retryCount  : ${syncTask.retryCount }`)
 
     if(syncTask.error > 0 && syncTask.retryCount >= this.maxRetryCount)  
       task.status = TaskStatus.ERRORED 
@@ -343,15 +341,16 @@ export class MigrationSyncService {
       if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
         task.status = TaskStatus.ERRORED;
       if(syncTask.retryCount < this.maxRetryCount && !syncTask.isFatal) {
-        this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+        this.logger.debug(`[${jobRunId}] Appending to Retry => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
         jobContext.migrateTask.lastId = await jobContext.appendToMigrationTask(task);
       }
       else if(syncTask.isFatal){
-        this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+        this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
         task.status = TaskStatus.ERRORED;
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
       }
     }else {
+      this.logger.debug(`[${jobRunId}] Completed Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
       jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
     }
     await this.redisService.setJobContext(task.jobRunId, jobContext);
