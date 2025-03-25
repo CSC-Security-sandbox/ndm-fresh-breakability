@@ -39,7 +39,7 @@ export class MigrationScanService {
     async publishMigrationTask({ jobContext, commands}: PublishMigrationTaskInput)  {
         const task = buildTask(TaskType.MIGRATE, jobContext.jobRunId, jobContext, commands);
         jobContext.migrateTask.lastId  = await jobContext.appendToMigrationTask(task);
-        this.logger.debug(`[${jobContext.jobRunId}] Task published: ${JSON.stringify(task)}`);
+        this.logger.debug(`[${jobContext.jobRunId}] Task published: ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
     }
 
     async scanContent({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
@@ -87,8 +87,6 @@ export class MigrationScanService {
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
 
                 this.logger.debug(`Item : ${item}`);
-                this.logger.debug(`sourceContentPath : ${sourceContentPath}`);
-                this.logger.debug(`sourcePrefix : ${sourcePrefix}`);
                 this.logger.debug(`relativeSourcePath : ${relativeSourcePath}`);
                 this.logger.debug(`lState -----> , ${JSON.stringify(sourceStat)}`)
 
@@ -133,12 +131,14 @@ export class MigrationScanService {
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
        
         const task  = await this.commonService.fetchOneTask(jobContext) 
-        this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
+       
         if(!task) {
             scanPath.noTaskFound = true;
             this.logger.debug(`[${jobRunId}] No task found`);
             return scanPath;
         }
+
+        this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
         const commands :Command[] = []
       
@@ -146,6 +146,8 @@ export class MigrationScanService {
         for (let i = 0;  i < task.commands.length; i++) 
             if(task.commands[i].status !== CommandStatus.COMPLETED)
                 task.commands[i].status = CommandStatus.IN_PROCESS
+        
+        this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} ${task?.status} ${task.commands?.length}`);
       
         jobContext.updatedTaskInfo.lastId  = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -231,14 +233,15 @@ export class MigrationScanService {
             if(errorType===ErrorType.TRANSIENT_ERROR || errorType===ErrorType.FATAL_ERROR)
                 task.status = TaskStatus.ERRORED;
             if(scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal)  {
-                this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
+                this.logger.debug(`[${jobRunId}] Appending to Retry => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
                 jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
             } else if(scanPath.isFatal){
-                this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+                this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
                 jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }
         else {
+            this.logger.debug(`[${jobRunId}] Completed Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
         await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -257,8 +260,6 @@ export class MigrationScanService {
             birthtime: sFile.birthtime,
             sid: undefined
         } 
-
-        this.logger.debug(`isContentUpdate(sFile, dFile) : ${isContentUpdate(sFile, dFile)}`)
         if (isContentUpdate(sFile, dFile) ) 
             return new Command(
                 fPath,
@@ -269,18 +270,6 @@ export class MigrationScanService {
                 uuid4(),
                 0
             );
-
-        // if(isMetaUpdated(sFile, dFile))
-        //     return new Command(
-        //         fPath,
-        //         {
-        //             0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.COMPLETED },
-        //             1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
-        //         },
-        //         uuid4(),
-        //         0
-        //     );
-
 
         return undefined;
     }
