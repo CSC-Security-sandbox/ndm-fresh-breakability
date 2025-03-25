@@ -589,7 +589,7 @@ export class JobConfigService {
                   { jobConfigId: jobConfigId },
                   { isOrphan: true }
                 );
-                console.log(
+               this.logger.log(
                   `Marked is_orphan as true for job_config_id: ${jobConfigId}`
                 );
 
@@ -603,12 +603,12 @@ export class JobConfigService {
                   const redisKeyExists = await redisClient.exists(redisKey)
                   if(redisKeyExists) {
                     await redisClient.del(redisKey);
-                    console.log(`Deleted redis key: ${redisKey}`);
+                   this.logger.log(`Deleted redis key: ${redisKey}`);
                   }
                 }
 
               } else {
-                console.log(`No entry found for job_config_id: ${jobConfigId}`);
+               this.logger.log(`No entry found for job_config_id: ${jobConfigId}`);
               }
             }
           }
@@ -1189,7 +1189,7 @@ export class JobConfigService {
         .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
         .getCount();
 
-    console.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
+   this.logger.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
 
     return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
   }
@@ -1357,7 +1357,7 @@ export class JobConfigService {
   }
 
   async precheckValidation(precheckData: MigrateConfig[]) {
-    console.log("precheckData",JSON.stringify(precheckData));
+   this.logger.log("precheckData",JSON.stringify(precheckData));
     const results = new Map<string,any>();
     for (const config of precheckData) {
       if(!results.has(config.sourcePathId)){
@@ -1377,7 +1377,7 @@ export class JobConfigService {
           fileServer: { workers: true},
         },
       });
-      console.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
+     this.logger.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
       const sourceVolume = pathToWorkerMapping.find(
         (p) => p.id === config.sourcePathId
       );
@@ -1434,7 +1434,7 @@ export class JobConfigService {
         const commonWorkers = sourceWorkers.filter((sw) =>
           destinationWorkers.some((dw) => dw.workerId === sw.workerId)
         );
-        console.log("commonWorkers",JSON.stringify(commonWorkers)); 
+       this.logger.log("commonWorkers",JSON.stringify(commonWorkers)); 
         if (commonWorkers.length === 0)
           {
             const data = results.get(config.sourcePathId);
@@ -1509,7 +1509,7 @@ export class JobConfigService {
       identityMap: string,
       templateType: TemplateType
     ) {
-      console.log("reached for saving mappings");
+     this.logger.log("reached for saving mappings");
   
       for (const mapping of parsedData) {
         if (templateType === TemplateType.SID) {
@@ -1521,7 +1521,7 @@ export class JobConfigService {
             targetMapping: targetMapping,
           });
           const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
         } else if (templateType === TemplateType.GID) {
           const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
   
@@ -1532,7 +1532,7 @@ export class JobConfigService {
             targetMapping: targetMappingGid,
           });
           const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
   
           const uidMappingEntity = this.identityMappingRepo.create({
             identityType: TemplateType.UID,
@@ -1541,7 +1541,7 @@ export class JobConfigService {
             targetMapping: targetMappingUid,
           });
           const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
         }
       }
   
@@ -1575,7 +1575,7 @@ export class JobConfigService {
             targetMapping: targetMapping,
           });
           const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-          console.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
+         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
         } else if (templateType === TemplateType.GID) {
           const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
   
@@ -1586,7 +1586,7 @@ export class JobConfigService {
             targetMapping: targetMappingGid,
           });
           const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-          console.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
   
           const uidMappingEntity = this.identityMappingRepo.create({
             identityType: TemplateType.UID,
@@ -1595,7 +1595,7 @@ export class JobConfigService {
             targetMapping: targetMappingUid,
           });
           const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-          console.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
+         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
         }
       }
   
@@ -1610,7 +1610,7 @@ export class JobConfigService {
         if (existingCrossMapping) {
           existingCrossMapping.identityMappingId = identityMap;
           await this.identityCrossMappingRepo.save(existingCrossMapping);
-          console.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
+         this.logger.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
         } else {
           const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
             identityMappingId: identityMap,
@@ -1673,7 +1673,7 @@ export class JobConfigService {
         totalSize: "0",
       };
      
-      console.log("inventorySummary", JSON.stringify(inventorySummary));
+     this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
       for (let i = 0; i < inventorySummary.length; i++) {
         jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
         jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";

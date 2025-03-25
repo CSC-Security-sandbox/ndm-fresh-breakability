@@ -1,43 +1,35 @@
+import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JobConfigService } from './jobconfig.service';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { Repository, In } from 'typeorm';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { createClient } from "redis";
+import { JobRunStatus, JobStatus, JobType, Protocol, TemplateType } from 'src/constants/enums';
+import { ScheduleStatus } from 'src/constants/status';
+import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { RedisService } from 'src/redis/redis.service';
+import { ParsedMapping } from 'src/utils/indentity-mapping.type';
+import { nextDate } from 'src/utils/mapper';
+import { In, Repository } from 'typeorm';
+import * as winston from 'winston';
 import { FileServerEntity } from '../entities/fileserver.entity';
-import { SpeedTestConfigEntity } from '../entities/speed-test-job-config.entity';
-import { SpeedLogEntity } from '../entities/speed-test-result.entity';
-import { NetworkPerformanceResultEntity } from '../entities/speed-test-result.entity';
-import { SpeedTestResultEntity } from '../entities/speed-test-result.entity';
-import { SpeedLogEntryEntity } from '../entities/speed-test-result.entity';
-import { SpeedTestConfigWorkerEntity } from '../entities/speed-test-job-config.entity';
-import { WorkerEntity } from '../entities/worker.entity';
 import { InventoryEntity } from '../entities/inventory.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { ProjectEntity } from '../entities/project.entity';
+import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from '../entities/speed-test-job-config.entity';
+import { NetworkPerformanceResultEntity, SpeedLogEntity, SpeedLogEntryEntity, SpeedTestResultEntity } from '../entities/speed-test-result.entity';
 import { VolumeEntity } from '../entities/volume.entity';
+import { WorkerEntity } from '../entities/worker.entity';
 import { WorkflowService } from '../workflow/workflow.service';
-import { ConfigService } from '@nestjs/config';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { JobType, JobStatus, JobRunStatus, TemplateType, Protocol, WorkFlows } from 'src/constants/enums';
-import * as winston from 'winston';
-import { BadRequestException, HttpException, Options } from '@nestjs/common';
-import { ScheduleStatus } from 'src/constants/status';
 import { JobConfigDto } from './dto/jobconfig.dto';
-import { nextDate } from 'src/utils/mapper';
-import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
-import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
-import { ParsedMapping } from 'src/utils/indentity-mapping.type';
-import { createClient } from "redis";
-import { RedisService } from 'src/redis/redis.service';
-import e, { Response } from "express";
-import { createReadStream, existsSync } from "fs";
-import { join } from "path";
-import { NotFoundException } from "@nestjs/common";
-import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
+import { JobConfigService } from './jobconfig.service';
 
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { JobRunStats } from 'src/jobrun/dto/jobstats';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
+
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -1053,7 +1045,6 @@ describe('JobConfigService', () => {
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {
         await redisClient.del(redisKey);
-        console.log(`Deleted redis key: ${redisKey}`);
       }
     }
 
@@ -1090,7 +1081,6 @@ describe('JobConfigService', () => {
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {
         await redisClient.del(redisKey);
-        console.log(`Deleted redis key: ${redisKey}`);
       }
     }
 
@@ -1433,12 +1423,18 @@ describe('JobConfigService', () => {
         totalSize: "5000",
         errors: [],
       };
+      const mockInvetoryReturnValue=[{
+        filecount: '10',
+        directorycount: '5',
+        totalsize: '5000',
+      }]
 
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
       jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+        //getRawMany: jest.fn().mockResolvedValue(mockInvetoryReturnValue),
       } as any);
       jest.spyOn(service,'calculateJobRunStats').mockReturnValue(Promise.resolve(mockInventoryStats))
 
@@ -2632,6 +2628,42 @@ describe('createBulkMigrate', () => {
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
       await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(new NotFoundException("Job Run with id invalid-id not found"));
     });
+    it('should return default values if inventory summary is empty', async () => {
+      const jobRunId = '12345';
+      const mockInventoryCounts = {
+        filecount: '10',
+        directorycount: '5',
+        totalsize: '1000',
+      };
+      const mockJobRun = {
+        id: 'mockJobRunId',
+        jobConfigId: 'jobConfigId',
+        startTime: new Date(),
+        endTime: new Date(),
+        status: 'Completed',
+      };
+      
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
+
+      jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      } as any);
+      jest.spyOn(service, 'getErrorCounts').mockResolvedValue(0);
+      
+      const result = await service.calculateJobRunStats(jobRunId);
+  
+      expect(result).toEqual({
+        fileCount: '0',
+        directories: '0',
+        totalSize: '0',
+        errors: 0,
+      });
+    });
+  
   });
 
   describe("JobConfigService - flattenCutoverConfig", () => {
@@ -2687,8 +2719,14 @@ describe('createBulkMigrate', () => {
           { sourcePathId: "path1", destinationPathId: ["path2"] },
         ],
       };
+
       await service.initiatePreCheck(preCheckData as any);
-      expect(volumeRepo.find).toHaveBeenCalled();
+      expect(volumeRepo.find).toHaveBeenCalledWith({
+        where: { id: In(["path1", "path2"]) },
+        relations: {
+          fileServer: { workers: true },
+        },
+      });
     });
   
     it("should return an error if pre-check fails", async () => {
@@ -2707,5 +2745,45 @@ describe('createBulkMigrate', () => {
       expect(result.erros).toContain("PRECHECK_FAILED");
       expect(result.message).toContain("Failed to perform the precheck");
     });
+    
   })
+  describe('getErrorCounts', () => {
+    it('should return 0 if error count is not found', async () => {
+     const mockError=[
+      {
+        errorType: 'Error',
+        count: 0
+      }
+     ]
+      const jobRunId = '12345';
+      jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockError),
+      } as any);
+      const result = await service.getErrorCounts(jobRunId);
+  
+      expect(result).toEqual(mockError);
+    });
+    it('should throw error', async () => {
+      const mockError=[
+       {
+         errorType: 'Error',
+         count: 0
+       }
+      ]
+       const jobRunId = '12345';
+       jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
+         innerJoin: jest.fn().mockReturnThis(),
+         where: jest.fn().mockReturnThis(),
+         select: jest.fn().mockReturnThis(),
+         groupBy: jest.fn().mockReturnThis(),
+         getRawMany: jest.fn().mockRejectedValue(new Error('Database error')),
+       } as any);
+       const result = await service.getErrorCounts(jobRunId);
+       expect(result).toEqual([]);
+     });
+  });
 })

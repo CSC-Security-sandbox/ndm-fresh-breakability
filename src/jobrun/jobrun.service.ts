@@ -664,7 +664,7 @@ export class JobRunService {
         );
       }
       const jobRunStats:JobRunStats = await this.calculateJobRunStats(jobRunId);
-      console.log("jobRunStats",JSON.stringify(jobRunStats));
+     this.logger.log("jobRunStats",JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date(),jobStats: jobRunStats}
