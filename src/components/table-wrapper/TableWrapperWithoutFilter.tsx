@@ -116,7 +116,7 @@ const TableWrapperWithoutFilter = ({
           originalColumns={originalColumns || tableState.columns}
           isTogglingColumns={isTogglingColumns || false}
         />
-        {!isLoading && pagination?.pageRows && (  
+        {!isLoading && pagination?.pageRows && (
           <TablePager
             pageRows={pagination?.pageRows}
             pageSize={10}
