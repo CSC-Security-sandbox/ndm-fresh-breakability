@@ -42,7 +42,7 @@ const ActionButtons = ({
   );
 
   return (
-    <Box className="flex justify-end gap-3">
+    <Box className="flex justify-end gap-3 ml-4">
       {showResumeButton && (
         <Button
           disabled={isButtonDisabled.RUNNING}

@@ -128,20 +128,19 @@ const TableWrapper = ({
         )}
         <Box className="flex gap-2 items-center">
           <TableWidgets>
-            <SearchWidget setFilter={updateTextFilter} className="w-[360px]" />
-            {showDownload && (
-              <Button variant="icon" style={{ margin: 20 }}>
-                <DownloadMonochromeIcon />
-              </Button>
-            )}
+            <SearchWidget setFilter={updateTextFilter} className="w-[360px]" style={{ marginTop : '5px' }} />
             {isRefreshing !== undefined && (
               <Button variant="icon"
                 isSubmitting={isRefreshing} 
                 onClick={!isRefreshing ? refetchTableData : undefined}
                 className="w-[16px] h-[16px]"
-                style={{ marginBottom: '5px' }}
               >
                 <RefreshIcon />
+              </Button>
+            )}
+            {showDownload && (
+              <Button variant="icon" className="w-[18px] h-[18px]" >
+                <DownloadMonochromeIcon />
               </Button>
             )}
           </TableWidgets>
@@ -157,7 +156,7 @@ const TableWrapper = ({
           updateRowState={updateRowState}
           selectionState={selectionState}
           isRowDisabled={isRowDisabled}
-          isLoading={isLoading}
+          isLoading={isRefreshing || isLoading}
           rowMenu={rowMenu}
           originalColumns={originalColumns || tableState.columns}
           isTogglingColumns={isTogglingColumns || false}

@@ -77,26 +77,26 @@ const TableWrapperWithoutFilter = ({
           <Box className="flex gap-2 items-center">
             <TableWidgets style={{}}>
               <SearchWidget
-                style={{ width: 360 }}
                 setFilter={updateTextFilter}
+                className="w-[360px]"
+                style={{ marginTop : '5px' }}
               />
-              {showDownload && (
-                <Button
-                  variant="icon"
-                  style={{ margin: 20 }}
-                  onClick={() => alert("DOWNLOAD CALLED")}
-                >
-                  <DownloadMonochromeIcon />
-                </Button>
-              )}
               {isRefreshing !== undefined && (
                 <Button variant="icon"
                   isSubmitting={isRefreshing} 
                   onClick={!isRefreshing ? refetchTableData : undefined}
                   className="w-[16px] h-[16px]"
-                  style={{ marginBottom: '5px' }}
                 >
                   <RefreshIcon />
+                </Button>
+              )}
+              {showDownload && (
+                <Button
+                  variant="icon"
+                  className="w-[18px] h-[18px]" 
+                  onClick={() => alert("DOWNLOAD CALLED")}
+                >
+                  <DownloadMonochromeIcon />
                 </Button>
               )}
             </TableWidgets>
@@ -111,12 +111,12 @@ const TableWrapperWithoutFilter = ({
           rows={pagination?.pageRows}
           selectionState={selectionState}
           isRowDisabled={isRowDisabled}
-          isLoading={isLoading}
+          isLoading={isRefreshing || isLoading}
           rowMenu={rowMenu}
           originalColumns={originalColumns || tableState.columns}
           isTogglingColumns={isTogglingColumns || false}
         />
-        {!isLoading && pagination?.pageRows && (
+        {!isLoading && pagination?.pageRows && (  
           <TablePager
             pageRows={pagination?.pageRows}
             pageSize={10}
