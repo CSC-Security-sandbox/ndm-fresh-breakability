@@ -368,7 +368,7 @@ export class RedisConsumerService {
             // Handle worker exit events
             worker.on('exit', (code) => {
                 if (code !== 0) {
-                   this.logger.error(`Worker stopped unexpectedly with exit code ${code}`);
+                    this.logger.error(`Worker stopped unexpectedly with exit code ${code}`);
                 }
 
                 // If job queue has pending jobs and worker slots are available, start the next job
@@ -461,16 +461,15 @@ export class RedisConsumerService {
             switch (consumerType) {
                 case ConsumerType.errors:
                     // If a specific task ID is encountered, stop the "errors" consumer
-                    try{
+                    try {
                         if (data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                             await this.stopConsumer(jobRunId, ConsumerType.errors);
                         } else {
                             await this.handleErrors(data);
                         }
-                        }catch(e)
-                        {
-                            this.logger.error(`${jobRunId} :${consumerType} Data updating error` )
-                        }
+                    } catch (e) {
+                        this.logger.error(`${jobRunId} :${consumerType} Data updating error`)
+                    }
                     break;
 
                 case ConsumerType.tasks:
@@ -587,7 +586,7 @@ export class RedisConsumerService {
     private async handleErrors(data: any): Promise<void> {
         try {
 
-           
+
             const { operation, tasks } = data || {};
 
             // Save operation error if present
