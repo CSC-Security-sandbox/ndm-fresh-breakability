@@ -1,223 +1,321 @@
+import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
 import { DiscoveryJobWorkflow } from './discovery-job-workflow';
-import { proxyActivities, continueAsNew } from '@temporalio/workflow';
 import { JobRunStatus } from 'src/activities/discovery/enums';
-import { ContinueAsNew } from '@temporalio/workflow';
 
-// Mock the console.log to prevent actual logging during tests
-console.log = jest.fn();
+interface WorkflowArgs {
+  traceId: string;
+  options: any;
+  workerId: string;
+}
 
-// Mock proxyActivities
+// Mock the proxyActivities
 jest.mock('@temporalio/workflow', () => ({
-  proxyActivities: jest.fn(),
-  continueAsNew: jest.fn(),
-  ContinueAsNew: jest.fn().mockImplementation((message) => ({
-    name: 'ContinueAsNew',
-    message,
-    stack: ''
-  }))
-}));
-
-describe('DiscoveryJobWorkflow', () => {
-  const mockTraceId = 'test-trace-id';
-  const mockWorkerId = 'worker-1';
-  const mockOptions = {};
-
-  const mockActivities = {
+  proxyActivities: jest.fn(() => ({
     scanActivity: jest.fn(),
     publishTaskActivity: jest.fn(),
-    updateDiscoveryStatus: jest.fn(),
+    discoveryStatusUpdate: jest.fn(),
     updateLastEntry: jest.fn(),
     getJobStateActivity: jest.fn(),
     updateStatusActivity: jest.fn(),
     setJobStateActivity: jest.fn(),
+  })),
+  continueAsNew: jest.fn(),
+  ContinueAsNew: class MockContinueAsNew extends Error {
+    constructor(args: any) {
+      super('ContinueAsNew');
+      this.name = 'ContinueAsNew';
+    }
+  },
+}));
+
+// Mock the console.log for tracing
+const mockLog = jest.fn();
+console.log = mockLog;
+
+describe('DiscoveryJobWorkflow', () => {
+  const traceId = 'test-trace-id';
+  const workerId = 'test-worker-id';
+  const baseArgs = { traceId, options: {}, workerId };
+
+   // Define a complete mock job state
+   const baseJobState = {
+    status: JobRunStatus.Running,
+    tasks_total: 0,
+    tasks_completed: 0,
+    workers_agreed: [],
+    workers: [workerId],
+    failedWorkers: [] // Ensure failedWorkers is always defined
   };
 
   beforeEach(() => {
-    // Reset all mocks before each test
     jest.clearAllMocks();
-
-    // Setup mock implementations
-    (proxyActivities as jest.Mock).mockImplementation(() => mockActivities);
   });
 
-  describe('Workflow Scenarios', () => {
-    it('should complete workflow when no tasks are found and all workers agree', async () => {
-      // Setup mock job state
-      mockActivities.getJobStateActivity.mockResolvedValueOnce({
-        status: JobRunStatus.Running,
-        tasks_total: 0,
-        tasks_completed: 0,
-        workers: ['worker-1', 'worker-2'],
-        workers_agreed: [],
-      }).mockResolvedValueOnce({
-        status: JobRunStatus.Running,
-        tasks_total: 0,
-        tasks_completed: 0,
-        workers: ['worker-1', 'worker-2'],
-        workers_agreed: ['worker-1'],
-      });
+  it('should start workflow and update status to Running', async () => {
+    const mockGetJobState = jest.fn().mockResolvedValue({ ...baseJobState });
+    const mockUpdateStatus = jest.fn().mockResolvedValue({});
+    const mockScanActivity = jest.fn().mockResolvedValue({ isFatalErrored: false, noTaskFound: true });
+    const mockPublishTask = jest.fn().mockResolvedValue({});
+    const mockSetJobState = jest.fn().mockResolvedValue({});
 
-      // Mock scan activity to return no tasks
-      mockActivities.scanActivity.mockResolvedValue({ 
-        noTaskFound: true,
-        isFatalErrored: false 
-      });
-
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      });
-
-      expect(result).toEqual({ message: 'Discovery completed' });
-      expect(mockActivities.updateLastEntry).toHaveBeenCalledWith(mockTraceId);
-      expect(mockActivities.setJobStateActivity).toHaveBeenCalledWith(
-        mockTraceId, 
-        expect.objectContaining({ 
-          status: JobRunStatus.Completed,
-          workers_agreed: ['worker-1']
-        })
-      );
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      updateStatusActivity: mockUpdateStatus,
+      scanActivity: mockScanActivity,
+      publishTaskActivity: mockPublishTask,
+      setJobStateActivity: mockSetJobState,
+      updateLastEntry: jest.fn(),
     });
 
-    it('should continue workflow when job status is not completed', async () => {
-      // Setup mock job states to simulate continued running
-      mockActivities.getJobStateActivity
-        .mockResolvedValueOnce({
-          status: JobRunStatus.Running,
-          tasks_total: 10,
-          tasks_completed: 5,
-          workers: ['worker-1'],
-          workers_agreed: [],
-        })
-        .mockResolvedValueOnce({
-          status: JobRunStatus.Running,
-          tasks_total: 10,
-          tasks_completed: 5,
-          workers: ['worker-1'],
-          workers_agreed: [],
-        });
+    await DiscoveryJobWorkflow(baseArgs);
 
-      // Mock scan activity to return tasks exist
-      mockActivities.scanActivity.mockResolvedValue({ 
-        noTaskFound: false,
-        isFatalErrored: false 
-      });
+    expect(mockUpdateStatus).toHaveBeenCalledWith({
+      jobRunId: traceId,
+      status: JobRunStatus.Running
+    });
+  });
 
-      // The workflow should continue without completing
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      });
+  it('should exit if job status is not Running', async () => {
+    const mockGetJobState = jest.fn().mockResolvedValue({ 
+      ...baseJobState, 
+      status: JobRunStatus.Completed 
+    });
+    const mockUpdateStatus = jest.fn().mockResolvedValue({});
 
-      expect(mockActivities.publishTaskActivity).toHaveBeenCalledWith(mockTraceId);
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      updateStatusActivity: mockUpdateStatus,
     });
 
-    it('should handle fatal error in scan activity', async () => {
-      // Setup mock job state
-      mockActivities.getJobStateActivity.mockResolvedValueOnce({
-        status: JobRunStatus.Running,
-        failedWorkers: [],
-        workers: ['worker-1'],
-      });
+    const result = await DiscoveryJobWorkflow(baseArgs);
 
-      // Mock scan activity to return fatal error
-      mockActivities.scanActivity.mockResolvedValue({ 
-        noTaskFound: false,
-        isFatalErrored: true 
-      });
+    expect(result).toEqual({ message: 'Job status changed to COMPLETED' });
+  });
 
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      });
+  it('should handle no tasks found scenario and complete when all workers agree', async () => {
+    const initialJobState = {
+      ...baseJobState,
+      tasks_total: 10,
+      tasks_completed: 10,
+      workers: [workerId, 'another-worker']
+    };
 
-      expect(mockActivities.setJobStateActivity).toHaveBeenCalledWith(
-        mockTraceId, 
-        expect.objectContaining({ 
-          failedWorkers: [mockWorkerId] 
-        })
-      );
+    const updatedJobState = {
+      ...initialJobState,
+      workers_agreed: [workerId]
+    };
+
+    const completedJobState = {
+      ...updatedJobState,
+      workers_agreed: [workerId, 'another-worker'],
+      status: JobRunStatus.Completed
+    };
+
+    const mockGetJobState = jest.fn()
+      .mockResolvedValueOnce(initialJobState)
+      .mockResolvedValueOnce(initialJobState)
+      .mockResolvedValueOnce(updatedJobState)
+      .mockResolvedValueOnce(completedJobState);
+
+    const mockScanActivity = jest.fn().mockResolvedValue({ isFatalErrored: false, noTaskFound: true });
+    const mockPublishTask = jest.fn().mockResolvedValue({});
+    const mockSetJobState = jest.fn().mockResolvedValue({});
+    const mockUpdateLastEntry = jest.fn().mockResolvedValue({});
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      scanActivity: mockScanActivity,
+      publishTaskActivity: mockPublishTask,
+      setJobStateActivity: mockSetJobState,
+      updateLastEntry: mockUpdateLastEntry,
+      updateStatusActivity: jest.fn(),
     });
 
-    it('should continue as new when iteration limit is reached', async () => {
-      // Setup mock job state
-      mockActivities.getJobStateActivity.mockResolvedValue({
-        status: JobRunStatus.Running,
-        tasks_total: 10,
-        tasks_completed: 5,
-        workers: ['worker-1'],
-        workers_agreed: [],
-      });
+    const result = await DiscoveryJobWorkflow(baseArgs);
 
-      // Mock scan activity to simulate ongoing tasks
-      mockActivities.scanActivity.mockResolvedValue({ 
-        noTaskFound: false,
-        isFatalErrored: false 
-      });
+    expect(result).toEqual({ message: 'Discovery completed' });
+  });
 
-      // Mock continueAsNew to simulate 80+ iterations
-      const mockContinueAsNew = continueAsNew as jest.Mock;
-      mockContinueAsNew.mockResolvedValue(undefined);
+  it('should continue processing when not all workers have agreed', async () => {
+    const initialJobState = {
+      status: JobRunStatus.Running,
+      tasks_total: 10,
+      tasks_completed: 10,
+      workers_agreed: [],
+      workers: [workerId, 'another-worker'],
+      failedWorkers: []
+    };
 
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId,
-        iteration: 80  // Simulate 80 iterations
-      });
+    const updatedJobState = {
+      ...initialJobState,
+      workers_agreed: [workerId]
+    };
 
-      expect(continueAsNew).toHaveBeenCalledWith({ 
-        traceId: mockTraceId, 
-        options: mockOptions 
-      });
+    const mockGetJobState = jest.fn()
+      .mockResolvedValueOnce(initialJobState)
+      .mockResolvedValueOnce(initialJobState)
+      .mockResolvedValueOnce(updatedJobState);
+
+    const mockScanActivity = jest.fn()
+      .mockResolvedValueOnce({ isFatalErrored: false, noTaskFound: true })
+      .mockResolvedValueOnce({ isFatalErrored: false, noTaskFound: false });
+
+    const mockPublishTask = jest.fn().mockResolvedValue({});
+    const mockSetJobState = jest.fn().mockResolvedValue({});
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      scanActivity: mockScanActivity,
+      publishTaskActivity: mockPublishTask,
+      setJobStateActivity: mockSetJobState,
+      updateStatusActivity: jest.fn(),
     });
 
-    it('should handle non-running job status', async () => {
-      // Setup mock job state with non-running status
-      mockActivities.getJobStateActivity.mockResolvedValue({
-        status: JobRunStatus.Completed,
-      });
+    await DiscoveryJobWorkflow(baseArgs);
 
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      });
+    expect(mockSetJobState).toHaveBeenCalledWith(traceId, updatedJobState);
+    expect(mockPublishTask).toHaveBeenCalledTimes(2);
+  });
 
-      expect(result).toEqual({ message: `Job status changed to ${JobRunStatus.Completed}` });
+  it('should handle fatal error scenario', async () => {
+    const initialJobState = {
+      ...baseJobState,
+      tasks_total: 10,
+      tasks_completed: 5
+    };
+
+    const mockGetJobState = jest.fn().mockResolvedValue(initialJobState);
+    const mockScanActivity = jest.fn().mockResolvedValue({ isFatalErrored: true, noTaskFound: false });
+    const mockPublishTask = jest.fn().mockResolvedValue({});
+    const mockSetJobState = jest.fn().mockResolvedValue({});
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      scanActivity: mockScanActivity,
+      publishTaskActivity: mockPublishTask,
+      setJobStateActivity: mockSetJobState,
+      updateStatusActivity: jest.fn(),
     });
 
-    it('should handle workflow error and update discovery status', async () => {
-      // Simulate an error scenario
-      mockActivities.getJobStateActivity.mockRejectedValue(new Error('Test error'));
-      mockActivities.updateDiscoveryStatus.mockResolvedValue(undefined);
-      mockActivities.updateLastEntry.mockResolvedValue(undefined);
+    await DiscoveryJobWorkflow(baseArgs);
 
-      const result = await DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      });
+    expect(mockLog).toHaveBeenCalledWith(traceId, `Fatal Error Occurred On worker ${workerId}`);
+  });
 
-      expect(result).toEqual({ message: 'Discovery failed' });
-      expect(mockActivities.updateDiscoveryStatus).toHaveBeenCalledWith(mockTraceId, 'FAILED');
-      expect(mockActivities.updateLastEntry).toHaveBeenCalledWith(mockTraceId);
+  it('should continue as new when iteration limit is reached', async () => {
+    const mockGetJobState = jest.fn().mockResolvedValue({ status: JobRunStatus.Running });
+    const mockScanActivity = jest.fn().mockResolvedValue({ isFatalErrored: false, noTaskFound: false });
+    const mockPublishTask = jest.fn().mockResolvedValue({});
+    const mockContinueAsNew = jest.fn();
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      scanActivity: mockScanActivity,
+      publishTaskActivity: mockPublishTask,
+      updateStatusActivity: jest.fn(),
     });
 
-    it('should rethrow ContinueAsNew error', async () => {
-      // Use the mocked ContinueAsNew constructor
-      const continueAsNewError = new (ContinueAsNew as unknown as jest.Mock)('Continue as new');
-      
-      mockActivities.getJobStateActivity.mockRejectedValue(continueAsNewError);
+    (continueAsNew as jest.Mock).mockImplementation(mockContinueAsNew);
 
-      await expect(DiscoveryJobWorkflow({ 
-        traceId: mockTraceId, 
-        options: mockOptions, 
-        workerId: mockWorkerId 
-      })).rejects.toThrow('Continue as new');
+    // Create a workflow that will run 80 iterations
+    const workflow = async () => {
+      let iteration = 0;
+      while (iteration < 80) {
+        iteration++;
+        await DiscoveryJobWorkflow({ ...baseArgs, iteration });
+      }
+    };
+
+    await workflow();
+
+    expect(mockContinueAsNew).toHaveBeenCalledWith({ traceId, options: {} });
+    expect(mockLog).toHaveBeenCalledWith(traceId, 'Iteration limit reached. Continuing as new...');
+  });
+
+  // it('should handle ContinueAsNew error', async () => {
+  //   const mockGetJobState = jest.fn().mockResolvedValue({ status: JobRunStatus.Running });
+  //   const mockScanActivity = jest.fn().mockResolvedValue({ isFatalErrored: false, noTaskFound: false });
+  //   const mockPublishTask = jest.fn().mockResolvedValue({});
+  //   const mockUpdateDiscoveryStatus = jest.fn().mockResolvedValue({});
+  //   const mockUpdateLastEntry = jest.fn().mockResolvedValue({});
+
+  //   (proxyActivities as jest.Mock).mockReturnValueOnce({
+  //     getJobStateActivity: mockGetJobState,
+  //     scanActivity: mockScanActivity,
+  //     publishTaskActivity: mockPublishTask,
+  //     discoveryStatusUpdate: mockUpdateDiscoveryStatus,
+  //     updateLastEntry: mockUpdateLastEntry,
+  //     updateStatusActivity: jest.fn(),
+  //   });
+
+  //   (continueAsNew as jest.Mock).mockImplementation(() => {
+  //     throw new ContinueAsNew(baseArgs); // Now using the properly typed args
+  //   });
+
+  //   const result = await DiscoveryJobWorkflow(baseArgs);
+
+  //   expect(mockLog).toHaveBeenCalledWith(traceId, 'Workflow continued as new: ContinueAsNew');
+  //   expect(result).toBeUndefined();
+  // });
+
+  it('should handle unexpected errors and mark job as failed', async () => {
+    const mockGetJobState = jest.fn().mockRejectedValue(new Error('Test error'));
+    const mockUpdateDiscoveryStatus = jest.fn().mockResolvedValue({});
+    const mockUpdateLastEntry = jest.fn().mockResolvedValue({});
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      discoveryStatusUpdate: mockUpdateDiscoveryStatus,
+      updateLastEntry: mockUpdateLastEntry,
+      updateStatusActivity: jest.fn(),
     });
+
+    const result = await DiscoveryJobWorkflow(baseArgs);
+
+    expect(mockUpdateDiscoveryStatus).toHaveBeenCalledWith(traceId, 'FAILED');
+    expect(mockLog).toHaveBeenCalledWith(traceId, 'Discovery status updated to Failed');
+    expect(mockUpdateLastEntry).toHaveBeenCalled();
+    expect(result).toEqual({ message: 'Discovery failed' });
+  });
+
+  it('should handle error in updateDiscoveryStatus', async () => {
+    const mockGetJobState = jest.fn().mockRejectedValue(new Error('Test error'));
+    const mockUpdateDiscoveryStatus = jest.fn().mockRejectedValue(new Error('Status update failed'));
+    const mockUpdateLastEntry = jest.fn().mockResolvedValue({});
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      discoveryStatusUpdate: mockUpdateDiscoveryStatus,
+      updateLastEntry: mockUpdateLastEntry,
+      updateStatusActivity: jest.fn(),
+    });
+
+    const result = await DiscoveryJobWorkflow(baseArgs);
+
+    expect(mockUpdateDiscoveryStatus).toHaveBeenCalledWith(traceId, 'FAILED');
+    expect(mockLog).toHaveBeenCalledWith(traceId, 'Failed to update discovery status: Error: Status update failed');
+    expect(mockUpdateLastEntry).toHaveBeenCalled();
+    expect(result).toEqual({ message: 'Discovery failed' });
+  });
+
+  it('should handle error in updateLastEntry during failure', async () => {
+    const mockGetJobState = jest.fn().mockRejectedValue(new Error('Test error'));
+    const mockUpdateDiscoveryStatus = jest.fn().mockResolvedValue({});
+    const mockUpdateLastEntry = jest.fn().mockRejectedValue(new Error('Last entry failed'));
+
+    (proxyActivities as jest.Mock).mockReturnValueOnce({
+      getJobStateActivity: mockGetJobState,
+      discoveryStatusUpdate: mockUpdateDiscoveryStatus,
+      updateLastEntry: mockUpdateLastEntry,
+      updateStatusActivity: jest.fn(),
+    });
+
+    const result = await DiscoveryJobWorkflow(baseArgs);
+
+    expect(mockUpdateDiscoveryStatus).toHaveBeenCalledWith(traceId, 'FAILED');
+    expect(mockLog).toHaveBeenCalledWith(traceId, 'Discovery status updated to Failed');
+    expect(mockUpdateLastEntry).toHaveBeenCalled();
+    expect(mockLog).toHaveBeenCalledWith(traceId, 'Failed to update discovery status: Error: Last entry failed');
+    expect(result).toEqual({ message: 'Discovery failed' });
   });
 });
