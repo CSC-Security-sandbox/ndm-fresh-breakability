@@ -39,6 +39,9 @@ const JobsCountRenderer: React.FC<JobsCountRendererProps> = ({
     [JOB_STATUS_TYPE_ENUM.COMPLETED]: 0,
     [JOB_STATUS_TYPE_ENUM.FAILED]: 0,
     [JOB_STATUS_TYPE_ENUM.ERRORED]: 0,
+    [JOB_STATUS_TYPE_ENUM.BLOCKED]: 0,
+    [JOB_STATUS_TYPE_ENUM.REJECTED]: 0,
+    [JOB_STATUS_TYPE_ENUM.APPROVED]: 0,
   };
 
   row.jobConfig.forEach((config) => {

@@ -10,7 +10,7 @@ import {
 import {
   BlueXpFormType,
   CutOverConfirmModalPropType,
-  CutOverStatus,
+  CUTOVER_STATUS_TYPE_ENUM,
   ReportENUM,
 } from "@/types/app.type";
 import { useConfirmCutOverMutation } from "@api/jobsApi";
@@ -33,7 +33,7 @@ export default function CutoverConfirmationModal({
 
   const handleConfirmCutOver = async (
     jobRunId: string,
-    action: CutOverStatus
+    action: CUTOVER_STATUS_TYPE_ENUM
   ) => {
     try {
       await confirmCutOverApi({ jobRunId, action }).unwrap();
@@ -85,13 +85,17 @@ export default function CutoverConfirmationModal({
         </Button>
         <Button
           color="secondary"
-          onClick={() => handleConfirmCutOver(jobRunId, CutOverStatus.REJECTED)}
+          onClick={() =>
+            handleConfirmCutOver(jobRunId, CUTOVER_STATUS_TYPE_ENUM.REJECTED)
+          }
         >
           Reject
         </Button>
         <Button
           disabled={!confirmCutOverForm?.formState?.confirmCutOver}
-          onClick={() => handleConfirmCutOver(jobRunId, CutOverStatus.APPROVED)}
+          onClick={() =>
+            handleConfirmCutOver(jobRunId, CUTOVER_STATUS_TYPE_ENUM.APPROVED)
+          }
         >
           Confirm
         </Button>
