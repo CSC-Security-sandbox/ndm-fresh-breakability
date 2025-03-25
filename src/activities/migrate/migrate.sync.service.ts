@@ -116,10 +116,15 @@ export class MigrationSyncService {
     if(metadata?.birthtime){
       try {
         if(process.platform == 'win32') {
-          const birthtime = new Date(metadata.birthtime).toLocaleString('sv-SE').replace(',', ''); 
-          const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birthtime}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          const birthtime = new Date(metadata.birthtime) 
+          var dateString = new Date(
+            birthtime.getTime() - birthtime.getTimezoneOffset() * 60000
+          );
+          var birth_time = dateString.toISOString().replace("T", " ").substr(0, 19);
+          const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+          this.logger.debug(`Setting birthtime for ${targetPath} to ${birth_time} using command : ${birthtimeCommand} and {metadata.birthtime} is ${metadata.birthtime}`)
           const output = await this.powershellService.runCommand(birthtimeCommand);
-          this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birthtime} and metadata.birthtime is ${metadata.birthtime}`)
+          this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birth_time} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
           const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
           execSync(birthtimeCommand);
