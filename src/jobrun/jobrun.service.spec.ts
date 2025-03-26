@@ -1071,7 +1071,7 @@ describe("JobRunService", () => {
         targetvolumepath: "/target/path",
         targetfileserverprotocol: "FTP",
         targetconfigname: "TargetServer",
-        status: JobRunStatus.Completed,
+        status: JobRunStatus.Running,
         starttime: new Date(Date.now() - 10000),
         endtime: new Date(),
         jobstats: {
@@ -1103,7 +1103,7 @@ describe("JobRunService", () => {
   
     expect(result).toMatchObject([
       {
-        status: JobRunStatus.Completed,
+        status: JobRunStatus.Running,
         startTime: mockJobRuns[0].starttime,
         endTime: mockJobRuns[0].endtime,
         jobType: "DISCOVER",
@@ -1120,7 +1120,7 @@ describe("JobRunService", () => {
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
         totalScannedSize: "2.00 KB",
-        totalMigratedSize: "0",
+        totalMigratedSize: "0 B",
         errors: [{ errorType: "FileNotFound", count: 5 }],
       },
     ]);
@@ -1194,7 +1194,7 @@ describe("JobRunService", () => {
         },
         scannedFilesCount: "10",
         scannedDirectoriesCount: "5",
-        totalScannedSize: "",
+        totalScannedSize: "0 B",
         totalMigratedSize: "4.88 KB",
         errors: [],
       },
