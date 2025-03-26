@@ -1380,7 +1380,7 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
-        totalMigratedSize: "0",
+        totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
       });
@@ -1506,7 +1506,7 @@ describe("JobRunService", () => {
         timeElapsed: endTime.getTime() - startTime.getTime(),
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
-        totalScannedSize: "",
+        totalScannedSize: "0 B",
         totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
@@ -1562,7 +1562,7 @@ describe("JobRunService", () => {
           jobRunId: "jobRun123",
           status: JobRunStatus.Running,
           totalScannedSize: "4.88 KB", // Assuming covertBytes converts bytes correctly
-          totalMigratedSize: "0",
+          totalMigratedSize: "0 B",
           tasks: [
             {
               taskId: "task1",
@@ -2019,6 +2019,11 @@ describe("JobRunService", () => {
         startTime: true,
         status: true,
         subStatus: true,
+        jobStats: {
+          fileCount: true,
+          directories: true,
+          totalSize: true,
+        },
         tasks: {
           createdAt: true,
           id: true,

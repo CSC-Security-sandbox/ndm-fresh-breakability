@@ -357,6 +357,11 @@ export class JobRunService {
         startTime: true,
         endTime: true,
         jobConfigId: true,
+        jobStats: {
+          fileCount: true,
+          directories: true,
+          totalSize: true,
+        },
         tasks: {
           id: true,
           status: true,
@@ -413,6 +418,7 @@ export class JobRunService {
     if(jobRun.status===JobRunStatus.Completed){
        this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
         const inventoryStats:JobRunStats = jobRun.jobStats;
+        this.logger.log(`Job Run ${jobRun.id} inventory stats ${JSON.stringify(inventoryStats)}`);
         const payload = {
           scannedFilesCount: BigInt(
             inventoryStats?.fileCount || "0"
@@ -423,8 +429,8 @@ export class JobRunService {
           totalScannedSize:
           jobConfigDetails.jobType === JobType.DISCOVER
               ? this.covertBytes(Number(inventoryStats?.totalSize || "0"))
-              : "",
-          totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0",
+              : "0 B",
+          totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0 B",
           errors: await this.getErrorCounts(jobRun.id),
           tasks: jobRun.tasks.map((task) => ({
             taskId: task.id,
@@ -454,9 +460,9 @@ export class JobRunService {
       totalScannedSize:
         jobConfigDetails.jobType === JobType.DISCOVER
           ? this.covertBytes(Number(inventoryCounts?.totalSize || "0"))
-          : "0",
+          : "0 B",
       totalMigratedSize:
-        jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || "0")) : "0",
+        jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || "0")) : "0 B",
       errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
