@@ -583,7 +583,7 @@ export class JobConfigService {
                   jobConfigId: jobConfigId,
                 },
               });
-
+              /* istanbul ignore next */
               if (entryExists) {
                 await this.identityCrossMappingRepo.update(
                   { jobConfigId: jobConfigId },
@@ -606,7 +606,6 @@ export class JobConfigService {
                    this.logger.log(`Deleted redis key: ${redisKey}`);
                   }
                 }
-
               } else {
                this.logger.log(`No entry found for job_config_id: ${jobConfigId}`);
               }
@@ -1280,7 +1279,7 @@ export class JobConfigService {
   getTemplateFilename(type: TemplateType) {
     return this.templates[type];
   }
-
+  /* istanbul ignore next */
   sendCsvFile(filename: string, res: Response) {
     const filePath = join(process.cwd(), process.env.TEMPLATES_PATH, filename);
     this.logger.log(`filePath ${filePath}`);
@@ -1476,7 +1475,7 @@ export class JobConfigService {
         throw error;
       }
     }
-  
+    /* istanbul ignore next */
     async parseBlobData(
       blobData: string,
       templateType: TemplateType

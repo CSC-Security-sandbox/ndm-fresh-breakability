@@ -1384,6 +1384,7 @@ describe("JobRunService", () => {
         errors: [],
         tasks: [],
       });
+      expect(result.tasks.length).toBe(0);
     });
     it("should return job run details when it exists with stats", async () => {
       // Arrange
@@ -1511,6 +1512,80 @@ describe("JobRunService", () => {
         tasks: [],
       });
     });
+
+    // jobRun.status !== JobRunStatus.Completed case
+      it("should calculate job stats dynamically when job is not completed", async () => {
+        const mockJobRun = {
+          id: "jobRun123",
+          status: JobRunStatus.Running,
+          subStatus: null,
+          startTime: new Date(Date.now() - 5000),
+          endTime: null,
+          jobConfigId: "config123",
+          tasks: [
+            {
+              id: "task1",
+              taskType: "COPY",
+              status: "RUNNING",
+              createdAt: new Date(Date.now() - 4000),
+              updatedAt: new Date(Date.now() - 1000),
+              worker: { workerName: "Worker1" },
+            },
+          ],
+        };
+        
+        const mockJobConfig = {
+          id: "config123",
+          jobType: JobType.DISCOVER,
+          sourcePath: {
+            fileServer: { config: { configName: "SourceServer" }, protocol: "SFTP" },
+            volumePath: "/source/path",
+          },
+          targetPath: {
+            fileServer: { config: { configName: "TargetServer" }, protocol: "SFTP" },
+            volumePath: "/target/path",
+          },
+        };
+        
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValue({});
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
+        jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+        jest.spyOn(service, 'calculateJobRunStats').mockResolvedValue({
+          fileCount: "10",
+          directories: "2",
+          totalSize: "5000",
+          errors: []
+        });
+        const result = await service.getJobRun("jobRun123");
+        expect(service.calculateJobRunStats).toHaveBeenCalledWith("jobRun123");
+        expect(result).toMatchObject({
+          jobRunId: "jobRun123",
+          status: JobRunStatus.Running,
+          totalScannedSize: "4.88 KB", // Assuming covertBytes converts bytes correctly
+          totalMigratedSize: "0",
+          tasks: [
+            {
+              taskId: "task1",
+              taskType: "COPY",
+              status: "RUNNING",
+              startTime: expect.any(Date),
+              endTime: expect.any(Date),
+              worker: "Worker1",
+              errors: [],
+            },
+          ],
+        });
+        expect(result.tasks).toHaveLength(1);
+        expect(result.tasks[0]).toEqual({
+          taskId: "task1",
+          taskType: "COPY",
+          status: "RUNNING",
+          startTime: expect.any(Date),
+          endTime: expect.any(Date),
+          worker: "Worker1",
+          errors: [],
+        });
+      });
   });
 
   describe("service.covertBytes", () => {
