@@ -1,16 +1,16 @@
 import React from "react";
 import { generateOptionsWithRange } from "@/utils/common.utils";
-import CutoverJobsCountRenderer from "./components/steps/Mapping/components/CellRenderer/CutoverJobsCountRenderer";
-import DestinationFileServer from "./components/steps/Mapping/components/CellRenderer/DestinationFileServer";
-import DestinationPath from "./components/steps/Mapping/components/CellRenderer/DestinationPath";
-import DiscoveryJobsCountRenderer from "./components/steps/Mapping/components/CellRenderer/DiscoveryJobsCountRenderer";
-import MigrationJobsCountRenderer from "./components/steps/Mapping/components/CellRenderer/MigrationJobsCountRenderer";
-import SourcePathCellRenderer from "./components/steps/Mapping/components/CellRenderer/SourcePathCellRenderer";
+import CutoverJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/CutoverJobsCountRenderer";
+import DestinationFileServer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DestinationFileServer";
+import DestinationPath from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DestinationPath";
+import DiscoveryJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DiscoveryJobsCountRenderer";
+import MigrationJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/MigrationJobsCountRenderer";
+import SourcePathCellRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/SourcePathCellRenderer";
 import * as Yup from "yup";
 import ValidationCellRenderer from "@components/custom-cell-renderer/ValidationCellRenderer";
-import Mapping from "./components/steps/Mapping/Mapping";
-import Options from "./components/steps/Options/Options";
-import Review from "./components/steps/Review/Review";
+import Mapping from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/Mapping";
+import Options from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Options/Options";
+import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review";
 
 export const STEPS_MAP_BULK_MIGRATION = {
   mapping: Mapping,

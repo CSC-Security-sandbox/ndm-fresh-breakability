@@ -1,7 +1,7 @@
 import { FileServerOverviewApi } from "@/types/app.type";
-import CutOverJobsCountRenderer from "./components/CellRenderer/CutOverJobsCountRenderer";
-import DiscoveryJobsCountRenderer from "./components/CellRenderer/DiscoveryJobsCountRenderer";
-import MigrationJobsCountRenderer from "./components/CellRenderer/MigrationJobsCountRenderer";
+import CutOverJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/CutOverJobsCountRenderer";
+import DiscoveryJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/DiscoveryJobsCountRenderer";
+import MigrationJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/MigrationJobsCountRenderer";
 import React from "react";
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 

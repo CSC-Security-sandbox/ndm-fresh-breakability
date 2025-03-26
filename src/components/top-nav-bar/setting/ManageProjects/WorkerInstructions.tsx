@@ -5,7 +5,7 @@ import {
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
 import { useDispatch } from "react-redux";
-import WorkerInstallationContent from "./WorkerInstallationContent";
+import WorkerInstallationContent from "@components/top-nav-bar/setting/ManageProjects/WorkerInstallationContent";
 
 const WorkerInstallation = ({
   label,

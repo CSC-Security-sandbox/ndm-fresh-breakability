@@ -7,7 +7,7 @@ import { useGetAllProjectsQuery } from "@api/projectApi";
 import { drawerFunctions } from "@components/side-drawer/SideDrawer.utils";
 import { Button, Chevron } from "@netapp/bxp-design-system-react";
 import { RootStateType } from "@store/store";
-import SwitchProjectContent from "./SwitchProjectContent";
+import SwitchProjectContent from "@components/top-nav-bar/switch-project/SwitchProjectContent";
 
 const SwitchProject = () => {
   const { selectedProjectId } = useSelectedProjectId();

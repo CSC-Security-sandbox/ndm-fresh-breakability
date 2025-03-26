@@ -25,12 +25,12 @@ import {
   COLUMNS_TO_FILTER_DEFS,
   defaultColumnState,
   JOB_RUN_LIST_COLUMN_DEFS,
-} from "./run.constants";
+} from "@modules/jobs/job-run-list/run.constants";
 import {
   getActionMenu,
   getJobRunListFlaternList,
   getReportActions,
-} from "./run.utils";
+} from "@modules/jobs/job-run-list/run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import useAdhocRun from "@hooks/useAdhocRun";
 
@@ -38,7 +38,12 @@ const JobRunList = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: jobRunList, isLoading, isFetching, refetch } = useGetJobRunsQuery({
+  const {
+    data: jobRunList,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetJobRunsQuery({
     projectId: selectedProjectId,
   });
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(

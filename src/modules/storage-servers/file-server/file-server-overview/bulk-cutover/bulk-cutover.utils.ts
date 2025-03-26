@@ -2,7 +2,7 @@ import {
   BlueXpTableStateType,
   GetAllCutOverPathsApiType,
 } from "@/types/app.type";
-import { CreateBulkCutOverApiPayloadType } from "./bulk-cutover.interface";
+import { CreateBulkCutOverApiPayloadType } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.interface";
 
 export const createBulkCutOverPayload = (
   cutOverSelectedIds: string[],

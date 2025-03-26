@@ -1,6 +1,6 @@
 import { JobTaskDetailsPropsType } from "@modules/jobs/job-task-errors/JobTaskErrorsTabs.interface";
 import { Card } from "@netapp/bxp-design-system-react";
-import DetailTile from "./DetailTile";
+import DetailTile from "@modules/jobs/job-task-errors/components/DetailTile";
 
 const JobTaskDetails = ({ jobConfigDetails }: JobTaskDetailsPropsType) => {
   return (

@@ -1,6 +1,5 @@
 /* eslint-disable */
 import { useEffect, useState } from "react";
-// import { useDispatch, useSelector } from "react-redux";
 import {
   Button,
   FormFieldInputNew,
@@ -11,13 +10,8 @@ import {
   WizardFooter,
 } from "@netapp/bxp-design-system-react";
 import Box from "@/components/container/Box";
-// import {
-//   setModalClose,
-//   setModalProps,
-// } from "@/app/redux/reducer/commonComponentSlice";
-// import WorkerInstructions from "./WorkerInstructions";
-import AssociateUsers from "./components/AssociateUsers";
-import { ASSOCIATE_USER_FORM_VALIDATION_SCHEMA } from "./ManageProjects.constant";
+import AssociateUsers from "@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers";
+import { ASSOCIATE_USER_FORM_VALIDATION_SCHEMA } from "@components/top-nav-bar/setting/ManageProjects/ManageProjects.constant";
 import {
   useGetAllRolesQuery,
   useAssociateUserBatchMutation,

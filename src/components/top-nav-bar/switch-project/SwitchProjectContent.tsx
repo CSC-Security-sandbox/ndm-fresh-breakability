@@ -24,7 +24,7 @@ import {
   setModalClose,
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
-import { FILE_SERVER_BULK_OPERATION_PATHS } from "./SwitchProject.constant";
+import { FILE_SERVER_BULK_OPERATION_PATHS } from "@components/top-nav-bar/switch-project/SwitchProject.constant";
 
 const DetailButton = ({ projectId }: { projectId: string }) => (
   <ActionMenu

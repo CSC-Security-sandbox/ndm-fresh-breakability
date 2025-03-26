@@ -4,7 +4,7 @@ import {
   FormFieldSelect,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import ProtocolAccordion from "./ProtocolAccordion";
+import ProtocolAccordion from "@modules/storage-servers/file-server/components/steps/Credentials/components/ProtocolAccordion";
 import { NFS_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-server/components/steps/Credentials/credentials.constant";
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 

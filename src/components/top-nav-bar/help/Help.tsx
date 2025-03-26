@@ -1,7 +1,7 @@
 import Box from "@/components/container/Box";
 import { Card, Layout, WizardHeader } from "@netapp/bxp-design-system-react";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
-import { HELP_ITEMS } from "./help.constant";
+import { HELP_ITEMS } from "@components/top-nav-bar/help/help.constant";
 
 const Help = () => {
   return (

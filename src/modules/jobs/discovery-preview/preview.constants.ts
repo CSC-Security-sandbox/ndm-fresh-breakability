@@ -8,7 +8,7 @@ import {
   chartDataForFileSize,
   chartDataForFileSizeCreated,
   chartDataForFileSizeModified,
-} from "./preview.decorators";
+} from "@modules/jobs/discovery-preview/preview.decorators";
 
 export const availableChartColors = [
   "chart-1",

@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { useMemo } from "react";
 import { TabHeader, TabLinks } from "@netapp/bxp-design-system-react";
-import { HEADER_WITH_PATHNAME } from "./TabHeaderWrapper.constant";
+import { HEADER_WITH_PATHNAME } from "@components/tab-header-wrapper/TabHeaderWrapper.constant";
 import { Link, useLocation } from "react-router-dom";
 
 const LinkWithActiveClass = (props: any) => {

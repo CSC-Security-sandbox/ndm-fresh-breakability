@@ -6,12 +6,12 @@ import {
   Layout,
   WizardHeader,
 } from "@netapp/bxp-design-system-react";
-import ManageProject from "./ManageProjects/ManageProjects";
-import ManageUsers from "./ManageUsers/ManageUsers";
+import ManageProject from "@components/top-nav-bar/setting/ManageProjects/ManageProjects";
+import ManageUsers from "@components/top-nav-bar/setting/ManageUsers/ManageUsers";
 
 import Box from "@/components/container/Box";
 import TabPanel from "@components/container/TabPanel";
-import CreateSMTP from "./SMTP/CreateSMTP";
+import CreateSMTP from "@components/top-nav-bar/setting/SMTP/CreateSMTP";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { IAMIcon } from "@netapp/bxp-design-system-react/icons/monochrome";

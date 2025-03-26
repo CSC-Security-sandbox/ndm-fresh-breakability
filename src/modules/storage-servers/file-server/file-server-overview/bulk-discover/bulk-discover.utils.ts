@@ -1,5 +1,5 @@
 import { BlueXpFormType } from "@/types/app.type";
-import { bulkDiscoveryFormType } from "./bulk-discovery.interface";
+import { bulkDiscoveryFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 
 export const generateBulkDiscoveryPayload = (
   bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType>,

@@ -1,5 +1,5 @@
 import Box from "@/components/container/Box";
-import AssociatedUsers from "./AssociatedUserList";
+import AssociatedUsers from "@components/top-nav-bar/setting/ManageProjects/components/AssociatedUserList";
 import { FormFieldSelect, Button, Text } from "@netapp/bxp-design-system-react";
 import { AddIcon } from "@netapp/bxp-style/react-icons/Action";
 import { AssociatedUsersPropsType } from "@/types/app.type";

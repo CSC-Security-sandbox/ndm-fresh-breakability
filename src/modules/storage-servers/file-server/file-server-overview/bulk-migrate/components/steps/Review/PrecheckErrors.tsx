@@ -7,7 +7,7 @@ import {
   Tooltip,
 } from "@netapp/bxp-design-system-react";
 import { nanoid } from "@reduxjs/toolkit";
-import { PRECHECK_ERROR_STATUS } from "./review.constants";
+import { PRECHECK_ERROR_STATUS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/review.constants";
 import { memo } from "react";
 import { getSourcePaths } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review.utils";
 import { PreCheckStatusPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review.types";

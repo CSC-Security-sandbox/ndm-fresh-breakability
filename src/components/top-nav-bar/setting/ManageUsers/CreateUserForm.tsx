@@ -20,9 +20,9 @@ import { useEffect, useState } from "react";
 import {
   CREATE_USER_FORM_VALIDATION_SCHEMA,
   RoleApiType,
-} from "./ManageUsers.constant";
+} from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
 import React from "react";
-import TemporaryPassword from "./TemporaryPassword";
+import TemporaryPassword from "@components/top-nav-bar/setting/ManageUsers/TemporaryPassword";
 import { USER_ROLES_ENUM } from "@/types/app.type";
 
 type CreateUserFormProps = {

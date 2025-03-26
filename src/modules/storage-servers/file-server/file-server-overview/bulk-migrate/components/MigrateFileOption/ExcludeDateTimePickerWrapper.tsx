@@ -4,7 +4,7 @@ import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import { ExcludeDateTimePickerWrapperPropsType } from "./ExcludeDateTimePickerWrapper.interface";
+import { ExcludeDateTimePickerWrapperPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/ExcludeDateTimePickerWrapper.interface";
 import { useMemo, useState } from "react";
 
 dayjs.extend(utc);

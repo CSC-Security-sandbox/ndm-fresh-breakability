@@ -3,7 +3,7 @@ import Box from "@/components/container/Box";
 import Divider from "@mui/material/Divider";
 import UserDetails from "@components/top-nav-bar/user-details/UserDetails";
 import SwitchProject from "@components/top-nav-bar/switch-project/SwitchProject";
-import Settings from "./setting/Settings";
+import Settings from "@components/top-nav-bar/setting/Settings";
 import { useNavigate } from "react-router-dom";
 
 const TopNavBar = () => {

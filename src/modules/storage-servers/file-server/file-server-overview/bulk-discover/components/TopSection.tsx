@@ -7,7 +7,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import React from "react";
 import { TopSectionPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
-import ScheduleComponent from "./ScheduleComponent";
+import ScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScheduleComponent";
 
 const TopSection = ({
   fileServerDetails,

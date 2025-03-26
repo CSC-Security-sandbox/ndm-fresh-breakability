@@ -1,7 +1,7 @@
 import { BlueXpTableRowType } from "@/types/app.type";
 import { JOBS_TYPE, VolumeType, JOB_STATUS_TYPE_ENUM } from "@/types/app.type";
 import { Text } from "@netapp/bxp-design-system-react";
-import JobsCountRenderer from "./JobCountRenderer";
+import JobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/JobCountRenderer";
 
 const CutOverJobsCountRenderer = ({
   row,

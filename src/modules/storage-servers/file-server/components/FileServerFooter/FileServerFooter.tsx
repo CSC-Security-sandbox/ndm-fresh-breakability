@@ -2,7 +2,7 @@ import { Box } from "@components/container/index";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
 import { ReactNode, useContext } from "react";
-import NextAndSubmitButton from "./NextAndSubmitButton";
+import NextAndSubmitButton from "@modules/storage-servers/file-server/components/FileServerFooter/NextAndSubmitButton";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 const FileServerFooter = ({ content }: { content?: ReactNode }) => {

@@ -10,18 +10,23 @@ import { COL_DEF_FOR_USER } from "@/constant/app.constants";
 import { Collapse } from "@mui/material";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
-import CreateUserForm from "./CreateUserForm";
+import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
-import { DEFAULT_COLUMN_STATE } from "./ManageUsers.constant";
+import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
-  const { data: userData, isLoading, isFetching, refetch } = useGetAllUsersQuery("");
+  const {
+    data: userData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetAllUsersQuery("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice

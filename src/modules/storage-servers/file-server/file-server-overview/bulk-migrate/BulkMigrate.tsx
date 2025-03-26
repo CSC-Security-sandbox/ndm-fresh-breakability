@@ -3,7 +3,7 @@ import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
 import { Wizard } from "@netapp/bxp-design-system-react";
 import BulkMigrateContextProvider from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
-import BulkMigrateFooter from "./components/footer/BulkMigrateFooter";
+import BulkMigrateFooter from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/footer/BulkMigrateFooter";
 import { withBulkMigrateCreateForm } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/withBulkMigrateCreateForm";
 import {
   STEPS_MAP_BULK_MIGRATION,

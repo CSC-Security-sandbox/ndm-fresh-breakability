@@ -19,8 +19,8 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import TaskFilters from "./TaskFilters";
-import { TASKS_COLUMN_DEFS } from "./tasks.constants";
+import TaskFilters from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/TaskFilters";
+import { TASKS_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/tasks.constants";
 import { BreadcrumbsArrowIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const JobTasks = () => {

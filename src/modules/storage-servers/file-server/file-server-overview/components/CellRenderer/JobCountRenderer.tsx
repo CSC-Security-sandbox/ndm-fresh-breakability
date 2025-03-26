@@ -5,7 +5,7 @@ import {
   BlueXpTableRowType,
 } from "@/types/app.type";
 import { Text, Tooltip } from "@netapp/bxp-design-system-react";
-import StatusWithCount from "./StatusWithCount";
+import StatusWithCount from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/StatusWithCount";
 import { toTitleCase } from "@/utils/common.utils";
 
 interface JobsCountRendererProps {

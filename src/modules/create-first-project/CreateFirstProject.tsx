@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import Collapse from "@mui/material/Collapse";
-import DefaultProjectScreen from "./components/DefaultProjectScreen";
-import EmptyNavBar from "./components/EmptyNavBar";
-import DefaultCreateProjectForm from "./components/DefaultCreateProjectForm";
+import DefaultProjectScreen from "@modules/create-first-project/components/DefaultProjectScreen";
+import EmptyNavBar from "@modules/create-first-project/components/EmptyNavBar";
+import DefaultCreateProjectForm from "@modules/create-first-project/components/DefaultCreateProjectForm";
 import { useDispatch } from "react-redux";
 import { setProject } from "@store/reducer/appSlice";
 

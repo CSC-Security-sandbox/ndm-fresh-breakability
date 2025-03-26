@@ -15,8 +15,8 @@ import {
   defaultColumnState,
   JOB_LIST_COLUMN_DEFS,
   preSelectedFilterType,
-} from "./job-listing.constant";
-import { getJobListFlaternList } from "./listing.utils";
+} from "@modules/jobs/jobs-list/job-listing.constant";
+import { getJobListFlaternList } from "@modules/jobs/jobs-list/listing.utils";
 
 const JobsList = () => {
   const navigate = useNavigate();

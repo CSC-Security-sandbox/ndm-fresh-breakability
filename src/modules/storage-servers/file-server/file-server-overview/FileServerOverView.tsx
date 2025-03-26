@@ -3,14 +3,14 @@ import { Box } from "@components/container/index";
 import useFileServerDetails from "@hooks/useFileServerDetails";
 import { WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
 import { GcpStorageIcon } from "@netapp/bxp-style/react-icons/Storage";
-import JobsAction from "./components/JobsAction";
-import TableRenderer from "./components/TableRenderer";
+import JobsAction from "@modules/storage-servers/file-server/file-server-overview/components/JobsAction";
+import TableRenderer from "@modules/storage-servers/file-server/file-server-overview/components/TableRenderer";
 import { useLazyGetFileOverviewQuery } from "@api/reportApi";
 import { useEffect, useState } from "react";
 import StorageChart from "@components/chartInfo/StorageChart";
 import { FileServerOverviewApi } from "@/types/app.type";
 import JobChart from "@components/chartInfo/JobsChart";
-import { InitialFileServerOverviewApiData } from "./fileServerId.constant";
+import { InitialFileServerOverviewApiData } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { notify } from "@components/notification/NotificationWrapper";
 
 const FileServerOverView = () => {

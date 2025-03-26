@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 
 import { ReactNode, useContext } from "react";
-import BulkMigrateProceedButton from "./BulkMigrateProceedButton";
+import BulkMigrateProceedButton from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/footer/BulkMigrateProceedButton";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 
 const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
