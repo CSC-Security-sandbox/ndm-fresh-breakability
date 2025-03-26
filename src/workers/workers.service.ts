@@ -18,15 +18,17 @@ export class WorkersService {
     const {
       page,
       limit,
-      jobRunId,
       sort = "createdAt",
       order = "ASC",
+      jobRunId,
       ...filter
     } = workerStatusPageDto;
 
     const whereCondition: any = { ...filter };
+    const updateFilter:any = { ...filter };
     if (jobRunId) {
       whereCondition.jobRunMap = { jobRunId };
+      updateFilter.jobRunMap = { jobRunId };
     }
 
     const findOptions: FindManyOptions<WorkerEntity> = {
@@ -40,10 +42,10 @@ export class WorkersService {
       findOptions.skip = (parseInt(page) - 1) * parseInt(limit);
       findOptions.take = parseInt(limit);
       data = await this.WorkerEntity.find(findOptions);
-      total = await this.WorkerEntity.count({ where: filter });
+      total = await this.WorkerEntity.count({ where: updateFilter });
     } else {
       data = await this.WorkerEntity.find(findOptions);
-      total = await this.WorkerEntity.count({ where: filter });
+      total = await this.WorkerEntity.count({ where: updateFilter });
     }
     return { data, total };
   }
