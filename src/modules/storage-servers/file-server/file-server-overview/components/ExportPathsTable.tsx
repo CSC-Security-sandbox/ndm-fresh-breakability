@@ -23,7 +23,7 @@ const ExportPathsTable = ({
   setSelectedExportPathsIds,
   defaultColumnState,
 }: ExportPathsTablePropsType) => {
-  const interval = useRef<any | undefined>("");
+  const interval = useRef<NodeJS.Timeout | null>(null);
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
@@ -40,7 +40,9 @@ const ExportPathsTable = ({
 
   const showErrorOnRefetchFailure = (error: Error) => {
     setDisableRefresh(false);
-    interval.current && clearInterval(interval.current);
+    if (interval.current) {
+      clearInterval(interval.current);
+    }
 
     notify.error(
       `Failed to refresh the list, reason - ${error?.message || "unknown"}`
@@ -86,7 +88,9 @@ const ExportPathsTable = ({
 
   useEffect(() => {
     return () => {
-      interval.current && clearInterval(interval.current);
+      if (interval.current) {
+        clearInterval(interval.current);
+      }
     };
   }, []);
 

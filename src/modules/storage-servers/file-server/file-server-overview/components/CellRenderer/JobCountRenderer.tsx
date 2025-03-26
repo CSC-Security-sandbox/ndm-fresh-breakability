@@ -46,7 +46,9 @@ const JobsCountRenderer: React.FC<JobsCountRendererProps> = ({
 
   row.jobConfig.forEach((config) => {
     config.jobRunDetails.forEach((jobDetail) => {
-      if (statusCounts.hasOwnProperty(jobDetail.status)) {
+      if (
+        Object.prototype.hasOwnProperty.call(statusCounts, jobDetail.status)
+      ) {
         statusCounts[jobDetail.status as keyof typeof statusCounts]++;
       }
     });

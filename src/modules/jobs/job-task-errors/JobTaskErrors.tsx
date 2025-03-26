@@ -30,7 +30,7 @@ const JobTaskErrors = () => {
           }).unwrap();
 
         setJobConfigDetails(_jobConfigDetails);
-      } catch (error) {
+      } catch {
         notify.error("Something went wrong.");
       }
     })();

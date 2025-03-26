@@ -15,7 +15,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 
 const getLabelValueObject = (
   value?: string,
-  formatter?: Function
+  formatter?: (value: string) => string
 ): TaskFilterOption[] =>
   value ? [{ label: formatter ? formatter(value) : value, value }] : [];
 
@@ -38,14 +38,16 @@ const TaskFilters = ({
   );
 
   useEffect(() => {
-    setFilters && setFilters(form.formState);
+    if (setFilters) {
+      setFilters(form.formState);
+    }
   }, [form]);
 
   const formatOptions = (
     data: string[],
-    formatter?: Function
+    formatter?: (value: string) => string
   ): TaskFilterOption[] => {
-    let options: TaskFilterOption[] = [];
+    const options: TaskFilterOption[] = [];
     data.forEach((value) => {
       if (!value) return;
       options.push(getOptionFormatting(value, formatter));
@@ -55,7 +57,7 @@ const TaskFilters = ({
 
   const getOptionFormatting = (
     value: string,
-    formatter?: Function
+    formatter?: (value: string) => string
   ): TaskFilterOption => ({
     label: formatter ? formatter(value) : value,
     value,

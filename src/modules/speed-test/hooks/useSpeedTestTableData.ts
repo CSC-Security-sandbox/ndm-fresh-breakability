@@ -29,15 +29,14 @@ export const useSpeedTestTableData = (): UseSpeedTestTableDataPropsType => {
   //Details Tile data creation
   useEffect(() => {
     if (data) {
-      const { fileServers, ...speedDetails } = data;
       setSpeedDetails({
-        jobRunId: speedDetails.jobRunId,
-        startTime: speedDetails.startTime,
-        endTime: speedDetails.endTime,
+        jobRunId: data?.jobRunId,
+        startTime: data?.startTime,
+        endTime: data?.endTime,
         noOfFileServers: data?.fileServers.length,
-        status: speedDetails.status,
+        status: data?.status,
         timeElapsed: "",
-        totalWorkers: speedDetails.totalWorkers,
+        totalWorkers: data?.totalWorkers,
       });
     }
   }, [data]);

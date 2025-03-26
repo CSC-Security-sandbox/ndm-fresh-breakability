@@ -63,7 +63,7 @@ export type SpeedTestConfigType = {
   }[];
 };
 
-export type configDetailsType = {
+export type ConfigDetailsType = {
   id: string;
   protocol: OptionsType[];
   workers: OptionsType[];
@@ -78,3 +78,5 @@ export type DataCellRendererPropsType = {
   value: number;
   unit: string;
 };
+
+export type TestType = { value: string };

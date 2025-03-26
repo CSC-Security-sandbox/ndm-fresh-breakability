@@ -40,15 +40,15 @@ export const lineGraphProcessData = ({
   // Flatten the array and extract unique sorted timestamps
   const allTimeStamps = speedTestOptionData
     .flat()
-    .map((data) => data.timeStamp);
+    .map((data) => data?.timeStamp);
 
   const uniqueSortedTimeStamps = Array.from(new Set(allTimeStamps))
     .sort((a, b) => a - b)
-    .map((timestamp) => parseInt(timestamp.toString()).toString());
+    .map((timestamp) => parseInt(timestamp?.toString()).toString());
 
   // Extract speeds for the graph data
   const graphData = speedTestOptionData.map((speedArray) =>
-    speedArray.map((data) => data.speed)
+    speedArray?.map((data) => data?.speed)
   );
 
   return { uniqueSortedTimeStamps, graphData };

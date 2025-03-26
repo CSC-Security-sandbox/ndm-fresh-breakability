@@ -30,11 +30,8 @@ const DiscoveryPreview = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const {
-    data: reportData,
-    isFetching: reportDataIsLoading,
-    isError,
-  } = useGetReportDataQuery(payload);
+  const { isFetching: reportDataIsLoading, isError } =
+    useGetReportDataQuery(payload);
 
   const [downloadReports] = useDownloadReportsMutation();
   const [getPdfReport] = useGetPdfReportMutation();

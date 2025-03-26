@@ -3,9 +3,9 @@ export type TaskFiltersType = {
     accessor: string;
     label: string;
     options: string[];
-    formatter?: Function;
+    formatter?: (value: string) => string;
   }[];
-  setFilters?: Function;
+  setFilters?: (arg: any) => void;
   preSelectedFilter?: any;
 };
 

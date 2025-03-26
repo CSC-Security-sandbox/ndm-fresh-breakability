@@ -14,7 +14,12 @@ const SpeedTest = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
-  const { data: speedTestJobRunList, isLoading, isFetching, refetch } = useGetSpeedTestJobsQuery({
+  const {
+    data: speedTestJobRunList,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetSpeedTestJobsQuery({
     projectId: selectedProjectId,
   });
   const jobStatus =
@@ -51,8 +56,6 @@ const SpeedTest = () => {
       </Button>
     </PermissionAuth>
   );
-
-  console.log({isFetching})
 
   return (
     <Box className="w-full p-6">

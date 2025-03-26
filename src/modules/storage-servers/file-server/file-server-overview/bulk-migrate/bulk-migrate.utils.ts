@@ -314,7 +314,7 @@ export const getDestinationPathIdByName = (
 };
 
 export const handleDownloadTemplate = async (
-  downloadFunction: Function,
+  downloadFunction: () => any,
   fileName: string
 ) => {
   try {

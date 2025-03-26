@@ -15,8 +15,7 @@ const JobTaskErrorsTabs = ({
 }: JobTaskErrorsTabsPropsType) => {
   const { jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
   const [errorList, setErrorList] = useState<JobRunErrorsOverviewApiType[]>([]);
-  const [getJobRunErrorsOverviewApi, { isLoading: isLoadingOverview }] =
-    useLazyGetJobRunErrorsOverviewQuery();
+  const [getJobRunErrorsOverviewApi] = useLazyGetJobRunErrorsOverviewQuery();
 
   useEffect(() => {
     (async () => {
@@ -26,7 +25,7 @@ const JobTaskErrorsTabs = ({
             jobRunId,
           }).unwrap();
         setErrorList(_JobErrorsOverview);
-      } catch (error) {
+      } catch {
         notify.error("Something went wrong");
       }
     })();

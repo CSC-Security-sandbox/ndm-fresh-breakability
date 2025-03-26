@@ -13,11 +13,9 @@ import {
 } from "@netapp/bxp-design-system-react";
 import {
   CREATE_SMTP_FORM_VALIDATION_SCHEMA,
-  INITIAL_SMTP_FORM_STATE
+  INITIAL_SMTP_FORM_STATE,
 } from "./SMTP.constants";
-import {
-  useGetAllUsersQuery,
-} from "@api/userApi";
+import { useGetAllUsersQuery } from "@api/userApi";
 import {
   useCreateSmtpMutation,
   useUpdateSmtpDataMutation,
@@ -26,10 +24,8 @@ import {
 import { useDispatch } from "react-redux";
 import { setDrawerClose } from "@store/reducer/commonComponentSlice";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
-import { smtpData } from './SMTP.utils';
-import {
-  smtpValuesType,
-} from "@/types/app.type";
+import { smtpData } from "./SMTP.utils";
+import { smtpValuesType } from "@/types/app.type";
 
 interface SmtpDetailsPropsType {
   handleDefaultTab: () => void;
@@ -37,13 +33,17 @@ interface SmtpDetailsPropsType {
 
 const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   const dispatch = useDispatch();
-  const [createSmtpApi, { isLoading: isCreateFormSubmitting }] = useCreateSmtpMutation();
-  const [updateSmtpDataAPi, { isLoading: isUpdateFormSubmitting }] = useUpdateSmtpDataMutation();
+  const [createSmtpApi, { isLoading: isCreateFormSubmitting }] =
+    useCreateSmtpMutation();
+  const [updateSmtpDataAPi, { isLoading: isUpdateFormSubmitting }] =
+    useUpdateSmtpDataMutation();
 
-  const { data: userData, isLoading: usersLoading } = useGetAllUsersQuery("");
-  const toEmailOptions = userData?.map((user) => ({ label: user.email, value: user.email })) || [];
+  const { data: userData } = useGetAllUsersQuery("");
+  const toEmailOptions =
+    userData?.map((user) => ({ label: user.email, value: user.email })) || [];
 
-  const { data: smtpExistingData, isLoading: smtpLoading } = useGetSmtpDetailsQuery("");
+  const { data: smtpExistingData, isLoading: smtpLoading } =
+    useGetSmtpDetailsQuery("");
   const [isEdit, setIsEdit] = useState<boolean>(false);
 
   const objectData: smtpValuesType = {
@@ -56,16 +56,20 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   };
 
   const getSmtpData = (values) => {
-    values.forEach(item => {
+    values.forEach((item) => {
       objectData[item.settingKey] = item.settingValue;
     });
     return objectData;
   };
 
-  const smtpValues = isEdit ? getSmtpData(smtpExistingData?.data?.SMTP) : objectData;
+  const smtpValues = isEdit
+    ? getSmtpData(smtpExistingData?.data?.SMTP)
+    : objectData;
 
   const getStructuredToEmails = (emailsString) => {
-    return emailsString.split(",").map((eachEmail) => ({ label: eachEmail, value: eachEmail }));
+    return emailsString
+      .split(",")
+      .map((eachEmail) => ({ label: eachEmail, value: eachEmail }));
   };
 
   const getFormData = (data) => {
@@ -106,7 +110,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || "Failed to ${isEdit ? 'update' : 'add'} SMTP Details"}
+          message={
+            err?.message ||
+            "Failed to ${isEdit ? 'update' : 'add'} SMTP Details"
+          }
         />
       );
     }
@@ -124,11 +131,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
                 name="ip_address"
                 label="IP Address"
               />
-              <FormFieldInputNew
-                form={smtpForm}
-                name="port"
-                label="Port"
-              />
+              <FormFieldInputNew form={smtpForm} name="port" label="Port" />
             </Box>
             <Box className="flex gap-4">
               <FormFieldInputNew
@@ -154,7 +157,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
               name="to_email"
               form={smtpForm}
               options={toEmailOptions}
-              style={{ paddingBottom: '6rem' }}
+              style={{ paddingBottom: "6rem" }}
               isCreatable={true}
               isMulti={true}
             />
@@ -167,7 +170,9 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
             style={{ width: 150 }}
             onClick={smtpForm.handleFormSubmit(handleCreateSMTP)}
             disabled={!(smtpForm.isValid && smtpForm.dirty)}
-            isSubmitting={isCreateFormSubmitting || isUpdateFormSubmitting || smtpLoading}
+            isSubmitting={
+              isCreateFormSubmitting || isUpdateFormSubmitting || smtpLoading
+            }
           >
             Save
           </Button>

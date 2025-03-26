@@ -57,7 +57,7 @@ import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
 ) {
-  return function withBulkMigrateCreateFormComponent(props: any) {
+  return function WithBulkMigrateCreateFormComponent(props: any) {
     const interval = useRef<any | undefined>("");
     const navigate = useNavigate();
     const timeIntervalInSeconds = 4000;
@@ -119,7 +119,8 @@ export function withBulkMigrateCreateForm(
       (async () => {
         try {
           const resp = await getAllFileServersApi({ projectId }).unwrap();
-          let allFileServers: AllFileServerWithVolumesApiType[] = resp?.configs;
+          const allFileServers: AllFileServerWithVolumesApiType[] =
+            resp?.configs;
           const _migrationTableDetails: MigrationDetailsTableConfigurationType[] =
             [];
 
@@ -183,7 +184,9 @@ export function withBulkMigrateCreateForm(
       })();
 
       return () => {
-        interval.current && clearInterval(interval.current);
+        if (interval.current) {
+          clearInterval(interval.current);
+        }
       };
     }, [getAllFileServersApi, projectId, fileServerDetails.id]);
 
@@ -259,7 +262,9 @@ export function withBulkMigrateCreateForm(
     const showErrorOnFailure = (error: Error) => {
       setIsPrecheckLoading(false);
       setIsSubmitting(false);
-      interval.current && clearInterval(interval.current);
+      if (interval.current) {
+        clearInterval(interval.current);
+      }
 
       notify.error(
         `Failed to perform precheck, reason - ${error?.message || "unknown"}`
@@ -267,7 +272,7 @@ export function withBulkMigrateCreateForm(
       console.error({ level: "Bulk Migrate - Precheck.", error });
     };
 
-    const handlePrecheck = (onSuccessfulSubmit?: Function) => {
+    const handlePrecheck = (onSuccessfulSubmit?: () => void) => {
       let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
       setIsPrecheckLoading(true);
@@ -294,7 +299,9 @@ export function withBulkMigrateCreateForm(
               const precheckState = getPreCheckStatus(data);
               setPreCheckStatus(precheckState);
               setIsPrecheckLoading(false);
-              interval.current && clearInterval(interval.current);
+              if (interval.current) {
+                clearInterval(interval.current);
+              }
               setIsSubmitting(false);
               if (precheckState.errors.length === 0) {
                 handleSubmit(onSuccessfulSubmit);
@@ -319,7 +326,7 @@ export function withBulkMigrateCreateForm(
         });
     };
 
-    const handleSubmit = async (onSuccessfulSubmit?: Function) => {
+    const handleSubmit = async (onSuccessfulSubmit?: () => void) => {
       const sid_mapping: FormFileUploadType | undefined =
         optionForm.formState.upload_sid_mapping;
       const uid_mapping: FormFileUploadType | undefined =
@@ -387,7 +394,7 @@ export function withBulkMigrateCreateForm(
         .unwrap()
         .then(() => {
           notify.success(successMessage, 15000);
-          onSuccessfulSubmit && onSuccessfulSubmit();
+          onSuccessfulSubmit?.();
         })
         .catch((err) => {
           notify.error("Bulk Migrate failed.");

@@ -119,7 +119,7 @@ export interface BulkMigrateContextType {
   setSelectedMountPathsId: (arg: string[]) => void;
   optionForm: BlueXpFormType<OptionsFormType>;
   protocolForm: BlueXpFormType<ProtocolFormType>;
-  handleSubmit: Function;
+  handleSubmit: (arg: any) => void;
   selectedReviewIds: string[];
   setSelectedReviewIds: (ids: string[]) => void;
   isPrecheckLoading: boolean;
@@ -161,7 +161,7 @@ export interface createPathMappingApiPayload {
 }
 
 export interface UploadMappingTableDetailsType {
-  toggleRowSelection: Function;
+  toggleRowSelection: (arg: any) => void;
 }
 
 export interface bulkMigrateCreateApiType {

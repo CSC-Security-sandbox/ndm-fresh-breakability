@@ -7,7 +7,7 @@ import { PopoverWrapperType } from "@modules/storage-servers/file-server/fileSer
 const SMBStatusRenderer = (
   params: BlueXpTableRowType<GetAllWorkersApiType, GetAllWorkersApiType>
 ) => {
-  const { workerId } = params?.row;
+  const { workerId } = params?.row ?? {};
 
   const {
     selectedWorkerIds,

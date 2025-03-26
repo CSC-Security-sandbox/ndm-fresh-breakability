@@ -19,7 +19,7 @@ export interface FileServerStateContextType {
   workerIdWithName: WorkerIdWithNameType;
   setWorkerIdWithName: (arg: WorkerIdWithNameType) => void;
   selectedWorkerIds: string[];
-  setSelectedWorkerIds: Function;
+  setSelectedWorkerIds: (arg: any) => void;
   validateConnectionLoader: any;
   setValidateConnectionLoader: (arg: any) => void;
   activeWorkerIds: string[];

@@ -7,7 +7,7 @@ import { PopoverWrapperType } from "@modules/storage-servers/file-server/fileSer
 const NFSStatusRenderer = (
   params: BlueXpTableRowType<GetAllWorkersApiType, GetAllWorkersApiType>
 ) => {
-  const { workerId } = params?.row;
+  const { workerId } = params?.row ?? {};
 
   const {
     selectedWorkerIds,

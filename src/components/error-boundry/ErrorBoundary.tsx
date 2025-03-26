@@ -1,7 +1,7 @@
-import { useRouteError } from "react-router-dom";
+// import { useRouteError } from "react-router-dom";
 
 const RouteErrorBoundary = () => {
-  const error = useRouteError();
+  // const error = useRouteError();
   return (
     <div role="alert">
       <h1>Sorry, an unexpected error has occurred.</h1>

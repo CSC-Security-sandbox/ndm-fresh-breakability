@@ -4,7 +4,7 @@ import { SPEED_TEST_FORM_SCHEMA } from "@modules/speed-test/constants/useSpeedTe
 import { useGetSpeedTestFileServersQuery } from "@api/configApi";
 import { JOB_CONFIG_STATUS_ENUM } from "@/types/app.type";
 import {
-  configDetailsType,
+  ConfigDetailsType,
   ItemType,
   OptionsType,
   SpeedTestConfigType,
@@ -22,7 +22,7 @@ const useSpeedTestConfigurationForm = () => {
   const [fileServerOptions, setFileServerOptions] = useState<OptionsType[]>([]);
   const [workerOptions, setWorkerOptions] = useState<OptionsType[]>([]);
   const [protocolOptions, setProtocolOptions] = useState<OptionsType[]>([]);
-  const [configDetails, setConfigDetails] = useState<configDetailsType[]>([]);
+  const [configDetails, setConfigDetails] = useState<ConfigDetailsType[]>([]);
 
   const configureSpeedTestForm = useForm(
     SPEED_TEST_FORM_SCHEMA,
@@ -31,6 +31,13 @@ const useSpeedTestConfigurationForm = () => {
 
   const { data: configurationData } = useGetSpeedTestFileServersQuery();
 
+  const isFileServerConfigAvailable = (configData) => {
+    return (
+      configData?.hasScratchPath &&
+      configData?.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
+    );
+  };
+
   //Create config form data
   useEffect(() => {
     if (configurationData) {
@@ -38,16 +45,10 @@ const useSpeedTestConfigurationForm = () => {
         (configData: SpeedTestConfigType) => ({
           label: configData?.serverName,
           value: configData?.id,
-          isDisabled:
-            configData?.hasScratchPath === true &&
-            configData?.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
-              ? false
-              : true,
-          tooltip:
-            configData?.hasScratchPath === true &&
-            configData?.status === JOB_CONFIG_STATUS_ENUM.ACTIVE
-              ? ""
-              : SPEED_TEST_TOOLTIP,
+          isDisabled: !isFileServerConfigAvailable(configData),
+          tooltip: isFileServerConfigAvailable(configData)
+            ? ""
+            : SPEED_TEST_TOOLTIP,
         })
       );
       const configDetails = configurationData.map(

@@ -8,7 +8,7 @@ const WorkersNameCellRenderer = ({
   SpeedTestConfigurationType,
   SpeedTestConfigurationType
 >) => {
-  const [firstWorker, ...remainingWorkers] = row?.workers;
+  const [firstWorker, ...remainingWorkers] = row?.workers ?? [];
 
   return (
     <Box>

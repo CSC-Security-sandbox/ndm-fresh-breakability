@@ -6,7 +6,7 @@ import { BlueXpTableRowType } from "@/types/app.type";
 const SpeedTestWorkerNameCellRenderer = ({
   row,
 }: BlueXpTableRowType<SpeedTestPropsType, any>) => {
-  const [firstWorker, ...remainingWorkers] = row?.workers.map(
+  const [firstWorker, ...remainingWorkers] = (row?.workers ?? []).map(
     (e) => e?.workerName
   );
 

@@ -27,7 +27,7 @@ const JobHeader = ({ jobConfigDetails }: JobHeaderPropType) => {
 
   const jobRunLatest =
     jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
-      ? [...jobConfigDetails?.jobRuns]
+      ? [...(jobConfigDetails?.jobRuns ?? [])]
           ?.sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime))
           ?.find((row) => row.status === JOB_STATUS_TYPE_ENUM.COMPLETED)
       : jobConfigDetails?.aggregateData;

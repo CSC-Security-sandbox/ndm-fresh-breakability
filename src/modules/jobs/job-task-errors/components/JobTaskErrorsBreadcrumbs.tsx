@@ -4,7 +4,7 @@ import { Box } from "@components/container";
 
 const JobTaskErrorsBreadcrumbs = () => {
   const navigate = useNavigate();
-  const { jobId, jobRunId } = useParams<{ jobId: string; jobRunId: string }>();
+  const { jobId } = useParams<{ jobId: string }>();
 
   return (
     <Breadcrumbs className="mb-4">

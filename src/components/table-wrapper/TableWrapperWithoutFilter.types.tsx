@@ -5,12 +5,12 @@ export type TableWrapperWithoutFilterPropsType = {
   rowMenu?: any;
   isLoading?: any;
   content?: ReactNode;
-  showDownload?: Boolean;
+  showDownload?: boolean;
   label?: string;
-  isTogglingColumns?: Boolean;
+  isTogglingColumns?: boolean;
   originalColumns?: any;
   isRowDisabled?: (arg: any) => void;
-  handleSelection?: Function;
+  handleSelection?: (arg: any[]) => void;
   showMenu?: boolean;
   isRefreshing?: boolean;
   refetchTableData?: () => void;

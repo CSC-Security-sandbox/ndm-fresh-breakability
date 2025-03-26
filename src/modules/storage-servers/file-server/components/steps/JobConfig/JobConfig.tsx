@@ -8,7 +8,7 @@ import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 const JobConfig = () => {
-  const { jobConfigForm, mountPaths, isJobRunning, isEditMode } = useContext(
+  const { jobConfigForm, mountPaths, isEditMode } = useContext(
     CommonFileServerContext
   );
 

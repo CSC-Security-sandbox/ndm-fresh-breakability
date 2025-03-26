@@ -72,13 +72,13 @@ export const getActionMenu = ({
 export const getReportActions = (
   row: JobRunApiType,
   handleDownloadReport: (
-    downloadReports: Function,
+    downloadReports: (arg: any) => void,
     jobRunId: string,
     reportType: ReportENUM,
     fileType: string
   ) => void,
-  downloadReportApi: Function,
-  getPdfReportApi: Function,
+  downloadReportApi: (arg: any) => void,
+  getPdfReportApi: (arg: any) => void,
   type: "rowMenu" | "button" = "rowMenu"
 ) => {
   const isReportReady =

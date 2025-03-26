@@ -12,8 +12,7 @@ const STEP_3_WORKING_DIRECTORY = 3;
 
 const NextAndSubmitButton = () => {
   const { currentStepIndex, goToNextStep } = useWizard();
-  const [getUniqueFileServerName, { data }] =
-    useLazyGetUniqueFileServerNamesQuery();
+  const [getUniqueFileServerName] = useLazyGetUniqueFileServerNamesQuery();
   const { selectedProjectId } = useSelectedProjectId();
 
   const {

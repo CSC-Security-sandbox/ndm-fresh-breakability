@@ -24,8 +24,8 @@ export const notify = (() => {
       root?.unmount();
       try {
         body.removeChild(notificationContainer);
-      } catch (e) {
-        // do nothing
+      } catch (error) {
+        console.error("Failed to remove notification container:", error);
       }
     };
 

@@ -242,7 +242,7 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
   return (longestDirPaths?.value as string)
     ?.split(";")
     ?.map((entry: string) => {
-      const match = entry.match(/\/([^\/]+) \((\d+)\)$/);
+      const match = entry.match(/\/([^/]+) \((\d+)\)$/);
       if (match) {
         return {
           fileName: match[1],

@@ -11,15 +11,15 @@ export interface BulkCutOverContextProviderType {
   children?: ReactNode;
   jobRunList: JobRunApiType[];
   cutOverSelectedIds: string[];
-  setCutOverSelectedIds: Function;
+  setCutOverSelectedIds: (arg: any) => void;
   reviewStepSelectedIds: string[];
-  setReviewStepSelectedIds: Function;
+  setReviewStepSelectedIds: (arg: any) => void;
   BulkCutOverForm: BlueXpFormType<bulkCutOverFormType>;
   selectPathTableState: BlueXpTableStateType<GetAllCutOverPathsApiType>;
   jobRunListPathTableState: BlueXpTableStateType<JobRunApiType>;
   allCutOverPaths: GetAllCutOverPathsApiType[];
   fileServerDetails: FileServerDetailsType;
-  handleCreateJobCutOverApi: Function;
+  handleCreateJobCutOverApi: (arg: any) => void;
   isSubmittingBulkCutover: boolean;
   isFetching: boolean;
   refetch: () => void;

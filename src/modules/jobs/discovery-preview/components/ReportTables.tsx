@@ -20,8 +20,7 @@ const ReportTables = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isLoading: reportDataIsLoading } =
-    useGetReportDataQuery(payload);
+  const { data: reportData } = useGetReportDataQuery(payload);
   return (
     <>
       <Box className="flex gap-4 mt-4">

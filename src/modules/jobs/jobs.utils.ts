@@ -1,7 +1,7 @@
 import { notify } from "@components/notification/NotificationWrapper";
 
 export const handleDownloadReport = async (
-  downloadReports: Function,
+  downloadReports: (arg: any) => any,
   jobRunId: string,
   reportType: string = "discovery",
   fileType: string

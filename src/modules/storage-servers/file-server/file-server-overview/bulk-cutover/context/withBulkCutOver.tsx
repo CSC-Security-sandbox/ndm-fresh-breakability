@@ -28,7 +28,7 @@ const INIT_VALUE: bulkCutOverFormType = {
 };
 
 export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
-  return function withBulkCutOverComponent(props: any) {
+  return function WithBulkCutOverComponent(props: any) {
     const navigate = useNavigate();
     const [jobRunList, setJobRunList] = useState<JobRunApiType[]>([]);
     const [cutOverSelectedIds, setCutOverSelectedIds] = useState<string[]>([]);
@@ -80,7 +80,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         notify?.error("Something went wrong");
         console.error("Failed to fetch job runs:", error);
       }
-    }
+    };
 
     useEffect(() => {
       fetchJobRuns();

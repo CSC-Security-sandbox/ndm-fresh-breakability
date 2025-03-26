@@ -105,7 +105,9 @@ export const useFileServerForm = () => {
   useEffect(() => {
     fetchWorkers();
     return () => {
-      interval.current && clearInterval(interval.current);
+      if (interval.current) {
+        clearInterval(interval.current);
+      }
     };
   }, [selectedProjectId]);
 
@@ -151,7 +153,9 @@ export const useFileServerForm = () => {
 
   const showErrorOnFailure = (error: Error) => {
     setValidateConnectionLoader(false);
-    interval.current && clearInterval(interval.current);
+    if (interval.current) {
+      clearInterval(interval.current);
+    }
 
     notify.error(
       `Failed to perform validaton, reason - ${error?.message || "unknown"}`
@@ -186,7 +190,9 @@ export const useFileServerForm = () => {
             const errorMessageList = await handleConnectionValidationComplete(
               data
             );
-            interval.current && clearInterval(interval.current);
+            if (interval.current) {
+              clearInterval(interval.current);
+            }
             resolve({ errorMessageList });
             setDisableNextButton(false);
           } else if (data?.status === ValidateConnectionStatus.TERMINATED) {

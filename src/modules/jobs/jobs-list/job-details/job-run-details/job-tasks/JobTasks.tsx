@@ -47,7 +47,7 @@ const JobTasks = () => {
     projectId: selectedProjectId,
   });
 
-  let preSelectedFilter: any = {};
+  const preSelectedFilter: any = {};
   if (status) preSelectedFilter.status = status;
 
   const { rowState, pagination, toggleSort, sortState, gotoPage } = useTable({
@@ -65,7 +65,7 @@ const JobTasks = () => {
   }, [pagination.pageIndex, sortState, currentFilters]);
 
   const fetchRecords = async () => {
-    let payload: any = {
+    const payload: any = {
       page: 1,
       jobRunId,
       limit: pageSize,

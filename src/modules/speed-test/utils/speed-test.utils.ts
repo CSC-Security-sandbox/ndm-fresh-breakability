@@ -12,10 +12,9 @@ export const calculateAverage = ({
   worker,
   speedAction,
 }: CalculateAveragePropsType) => {
-  return (worker[speedAction as keyof WorkerType] as SpeedDataType[]).reduce(
-    (acc, speedData) => acc + speedData?.speed,
-    0
-  );
+  return (
+    (worker[speedAction as keyof WorkerType] as SpeedDataType[]) ?? []
+  ).reduce((acc, speedData) => acc + speedData?.speed, 0);
 };
 
 export const calculateAverageSpeedOfWorkers = ({
@@ -58,11 +57,7 @@ export const calculateAverageSpeed = ({
 
 export const workerErrors = ({ workers }: workerErrorsPropsType) => {
   return workers
-    .filter(
-      (worker) =>
-        worker?.networkPerformanceError &&
-        worker?.networkPerformanceError !== ""
-    )
-    .map((worker) => worker?.networkPerformanceError)
+    .filter((worker) => worker?.networkPerformanceError?.trim())
+    .map((worker) => worker.networkPerformanceError)
     .join(", ");
 };

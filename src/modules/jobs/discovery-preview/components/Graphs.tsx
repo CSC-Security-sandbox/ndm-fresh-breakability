@@ -27,8 +27,7 @@ const Graphs = () => {
     jobRunId: jobRunId,
     reportType: JOBS_TYPE.DISCOVERY,
   };
-  const { data: reportData, isLoading: reportDataIsLoading } =
-    useGetReportDataQuery(payload);
+  const { data: reportData } = useGetReportDataQuery(payload);
 
   const form = useForm({
     dataset: { label: "File Count", value: "fileCount" },
