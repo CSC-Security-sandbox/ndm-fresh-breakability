@@ -2,17 +2,18 @@ import { NFSProtocol } from './nfs.protocol';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
 import * as net from 'net';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
+import * as fs from 'fs';
 import { ConfigService } from '@nestjs/config';
 import { WorkersConfig } from 'src/config/app.config';
 import { CommandConfig } from 'src/config/command.config';
-import { Runtime, RuntimeOptions } from '@temporalio/worker';
+import { Logger, Runtime, RuntimeOptions } from '@temporalio/worker';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
 
 describe('NFSProtocol', () => {
   let nfsProtocol: NFSProtocol;
-  let mockLogger: any;
+  let mockLogger: Partial<Logger>;
 
   beforeEach(() => {
     jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
@@ -141,4 +142,97 @@ describe('NFSProtocol', () => {
       expect(mockLogger.info).toHaveBeenCalledWith('[traceId] /export/path1\n/export/path2');
     });
   });
+
+  describe('unmountPath', () => {
+    it('should unmount path successfully', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: '',
+        path: '/path1',
+        mountBasePath: '/mnt'
+      };
+      const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await nfsProtocol.unmountPath('traceId', payload);
+      expect(mockLogger.info).toHaveBeenCalled();
+      expect(result).toBe(mockResponse);
+    });
+  })
+
+  // describe('mountPath', () => {
+  //   const mockPayload = {
+  //     mountBasePath: '/mnt',
+  //     jobRunId: '1234',
+  //     pathId: '5678',
+  //     hostname: 'test-host',
+  //   };
+  
+  //   it('should return error if directory already exists', async () => {
+  //     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+  
+  //     const result = await nfsProtocol.mountPath('trace-1', mockPayload);
+  
+  //     expect(result.status).toBe('error');
+  //     expect(result.message).toContain('Directory already exists');
+  //     expect(fs.mkdirSync).not.toHaveBeenCalled();
+  //   });
+  
+  //   it('should create directory and proceed with mounting', async () => {
+  //     jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+  //     jest.spyOn(fs, 'mkdirSync').mockImplementation(); // No error
+  
+  //     const executeCommandSpy = jest
+  //       .spyOn(nfsProtocol, 'executeCommand')
+  //       .mockResolvedValue({ status: 'success' });
+  
+  //     const result = await nfsProtocol.mountPath('trace-2', mockPayload);
+  
+  //     expect(fs.mkdirSync).toHaveBeenCalledWith('/mnt/1234/5678', { recursive: true });
+  //     expect(executeCommandSpy).toHaveBeenCalled();
+  //     expect(result.status).toBe('success');
+  //   });
+  
+  //   it('should return error if directory creation fails', async () => {
+  //     (fs.existsSync as jest.Mock).mockReturnValue(false);
+  //     (fs.mkdirSync as jest.Mock).mockImplementation(() => {
+  //       throw new Error('Permission denied');
+  //     });
+  
+  //     const result = await nfsProtocol.mountPath('trace-3', mockPayload);
+  
+  //     expect(result.status).toBe('error');
+  //     expect(result.message).toContain('Error creating directory');
+  //   });
+  
+  //   it('should return error if mount command fails', async () => {
+  //     (fs.existsSync as jest.Mock).mockReturnValue(false);
+  //     (fs.mkdirSync as jest.Mock).mockImplementation(() => {}); // No error
+  
+  //     const executeCommandSpy = jest
+  //       .spyOn(nfsProtocol, 'executeCommand')
+  //       .mockResolvedValue({ status: 'error', message: 'Mount failed' });
+  
+  //     const result = await nfsProtocol.mountPath('trace-4', mockPayload);
+  
+  //     expect(result.status).toBe('error');
+  //     expect(result.message).toContain('Mount failed');
+  //     expect(executeCommandSpy).toHaveBeenCalled();
+  //   });
+  
+  //   it('should log mount result', async () => {
+  //     (fs.existsSync as jest.Mock).mockReturnValue(false);
+  //     (fs.mkdirSync as jest.Mock).mockImplementation(() => {}); // No error
+  
+  //     const executeCommandSpy = jest
+  //       .spyOn(nfsProtocol, 'executeCommand')
+  //       .mockResolvedValue({ status: 'success' });
+  
+  //     const loggerSpy = jest.spyOn(mockLogger, 'info');
+  
+  //     await nfsProtocol.mountPath('trace-5', mockPayload);
+  
+  //     expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Mount result'));
+  //   });
+  // });
 });

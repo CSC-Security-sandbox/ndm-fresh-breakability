@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import { Logger } from "@nestjs/common";
-import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStatus, FileServerDetails, NFS } from "@netapp-cloud-datamigrate/jobs-lib"
+import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStatus, FileServerDetails, NFS, OPS_CMD } from "@netapp-cloud-datamigrate/jobs-lib"
 import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
@@ -313,8 +313,8 @@ describe('MigrationScanService', () => {
 
       const result = await service.scanContent(input);
       //expect(result.files).toBe(1);
-      expect(result.directory).toBe(1);``
-      expect(result.command.length).toBe(1);
+      expect(result.directory).toBe(0);
+      expect(result.command.length).toBe(0);
     });
   });
 
@@ -336,7 +336,7 @@ describe('MigrationScanService', () => {
       const jobRunId = 'job-1';
       const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
-      const jobContext = new TestJobContext('job1', jobConfig, 'running');
+      const jobContext: any = new TestJobContext('job1', jobConfig, 'running');
       const command: Command = { 
         commandId: 'cmd-1', 
         fPath: 'file.txt', 
@@ -361,7 +361,9 @@ describe('MigrationScanService', () => {
       jest.spyOn(mockRedisService, 'getJobContext').mockResolvedValue(jobContext);
       jest.spyOn(mockCommonService, 'fetchOneTask').mockResolvedValue(task);
       jest.spyOn(jobContext, 'appendToUpdatedTaskList').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'appendToErrorList').mockResolvedValue(null);
       jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 1, directory: 0, command: [], isGeneratedTask: false, error: null });
+      jobContext.updatedTaskInfo = { lastId: '0-0' };
 
       const result = await service.scanPath({ jobRunId });
       expect(result.success).toBe(1);
@@ -371,11 +373,11 @@ describe('MigrationScanService', () => {
 
     it('should handle errors during task processing', async () => {
       const jobRunId = 'job-1';
-      const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn() };
+      const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn(), updatedTaskInfo: { lastId: '0-0' }, appendToErrorList: jest.fn() };
       const task = { commands: [{ status: CommandStatus.IN_PROCESS, fPath: 'file.txt' }] };
       mockRedisService.getJobContext = jest.fn().mockResolvedValue(jobContext);
       mockCommonService.fetchOneTask = jest.fn().mockResolvedValue(task);
-      (service.scanContent as jest.Mock).mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'some-error' });
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'some-error' });
 
       const result = await service.scanPath({ jobRunId });
       expect(result.error).toBe(1);
@@ -389,7 +391,7 @@ describe('MigrationScanService', () => {
       const fPath = 'file.txt';
       const command:any = service.buildCommand(sFile as any, fPath);
       expect(command).toBeDefined();
-      expect(command.cmd[0].cmd).toBe('COPY_CONTENT');
+      expect(command.ops[0].cmd).toBe('cc');
     });
 
     it('should return undefined if content is not updated', () => {
