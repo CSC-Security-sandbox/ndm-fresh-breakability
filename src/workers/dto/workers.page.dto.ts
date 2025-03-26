@@ -54,6 +54,11 @@ export class WorkersStatusPageDto {
   @IsString()
   clientId?: string;
 
+  @ApiPropertyOptional({ description: 'Field to Filter Worker by jobRunId'})
+  @IsOptional()
+  @IsString()
+  jobRunId?: string;
+
 }
 
 
