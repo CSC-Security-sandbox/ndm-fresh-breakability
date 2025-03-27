@@ -1266,7 +1266,7 @@ export class JobConfigService {
         totalRuns: job.totalRuns,
         configName: job.configname,
         createdAt: job.createdAt,
-        updated_at: job.updated_at
+        updatedAt: job.updated_at
       });
     });
     return payload;

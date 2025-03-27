@@ -39,7 +39,7 @@ export class JobListingDTO{
     createdAt: Date;
 
     @ApiProperty({ description: 'Job update date' })
-    updated_at: Date;
+    updatedAt: Date;
     
 }
 export interface SourceServer{
