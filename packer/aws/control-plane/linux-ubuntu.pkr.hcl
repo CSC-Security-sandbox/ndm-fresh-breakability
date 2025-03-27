@@ -169,6 +169,8 @@ source "amazon-ebs" "aws_ubuntu" {
   vpc_id                       = var.vpc_id
   subnet_id                    = var.subnet_id
   ssh_username                 = var.ssh_username
+  ssh_keypair_name             = "datamigrator-aws-key"
+  ssh_private_key_file         = "~/Downloads/datamigrator-aws-key.pem"
 
   launch_block_device_mappings {
     device_name           = var.aws_block_device_name
