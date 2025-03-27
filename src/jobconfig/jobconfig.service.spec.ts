@@ -919,7 +919,6 @@ describe('JobConfigService', () => {
     jest.spyOn(jobRunRepo, 'find').mockResolvedValue([{ id: 'run1' }] as any);
     jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
     jest.spyOn(identityCrossMappingRepo, 'exists').mockResolvedValue(true);
-    jest.spyOn(redisService, 'getClient').mockRejectedValue(new Error('Redis error'));
 
     await expect(service.createBulkMigrate(mockBulkMigrate as any)).rejects.toThrow("NOAUTH Authentication required.");
   });
