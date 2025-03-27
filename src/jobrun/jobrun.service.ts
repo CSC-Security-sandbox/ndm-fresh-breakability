@@ -543,6 +543,7 @@ export class JobRunService {
 
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
+        this.logger.log(`jobRun for id ${jobRun.jobrunid} - ${JSON.stringify(jobRun)}`);
         const partialJobRunStats= {
           jobRunId: jobRun.jobrunid,
           status: jobRun.substatus || jobRun.status,
@@ -747,28 +748,25 @@ export class JobRunService {
       relations: ["jobConfig"],
     });
     if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
     const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-        "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-        "SUM(inventory.fileSize) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId })
-      .groupBy("inventory.isDirectory")
-      .getRawMany();
-    const jobRunStatus = {
-      fileCount: "0",
-      directories: "0",
-      totalSize: "0",
-    };
-   
+  .createQueryBuilder('inventory')
+  .select([
+    'COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount',
+    'COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount',
+    'COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize',
+  ])
+  .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRunId })
+  .getRawOne();
+
     this.logger.debug(`[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`);
-    for (let i = 0; i < inventorySummary.length; i++) {
-      jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
-      jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
-      jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? inventorySummary[i].totalfilesize?.toString() : "0";
-    }
+
+    const jobRunStatus = {
+      fileCount: inventorySummary.filecount || "0",
+      directories: inventorySummary.directorycount || "0",
+      totalSize: inventorySummary.totalfilesize || "0",
+    };
+
     const response = {
       ...jobRunStatus,
       errors: await this.getErrorCounts(jobRunId),
