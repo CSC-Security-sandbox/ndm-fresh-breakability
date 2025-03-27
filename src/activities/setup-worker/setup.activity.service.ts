@@ -5,10 +5,12 @@ import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import axios from 'axios';
 import * as fs from 'fs';
 import { Protocol } from 'src/protocols/protocol/protocol';
+import { Protocol as pc } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import * as util from 'util';
 
+import { WorkersConfig } from 'src/config/app.config';
 @Injectable()
 export class SetupActivityService {
   readonly workerId: string;
@@ -63,6 +65,69 @@ export class SetupActivityService {
       `[${jobRunId}] - Worker ${this.workerId} cleanup completed for ${server.hostname}/${server.path}`,
     );
   }
+  async  waitFor(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  }
+  async speedTestSetup(args: any): Promise<any> {
+    this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Setting up worker`);
+
+    try {
+      // Retrieve the protocol based on the protocol type
+      const protocol = Protocols.getProtocol(ProtocolTypes[args.protocolType]);
+      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Protocol resolved: ${args.protocolType}`);
+
+      // Get the base working directory from the configuration
+      const workingDirectory = WorkersConfig.get('baseWorkingPath');
+
+      // Create FileServerDetails object with the provided arguments
+      const fsDetails = new FileServerDetails(
+        args.hostname,
+        args.protocols,
+        args.pathId,
+        args.path,
+        args.userName,
+        args.password,
+        workingDirectory
+      );
+
+      // Mount the file system path
+      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Mounting path`);
+      await this.mountPath(fsDetails, protocol, args.jobRunId);
+
+      // Update worker configuration via an API call
+      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
+      await axios.post(
+        `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
+        { jobRunId: args.jobRunId, workerIds: [this.workerId] }
+      );
+
+      // Wait for 1 second to ensure the configuration is updated
+      await this.waitFor(1000);
+
+      // Return success response
+      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Worker setup completed successfully`);
+      return {
+        jobRunId: args.jobRunId,
+        status: 'success',
+        protocolType: args.protocolType,
+        workerId: this.workerId,
+        message: `Worker ${this.workerId} successfully set up.`,
+        fsDetails,
+        fileServerId: args.fileServerId,
+        volumeId: args.volumeId,
+        tests: args.tests,
+      };
+    } catch (error) {
+      // Log the error and return a failure response
+      this.logger.error(`[${args.jobRunId}] - Setup failed: ${error.message}`);
+      return {
+        jobRunId: args.jobRunId,
+        status: 'error',
+        workerId: this.workerId,
+        message: `Setup failed: ${error.message}`,
+      };
+    }
+  }
 
   async setup(jobRunId: string): Promise<SetupOutput> {
     console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
@@ -76,7 +141,7 @@ export class SetupActivityService {
       const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
       // mount source path
       console.log(
-        `[${jobRunId}] - [${this.workerId}] Setting up worke12iey12iuy12iur`,
+        `[${jobRunId}] - [${this.workerId}] Setting up worker`,
       );
       await this.mountPath(
         context.jobConfig.sourceFileServer,
@@ -111,6 +176,36 @@ export class SetupActivityService {
         status: 'error',
         workerId: this.workerId,
         message: `Setup failed: ${error.message}`,
+      };
+    }
+  }
+
+  async speedTestCleanup(jobRunId: string, fsDetails:FileServerDetails, protocolType:string): Promise<any> {
+    try {
+
+      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      // unmount source path
+      await this.unmountPath(
+        fsDetails,
+        protocol,
+        jobRunId,
+      );
+        await new Promise((resolve) => setTimeout( resolve, 1000));
+
+      return {
+        jobRunId,
+        status: 'success',
+        protocolType,
+        workerId: this.workerId,
+        message: `Cleanup successful.`,
+      };
+    } catch (error) {
+      console.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
+      return {
+        jobRunId,
+        status: 'error',
+        workerId: this.workerId,
+        message: `Cleanup failed: ${error.message}`,
       };
     }
   }

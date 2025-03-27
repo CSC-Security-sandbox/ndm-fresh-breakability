@@ -25,6 +25,9 @@ export default registerAs(
     fetchTaskBatchMigration: process.env.FETCH_TASK_BATCH_MIGRATION || 1,
     maxConcurrency: process.env.MAX_CONCURRENCY || 100,
     threadCount: process.env.THREAD_COUNT || 5,
+    speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
+    speedTestFileSize: process.env.SPEED_TEST_FILE_Size_GB || 1,
+    speedTestTimeout: process.env.SPEED_TEST_TIMEOUT || 120000,
   }),
 );
 

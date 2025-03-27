@@ -7,6 +7,7 @@ async function log(traceId: string, message: string) {
 
 const { 
   cleanup: cleanupWorkerActivity,
+  speedTestCleanup: cleanupSpeedTestWorkerActivity,
 } = proxyActivities<SetupActivityService>({ startToCloseTimeout: '300s' });
 
 
@@ -14,5 +15,10 @@ export async function CleanupWorkerWorkflow(
   args: any,
 ): Promise<any> {
     await log( args.traceId,`Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`);
-    return await cleanupWorkerActivity(args.jobRunId);
+    if(args.jobType=="SPEED_TEST") {
+      return await cleanupSpeedTestWorkerActivity(args.jobRunId, args.fsDetails, args.protocolType);
+    }
+    else{
+     return await cleanupWorkerActivity(args.jobRunId);
+    }
 }
