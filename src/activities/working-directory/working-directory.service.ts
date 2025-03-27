@@ -8,12 +8,16 @@ import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-direct
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { getAccessToken } from '../common/token.util';
+import { HttpService } from '@nestjs/axios';
+
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
+    private readonly httpService: HttpService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
   }
@@ -64,10 +68,17 @@ export class ValidateWorkingDirectoryActivity {
 
   async updateConfigStatus(apiUrl: string, accessToken: string, payload: ConfigStatusPayload) {
     try {
+      const accessToken = await getAccessToken(
+        this.httpService,
+        this.configService,
+      );
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
       await axios.post(apiUrl, payload, {
         headers: {
-          // "Authorization": `Bearer ${accessToken}`, // TODO: Implement token handling
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
         }
       });
     } catch (error) {

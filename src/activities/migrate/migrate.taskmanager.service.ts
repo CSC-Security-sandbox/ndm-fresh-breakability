@@ -6,6 +6,8 @@ import { RedisService } from 'src/redis/redis.service';
 import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import axios from 'axios';
+import { getAccessToken } from '../common/token.util';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class MigrationTaskService{
@@ -20,6 +22,7 @@ export class MigrationTaskService{
       @Inject(ConfigService) private readonly configService: ConfigService,
       private readonly logger: Logger,
       private readonly redisService: RedisService,
+      private readonly httpService: HttpService,
   ) {
       this.workerId = this.configService.get('worker.workerId');
       this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
@@ -92,7 +95,14 @@ export class MigrationTaskService{
     try {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Triggering generateCOCReport for url : ${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
-      await axios.get(`${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
+      const accessToken = await getAccessToken(
+        this.httpService,
+        this.configService,
+      );
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+      await axios.get(`${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`, {headers:{Authorization:`Bearer ${accessToken}`}});
       this.logger.log(`[${jobRunId}] Triggering generateCOCReport successful`);
       return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
     } catch (error) {
@@ -105,7 +115,14 @@ export class MigrationTaskService{
     try {
       this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
       this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
-      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`);
+      const accessToken = await getAccessToken(
+        this.httpService,
+        this.configService,
+      );
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {headers:{Authorization:`Bearer ${accessToken}`}});
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
