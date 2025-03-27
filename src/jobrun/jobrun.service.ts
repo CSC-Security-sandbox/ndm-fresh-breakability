@@ -750,14 +750,14 @@ export class JobRunService {
     if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
     const inventorySummary = await this.inventoryRepo
-  .createQueryBuilder('inventory')
-  .select([
-    'COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount',
-    'COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount',
-    'COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize',
-  ])
-  .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRunId })
-  .getRawOne();
+      .createQueryBuilder('inventory')
+      .select([
+        'COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount',
+        'COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount',
+        'COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize',
+      ])
+      .where('inventory.jobRunId = :jobRunId', { jobRunId: jobRunId })
+      .getRawOne();
 
     this.logger.debug(`[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`);
 
