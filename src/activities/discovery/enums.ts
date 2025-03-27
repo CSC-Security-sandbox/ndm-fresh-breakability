@@ -23,3 +23,10 @@ export enum OperationStatus{
     ERROR ='ERROR',
     COMPLETED = 'COMPLETED'
 }
+
+//TODO: Need to check
+export enum  JobReportType {
+    MIGRATE = 'MIGRATE',
+    CUT_OVER = 'CUT_OVER',
+    DISCOVER= 'DISCOVER'
+}

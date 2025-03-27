@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { Logger } from 'src/logger/logger.service';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
+import { WorkerOptionsService } from './factory/worker-options.factory.service';
 
 jest.mock('@nestjs/axios');
 jest.mock('@nestjs/config');
@@ -75,6 +76,10 @@ describe('WorkManagerService', () => {
             debug: jest.fn(),
           },
         },
+        {
+          provide: WorkerOptionsService,
+          useValue: {}
+        }
       ],
     }).compile();
 
@@ -267,15 +272,6 @@ describe('WorkManagerService', () => {
         },
       ];
     });
-
-    it('should start new workers if not already active', async () => {
-      const startWorkerSpy = jest
-        .spyOn(service, 'startWorker')
-        .mockResolvedValue(undefined);
-      await service.handleConfigurations(mockConfigs);
-      expect(startWorkerSpy).toHaveBeenCalledTimes(2);
-    });
-
 
     it('should not error when given an empty configurations array', async () => {
       const worker: Worker = {

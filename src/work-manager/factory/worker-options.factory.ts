@@ -1,7 +1,5 @@
 import { NativeConnection } from "@temporalio/worker";
 import { WorkerConfiguration } from "../work-manager.types";
-import { WorkFlowType } from "./worker-options.types";
-// import { WorkerConfiguration } from "../work-manager.types";
 
 export class WorkFlowOptions {
     identity: string;
@@ -27,15 +25,3 @@ export class WorkFlowOptions {
         this.workflowsPath = require.resolve('../../workflows/workflows')
     }
 }
-
-// export const WorkerOptionsFactory = (id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) => {
-//     switch (config.configName) {
-//         case WorkFlowType.PARENT_WORKFLOW:
-//             return new WorkFlowOptions( id, workerId, connection, 'ParentWorkflow-TaskQueue', config)
-//         case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
-//             return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
-//         case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
-//             return  new WorkFlowOptions( id, workerId, connection, 'TaskQueue', config, activities)
-//         default:
-//             return undefined
-//     }

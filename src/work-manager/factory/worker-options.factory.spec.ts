@@ -1,55 +1,65 @@
+import { WorkerConfiguration } from "../work-manager.types";
+import { WorkFlowOptions } from "./worker-options.factory";
 
-import { WorkFlowType } from './worker-options.types';
-import { WorkerConfiguration } from '../work-manager.types';
-import { NativeConnection } from '@temporalio/worker';
-import * as activities from '../../activities/activities';
-import { WorkerOptionsFactory } from './worker-options.factory';
+describe("WorkFlowOptions", () => {
+  let config: WorkerConfiguration;
 
-jest.mock('../../activities/activities');
-jest.mock('../../workflows/workflows', () => jest.fn());
-
-describe('WorkerOptionsFactory', () => {
-  const mockConnection = {} as NativeConnection; // Mocking NativeConnection
-  const mockWorkerId = 'worker123';
-  const mockIdentity = 'identity123';
-
-  const baseConfig: WorkerConfiguration = {
-    workerId: 'worker123',
-    configName: '',
-    dynamicTaskQueue: false,
-    taskQueueId: 'taskQueue123',
-  };
-
-  it('should return a WorkFlowOptions instance for PARENT_WORKFLOW', () => {
-    const config = { ...baseConfig, configName: WorkFlowType.PARENT_WORKFLOW };
-    const options = WorkerOptionsFactory(mockIdentity, config, mockWorkerId, mockConnection);
-
-    expect(options).toBeDefined();
-    expect(options?.identity).toBe(mockIdentity);
-    expect(options?.workerId).toBe(mockWorkerId);
-    expect(options?.connection).toBe(mockConnection);
-    expect(options?.taskQueue).toBe('ParentWorkflow-TaskQueue');
-    expect(options?.activities).toBeUndefined();
-    expect(options?.workflowsPath).toBeDefined();
+  beforeEach(() => {
+    config = {
+      dynamicTaskQueue: false,
+      taskQueueId: "test-task-queue-id",
+      workerId: "test-worker-id",
+      configName: "test-config-name",
+    };
   });
 
-  it('should return a WorkFlowOptions instance for WORKER_SPECIFIC_WORKFLOW', () => {
-    const config = { ...baseConfig, configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW, dynamicTaskQueue: true };
-    const options = WorkerOptionsFactory(mockIdentity, config, mockWorkerId, mockConnection);
+  it("should create a new instance with default values", () => {
+    const options = new WorkFlowOptions(
+      "test-identity",
+      "test-worker-id",
+      {} as any, // Use a mock connection
+      "test-task-queue",
+      config
+    );
 
-    expect(options).toBeDefined();
-    expect(options?.identity).toBe(mockIdentity);
-    expect(options?.workerId).toBe(mockWorkerId);
-    expect(options?.connection).toBe(mockConnection);
-    expect(options?.taskQueue).toBe('taskQueue123-TaskQueue'); // Task queue ID concatenated
-    expect(options?.activities).toBe(activities);
-    expect(options?.workflowsPath).toBeDefined();
+    expect(options.identity).toBe("test-identity");
+    expect(options.workerId).toBe("test-worker-id");
+    expect(options.connection).not.toBeUndefined();
+    expect(options.taskQueue).toBe("test-task-queue");
+    expect(options.activities).toBeUndefined();
+    expect(options.workflowsPath).not.toBeUndefined();
   });
 
-  it('should return undefined for an unknown configName', () => {
-    const config = { ...baseConfig, configName: 'UNKNOWN_WORKFLOW' };
-    const options = WorkerOptionsFactory(mockIdentity, config, mockWorkerId, mockConnection);
+  it("should create a new instance with dynamic task queue", () => {
+    config.dynamicTaskQueue = true;
+    const options = new WorkFlowOptions(
+      "test-identity",
+      "test-worker-id",
+      {} as any, // Use a mock connection
+      "test-task-queue",
+      config
+    );
 
-    expect(options).toBeUndefined();
+    expect(options.taskQueue).toBe(`${config.taskQueueId}-test-task-queue`);
+  });
+
+  it("should create a new instance with activities", () => {
+    const activities = { testActivity: jest.fn() };
+    const options = new WorkFlowOptions(
+      "test-identity",
+      "test-worker-id",
+      {} as any, // Use a mock connection
+      "test-task-queue",
+      config,
+      activities
+    );
+
+    expect(options.activities).toBe(activities);
+  });
+
+  it("should throw an error if config is missing", () => {
+    expect(() => new WorkFlowOptions("test-identity", "test-worker-id", {} as any, "test-task-queue", null)).toThrowError(
+      "Cannot read properties of null (reading 'dynamicTaskQueue')"
+    );
   });
 });
