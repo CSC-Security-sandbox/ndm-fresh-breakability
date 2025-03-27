@@ -28,12 +28,15 @@ jobs:
             (Get-Content .npmrc) -replace '\$\{GITOPS_USER_GITHUB_TOKEN\}', $env:GITOPS_USER_GITHUB_TOKEN | Set-Content .npmrc
   
         - name: Install dependencies and pkg
+          shell: cmd   
           run: npm install && npm install pkg -g
   
         - name: Run Build
+          shell: cmd  
           run: npm run build
   
         - name: Build Windows Binary
+          shell: cmd  
           run: npm run pkg
   
         - name: Prepare Installer Directory
