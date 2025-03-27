@@ -71,7 +71,6 @@ Ensure the following tools are installed on your macOS system:
     config-service (main)
     datamigrator-ui (main)
     db-writer (main)
-    file-service (main)
     jobs-service (main)
     reports-service (main)
     ```

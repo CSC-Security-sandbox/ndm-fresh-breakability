@@ -10,8 +10,6 @@ dependencies:
     version: 0.1.0
   - name: jobs-service
     version: 0.1.0
-  - name: file-service
-    version: 0.1.0
   - name: reports-service
     version: 0.1.0
   - name: datamigrator-ui
