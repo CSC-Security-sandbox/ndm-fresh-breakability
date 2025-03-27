@@ -4,7 +4,7 @@ import {
   Span,
   Card,
   Layout,
-  WizardHeader,
+  TabHeader,
 } from "@netapp/bxp-design-system-react";
 import ManageProject from "@components/top-nav-bar/setting/ManageProjects/ManageProjects";
 import ManageUsers from "@components/top-nav-bar/setting/ManageUsers/ManageUsers";
@@ -27,7 +27,7 @@ const SettingsContent = () => {
   return (
     <Card className="h-full w-[70rem]">
       <Layout.Page>
-        <WizardHeader
+        <TabHeader
           label={
             <Box className="flex gap-0">
               <IAMIcon />
@@ -60,7 +60,7 @@ const SettingsContent = () => {
               </InnerTab.Button>
             </PermissionAuth>
           </InnerTab>
-        </WizardHeader>
+        </TabHeader>
 
         <Layout.Content>
           <TabPanel value={currentTab} index={1}>
