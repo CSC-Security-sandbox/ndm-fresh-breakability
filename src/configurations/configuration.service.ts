@@ -13,12 +13,13 @@ import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
-import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
+import { FindAllConfigPageDto, FileServerInfo } from './dto/findallconfig.dto';
 import { CreateRequestDto, Options } from 'src/work-manager/dto/validate-connection.dto';
 import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Injectable()
 export class ConfigurationService {
@@ -34,11 +35,56 @@ export class ConfigurationService {
         private readonly fileServerWorkingDirectoryMappingEntity: Repository<FileServerWorkingDirectoryMappingEntity>,
         @InjectRepository(WorkerEntity)
         private readonly WorkerEntity: Repository<WorkerEntity>,
+        @InjectRepository(ProjectEntity)
+        private readonly projectEntity: Repository<ProjectEntity>,
         private loggerFactory: LoggerFactory,
         private readonly workFlowService: WorkflowService
     ) {
         this.logger = this.loggerFactory.create(ConfigurationService.name)
     }
+    
+    async getAllFileServers(): Promise<any[]>  {
+        const fileServers = await this.fileServerEntity.createQueryBuilder('fileServer')
+        .leftJoinAndSelect('fileServer.workers', 'worker')
+        .leftJoinAndSelect('fileServer.config', 'config')
+        .leftJoinAndSelect('config.workingDirectory', 'workingDirectory')
+        .select([
+            'fileServer.id',
+            'fileServer.protocol',
+            'worker.workerId',
+            'worker.workerName',
+            'config.id',
+            'config.configName',
+            'config.status',
+            'workingDirectory.workingDirectory'
+        ])
+        .getMany();
+
+    const groupedByConfig = fileServers.reduce((acc, fileServer) => {
+        const configId = fileServer.config.id;
+        if (!acc[configId]) {
+            acc[configId] = {
+                id: configId,
+                serverName: fileServer.config.configName,
+                hasScratchPath: fileServer.config.workingDirectory && fileServer.config.workingDirectory.workingDirectory !== '' ? true : false,
+                status: fileServer.config.status,
+                fileServers: []
+            };
+        }
+        acc[configId].fileServers.push({
+            id: fileServer.id,
+            protocol: fileServer.protocol,
+            workers: fileServer.workers ? fileServer.workers.map(worker => ({
+                id: worker.workerId,
+                workerName: worker.workerName,
+            })) : []
+        });
+        return acc;
+    }, {});
+
+    return Object.values(groupedByConfig);
+    }
+
 
     async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
       try {
@@ -172,6 +218,23 @@ export class ConfigurationService {
             this.logger.error(`Error fetching cutover details: ${error.message}`);
             throw new InternalServerErrorException('An error occurred while processing the request.');
         }
+    }
+
+    async isConfigNameUnique(projectId: string, configName: string): Promise<{ isUnique: boolean }> {
+        const projectExists = await this.projectEntity.findOne({ where: { id: projectId } });
+        if (!projectExists) {
+            throw new NotFoundException('Invalid Project ID');
+        }
+
+        const existingConfig = await this.configEntity.findOne({
+            where: { projectId, configName },
+        });
+
+        if (existingConfig) {
+            throw new BadRequestException('Config name already exists for this project.');
+        }
+
+        return { isUnique: true };
     }
     
     private async fetchConfigWithRelations(configId: string) {
@@ -340,6 +403,8 @@ export class ConfigurationService {
         this.logger.debug("Config creation started");        
         const credentials:Credentials[] = []
         try {
+           await this.isConfigNameUnique(createConfig.projectId, createConfig.configName);
+
             const fileServerPromises = createConfig.fileServers.map(async (fileServer) => {
                 const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
                 credentials.push({
@@ -389,11 +454,16 @@ export class ConfigurationService {
                 createdBy: userId
             });
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-            this.refreshConfig(update.id, traceId)
+            this.refreshConfig(update.id, traceId);
             return update;
-        }catch(error) {
-            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`)
-            throw new InternalServerErrorException('Error Occurred during creating Config')
+        } catch(error) {
+            this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`);
+            
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            
+            throw new InternalServerErrorException('Error Occurred during creating Config');
         }
     }
 
