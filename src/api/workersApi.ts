@@ -6,14 +6,14 @@ import { prepareHeaders } from "@api/api.utils";
 export const workersApi = createApi({
   reducerPath: "workersApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: window?.env?.VITE_WORKERS_SERVICE_URL || import.meta.env.VITE_WORKERS_SERVICE_URL,
+    baseUrl:
+      window?.env?.VITE_WORKERS_SERVICE_URL ||
+      import.meta.env.VITE_WORKERS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({
     getAllWorkers: builder.query({
-      query: ({ projectId }) => {
-        return `?projectId=${projectId}`;
-      },
+      query: (url) => url,
 
       // THIS IS RESP MODIFICATION DUE TO BLUEXP SELECT WORKS ON ID. ON VALIDATE CONNECTION
       transformResponse: (response: any) => {
