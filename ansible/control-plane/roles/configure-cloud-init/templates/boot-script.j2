@@ -155,6 +155,12 @@ reset_creds(){
       --from-literal=keycloak-db-password="${KEYCLOAK_POSTGRES_PASSWORD}" \
       --dry-run=client -o yaml | kubectl apply -f -
 
+    log "Updating temporal secret with new credentials..."
+    kubectl create secret generic temporal-credentials \
+      --namespace temporal \
+      --from-literal=temporal_db_password="${TEMPORAL_POSTGRES_PASSWORD}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
     log "Waiting for Keycloak pods to be ready..."
     retry $MAX_RETRIES "kubectl wait --namespace=\"keycloak\" --for=condition=Ready pod --all --timeout=${WAIT_TIMEOUT}s" || 
     handle_failure "Keycloak pods not ready"
