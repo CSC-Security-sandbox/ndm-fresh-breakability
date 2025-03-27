@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
 
     steps:
         - name: Checkout code
@@ -21,6 +21,11 @@ jobs:
           uses: actions/setup-node@v4
           with:
             node-version: '22'
+        
+        - name: Replace GitHub Token Placeholder in .npmrc (Windows)
+          shell: pwsh
+          run: |
+            (Get-Content .npmrc) -replace '\$\{GITOPS_USER_GITHUB_TOKEN\}', $env:GITOPS_USER_GITHUB_TOKEN | Set-Content .npmrc
   
         - name: Install dependencies and pkg
           run: npm install && npm install pkg -g
