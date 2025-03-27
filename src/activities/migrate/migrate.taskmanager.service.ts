@@ -122,7 +122,7 @@ export class MigrationTaskService{
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {headers:{Authorization:`Bearer ${accessToken}`}});
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {}, {headers:{Authorization:`Bearer ${accessToken}`}});
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
