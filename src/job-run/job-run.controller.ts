@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, SerializeOptions } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags("job-run")
 @Controller("job-run")
@@ -53,7 +53,7 @@ export class JobRunController {
   @ApiOperation({ summary: "Get COC Report by JobRunId" })
   @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
   @ApiResponse({ status: 404, description: "COC report not found." })
-  @Auth()
+  @AuthWorker()
   @ApiBearerAuth()  
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {

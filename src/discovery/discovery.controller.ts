@@ -113,8 +113,8 @@ export class DiscoveryController {
     return stream;
   }
 
-  @Auth()
   @ApiBearerAuth()
+  @AuthWorker()
   @Post('/generate-report')
   @ApiOperation({ summary: 'Generate a blank report for a job run' })
   @ApiBody({
