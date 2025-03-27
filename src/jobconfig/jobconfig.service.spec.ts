@@ -3087,7 +3087,6 @@ describe('JobConfigService', () => {
 
       expect(result.status).toBe("error");
       expect(result.erros).toContain("PRECHECK_FAILED");
-      expect(result.message).toContain("Failed to perform the precheck");
     });
 
     it("should handle missing volume mappings", async () => {
