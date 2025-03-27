@@ -78,7 +78,7 @@ const JobsList = () => {
     isSorting: true,
     pageSize: 10,
     defaultColumnState,
-    defaultSortState: { sortOrder: "desc", column: "createdAt" },
+    defaultSortState: { sortOrder: "desc", column: "updatedAt" },
   };
 
   if (isError) {

@@ -153,6 +153,16 @@ export const JOB_LIST_COLUMN_DEFS = [
     }: BlueXpTableRowType<JobRowType, JobRowType["createdAt"]>) =>
       React.createElement(DateCellRenderer, { value }),
   },
+  {
+    header: "Updated On",
+    accessor: "updatedAt",
+    id: "updatedAt",
+    width: 90,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<JobRowType, JobRowType["updatedAt"]>) =>
+      React.createElement(DateCellRenderer, { value }),
+  },
 ];
 
 export type preSelectedFilterType = {
@@ -166,6 +176,7 @@ export const defaultColumnState = {
   sourcePath: { isHidden: true },
   destinationServerName: { isHidden: true },
   destinationPath: { isHidden: true },
+  createdAt: { isHidden: true },
 };
 
 export const COLUMNS_TO_FILTER_DEFS: ColumnFilterType[] = [
