@@ -13,6 +13,7 @@ import {
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -27,6 +28,7 @@ import { AdHocRunDTO } from "./dto/adhockjobrun.dto";
 import { CutOverStatus, JobRunStatus } from "src/constants/enums";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { Auth, AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 
 @ApiTags("jobs run")
 @Controller("job-run")
@@ -55,6 +57,8 @@ export class JobRunController {
   @ApiBadRequestResponse({
     description: "Invalid pagination parameters.",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Get("/")
   async getJobRuns(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -68,6 +72,8 @@ export class JobRunController {
     status: 200,
     description: "The job run errors retrieved successfully .",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Get("/errors")
   async getJobRunErrors(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -79,6 +85,8 @@ export class JobRunController {
   @ApiOperation({ summary: "Get job run by ID" })
   @ApiResponse({ status: 200, description: "Returns a job run by its ID." })
   @ApiResponse({ status: 404, description: "Job run not found." })
+  @ApiBearerAuth()
+  @Auth()
   @Get(":id")
   async getJobById(@Param("id") id: string): Promise<JobRunDetailsDTO> {
     return await this.jobRunService.getJobRun(id);
@@ -89,6 +97,8 @@ export class JobRunController {
     status: 200,
     description: "The job run action completed successfully .",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Put("/action")
   async actions(@Body() jobRunActions: JobRunActionsReq) {
     return this.jobRunService.actions(jobRunActions);
@@ -99,6 +109,8 @@ export class JobRunController {
     status: 200,
     description: "The cutover job approved successfully.",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Put("/cutover/approve")
   async cutoverApprove(@Body() approval: ApprovalRequestDTO) {
     this.logger.log(approval);
@@ -110,6 +122,8 @@ export class JobRunController {
     status: 200,
     description: "The job run created completed successfully .",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Post("/ad-hoc")
   async adhocRun(@Body() adhocRun: AdHocRunDTO) {
     return this.jobRunService.addHocRun(adhocRun.jobConfigId);
@@ -120,6 +134,7 @@ export class JobRunController {
     status: 200,
     description: "The job run status updated successfully .",
   })
+  @AuthWorker()
   @Patch("/:jobRunId/:status")
   async updateJobRunStatus(
     @Param("jobRunId") jobRunId: string,
@@ -134,6 +149,8 @@ export class JobRunController {
     status: 200,
     description: "The cutover job approved successfully.",
   })
+  @ApiBearerAuth()
+  @AuthWorker()
   @Put("/cutover/:jobRunId/:status")
   async cutoverApproval(
     @Param("jobRunId") jobRunId: string,
@@ -147,6 +164,8 @@ export class JobRunController {
     status: 200,
     description: "The job run error overview retrieved successfully .",
   })
+  @ApiBearerAuth()
+  @Auth()
   @Get("/:jobRunId/errors/overview")
   async getErrorOverview(@Param("jobRunId") jobRunId: string) {
     return this.jobRunService.getErrorOverview(jobRunId);
