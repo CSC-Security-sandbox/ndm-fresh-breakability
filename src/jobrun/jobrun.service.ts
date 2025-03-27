@@ -357,6 +357,11 @@ export class JobRunService {
         startTime: true,
         endTime: true,
         jobConfigId: true,
+        jobStats: {
+          fileCount: true,
+          directories: true,
+          totalSize: true,
+        },
         tasks: {
           id: true,
           status: true,
@@ -413,6 +418,7 @@ export class JobRunService {
     if(jobRun.status===JobRunStatus.Completed){
        this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
         const inventoryStats:JobRunStats = jobRun.jobStats;
+        this.logger.log(`Job Run ${jobRun.id} inventory stats ${JSON.stringify(inventoryStats)}`);
         const payload = {
           scannedFilesCount: BigInt(
             inventoryStats?.fileCount || "0"
@@ -423,8 +429,8 @@ export class JobRunService {
           totalScannedSize:
           jobConfigDetails.jobType === JobType.DISCOVER
               ? this.covertBytes(Number(inventoryStats?.totalSize || "0"))
-              : "",
-          totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0",
+              : "0 B",
+          totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0 B",
           errors: await this.getErrorCounts(jobRun.id),
           tasks: jobRun.tasks.map((task) => ({
             taskId: task.id,
@@ -454,9 +460,9 @@ export class JobRunService {
       totalScannedSize:
         jobConfigDetails.jobType === JobType.DISCOVER
           ? this.covertBytes(Number(inventoryCounts?.totalSize || "0"))
-          : "0",
+          : "0 B",
       totalMigratedSize:
-        jobConfigDetails.jobType === JobType.MIGRATE ? "" : "0",
+        jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || "0")) : "0 B",
       errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -531,6 +537,7 @@ export class JobRunService {
         "jobRun.status AS status",
         "jobRun.startTime AS startTime",
         "jobRun.endTime AS endTime",
+        "jobRun.jobStats AS jobStats",
       ])
       .getRawMany();
 
@@ -561,8 +568,10 @@ export class JobRunService {
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
         }
-        if(jobRun.satus===JobRunStatus.Completed){
+        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+        if(String(jobRun.status).trim()==JobRunStatus.Completed){
           const inventoryStats:JobRunStats = jobRun.jobstats;
+          this.logger.log(`Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(inventoryStats)}`);
           const payload = {
             scannedFilesCount: BigInt(
               inventoryStats?.fileCount || "0"
@@ -572,9 +581,9 @@ export class JobRunService {
             )?.toString(),
             totalScannedSize:
               jobRun.jobtype === JobType.DISCOVER
-                ? this.covertBytes(Number(inventoryStats?.totalSize || "0"))
-                : "",
-            totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0",
+                ? this.covertBytes(Number(inventoryStats?.totalSize || 0))
+                : "0 B",
+            totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || 0)) : "0 B",
             errors: await this.getErrorCounts(jobRun.jobrunid),
           }
          const response: JobRunsDTO = {
@@ -595,8 +604,8 @@ export class JobRunService {
           totalScannedSize:
             jobRun.jobtype === JobType.DISCOVER
               ? this.covertBytes(Number(inventoryCounts?.totalSize || "0"))
-              : "",
-          totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || "0")) : "0",
+              : "0 B",
+          totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || 0)) : "0 B",
           errors: await this.getErrorCounts(jobRun.jobrunid),
         };
         return response;
@@ -664,7 +673,7 @@ export class JobRunService {
         );
       }
       const jobRunStats:JobRunStats = await this.calculateJobRunStats(jobRunId);
-     this.logger.log("jobRunStats",JSON.stringify(jobRunStats));
+     this.logger.log("job Run Stats",JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date(),jobStats: jobRunStats}
@@ -758,7 +767,7 @@ export class JobRunService {
     for (let i = 0; i < inventorySummary.length; i++) {
       jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
       jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
-      jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
+      jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? inventorySummary[i].totalfilesize?.toString() : "0";
     }
     const response = {
       ...jobRunStatus,

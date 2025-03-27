@@ -1044,7 +1044,7 @@ export class JobConfigService {
         }
         const jobRunStats = jobRun.jobStats;
         if(jobRun.status===JobRunStatus.Completed){
-          this.logger.log(`Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats`);
+          this.logger.log(`Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`);
           return {
             ...partialPayload,
             scannedFilesCount: BigInt(
@@ -1678,12 +1678,13 @@ export class JobConfigService {
       for (let i = 0; i < inventorySummary.length; i++) {
         jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
         jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
-        jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
+        jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? inventorySummary[i].totalfilesize?.toString() : "0";
       }
       const response = {
         ...jobRunStatus,
         errors: await this.getErrorCounts(jobRunId),
       };
+      this.logger.log("formatted response", JSON.stringify(response));
       return response;
     }
     async getErrorCounts(jobRunId: string){
