@@ -442,6 +442,7 @@ export interface JobRowType {
   errors: number;
   totalRuns: number;
   createdAt: string;
+  updatedAt: string; 
 }
 
 export interface FileServerOverviewApi {
