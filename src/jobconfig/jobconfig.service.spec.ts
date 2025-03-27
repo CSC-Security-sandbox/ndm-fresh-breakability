@@ -903,6 +903,26 @@ describe('JobConfigService', () => {
     ]);
   });
 
+  it('should handle Redis errors gracefully during bulk migrate', async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [{ sourcePathId: 'src1', destinationPathId: ['dest1'] }]
+    };
+
+    const mockExistingJobConfigs = [{
+      id: 'job1',
+      sourcePathId: 'src1',
+      targetPathId: 'dest1',
+      scheduler: ScheduleStatus.SCHEDULING
+    }];
+
+    // Mock jobRunIdsToDeleteKey to be iterable
+    jest.spyOn(jobRunRepo, 'find').mockResolvedValue([{ id: 'run1' }] as any);
+    jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(mockExistingJobConfigs as any);
+    jest.spyOn(identityCrossMappingRepo, 'exists').mockResolvedValue(true);
+    jest.spyOn(redisService, 'getClient').mockRejectedValue(new Error('Redis error'));
+
+    await expect(service.createBulkMigrate(mockBulkMigrate as any)).rejects.toThrow("NOAUTH Authentication required.");
+  });
 
   it("should process sidMapping when it is a valid string", async () => {
     const mockBulkMigrate = {
@@ -1528,6 +1548,82 @@ describe('JobConfigService', () => {
       });
     });
 
+    it('should handle job runs with no stats', async () => {
+      const mockJobConfig = {
+        id: 'job1',
+        jobType: JobType.MIGRATE,
+        jobRuns: [{
+          id: 'run1',
+          status: JobRunStatus.Running,
+          startTime: new Date(),
+          endTime: null,
+          jobStats: null,
+          isReportReady: false,
+          subStatus: null
+        }],
+        sourcePath: { 
+          id: 'src1',
+          volumePath: '/src',
+          fileServer: { 
+            id: 'fs1',
+            protocol: 'NFS',
+            config: { 
+              configName: 'SrcServer' 
+            },
+            workers: []
+          }
+        },
+        targetPath: { 
+          id: 'dest1',
+          volumePath: '/dest',
+          fileServer: { 
+            id: 'fs2',
+            protocol: 'NFS',
+            config: { 
+              configName: 'DestServer' 
+            },
+            workers: []
+          }
+        },
+        status: 'Active',
+        createdAt: new Date()
+      };
+    
+      // Mock the main job config repository
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      
+      // Mock the inventory repository
+      jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          filecount: '0',
+          directorycount: '0',
+          totalfilesize: '0'
+        })
+      } as any);
+    
+      // Mock the job run repository
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue({
+        id: 'run1',
+        jobConfig: { id: 'job1' }
+      } as any);
+    
+      // Mock the operation error repository
+      jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([])
+      } as any);
+    
+      const result = await service.getJobConfigById('job1');
+      
+      expect(result.jobRuns[0].scannedFilesCount).toBe('0');
+      expect(result.jobRuns[0].scannedDirectoriesCount).toBe('0');
+      expect(result.jobRuns[0].totalScannedSize).toBe('0');
+    });
 
     it('should throw an error if job config is not found', async () => {
       const mockJobConfigId = 'jobConfigId';
@@ -1602,6 +1698,60 @@ describe('JobConfigService', () => {
     });
   });
 
+  describe('parseSize', () => {
+    it('should return 0 for empty or undefined input', () => {
+      expect(service.parseSize('')).toBe(0);
+      expect(service.parseSize(null)).toBe(0);
+      expect(service.parseSize(undefined)).toBe(0);
+    });
+  
+    it('should return 0 for invalid format', () => {
+      expect(service.parseSize('invalid')).toBe(0);
+      expect(service.parseSize('123')).toBe(0); // missing unit
+      expect(service.parseSize('MB')).toBe(0); // missing value
+      expect(service.parseSize('12.3XB')).toBe(0); // invalid unit
+    });
+  
+    it('should correctly parse bytes (B)', () => {
+      expect(service.parseSize('1024 B')).toBe(1024);
+      expect(service.parseSize('1 B')).toBe(1);
+      expect(service.parseSize('0 B')).toBe(0);
+      expect(service.parseSize('1.5 B')).toBe(1.5);
+    });
+  
+    it('should correctly parse kilobytes (KB)', () => {
+      expect(service.parseSize('1 KB')).toBe(1024);
+      expect(service.parseSize('2.5 KB')).toBe(2.5 * 1024);
+      expect(service.parseSize('0 KB')).toBe(0);
+    });
+  
+    it('should correctly parse megabytes (MB)', () => {
+      expect(service.parseSize('1 MB')).toBe(1024 * 1024);
+      expect(service.parseSize('3.2 MB')).toBe(3.2 * 1024 * 1024);
+    });
+  
+    it('should correctly parse gigabytes (GB)', () => {
+      expect(service.parseSize('1 GB')).toBe(1024 ** 3);
+      expect(service.parseSize('0.5 GB')).toBe(0.5 * 1024 ** 3);
+    });
+  
+    it('should correctly parse terabytes (TB)', () => {
+      expect(service.parseSize('1 TB')).toBe(1024 ** 4);
+      expect(service.parseSize('2 TB')).toBe(2 * 1024 ** 4);
+    });
+  
+    it('should correctly parse petabytes (PB)', () => {
+      expect(service.parseSize('1 PB')).toBe(1024 ** 5);
+      expect(service.parseSize('0.1 PB')).toBe(0.1 * 1024 ** 5);
+    });
+  
+    it('should handle decimal values', () => {
+      expect(service.parseSize('1.5 KB')).toBe(1.5 * 1024);
+      expect(service.parseSize('0.25 MB')).toBe(0.25 * 1024 * 1024);
+      expect(service.parseSize('.5 GB')).toBe(0.5 * 1024 ** 3);
+    });
+  });
+
   describe('precheckValidation', () => {
     it('should perform precheck validation successfully', async () => {
       const mockPrecheckData = [
@@ -1667,6 +1817,37 @@ describe('JobConfigService', () => {
         },
       });
 
+    });
+
+    it('should handle workflow service errors during precheck', async () => {
+      const mockData = {
+        migrateConfigs: [{ sourcePathId: 'src1', destinationPathId: ['dest1'] }],
+        preserveAccessTime: true
+      };
+
+      const mockVolumes = [{
+        id: 'src1',
+        fileServer: {
+          id: 'fs1',
+          workers: [{ workerId: 'w1' }],
+          protocolVersion: 'v3'
+        }
+      }, {
+        id: 'dest1',
+        fileServer: {
+          id: 'fs2',
+          workers: [{ workerId: 'w1' }],
+          protocolVersion: 'v3'
+        }
+      }];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockVolumes as any);
+      jest.spyOn(workFlowService, 'startWorkflow').mockRejectedValue(new Error('Workflow error'));
+
+      const result = await service.initiatePreCheck(mockData);
+
+      expect(result.status).toBe('error');
+      expect(result.erros).toContain('PRECHECK_FAILED');
     });
 
     it('should handle source path not found', async () => {
