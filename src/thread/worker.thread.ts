@@ -38,7 +38,7 @@ async function copyFileWithChecksum(sourceFile: string, destinationFile: string)
   
     await new Promise<void>((resolve, reject) => {
       const readStream = fs.createReadStream(sourceFile, {
-        highWaterMark: 1024,
+        highWaterMark: 1024*1024,
       });
       const writeStream = fs.createWriteStream(destinationFile);
   
