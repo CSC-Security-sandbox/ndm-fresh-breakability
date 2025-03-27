@@ -98,79 +98,6 @@ unseal_openbao() {
     wait
 }
 
-reset_creds(){
-    export POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-
-    log "Waiting for postgres pod to be ready..."
-    retry $MAX_RETRIES "kubectl wait --namespace=\"postgres\" --for=jsonpath='{.status.phase}'=Running pod/postgresql-0 --timeout=${WAIT_TIMEOUT}s" || 
-    handle_failure "postgres pod not ready"
-
-    CURRENT_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
-    [ -z "$CURRENT_POSTGRES_PASSWORD" ] && handle_failure "Failed to get current postgres password from OpenBao"
-
-    log "Updating postgres user passwords..."
-    update_user_password() {
-        local user=$1
-        local new_password=$2
-        kubectl exec -n postgres postgresql-0 -- sh -c "PGPASSWORD='${CURRENT_POSTGRES_PASSWORD}' psql -U postgres -c \"ALTER USER ${user} WITH PASSWORD '${new_password}';\""
-    }
-
-    update_user_password "dmadmin" "${POSTGRES_DMADMIN_PASSWORD}"
-    update_user_password "kcadmin" "${KEYCLOAK_POSTGRES_PASSWORD}"
-    update_user_password "liquibase" "${LIQUIBASE_POSTGRES_PASSWORD}"
-    update_user_password "temporal" "${TEMPORAL_POSTGRES_PASSWORD}"
-    update_user_password "postgres" "${POSTGRES_PASSWORD}"
-    
-    kubectl exec openbao-0 -n openbao -- bao kv put secrets/postgres-secrets/postgres-creds \
-      POSTGRES_USER="postgres" \
-      POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-      POSTGRES_DMADMIN_USER="dmadmin" \
-      POSTGRES_DMADMIN_PASSWORD="${POSTGRES_DMADMIN_PASSWORD}" \
-      KEYCLOAK_POSTGRES_USER="kcadmin" \
-      KEYCLOAK_POSTGRES_PASSWORD="${KEYCLOAK_POSTGRES_PASSWORD}" \
-      LIQUIBASE_POSTGRES_USER="liquibase" \
-      LIQUIBASE_POSTGRES_PASSWORD="${LIQUIBASE_POSTGRES_PASSWORD}" \
-      TEMPORAL_POSTGRES_USER="temporal" \
-      TEMPORAL_POSTGRES_PASSWORD="${TEMPORAL_POSTGRES_PASSWORD}"
-
-    log "Waiting for postgres pod to be ready after password changes..."
-    retry $MAX_RETRIES "kubectl wait --namespace=\"postgres\" --for=jsonpath='{.status.phase}'=Running pod/postgresql-0 --timeout=${WAIT_TIMEOUT}s" || 
-    handle_failure "postgres pod not ready after password changes"
-
-    export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/keycloak/generate | jq -r '.data.password')
-    export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    kubectl exec openbao-0 -n openbao -- bao kv put secrets/keycloak-secrets/keycloak-creds \
-      KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \
-      KEYCLOAK_ADMIN_USER="kcadmin" \
-      KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
-
-    log "Updating Keycloak secret with new credentials..."
-    kubectl create secret generic keycloak-credentials \
-      --namespace keycloak \
-      --from-literal=keycloak-admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
-      --from-literal=keycloak-db-password="${KEYCLOAK_POSTGRES_PASSWORD}" \
-      --dry-run=client -o yaml | kubectl apply -f -
-
-    log "Updating temporal secret with new credentials..."
-    kubectl create secret generic temporal-credentials \
-      --namespace temporal \
-      --from-literal=temporal_db_password="${TEMPORAL_POSTGRES_PASSWORD}" \
-      --dry-run=client -o yaml | kubectl apply -f -
-
-    log "Waiting for Keycloak pods to be ready..."
-    retry $MAX_RETRIES "kubectl wait --namespace=\"keycloak\" --for=condition=Ready pod --all --timeout=${WAIT_TIMEOUT}s" || 
-    handle_failure "Keycloak pods not ready"
-
-    export REDIS_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
-    kubectl exec openbao-0 -n openbao -- bao kv put secrets/redis-secrets/redis-creds \
-      REDIS_PASSWORD="${REDIS_PASSWORD}" \
-      REDIS_USERNAME="default"
-}
-
 restart_statefulsets() {
     local services=("postgresql:postgres" "keycloak:keycloak" "redis-master:redis")
 
@@ -283,7 +210,6 @@ main() {
     sleep $MICROK8S_INIT_DELAY
     
     unseal_openbao
-    reset_creds
     restart_statefulsets
     restart_temporal_deployments
     
