@@ -38,10 +38,6 @@ jobs-service:
     image:
       tag: {{ jobs_service_liquibase_tag | default(liquibase_common_tag) | default("latest") }}
 
-file-service:
-  image:
-    tag: {{ file_service_tag | default(common_tag) | default("latest") }}
-
 reports-service:
   image:
     tag: {{ reports_service_tag | default(common_tag) | default("latest") }}

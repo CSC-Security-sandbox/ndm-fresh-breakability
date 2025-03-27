@@ -1,4 +1,4 @@
-appName: "job-service"
+appName: "jobs-service"
 kubeApiVersion: "apps/v1"
 replicaCount: 1
 
@@ -66,7 +66,7 @@ env:
   #   value: "default"
 
   - name: SERVICE
-    value: "/job-service"
+    value: "/jobs-service"
   - name: MOUNT_BASE_PATH
     value: "/mnt/datamigrator"
   - name: TEMPORAL_ADDRESS

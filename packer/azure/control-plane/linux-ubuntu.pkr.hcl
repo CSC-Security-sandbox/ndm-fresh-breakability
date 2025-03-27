@@ -223,6 +223,12 @@ source "azure-arm" "azure_ubuntu" {
     storage_account_type                    = var.sig_storage_account_type
     specialized                             = var.sig_specialized
     use_shallow_replication                 = var.sig_use_shallow_replication
+    target_region {
+      name = "East US"
+    }
+    target_region {
+      name = "East US 2"
+    }
   }
 
   azure_tags = {
