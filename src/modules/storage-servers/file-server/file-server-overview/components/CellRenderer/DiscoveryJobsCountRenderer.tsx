@@ -6,7 +6,7 @@ import {
   JOB_STATUS_TYPE_ENUM,
 } from "@/types/app.type";
 import { Text } from "@netapp/bxp-design-system-react";
-import JobsCountRenderer from "./JobCountRenderer";
+import JobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/JobCountRenderer";
 
 const DiscoveryJobsCountRenderer = ({
   row,

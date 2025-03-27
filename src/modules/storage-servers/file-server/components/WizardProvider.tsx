@@ -1,7 +1,7 @@
 import CustomStepLayout from "@modules/storage-servers/file-server/components/layout/CustomStepLayout";
 import { Box } from "@components/container/index";
 import { Wizard } from "@netapp/bxp-design-system-react";
-import FileServerFooter from "./FileServerFooter/FileServerFooter";
+import FileServerFooter from "@modules/storage-servers/file-server/components/FileServerFooter/FileServerFooter";
 import {
   STEPS_MAP,
   STEPS_PATHS,

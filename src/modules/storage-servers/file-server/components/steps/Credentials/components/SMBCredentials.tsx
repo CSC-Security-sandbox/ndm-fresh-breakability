@@ -6,7 +6,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { SMB_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-server/components/steps/Credentials/credentials.constant";
-import ProtocolAccordion from "./ProtocolAccordion";
+import ProtocolAccordion from "@modules/storage-servers/file-server/components/steps/Credentials/components/ProtocolAccordion";
 
 const SMBCredentials = () => {
   const { smbCredentialsForm, isJobRunning } = useContext(

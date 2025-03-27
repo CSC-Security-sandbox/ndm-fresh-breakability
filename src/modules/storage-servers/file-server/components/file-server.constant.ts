@@ -1,10 +1,10 @@
 import * as Yup from "yup";
-import NFSStatusRenderer from "./steps/ValidateConnection/components/NFSStatusRenderer";
+import NFSStatusRenderer from "@modules/storage-servers/file-server/components/steps/ValidateConnection/components/NFSStatusRenderer";
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 import { BlueXpTableRowType } from "@/types/app.type";
 import React from "react";
-import ToggleWorker from "./cellRenderer/ToggleWorkerCellRenderer";
-import SMBStatusRenderer from "./steps/ValidateConnection/components/SMBStatusRenderer";
+import ToggleWorker from "@modules/storage-servers/file-server/components/cellRenderer/ToggleWorkerCellRenderer";
+import SMBStatusRenderer from "@modules/storage-servers/file-server/components/steps/ValidateConnection/components/SMBStatusRenderer";
 
 export const SERVICE_AND_PROTOCOL_VALIDATION_SCHEMA = Yup.object({
   configName: Yup.string().required("Name is required"),

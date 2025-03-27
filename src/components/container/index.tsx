@@ -1,3 +1,3 @@
-import Box from "./Box";
+import Box from "@components/container/Box";
 
 export { Box };

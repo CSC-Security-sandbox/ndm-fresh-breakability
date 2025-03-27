@@ -10,7 +10,10 @@ import {
 import { FilterIcon } from "@netapp/bxp-style/react-icons/Action";
 import { nanoid } from "@reduxjs/toolkit";
 import { useEffect } from "react";
-import { TaskFilterOption, TaskFiltersType } from "./tasks.interface";
+import {
+  TaskFilterOption,
+  TaskFiltersType,
+} from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/tasks.interface";
 import { Button } from "@netapp/bxp-design-system-react";
 
 const getLabelValueObject = (

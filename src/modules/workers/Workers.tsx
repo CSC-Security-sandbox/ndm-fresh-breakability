@@ -3,7 +3,7 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/WorkerInstructions";
 import useFetchWorkers from "@hooks/useFetchWorkers";
-import { WORKERS_COLUMN_DEF } from "./workers.constant";
+import { WORKERS_COLUMN_DEF } from "@modules/workers/workers.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { notify } from "@components/notification/NotificationWrapper";
 

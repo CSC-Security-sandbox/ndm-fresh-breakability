@@ -10,7 +10,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useEffect } from "react";
-import { TableWrapperWithoutFilterPropsType } from "./TableWrapperWithoutFilter.types";
+import { TableWrapperWithoutFilterPropsType } from "@components/table-wrapper/TableWrapperWithoutFilter.types";
 import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const TableWrapperWithoutFilter = ({
@@ -79,11 +79,12 @@ const TableWrapperWithoutFilter = ({
               <SearchWidget
                 setFilter={updateTextFilter}
                 className="w-[360px]"
-                style={{ marginTop : '5px' }}
+                style={{ marginTop: "5px" }}
               />
               {isRefreshing !== undefined && (
-                <Button variant="icon"
-                  isSubmitting={isRefreshing} 
+                <Button
+                  variant="icon"
+                  isSubmitting={isRefreshing}
                   onClick={!isRefreshing ? refetchTableData : undefined}
                   className="w-[16px] h-[16px]"
                 >
@@ -93,7 +94,7 @@ const TableWrapperWithoutFilter = ({
               {showDownload && (
                 <Button
                   variant="icon"
-                  className="w-[18px] h-[18px]" 
+                  className="w-[18px] h-[18px]"
                   onClick={() => alert("DOWNLOAD CALLED")}
                 >
                   <DownloadMonochromeIcon />

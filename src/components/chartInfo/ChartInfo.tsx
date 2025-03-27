@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@netapp/bxp-design-system-react";
 import React from "react";
-import ChartError from "./ChartError";
+import ChartError from "@components/chartInfo/ChartError";
 import { Show } from "@components/show/Show";
 
 const ChartInfo = React.memo(

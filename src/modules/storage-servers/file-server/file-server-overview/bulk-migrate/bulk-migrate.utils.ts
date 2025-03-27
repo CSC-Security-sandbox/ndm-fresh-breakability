@@ -7,8 +7,8 @@ import {
   MappingStepFormikFormType,
   MigrationDetailsTableConfigurationType,
   PreCheckStatusType,
-} from "./bulk-migrate.interface";
-import { REVIEW_LIST_COLUMN_DEFS } from "./bulk-migrate.constant";
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
+import { REVIEW_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";
 

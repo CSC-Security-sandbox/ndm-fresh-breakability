@@ -3,7 +3,7 @@ import { useState } from "react";
 import Box from "@/components/container/Box";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { COL_DEF_FOR_PROJECT } from "@/constant/app.constants";
-import CreateProjectForm from "./CreateProject";
+import CreateProjectForm from "@components/top-nav-bar/setting/ManageProjects/CreateProject";
 import useAccountDetails from "@/hooks/useAccountDetails";
 import { useGetAllProjectsQuery } from "@api/projectApi";
 import { hasPermission } from "@/auth/auth.utils";
@@ -14,9 +14,12 @@ import { Collapse } from "@mui/material";
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList, isLoading, isFetching, refetch } = useGetAllProjectsQuery(
-    accountDetails?.id
-  );
+  const {
+    data: projectList,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetAllProjectsQuery(accountDetails?.id);
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
   const closeAction = () => {

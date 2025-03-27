@@ -14,7 +14,7 @@ import {
   INCREMENTAL_SYNC_SCHEDULE_SET_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
-} from "./bulk-migrate.constant";
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 
 export interface OptionType {
   label: string;

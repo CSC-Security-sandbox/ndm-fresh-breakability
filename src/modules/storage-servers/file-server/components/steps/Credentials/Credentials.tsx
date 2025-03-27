@@ -2,8 +2,8 @@ import { CommonFileServerContext } from "@modules/storage-servers/file-server/co
 import { Box } from "@components/container/index";
 import { FormFieldInputNew } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import NFSCredentials from "./components/NFSCredentials";
-import SMBCredentials from "./components/SMBCredentials";
+import NFSCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/NFSCredentials";
+import SMBCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/SMBCredentials";
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const Credentials = () => {

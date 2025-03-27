@@ -1,7 +1,7 @@
 import { Box } from "@components/container/index";
 import { Card, Text } from "@netapp/bxp-design-system-react";
 import Icon from "/laptop-icon.svg";
-import CreateProjectButton from "./CreateProjectButton";
+import CreateProjectButton from "@modules/create-first-project/components/CreateProjectButton";
 
 interface DefaultProjectScreenPropsType {
   showCreateProject: boolean;

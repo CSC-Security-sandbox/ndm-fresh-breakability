@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { TableRendererPropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
-import ExportPathsTable from "./ExportPathsTable";
-import OverviewTabs from "./OverviewTabs";
-import WorkersTable from "./WorkersTable";
+import ExportPathsTable from "@modules/storage-servers/file-server/file-server-overview/components/ExportPathsTable";
+import OverviewTabs from "@modules/storage-servers/file-server/file-server-overview/components/OverviewTabs";
+import WorkersTable from "@modules/storage-servers/file-server/file-server-overview/components/WorkersTable";
 
 const TableRenderer = ({
   fileServerDetails,

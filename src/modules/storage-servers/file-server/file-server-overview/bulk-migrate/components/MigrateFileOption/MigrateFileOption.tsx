@@ -1,5 +1,5 @@
 import { Box } from "@components/container/index";
-import DateTimePickerWrapper from "./ExcludeDateTimePickerWrapper";
+import DateTimePickerWrapper from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/ExcludeDateTimePickerWrapper";
 import { Popover, RadioButton, Text } from "@netapp/bxp-design-system-react";
 import { MIGRATE_OPTION_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";

@@ -11,8 +11,8 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import React, { useEffect, useState } from "react";
-import Filters from "./Filters";
-import { TableWrapperPropsType } from "./TableWrapper.types";
+import Filters from "@components/table-wrapper/Filters";
+import { TableWrapperPropsType } from "@components/table-wrapper/TableWrapper.types";
 import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
 
 const TableWrapper = ({
@@ -38,7 +38,7 @@ const TableWrapper = ({
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
     tableStateProps.rows || []
   );
-  
+
   useEffect(() => {
     const data = tableStateProps.rows || [];
     const filteredRows = [...data].filter((row: any) => {
@@ -128,10 +128,15 @@ const TableWrapper = ({
         )}
         <Box className="flex gap-2 items-center">
           <TableWidgets>
-            <SearchWidget setFilter={updateTextFilter} className="w-[360px]" style={{ marginTop : '5px' }} />
+            <SearchWidget
+              setFilter={updateTextFilter}
+              className="w-[360px]"
+              style={{ marginTop: "5px" }}
+            />
             {isRefreshing !== undefined && (
-              <Button variant="icon"
-                isSubmitting={isRefreshing} 
+              <Button
+                variant="icon"
+                isSubmitting={isRefreshing}
                 onClick={!isRefreshing ? refetchTableData : undefined}
                 className="w-[16px] h-[16px]"
               >
@@ -139,7 +144,7 @@ const TableWrapper = ({
               </Button>
             )}
             {showDownload && (
-              <Button variant="icon" className="w-[18px] h-[18px]" >
+              <Button variant="icon" className="w-[18px] h-[18px]">
                 <DownloadMonochromeIcon />
               </Button>
             )}

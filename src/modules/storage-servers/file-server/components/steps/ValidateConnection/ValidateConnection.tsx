@@ -2,7 +2,7 @@ import { CommonFileServerContext } from "@modules/storage-servers/file-server/co
 import { Box } from "@components/container/index";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { useContext } from "react";
-import WorkersWithErrorAccordion from "./components/WorkersWithErrorAccordion";
+import WorkersWithErrorAccordion from "@modules/storage-servers/file-server/components/steps/ValidateConnection/components/WorkersWithErrorAccordion";
 
 const ValidateConnection = () => {
   const { workersListTableStateProps, selectedWorkerIds, isFetching, refetch } =

@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { SubTable, useTable } from "@netapp/bxp-design-system-react";
-import { getAssoicatedUserColumns } from "./AssociateUsers.constant";
+import { getAssoicatedUserColumns } from "@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers.constant";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 

@@ -7,8 +7,8 @@ import {
   Text,
 } from "@netapp/bxp-design-system-react";
 import { useContext, useEffect, useMemo, useState } from "react";
-import BulkMigrateScheduleComponent from "./components/BulkMigrateScheduleComponent";
-import MountPathConfigurationTable from "./components/MountPathConfigurationTable";
+import BulkMigrateScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/BulkMigrateScheduleComponent";
+import MountPathConfigurationTable from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/MountPathConfigurationTable";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { nanoid } from "@reduxjs/toolkit";
 import UploadMappingTableDetails from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/UploadMappingTableDetails";

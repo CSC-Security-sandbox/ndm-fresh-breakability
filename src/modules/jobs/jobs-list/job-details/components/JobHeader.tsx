@@ -1,6 +1,6 @@
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
-import JobInfoCard from "./JobInfoCard";
-import JobInfoReverseCard from "./JobInfoReverseCard";
+import JobInfoCard from "@modules/jobs/jobs-list/job-details/components/JobInfoCard";
+import JobInfoReverseCard from "@modules/jobs/jobs-list/job-details/components/JobInfoReverseCard";
 import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
 import {

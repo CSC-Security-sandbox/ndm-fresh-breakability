@@ -1,5 +1,5 @@
-import Review from "./components/Review/Review";
-import SelectPath from "./components/SelectPath/SelectPath";
+import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/Review";
+import SelectPath from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/SelectPath";
 
 export const CUT_OVER_STEPS_MAP = {
   "select-path": SelectPath,

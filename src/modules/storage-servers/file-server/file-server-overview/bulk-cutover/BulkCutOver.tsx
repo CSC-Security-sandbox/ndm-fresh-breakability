@@ -5,10 +5,10 @@ import { Wizard } from "@netapp/bxp-design-system-react";
 import {
   CUT_OVER_STEPS_MAP,
   CUT_OVER_STEPS_PATHS,
-} from "./bulk-cutover.constant";
-import BulkCutOverFooter from "./components/BulkCutOverFooter";
-import BulkCutOverContextProvider from "./context/BulkCutOverContextProvider";
-import { withBulkCutOver } from "./context/withBulkCutOver";
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/bulk-cutover.constant";
+import BulkCutOverFooter from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/BulkCutOverFooter";
+import BulkCutOverContextProvider from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
+import { withBulkCutOver } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/withBulkCutOver";
 
 const BulkCutOverContextWrapper = withBulkCutOver(BulkCutOverContextProvider);
 

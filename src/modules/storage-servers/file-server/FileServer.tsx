@@ -9,17 +9,21 @@ import { AddIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { FILE_SERVER_LIST_COLUMN_DEFS } from "./file-server.constant";
+import { FILE_SERVER_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server.constant";
 
 const FileServer = () => {
   const navigate = useNavigate();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
-  const { data: configByProject ,isLoading, isFetching, refetch } =
-    useGetAllFileServersOfProjectQuery({
-      projectId,
-    });
+  const {
+    data: configByProject,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetAllFileServersOfProjectQuery({
+    projectId,
+  });
 
   const canManageConfig: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageConfig

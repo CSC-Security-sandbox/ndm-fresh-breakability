@@ -24,7 +24,7 @@ import { useNavigate } from "react-router-dom";
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
-import { JOB_RUN_LIST_COLUMN_DEFS } from "./job-details.constants";
+import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import { useParams } from "react-router-dom";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
 import {

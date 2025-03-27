@@ -14,7 +14,7 @@ import {
 import {
   CREATE_SMTP_FORM_VALIDATION_SCHEMA,
   INITIAL_SMTP_FORM_STATE,
-} from "./SMTP.constants";
+} from "@components/top-nav-bar/setting/SMTP/SMTP.constants";
 import { useGetAllUsersQuery } from "@api/userApi";
 import {
   useCreateSmtpMutation,
@@ -24,7 +24,7 @@ import {
 import { useDispatch } from "react-redux";
 import { setDrawerClose } from "@store/reducer/commonComponentSlice";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
-import { smtpData } from "./SMTP.utils";
+import { smtpData } from "@components/top-nav-bar/setting/SMTP/SMTP.utils";
 import { smtpValuesType } from "@/types/app.type";
 
 interface SmtpDetailsPropsType {

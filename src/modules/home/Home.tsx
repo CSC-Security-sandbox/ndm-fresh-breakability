@@ -5,7 +5,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { WorkspaceIcon } from "@netapp/bxp-style/react-icons/General";
 import { GcpStorageIcon } from "@netapp/bxp-style/react-icons/Storage";
 import { useNavigate } from "react-router-dom";
-import NoticeBoard from "./components/NoticeBoard";
+import NoticeBoard from "@modules/home/components/NoticeBoard";
 import { useLazyGetProjectOverviewQuery } from "@/api/reportApi";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { notify } from "@components/notification/NotificationWrapper";

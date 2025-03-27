@@ -1,12 +1,11 @@
 import { Card } from "@netapp/bxp-design-system-react";
-
 import Divider from "@mui/material/Divider";
 import {
   TASK_STATUS_TYPE_ENUM,
   JobRunTaskCardPropType,
 } from "@/types/app.type";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
-import TaskInfoCard from "./TaskInfoCard";
+import TaskInfoCard from "@modules/jobs/jobs-list/job-details/components/TaskInfoCard";
 
 const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
   const completed = jobRunDetails?.task.completed || 0;

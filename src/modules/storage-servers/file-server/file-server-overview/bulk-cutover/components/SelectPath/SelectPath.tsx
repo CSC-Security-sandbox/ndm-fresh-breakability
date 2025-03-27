@@ -4,7 +4,7 @@ import { Box } from "@components/container/index";
 import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
 import { Card, CardContent, Text } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import { SELECT_PATH_WARNING_MESSAGE } from "./selectPath.constant";
+import { SELECT_PATH_WARNING_MESSAGE } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
 
 const SelectPath = () => {
   const {

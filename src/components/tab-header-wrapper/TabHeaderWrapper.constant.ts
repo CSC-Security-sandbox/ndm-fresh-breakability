@@ -9,7 +9,7 @@ import {
 import {
   BlueXpTabHeaderPropsType,
   HeaderType,
-} from "./TabHeaderWrapper.interface";
+} from "@components/tab-header-wrapper/TabHeaderWrapper.interface";
 
 const HOME_HEADER_TAB: BlueXpTabHeaderPropsType = {
   tabIcon: AppIcon,

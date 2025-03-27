@@ -1,4 +1,4 @@
-import Box from "./Box";
+import Box from "@components/container/Box";
 
 interface TabPanelProps {
   children?: React.ReactNode;

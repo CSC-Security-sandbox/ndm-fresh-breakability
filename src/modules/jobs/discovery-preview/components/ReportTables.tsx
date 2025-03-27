@@ -1,6 +1,6 @@
 import { Box } from "@components/container/index";
 import { useGetReportDataQuery } from "@api/reportApi";
-import ReportTableRenderer from "./ReportTableRenderer";
+import ReportTableRenderer from "@modules/jobs/discovery-preview/components/ReportTableRenderer";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import {
   BIGGEST_FILE_SIZE_NAME_COLS,

@@ -9,7 +9,7 @@ import {
   CardContentLoading,
 } from "@netapp/bxp-design-system-react";
 import { VolIcon } from "@netapp/bxp-style/react-icons/Storage";
-import JobDescriptionColumn from "./JobDescriptionColumn";
+import JobDescriptionColumn from "@modules/jobs/jobs-list/job-details/components/JobDescriptionColumn";
 
 const JobDescription = (props: JobDescriptionProps) => {
   const { source, destination } = props;

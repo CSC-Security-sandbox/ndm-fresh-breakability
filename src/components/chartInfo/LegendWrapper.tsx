@@ -1,5 +1,4 @@
-import React from "react";
-import Legends from "./Legends";
+import Legends from "@components/chartInfo/Legends";
 import { LegendWrapperPropsType } from "@/types/app.type";
 
 const LegendWrapper = ({

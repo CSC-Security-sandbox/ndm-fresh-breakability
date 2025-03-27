@@ -3,7 +3,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { HeaderUserIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { RootStateType } from "@store/store";
 import { useDispatch, useSelector } from "react-redux";
-import UserDetailsContent from "./UserDetailsContent";
+import UserDetailsContent from "@components/top-nav-bar/user-details/UserDetailsContent";
 
 const UserDetails = () => {
   const dispatch = useDispatch();

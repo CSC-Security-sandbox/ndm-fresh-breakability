@@ -4,7 +4,7 @@ import {
 } from "@/types/app.type";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { prepareHeaders } from "@api/api.utils";
-import { reportApi } from "./reportApi";
+import { reportApi } from "@api/reportApi";
 import { SpeedTestJobsType } from "@modules/speed-test/types/speed-test.types";
 import { SpeedTestDetailsType } from "@modules/speed-test/types/speed-test-details.types";
 

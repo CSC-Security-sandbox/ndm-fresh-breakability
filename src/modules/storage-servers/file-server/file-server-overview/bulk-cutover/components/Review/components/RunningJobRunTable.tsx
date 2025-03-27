@@ -4,7 +4,7 @@ import { useContext } from "react";
 import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
 import { REVIEW_WARNING_MESSAGE } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
 import UserWarning from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/UserWarning";
-import ActionButtons from "./ActionButtons";
+import ActionButtons from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons";
 
 const RunningJobRunTable = () => {
   const {
@@ -16,7 +16,7 @@ const RunningJobRunTable = () => {
     isFetching = false,
     refetch,
   } = useContext(BulkCutOverContext);
-  
+
   return (
     <Box className="px-8 mt-3">
       <ActionButtons selectedRowIds={reviewStepSelectedIds} rows={jobRunList} />
@@ -28,7 +28,6 @@ const RunningJobRunTable = () => {
         refetchTableData={refetch}
         isRefreshing={isFetching}
       />
-
 
       {jobRunList?.length > 0 && (
         <UserWarning

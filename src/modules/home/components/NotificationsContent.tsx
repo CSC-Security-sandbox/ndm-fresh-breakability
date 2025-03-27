@@ -13,7 +13,7 @@ import {
   SuccessIcon,
 } from "@netapp/bxp-style/react-icons/Notification";
 import { useEffect, useMemo, useState } from "react";
-import NotificationsTile from "./NotificationsTile";
+import NotificationsTile from "@modules/home/components/NotificationsTile";
 import { Show } from "@components/show/Show";
 
 const NotificationsContent = ({
