@@ -1219,6 +1219,7 @@ export class JobConfigService {
         "sourceConfig.configName AS sourceServerName",
         "targetConfig.configName AS targetServerName",
         'jobconfig.createdAt AS "createdAt"',
+        'jobconfig.updated_at AS "updated_at"',
       ])
       .addSelect("COUNT(jobRun.id)", "totalRuns")
       .where("sourceConfig.projectId = :projectId", { projectId })
@@ -1265,6 +1266,7 @@ export class JobConfigService {
         totalRuns: job.totalRuns,
         configName: job.configname,
         createdAt: job.createdAt,
+        updatedAt: job.updated_at
       });
     });
     return payload;
