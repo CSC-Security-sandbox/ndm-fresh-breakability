@@ -1,0 +1,63 @@
+name: Build Worker Binary and Windows Installer
+
+on:
+  push:
+    branches:
+      - ad/windows-worker-action
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+  
+        - name: Set up Node.js
+          uses: actions/setup-node@v4
+          with:
+            node-version: '22'
+  
+        - name: Install dependencies and pkg
+          run: npm install && npm install pkg -g
+  
+        - name: Run Build
+          run: npm run build
+  
+        - name: Build Windows Binary
+          run: npm run pkg
+  
+        - name: Prepare Installer Directory
+          shell: pwsh
+          run: |
+            # Adjust the path to your generated Windows binary
+            Rename-Item -Path "./pkg/worker-win-x64.exe" -NewName "worker.exe" -Force
+            New-Item -ItemType Directory -Force -Path wininstaller
+            Move-Item -Path "./worker.exe" -Destination "wininstaller\worker.exe" -Force
+  
+        - name: Download WinSW and rename
+          shell: pwsh
+          run: |
+            # Download a specific version of WinSW (adjust version if needed)
+            Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
+  
+        - name: Install Inno Setup
+          shell: pwsh
+          run: choco install innosetup -y
+  
+        - name: Build Windows Installer with Inno Setup
+          shell: pwsh
+          run: |
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" wininstaller\installer.iss
+  
+        - name: Upload Windows Release Asset
+          uses: actions/upload-release-asset@v1.0.1
+          with:
+            upload_url: ${{ needs.Worker-package.outputs.release_upload_url }}
+            asset_path: wininstaller\datamigrator-worker-setup.exe
+            asset_name: ${{ needs.Worker-package.outputs.release_tag }}-worker-installer.exe
+            asset_content_type: application/octet-stream
