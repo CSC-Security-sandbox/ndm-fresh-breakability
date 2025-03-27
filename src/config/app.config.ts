@@ -24,6 +24,7 @@ export default registerAs(
     scanTaskDirBatch : process.env.SCAN_TASK_DIR_BATCH || 500,
     fetchTaskBatchMigration: process.env.FETCH_TASK_BATCH_MIGRATION || 1,
     maxConcurrency: process.env.MAX_CONCURRENCY || 100,
+    threadCount: process.env.THREAD_COUNT || 5,
   }),
 );
 
