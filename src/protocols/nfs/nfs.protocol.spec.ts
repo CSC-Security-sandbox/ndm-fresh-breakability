@@ -2,17 +2,18 @@ import { NFSProtocol } from './nfs.protocol';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
 import * as net from 'net';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
+import * as fs from 'fs';
 import { ConfigService } from '@nestjs/config';
 import { WorkersConfig } from 'src/config/app.config';
 import { CommandConfig } from 'src/config/command.config';
-import { Runtime, RuntimeOptions } from '@temporalio/worker';
+import { Logger, Runtime, RuntimeOptions } from '@temporalio/worker';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
 
 describe('NFSProtocol', () => {
   let nfsProtocol: NFSProtocol;
-  let mockLogger: any;
+  let mockLogger: Partial<Logger>;
 
   beforeEach(() => {
     jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
@@ -141,4 +142,21 @@ describe('NFSProtocol', () => {
       expect(mockLogger.info).toHaveBeenCalledWith('[traceId] /export/path1\n/export/path2');
     });
   });
+
+  describe('unmountPath', () => {
+    it('should unmount path successfully', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: '',
+        path: '/path1',
+        mountBasePath: '/mnt'
+      };
+      const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await nfsProtocol.unmountPath('traceId', payload);
+      expect(mockLogger.info).toHaveBeenCalled();
+      expect(result).toBe(mockResponse);
+    });
+  })
 });

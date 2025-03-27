@@ -1,127 +1,12 @@
-// import { PreCheckValidationWorkflow } from './pre-check.workflow';
-// import { PreCheckWorkflowRequest, PreCheckWorkflowResponse, PreCheckStatus, PreCheckErrorCodes, WorkerTaskPaths } from '../pre-check.types';
-// import { executeChild, proxyActivities, ChildWorkflowCancellationType } from '@temporalio/workflow';
-// import { PreCheckWorkerValidationWorkflow } from '../core/pre-check.worker.workflow';
-
-// // Mock the proxyActivities function
-// jest.mock('@temporalio/workflow', () => ({
-//     executeChild: jest.fn(),
-//     proxyActivities: jest.fn(() => ({
-//         preCheckPath: jest.fn().mockImplementation((settings, serverCredentials, serverPaths, traceId) => {
-//             // Return a successful response for the first call
-//             if (serverPaths.pathId === 'source-path-1') {
-//                 return Promise.resolve({
-//                     pathId: serverPaths.pathId,
-//                     status: PreCheckStatus.SUCCESS,
-//                     errorCode: undefined,
-//                     workerId: 'worker-1'
-//                 });
-//             }
-//             // Return a failed response for the second call
-//             return Promise.resolve({
-//                 pathId: serverPaths.pathId,
-//                 status: PreCheckStatus.FAILED,
-//                 errorCode: PreCheckErrorCodes.SOURCE_PATH_MOUNT_FAILED,
-//                 workerId: 'worker-1'
-//             });
-//         }),
-//     })),
-//     ChildWorkflowCancellationType: {
-//         WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED',
-//     },
-// }));
-
-// describe('PreCheckValidationWorkflow', () => {
-//     const mockSettings = {
-//         preserveAccessTime: false
-//     };
-
-//     const mockServerCredentials = [
-//         {
-//             id: 'server-1',
-//             host: 'host1',
-//             userName: 'user1',
-//             password: 'pass1',
-//             protocol: 'protocol1',
-//             protocolVersion: '1.0',
-//             serverType: 'type1'
-//         }
-//     ];
-
-//     const mockServerPaths = [
-//         {
-//             pathId: 'source-path-1',
-//             serverId: 'server-1',
-//             pathName: 'Source Path 1',
-//             isSource: true
-//         },
-//         {
-//             pathId: 'dest-path-1',
-//             serverId: 'server-1',
-//             pathName: 'Destination Path 1',
-//             isSource: false
-//         }
-//     ];
-
-//     beforeEach(() => {
-//         jest.clearAllMocks();
-//     });
-
-//     it('should successfully validate source and destination paths', async () => {
-//         const result = await PreCheckWorkerValidationWorkflow(
-//             'worker-1', 
-//             { 
-//                 settings: mockSettings, 
-//                 serverCredentials: mockServerCredentials, 
-//                 serverPaths: mockServerPaths 
-//             }, 
-//             'test-trace-id'
-//         );
-
-//         expect(result.workerId).toBe('worker-1');
-//         expect(result.paths).toHaveLength(2);
-//         expect(result.paths[0].status).toBe(PreCheckStatus.SUCCESS);
-//         expect(result.paths[1].status).toBe(PreCheckStatus.FAILED); // Adjusted to expect the failed status
-//     });
-
-// it('should handle failed path validation', async () => {
-//     const result = await PreCheckWorkerValidationWorkflow(
-//         'worker-1', 
-//         { 
-//             settings: mockSettings, 
-//             serverCredentials: mockServerCredentials, 
-//             serverPaths: mockServerPaths 
-//         }, 
-//         'test-trace-id'
-//     );
-
-//     expect(result.workerId).toBe('worker-1');
-//     expect(result.paths[0].status).toBe(PreCheckStatus.SUCCESS);
-//     expect(result.paths[1].status).toBe(PreCheckStatus.FAILED);
-// });
-// });
-
-
-
-
-
-
-
-
-
-
-
 import { PreCheckValidationWorkflow } from './pre-check.workflow';
 import { PreCheckWorkflowRequest, PreCheckWorkflowResponse, PreCheckStatus, PreCheckErrorCodes, WorkerTaskPaths } from '../pre-check.types';
 import { executeChild, proxyActivities, ChildWorkflowCancellationType } from '@temporalio/workflow';
 import { PreCheckWorkerValidationWorkflow } from '../core/pre-check.worker.workflow';
 
-// Mock the proxyActivities function with more comprehensive mocking
 jest.mock('@temporalio/workflow', () => ({
     executeChild: jest.fn(),
     proxyActivities: jest.fn(() => ({
         preCheckPath: jest.fn().mockImplementation((settings, serverCredentials, serverPaths, traceId) => {
-            // Different scenarios based on pathId
             switch (serverPaths.pathId) {
                 case 'source-path-1':
                     return Promise.resolve({
@@ -138,14 +23,14 @@ jest.mock('@temporalio/workflow', () => ({
                         workerId: 'worker-1'
                     });
                 case 'path-timeout':
-                    return new Promise(() => { }); // Never resolves to simulate timeout
+                    return new Promise(() => { });
                 case 'path-error':
                     return Promise.reject(new Error('Unexpected error'));
                 default:
                     return Promise.resolve({
                         pathId: serverPaths.pathId,
                         status: PreCheckStatus.FAILED,
-                        errorCode: PreCheckErrorCodes.UNKNOWN_ERROR,
+                        errorCode: PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND ,
                         workerId: 'worker-1'
                     });
             }

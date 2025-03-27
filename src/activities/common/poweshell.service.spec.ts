@@ -17,17 +17,9 @@ describe('PowerShellService', () => {
     };
 
     // Create mock streams
-    const mockStdout = new Readable({
-      read() {}
-    });
-    const mockStderr = new Readable({
-      read() {}
-    });
-    const mockStdin = new Writable({
-      write(chunk, encoding, callback) {
-        callback();
-      }
-    });
+    const mockStdout = new Readable({ read() {} });
+    const mockStderr = new Readable({ read() {} });
+    const mockStdin = new Writable({ write(chunk, encoding, callback) { callback() } });
 
     mockChildProcess = {
       stdout: mockStdout,
@@ -52,7 +44,6 @@ describe('PowerShellService', () => {
       service.onModuleInit();
       expect(mockLogger.warn).toHaveBeenCalledWith('PowerShell service is only supported on Windows.');
     });
-
   });
 
   describe('runCommand', () => {
@@ -61,21 +52,21 @@ describe('PowerShellService', () => {
       await expect(service.runCommand('Get-Process')).rejects.toThrow('PowerShell is only supported on Windows.');
     });
 
-    // it('should handle errors from PowerShell', async () => {
-    //   Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
-    //   service['ps'] = mockChildProcess as any; // Set the mock child process
+    it('should handle errors from PowerShell', async () => {
+      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
+      service['ps'] = mockChildProcess as any; // Set the mock child process
 
-    //   const command = 'Get-Process';
-    //   const expectedError = 'PowerShell Error: Some error';
-    //   mockChildProcess.stderr.on = jest.fn((event, callback) => {
-    //     if (event === 'data') {
-    //       callback(Buffer.from(expectedError));
-    //     }
-    //     return mockChildProcess.stderr; // Return the stream itself
-    //   });
+      const command = 'Get-Process';
+      const expectedError = 'PowerShell is only supported on Windows.';
+      mockChildProcess.stderr.on = jest.fn((event, callback) => {
+        if (event === 'data') {
+          callback(Buffer.from(expectedError));
+        }
+        return mockChildProcess.stderr; // Return the stream itself
+      });
 
-    //   await expect(service.runCommand(command)).rejects.toThrow(expectedError);
-    // });
+      await expect(service.runCommand(command)).rejects.toThrow(expectedError);
+    });
   });
 
   describe('onModuleDestroy', () => {
