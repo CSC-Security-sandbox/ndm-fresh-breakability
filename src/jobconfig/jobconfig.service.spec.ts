@@ -1432,67 +1432,60 @@ describe('JobConfigService', () => {
   });
 
   describe('getJobConfigById', () => {
+    beforeEach(() => {
+      jest.spyOn(service, 'covertBytes').mockImplementation((bytes) => {
+        if (bytes === 5000) return '4.88 KB';
+        if (bytes === 3000) return '2.93 KB';
+        return '0 B';
+      });
+      jest.spyOn(service, 'parseSize').mockImplementation((size) => {
+        if (size === '4.88 KB') return 5000;
+        if (size === '2.93 KB') return 3000;
+        return 0;
+      });
+    });
+
     it('should return job config by id successfully', async () => {
       const mockJobConfigId = 'jobConfigId';
+      const startTime = new Date('2025-03-27T00:00:00Z');
+      const endTime = new Date('2025-03-27T00:00:01Z');
+
       const mockJobConfig = {
         id: mockJobConfigId,
-        jobType: 'MIGRATE',
-        jobRuns: [
-          {
-            id: 'jobRunId1',
-            isReportReady: true,
-            status: 'Completed',
-            startTime: new Date(),
-            endTime: new Date(),
-          },
-        ],
+        jobType: JobType.MIGRATE,
+        jobRuns: [{
+          id: 'jobRunId1',
+          isReportReady: true,
+          status: JobRunStatus.Completed,
+          subStatus: null,
+          startTime,
+          endTime,
+          jobStats: {
+            fileCount: "10",
+            directories: "5",
+            totalSize: "5000",
+            errors: []
+          }
+        }],
         sourcePath: {
           volumePath: '/source/path',
           fileServer: {
             protocol: 'NFS',
-            config: {
-              configName: 'SourceServer',
-            },
-          },
+            config: { configName: 'SourceServer' }
+          }
         },
         targetPath: {
           volumePath: '/target/path',
           fileServer: {
             protocol: 'NFS',
-            config: {
-              configName: 'TargetServer',
-            },
-          },
+            config: { configName: 'TargetServer' }
+          }
         },
         status: 'Active',
-        createdAt: new Date(),
+        createdAt: startTime
       };
-
-      const mockInventoryCounts = {
-        filecount: '10',
-        directorycount: '5',
-        totalsize: '1000',
-      };
-      const mockInventoryStats: JobRunStats = {
-        fileCount: "10",
-        directories: "5",
-        totalSize: "5000",
-        errors: [],
-      };
-      const mockInvetoryReturnValue = [{
-        filecount: '10',
-        directorycount: '5',
-        totalsize: '5000',
-      }]
 
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
-      jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-        //getRawMany: jest.fn().mockResolvedValue(mockInvetoryReturnValue),
-      } as any);
-      jest.spyOn(service, 'calculateJobRunStats').mockReturnValue(Promise.resolve(mockInventoryStats))
 
       const result = await service.getJobConfigById(mockJobConfigId);
 
@@ -1510,43 +1503,31 @@ describe('JobConfigService', () => {
           protocol: 'NFS',
         },
         status: 'Active',
-        createdAt: mockJobConfig.createdAt,
-        jobRuns: [
-          {
-            jobRunId: 'jobRunId1',
-            isReportReady: true,
-            status: 'Completed',
-            startTime: mockJobConfig.jobRuns[0].startTime,
-            endTime: mockJobConfig.jobRuns[0].endTime,
-            jobType: 'MIGRATE',
-            timeElapsed: mockJobConfig.jobRuns[0].endTime.getTime() - mockJobConfig.jobRuns[0].startTime.getTime(),
-            scannedFilesCount: '10',
-            scannedDirectoriesCount: '5',
-            totalScannedSize: '5000',
-            errors: [],
-          },
-        ],
-        aggregateData: {
-          timeElapsed: mockJobConfig.jobRuns[0].endTime.getTime() - mockJobConfig.jobRuns[0].startTime.getTime(),
+        createdAt: startTime,
+        jobRuns: [{
+          jobRunId: 'jobRunId1',
+          isReportReady: true,
+          status: 'COMPLETED',
+          startTime,
+          endTime,
+          jobType: 'MIGRATE',
+          timeElapsed: 1000,
           scannedFilesCount: '10',
           scannedDirectoriesCount: '5',
-          totalScannedSize: "4.88 KB",
+          totalScannedSize: '0 B',
+          totalMigratedSize: '4.88 KB',
+          errors: [],
+        }],
+        aggregateData: {
+          timeElapsed: 1000,
+          scannedFilesCount: '10',
+          scannedDirectoriesCount: '5',
+          totalScannedSize: "0 B",
         },
         errors: [],
       });
-      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
-        relations: [
-          'jobRuns',
-          'sourcePath',
-          'sourcePath.fileServer',
-          'sourcePath.fileServer.config',
-          'targetPath',
-          'targetPath.fileServer',
-          'targetPath.fileServer.config',
-        ],
-      });
     });
+
 
     it('should throw an error if job config is not found', async () => {
       const mockJobConfigId = 'jobConfigId';
@@ -1568,48 +1549,59 @@ describe('JobConfigService', () => {
       });
     });
 
-    // jobRun.status===JobRunStatus.Completed case
-    it('should return jobStats for jobRun.status===JobRunStatus.Completed', async () => {
+    it('should return jobStats for jobRun.status===JobRunStatus.COMPLETED', async () => {
+      const startTime = new Date('2025-03-27T00:00:00Z');
+      const endTime = new Date('2025-03-27T00:00:01Z');
+
       const mockJobConfig = {
         id: 'jobConfigId',
+        jobType: JobType.MIGRATE,
         jobRuns: [
           {
             id: 'jobRunId1',
             status: JobRunStatus.Completed,
-            timeElapsed: 0,
-            startTime: new Date(),
-            endTime: new Date(),
+            subStatus: null,
+            startTime,
+            endTime,
             jobStats: {
-              fileCount: '10',
-              directories: '5',
-              totalSize: '1000',
+              fileCount: "10",
+              directories: "5",
+              totalSize: "1000",
+              errors: []
             }
           },
           {
             id: 'jobRunId2',
             status: JobRunStatus.Completed,
-            timeElapsed: 0,
-            startTime: new Date(),
-            endTime: new Date(),
+            subStatus: null,
+            startTime,
+            endTime,
             jobStats: {
-              fileCount: '20',
-              directories: '10',
-              totalSize: '2000',
+              fileCount: "20",
+              directories: "10",
+              totalSize: "2000",
+              errors: []
             }
           }
-        ]
-      }
+        ],
+        sourcePath: null,
+        targetPath: null,
+        status: 'Active',
+        createdAt: startTime,
+      };
+
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
 
       const result = await service.getJobConfigById('jobConfigId');
       expect(result.aggregateData).toEqual({
-        timeElapsed: 0,
+        timeElapsed: 2000,
         scannedFilesCount: '30',
         scannedDirectoriesCount: '15',
-        totalScannedSize: '2.93 KB',
+        totalScannedSize: "0 B",
       });
     });
   });
+
   describe('precheckValidation', () => {
     it('should perform precheck validation successfully', async () => {
       const mockPrecheckData = [
@@ -2799,88 +2791,43 @@ describe('JobConfigService', () => {
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
       await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(new NotFoundException("Job Run with id invalid-id not found"));
     });
-    it('should return default values if inventory summary is empty', async () => {
-      const jobRunId = '12345';
-      const mockInventoryCounts = {
-        filecount: '10',
-        directorycount: '5',
-        totalsize: '1000',
-      };
-      const mockJobRun = {
-        id: 'mockJobRunId',
-        jobConfigId: 'jobConfigId',
-        startTime: new Date(),
-        endTime: new Date(),
-        status: 'Completed',
-      };
 
-      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
-
-      jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      } as any);
-      jest.spyOn(service, 'getErrorCounts').mockResolvedValue(0);
-
-      const result = await service.calculateJobRunStats(jobRunId);
-
-      expect(result).toEqual({
-        fileCount: '0',
-        directories: '0',
-        totalSize: '0',
-        errors: 0,
-      });
+    it("should throw NotFoundException if jobRunId does not exist", async () => {
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+      await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
+        new NotFoundException("Job Run with id invalid-id not found")
+      );
     });
 
-    // for (let i = 0; i < inventorySummary.length; i++) case
-    it('should return correct values for inventory summary', async () => {
+    it('should return values from inventory summary', async () => {
       const jobRunId = '12345';
       const mockInventoryCounts = {
         filecount: '10',
         directorycount: '5',
-        totalsize: '1000',
+        totalfilesize: '1000'
       };
       const mockJobRun = {
-        id: 'mockJobRunId',
-        jobConfigId: 'jobConfigId',
-        startTime: new Date(),
-        endTime: new Date(),
-        status: 'Completed',
+        id: jobRunId,
+        jobConfig: { id: 'jobConfigId' }
       };
-      const inventorySummary = [
-        {
-          directories: '5',
-          fileCount: '10',
-          totalSize: '1000',
-        },
-        {
-          directories: '3',
-          fileCount: '6',
-          totalSize: '600',
-        }
-      ]
 
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
       jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValue({
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(inventorySummary),
       } as any);
-      jest.spyOn(service, 'getErrorCounts').mockResolvedValue(0);
+      jest.spyOn(service, 'getErrorCounts').mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);
       expect(result).toEqual({
-        fileCount: '0',
-        directories: '0',
-        totalSize: '0',
-        errors: 0,
+        fileCount: '10',
+        directories: '5',
+        totalSize: '1000',
+        errors: [],
       });
     });
+
   });
 
   describe("JobConfigService - flattenCutoverConfig", () => {

@@ -613,17 +613,24 @@ describe("JobRunService", () => {
       const jobRunId = "12345";
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({
         id: jobRunId,
+        jobConfigId: "config1",
         jobConfig: {},
       } as any);
-      const queryBuilder: any = {
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue({
+        id: "config1",
+        jobType: JobType.MIGRATE,
+        futureScheduleAt: null,
+      } as any);
+
+      const inventoryQueryBuilder: any = {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest
-          .fn()
-          .mockResolvedValue([
-            { fileCount: "10", directoryCount: "5", totalFileSize: "5000" },
-          ]),
+        getRawOne: jest.fn().mockResolvedValue({
+          fileCount: "10",
+          directoryCount: "5",
+          totalFileSize: "5000"
+        }),
       };
 
       const operationErrorQueryBuilder: any = {
@@ -639,31 +646,27 @@ describe("JobRunService", () => {
 
       jest
         .spyOn(inventoryRepo, "createQueryBuilder")
-        .mockReturnValue(queryBuilder);
-      jest
-        .spyOn(operationErrorRepo, "createQueryBuilder")
-        .mockReturnValue(queryBuilder);
+        .mockReturnValue(inventoryQueryBuilder);
       jest
         .spyOn(operationErrorRepo, "createQueryBuilder")
         .mockReturnValue(operationErrorQueryBuilder);
 
-      expect(
-        await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed)
-      ).toBeUndefined();
+      jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed);
+
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
         where: { id: jobRunId },
-        relations: ["jobConfig"],
       });
 
-      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "inventory"
-      );
-      expect(queryBuilder.select).toHaveBeenCalled();
-      expect(queryBuilder.where).toHaveBeenCalledWith(
+      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith("inventory");
+      expect(inventoryQueryBuilder.select).toHaveBeenCalled();
+      expect(inventoryQueryBuilder.where).toHaveBeenCalledWith(
         "inventory.jobRunId = :jobRunId",
         { jobRunId }
       );
-      expect(queryBuilder.getRawMany).toHaveBeenCalled();
+      expect(inventoryQueryBuilder.getRawOne).toHaveBeenCalled();
 
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(operationErrorQueryBuilder.innerJoin).toHaveBeenCalledWith(
@@ -675,6 +678,15 @@ describe("JobRunService", () => {
         { jobRunId }
       );
       expect(operationErrorQueryBuilder.getRawMany).toHaveBeenCalled();
+
+      expect(jobRunRepo.update).toHaveBeenCalledWith(
+        { id: jobRunId },
+        {
+          status: JobRunStatus.Completed,
+          endTime: expect.any(Date),
+          jobStats: expect.anything()
+        }
+      );
     });
   });
 
