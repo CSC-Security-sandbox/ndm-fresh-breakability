@@ -5,6 +5,7 @@ import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRende
 import {
   BlueXpTableRowType,
   ColumnFilterType,
+  JOBS_TYPE,
   JobRunApiType,
 } from "@/types/app.type";
 import { getJobType, toTitleCase } from "@/utils/common.utils";
@@ -122,6 +123,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Size",
     accessor: "totalScannedSize",
     id: "size",
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
     width: 80,
   },
   {

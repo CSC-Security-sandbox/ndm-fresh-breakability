@@ -373,7 +373,8 @@ export type JobRunApiType = {
   timeElapsed: number;
   scannedFilesCount: number;
   scannedDirectoriesCount: number;
-  totalScannedSize: number;
+  totalScannedSize: string;
+  totalMigratedSize: string;
   errors: JobErrors;
   sourceServer: FileServerApiPropType;
   destinationServer: FileServerApiPropType;

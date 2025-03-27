@@ -2,7 +2,7 @@ import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer"
 import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
-import { BlueXpTableRowType, JobRunApiType } from "@/types/app.type";
+import { BlueXpTableRowType, JOBS_TYPE, JobRunApiType } from "@/types/app.type";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
@@ -62,6 +62,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Data",
     accessor: "totalScannedSize",
     id: "totalScannedSize",
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
     width: 80,
   },
   {

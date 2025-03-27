@@ -2,7 +2,7 @@ import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer"
 import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRenderer";
-import { BlueXpTableRowType, JobRunApiType } from "@/types/app.type";
+import { BlueXpTableRowType, JOBS_TYPE, JobRunApiType } from "@/types/app.type";
 import { getJobType } from "@/utils/common.utils";
 import React from "react";
 
@@ -71,6 +71,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
     accessor: "totalScannedSize",
     id: "size",
     width: 80,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
   },
   {
     header: "Status",
