@@ -12,6 +12,7 @@ import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { CommonActivityService } from '../common/common.service';
 import { PowerShellService } from '../common/poweshell.service';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
+import { WorkerThreadService } from 'src/thread/worker.thread.service';
 
 
 @Injectable()
@@ -28,7 +29,8 @@ export class MigrationSyncService {
     private readonly logger: Logger,
     private readonly redisService: RedisService,
     private readonly commonService: CommonActivityService,
-    private readonly powershellService: PowerShellService
+    private readonly powershellService: PowerShellService,
+    private readonly workerThreadService: WorkerThreadService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -213,9 +215,17 @@ export class MigrationSyncService {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
           this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
-          const checksum = await this.copyFileWithChecksum(sourcePath, targetPath);
-          syncOperation.checksums = checksum
-          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum } as any;
+          if(syncOperation.ops[0].metadata?.size <= 1024) {
+            syncOperation.checksums = await this.copyFileWithChecksum(sourcePath, targetPath);
+          }
+          else{
+            this.logger.debug(`Copying file from ${sourcePath} to ${targetPath} using checksum with worker thread`);
+            syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
+              sourcePath, destinationPath: targetPath, operationId: command.commandId
+            });
+            this.logger.debug(`Output of copying file from ${sourcePath} to ${targetPath} is ${JSON.stringify(syncOperation.checksums)}`);
+          }
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum: syncOperation.checksums } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});

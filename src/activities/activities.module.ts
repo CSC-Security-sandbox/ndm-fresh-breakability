@@ -14,10 +14,11 @@ import { ValidateWorkingDirectoryActivity } from './working-directory/working-di
 import { PrecheckActivity } from './precheck/precheck-activity';
 import { CommonActivityService } from './common/common.service';
 import { PowerShellService } from './common/poweshell.service';
+import { WorkerThreadModule } from 'src/thread/worker.thread.module';
 
 
 @Module({
-  imports: [HttpModule, ConfigModule],
+  imports: [HttpModule, ConfigModule, WorkerThreadModule],
   controllers: [],
   providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService],
   exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService],
