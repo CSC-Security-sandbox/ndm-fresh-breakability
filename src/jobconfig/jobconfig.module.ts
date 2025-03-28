@@ -23,12 +23,13 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { RedisModule } from 'src/redis/redis.module';
 import { JobRunService } from 'src/jobrun/jobrun.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity,IdentityMappingEntity,IdentityConfigCrossMappingEntity,OperationErrorEntity]),
-        RedisModule
+        RedisModule, AuthKeycloakModule
     ],
     providers: [JobConfigService,WorkflowService],
     controllers: [JobConfigController]
