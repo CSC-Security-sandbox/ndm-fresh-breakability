@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
         - name: Checkout code
