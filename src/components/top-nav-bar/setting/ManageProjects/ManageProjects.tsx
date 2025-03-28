@@ -70,7 +70,7 @@ const ManageProject = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.DeleteProject}
             >
-              <Button onClick={() => setIsCreateFormVisible(true)}>
+              <Button onClick={() => setIsCreateFormVisible(true)} className="ml-4">
                 Add Project
               </Button>
             </PermissionAuth>
