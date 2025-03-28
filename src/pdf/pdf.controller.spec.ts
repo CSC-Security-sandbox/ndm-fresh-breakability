@@ -3,28 +3,10 @@ import { PdfController } from './pdf.controller';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ReportType } from 'src/constants/enums';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('PdfController', () => {
   let controller: PdfController;
   let service: PdfService;
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   const mockPdfService = {
     generatePdf: jest.fn(),
@@ -33,16 +15,10 @@ describe('PdfController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PdfController],
-      providers: [
-        {
-          provide: PdfService,
-          useValue: mockPdfService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
-      ],
+      providers: [{
+        provide: PdfService,
+        useValue: mockPdfService
+      }],
     }).compile();
 
     controller = module.get<PdfController>(PdfController);

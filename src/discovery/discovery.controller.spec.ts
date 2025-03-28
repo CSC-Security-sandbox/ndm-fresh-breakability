@@ -6,29 +6,11 @@ import { StreamableFile } from '@nestjs/common';
 import { RmqContext } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
 import { ReportType } from './pattern.enum';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('DiscoveryController', () => {
   let controller: DiscoveryController;
   let service: DiscoveryService;
   let logger: Logger;
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   const mockDiscoveryService = {
     getDiscoveryByFileServerId: jest.fn(),
@@ -44,10 +26,6 @@ describe('DiscoveryController', () => {
         {
           provide: DiscoveryService,
           useValue: mockDiscoveryService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
         },
       ],
     }).compile();

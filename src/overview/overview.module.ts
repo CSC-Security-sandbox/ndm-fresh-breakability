@@ -4,10 +4,9 @@ import { OverviewService } from './overview.service';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectEntity } from 'src/entities/project.entity';
-import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryEntity,ProjectEntity]), AuthKeycloakModule],
+  imports: [TypeOrmModule.forFeature([InventoryEntity,ProjectEntity])],
   controllers: [OverviewController],
   providers: [OverviewService],
 })

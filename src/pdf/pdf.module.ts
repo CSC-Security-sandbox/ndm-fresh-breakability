@@ -5,12 +5,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { DiscoveryService } from 'src/discovery/discovery.service';
-import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
-    AuthKeycloakModule
 ],
   controllers: [PdfController],
   providers: [PdfService, DiscoveryService],

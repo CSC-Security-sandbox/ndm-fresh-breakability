@@ -1,9 +1,8 @@
 import { Controller, Res, Body, Post } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { Response } from 'express';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReportType } from 'src/constants/enums';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 
 @ApiTags('Generate PDF')
@@ -12,8 +11,6 @@ export class PdfController {
   constructor(private readonly pdfService: PdfService) {}
   
     @ApiOperation({ summary: 'Generate PDF report' })
-    @Auth()
-    @ApiBearerAuth()
     @Post('generate')
     @ApiBody({
       schema: {
