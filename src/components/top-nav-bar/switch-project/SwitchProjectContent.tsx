@@ -32,11 +32,12 @@ const DetailButton = ({ projectId }: { projectId: string }) => (
     verticalPlacement="bottom"
     Trigger="oval-hidden"
   >
-    <ActionMenu.CopyButton 
+    <ActionMenu.CopyButton
         label="Project ID"
-        tooltip={projectId} value={projectId}
+        value={projectId}
+        tooltip={projectId}
       >
-      </ActionMenu.CopyButton>
+    </ActionMenu.CopyButton>
   </ActionMenu>
 );
 
