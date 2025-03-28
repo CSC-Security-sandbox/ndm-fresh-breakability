@@ -5,10 +5,28 @@ import { JobRunPageDto } from './dto/jobrunpage.dto';
 import { JobRunInitService } from './jobrun.init.service';
 import { BadRequestException } from '@nestjs/common';
 import { CutOverStatus } from 'src/constants/enums';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
   let service: JobRunService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   const mockJobRunService = {
     findAllJobRuns: jest.fn(),
@@ -37,10 +55,13 @@ describe('JobRunController', () => {
           useValue: mockJobRunService,
         },
         {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
+        {
           provide: JobRunInitService,
           useValue: mockJobRunInitService,
         },
-
       ],
     }).compile();
 
