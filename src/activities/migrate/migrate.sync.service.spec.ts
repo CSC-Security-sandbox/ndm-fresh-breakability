@@ -16,12 +16,27 @@ describe('MigrationSyncService', () => {
     let service: MigrationSyncService;
     let redisService: RedisService;
     let commonService: CommonActivityService;
-    let workerThreadService: WorkerThreadService;
+    let workerThreadService: any;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
-                WorkerThreadService,
+                {
+                    provide: WorkerThreadService,
+                    useValue: {
+                        runWorkerThread: jest.fn(),
+                        stopWorkerThread: jest.fn(),
+                        sendMessageToWorker: jest.fn(),
+                        getWorkerThreadStatus: jest.fn(),
+                        getWorkerThreadId: jest.fn(),
+                        getWorkerThreadJobRunId: jest.fn(),
+                        getWorkerThreadJobConfig: jest.fn(),
+                        getWorkerThreadJobState: jest.fn(),
+                        getWorkerThreadJobRunStatus: jest.fn(),
+                        setWorkerThreadJobRunStatus: jest.fn(),
+                        migrateWorkerThread: jest.fn(),
+                    }
+                },
                 MigrationSyncService,
                 ConfigService,
                 Logger,
@@ -185,6 +200,10 @@ describe('MigrationSyncService', () => {
                 sourceChecksum: 'sourceChecksum',
             });
             jest.spyOn(service, 'stampMetaData').mockResolvedValue({ errors: [] });
+            jest.spyOn(workerThreadService, 'migrateWorkerThread').mockResolvedValue({
+                sourceChecksum: 'sourceChecksum',
+                targetChecksum: 'targetChecksum',
+            });
 
             const result = await service.syncOperation(mockInput as any);
             expect(result.ops[0].status).toBe(OPS_STATUS.COMPLETED);
@@ -239,11 +258,13 @@ describe('MigrationSyncService', () => {
                 ops: [{
                     cmd: OPS_CMD.COPY_CONTENT,
                     status: OPS_STATUS.READY,
-                    metadata: {}
+                    metadata: {
+                        size: 2048,
+                    }
                 }, {
                     cmd: OPS_CMD.STAMP_META,
                     status: OPS_STATUS.READY,
-                    metadata: {}
+                    metadata: { size: 2048 }
                 }],
                 jobContext: mockJobContext,
                 command: {
@@ -252,7 +273,7 @@ describe('MigrationSyncService', () => {
                         0: {
                             cmd: OPS_CMD.COPY_CONTENT,
                             status: OPS_STATUS.READY,
-                            metadata: {}
+                            metadata: { size: 2048 }
                         }
                     },
                     status: OPS_STATUS.READY,
@@ -263,6 +284,7 @@ describe('MigrationSyncService', () => {
 
             jest.spyOn(service, 'copyFileWithChecksum').mockRejectedValue(new Error('Copy error'));
             jest.spyOn(service, 'stampMetaData').mockResolvedValue({ errors: [] });
+            jest.spyOn(workerThreadService, 'migrateWorkerThread').mockRejectedValue(new Error('Copy error'))
 
             try {
                 await service.syncOperation(mockInput as any);
@@ -555,7 +577,7 @@ describe('MigrationSyncService', () => {
                 ctime: new Date(),
                 birthtime: new Date(),
             } as fs.Stats);
-    
+
             const result = await service.getFileInfo({
                 name: "file.txt",
                 fullFilePath: "/mock/path/file.txt",
@@ -563,7 +585,7 @@ describe('MigrationSyncService', () => {
                 checksums: { sourceChecksum: 'abc123', targetChecksum: 'abc123' },
                 getID: false,
             });
-    
+
             expect(result.fileName).toBe("file.txt");
             expect(result.isDirectory).toBe(false);
             expect(result.fileSize).toBe(1024);
@@ -579,7 +601,7 @@ describe('MigrationSyncService', () => {
             expect(result.modifiedTime).toBeInstanceOf(Date);
             expect(result.accessTime).toBeInstanceOf(Date);
         });
-    
+
         it("should return file info for a directory", async () => {
             jest.spyOn(fs.promises, "lstat").mockResolvedValue({
                 isFile: () => false,
@@ -603,7 +625,7 @@ describe('MigrationSyncService', () => {
                 ctime: new Date(),
                 birthtime: new Date(),
             } as fs.Stats);
-    
+
             const result = await service.getFileInfo({
                 name: "dir_1",
                 fullFilePath: "/mock/path/dir_1",
@@ -611,9 +633,99 @@ describe('MigrationSyncService', () => {
                 checksums: { sourceChecksum: 'abc123', targetChecksum: 'abc123' },
                 getID: false,
             });
-    
+
             expect(result.fileName).toBe("dir_1");
             expect(result.isDirectory).toBe(true);
+        });
+    });
+    describe('stampMetaData', () => {
+        it('should set file mode successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { mode: 0o755 } as any;
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
+
+            expect(result.errors).toHaveLength(0);
+            expect(fs.chmodSync).toHaveBeenCalledWith(mockTargetPath, mockMetadata.mode);
+        });
+
+        it('should set access and modified times successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
+
+            expect(result.errors).toHaveLength(0);
+            expect(fs.utimesSync).toHaveBeenCalledWith(mockTargetPath, new Date(mockMetadata.atime), new Date(mockMetadata.mtime));
+        });
+
+        // error case when metadata.mode 
+        it('should handle error when setting file mode', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { mode: 0o755 } as any;
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { });
+            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { throw new Error('Error setting file mode') });
+            try {
+                const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
+                expect(result.errors).toHaveLength(1);
+            } catch (error) {
+                expect(error.message).toBe('Error setting file mode');
+            }
+        });
+
+        // test case for birth time
+
+        it('should set birth time successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { birthtime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        // test case for mtime && atime
+
+        it('should set mtime and atime successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { mtime: new Date().toISOString(), atime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
+            expect(result.errors).toHaveLength(0);
         });
     });
 });
