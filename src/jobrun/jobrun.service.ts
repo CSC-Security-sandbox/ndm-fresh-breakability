@@ -119,6 +119,11 @@ export class JobRunService {
       { id: jobRunId },
       { status: JobRunStatus.Completed, subStatus: status }
     );
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    if(jobContext){
+      jobContext.cleanup();
+      this.logger.log(`Job Context for ${jobRunId} cleaned up`);
+    }
   }
 
   async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
