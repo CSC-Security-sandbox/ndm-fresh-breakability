@@ -48,7 +48,6 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.NO_COMMON_WORKERS);
             }
             if(sourceVersion !== serverCredentials.get(destination.serverId).protocolVersion) {
-                console.error(`Protocol version mismatch between source and destination ${preCheck.serverId} and ${destination.serverId}`);
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
             }
