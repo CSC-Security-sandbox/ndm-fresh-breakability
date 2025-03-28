@@ -64,6 +64,7 @@ import { RedisService } from "src/redis/redis.service";
 import { JobRunService } from "src/jobrun/jobrun.service";
 import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { SendMailService } from "src/utils/send-email";
 
 @Injectable()
 export class JobConfigService {
@@ -107,6 +108,7 @@ export class JobConfigService {
     private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
+    private sendMailService: SendMailService,
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -641,6 +643,16 @@ export class JobConfigService {
       if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
         await this.saveIdentityMappingsWithMap(jobConfigIds, parsedMappings, identityMap, templateType);
       }
+      const mailBody = `Hello,
+      The following Migrate jobs have been created:
+      ` + savedJobConfigs.
+              map((jobConfig) =>{
+                `<p>Job ID: ${jobConfig.id}</p>
+                <p>Source Path: ${jobConfig.sourcePath.volumePath}</p>
+                <p>Target Path: ${jobConfig.targetPath.volumePath}</p>
+                <p>Job Type: ${jobConfig.jobType}</p>    `
+              });
+      await this.sendMailService.sendMail(mailBody);
       return (await this.jobConfigRepo.save(jobConfigs)).map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,

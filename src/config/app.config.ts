@@ -16,6 +16,9 @@ export default registerAs(
     paths: {
       mountBasePath: process.env.MOUNT_BASE_PATH || '/mnt/datamigrate',
       startConsumer: process.env.START_CONSUMER || 'http://localhost:3009',
+    },
+    email:{
+      sendMail: process.env.SEND_MAIL || 'http://localhost:3001',
     }
   }),
 );
