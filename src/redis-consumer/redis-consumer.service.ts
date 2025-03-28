@@ -307,25 +307,9 @@ export class RedisConsumerService {
             });
         } else {
             // If no consumer type is provided, iterate through all available consumer types
-            Object.values(ConsumerType).forEach((consumerType) => {
-                readerName = `${consumerType}-reader`;
-                this.logger.log(`Consumer ${jobRunId} ${consumerType} ${readerName} in active list`);
-
-                // Skip 'directories' consumer type
-                if (consumerType === ConsumerType.directories) {
-                    return;
-                }
-
-                // If worker limit is not exceeded, start consumer immediately
-                if (this.activeWorkers < this.MAX_CONCURRENT_WORKERS) {
+         
                     setImmediate(() => this.startConsumerWithThreading(jobRunId, readerName, consumerType));
-                } else {
-                    // If max workers are reached, add the job to the queue for later execution
-                    const job = { jobRunId, readerName, consumerType };
-                    this.jobQueue.push(job);
-                    this.logger.log("Job added to queue:", this.jobQueue);
-                }
-            });
+                
         }
     }
 
@@ -343,10 +327,9 @@ export class RedisConsumerService {
         return new Promise((resolve, reject) => {
             // Define the path to the worker script
             const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js');
-
             // Initialize a new worker thread with job details
             const worker = new Worker(workerPath, {
-                workerData: { jobRunId, readerName, consumerType },
+                workerData: { jobRunId, consumerType },
             });
 
             // Listen for messages from the worker
@@ -431,15 +414,17 @@ export class RedisConsumerService {
                 // If no new data is found, log and wait before checking again
                 if (!hasData) {
                     this.logger.log(`[${jobRunId}]: ${key} No new data found, sleeping...`);
-                    await new Promise(resolve => setTimeout(resolve, 4000)); // Sleep for 4 seconds
+                    if(consumerType != ConsumerType.files){
+                    await new Promise(resolve => setTimeout(resolve, 4000));
+                    } // Sleep for 4 seconds
                 }
 
             }
-
+            
             this.logger.log(`[${jobRunId}] : Consumer stopped`);
         } catch (error) {
             // Handle errors, log them, and ensure the consumer is stopped
-            this.logger.error(`[${jobRunId}] Error starting consumer:`, error);
+            this.logger.error(`[${jobRunId}] Error starting consumer: startConsumerCall `, error);
             await this.stopConsumer(jobRunId, consumerType);
         }
 

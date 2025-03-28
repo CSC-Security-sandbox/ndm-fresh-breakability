@@ -146,12 +146,12 @@ export class InventoryService {
 
 
   async saveTasks(data: any) {
+    if (!data || !data.jobRunId || !data.taskType || !data.status) {
+
+      throw new Error("Invalid task data");
+    }
     try {
-      if (!data || !data.jobRunId || !data.taskType || !data.status) {
-
-        throw new Error("Invalid task data");
-      }
-
+     
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
 
       const taskId = id
@@ -198,7 +198,7 @@ export class InventoryService {
       // Save the task
       // Save all operation batches concurrently
       if (operationBatches.length > 0) {
-        await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
+        await Promise.all(operationBatches.map(batch => this.operationRepo.upsert(batch,["id"])));
       }
       this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {

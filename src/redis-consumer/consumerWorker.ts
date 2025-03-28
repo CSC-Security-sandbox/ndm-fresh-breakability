@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { RedisConsumerService } from './redis-consumer.service';
 import { Logger } from '@nestjs/common';
+import { ConsumerType } from '../enum/redis-consumer.enum';
 
 (async () => {
      let logger = new Logger("Worker Service");
@@ -12,14 +13,26 @@ import { Logger } from '@nestjs/common';
     const consumerService = app.get(RedisConsumerService);
 
     try {
-        if (!workerData?.jobRunId || !workerData?.consumerType || !workerData?.readerName) {
+        if (!workerData?.jobRunId) {
             throw new Error('Missing required workerData parameters');
         }
 
-        const { jobRunId, readerName, consumerType } = workerData;
+        const { jobRunId, consumerType } = workerData;
+        let { readerName } = workerData
         logger.log(`🔄 consumerWorker.js: Starting consumer for jobRunId=${jobRunId}, readerName=${readerName}, consumerType=${consumerType}`);
 
-        await consumerService.startConsumerCall(jobRunId, readerName, consumerType);
+        if (consumerType) {
+            const dynamicReaderName = `${consumerType}-reader`;
+            await consumerService.startConsumerCall(jobRunId, dynamicReaderName, consumerType);
+        }
+        else {
+            await Promise.all(
+                Object.values(ConsumerType).map(type => {
+                    const dynamicReaderName = `${type}-reader`;
+                    return consumerService.startConsumerCall(jobRunId, dynamicReaderName, type);
+                })
+            );
+        }
 
         logger.log('✅ consumerWorker.js: Consumer service call completed successfully');
         parentPort?.postMessage({ success: true });
