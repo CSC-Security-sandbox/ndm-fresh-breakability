@@ -309,56 +309,7 @@ describe("InventoryService", () => {
   });
 
   describe("saveTasks", () => {
-    // it("should save task and operations", async () => {
-    //   const data = {
-    //     jobRunId: "jobRunId",
-    //     taskType: "taskType",
-    //     status: "status",
-    //     sPathId: "sPathId",
-    //     tPathId: "tPathId",
-    //     commands: [{ commandId: "cmd1", fPath: "/path/to/file" }],
-    //     workerId: "workerId",
-    //     id: "taskId",
-    //   };
-    //   const task = {
-    //     id: "taskId",
-    //     jobRunId: "jobRunId",
-    //     status: "status",
-    //     taskType: "taskType",
-    //     workerId: "workerId",
-    //   };
-    //   const operations = [
-    //     {
-    //       id: "cmd1",
-    //       taskId: "taskId",
-    //       jobRunId: "jobRunId",
-    //       sPathId: "sPathId",
-    //       tPathId: "tPathId",
-    //       status: OperationStatus.IN_PROCESS,
-    //       operationType: "taskType",
-    //       request: data.commands[0],
-    //       fPath: "/path/to/file",
-    //     },
-    //   ];
-    
-    //   jest.spyOn(taskRepo, "findOne").mockResolvedValue(null); // No existing task
-    //   jest.spyOn(taskRepo, "upsert").mockResolvedValue(task as any); // Mock upsert instead of create/save
-    //   jest.spyOn(operationRepo, "upsert").mockResolvedValue(operations as any);
-    
-    //   await service.saveTasks(data);
-    
-    //   // Check that upsert was called instead of create/save
-    //   expect(taskRepo.upsert).toHaveBeenCalledWith(expect.objectContaining(task), ["id"]);
-    //   expect(operationRepo.upsert).toHaveBeenCalledWith(
-    //     expect.arrayContaining([
-    //       expect.objectContaining({
-    //         id: "cmd1",
-    //         taskId: "taskId",
-    //       }),
-    //     ]),
-    //     ["id"]
-    //   );
-    // });
+   
 
     it("should save task and operations", async () => {
       const data = {
