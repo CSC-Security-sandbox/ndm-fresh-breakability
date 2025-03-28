@@ -204,7 +204,7 @@ export class RedisConsumerService {
                     if (jobContext) {
                         this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
                         try {
-                            await jobContext.cleanup();
+                            //await jobContext.cleanup(); //TODO: Need to check whats the better place to call this
                             this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
                         } catch (error) {
                             this.logger.error(`[${jobRunId}] Error during job cleanup: ${error.message}`);
