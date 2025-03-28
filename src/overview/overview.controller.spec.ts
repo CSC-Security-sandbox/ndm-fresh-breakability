@@ -2,28 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OverviewController } from './overview.controller';
 import { BadRequestException } from '@nestjs/common';
 import { OverviewService } from './overview.service';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('OverviewController', () => {
   let controller: OverviewController;
   let service: OverviewService;
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,10 +16,6 @@ describe('OverviewController', () => {
           useValue: {
             getStorageAndJobsOverview: jest.fn(),
           },
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
         },
       ],
     }).compile();

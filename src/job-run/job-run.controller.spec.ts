@@ -2,29 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
   jobRunReportByJobRunId: jest.fn(),
   getJobSubStatus: jest.fn(),
-};
-
-const mockJwtService = {
-  verifyToken: jest.fn().mockResolvedValue({
-    user: {
-      roles: [
-        {
-          permissions: ["permission1", "permission2"],
-          projects: ["project1"],
-        },
-      ],
-    },
-  }),
-  configService: {},
-  client: jest.fn(),
-  logger: jest.fn(),
-  getKey: jest.fn(),
 };
 
 describe('JobRunController', () => {
@@ -35,14 +17,7 @@ describe('JobRunController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobRunController],
       providers: [
-        { 
-          provide: JobRunService, 
-          useValue: mockJobRunService 
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
+        { provide: JobRunService, useValue: mockJobRunService },
       ],
     }).compile();
 

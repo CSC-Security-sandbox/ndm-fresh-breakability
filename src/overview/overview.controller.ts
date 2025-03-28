@@ -1,8 +1,7 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { OverviewService } from './overview.service';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { OverviewDTO } from './overview.dto';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Controller('overview')
 export class OverviewController {
@@ -20,8 +19,6 @@ export class OverviewController {
 @ApiQuery({ name: 'projectId', required: false, type: String, description: 'Project Id'})
 @ApiQuery({ name: 'fileServerId', required: false, type: String, description: 'File Server Id' })
 @ApiQuery({ name: 'jobConfigId', required: false, type: String, description: 'Job Config Id' })
-@Auth()
-@ApiBearerAuth()
 @Get()
 async getStorageAndJobsOverview(
     @Query('projectId') projectId: string,
