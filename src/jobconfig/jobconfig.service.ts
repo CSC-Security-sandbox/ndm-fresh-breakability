@@ -1504,6 +1504,7 @@ export class JobConfigService {
       const parsedData = blobData
         ?.trim()
         ?.split("\n")
+        ?.slice(1)
         ?.map((line) => line.split(","))
         ?.map((columns) => {
           if (templateType === TemplateType.SID) {
