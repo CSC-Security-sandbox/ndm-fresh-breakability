@@ -1,8 +1,7 @@
 import { Controller, Get, Query, ValidationPipe } from '@nestjs/common';
-import { ApiBadRequestResponse, ApiBearerAuth, ApiOkResponse, ApiOperation } from '@nestjs/swagger';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation } from '@nestjs/swagger';
 import { TaskQueryParamsDto } from './dto/taskpage.dto';
 import { TasksService } from './tasks.service';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Controller('tasks')
 export class TasksController {
@@ -14,8 +13,6 @@ export class TasksController {
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    @ApiBearerAuth()
-    @Auth()
     @Get('/')
     async getTaskList(@Query(new ValidationPipe({ transform: false, whitelist: true })) taskQuery: TaskQueryParamsDto) {
         return await this.taskService.getTaskList(taskQuery)

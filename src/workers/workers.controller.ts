@@ -1,9 +1,8 @@
 import { Body, Controller, Get, Logger, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
-import { ApiBadRequestResponse, ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkersStatusPageDto, WorkerStatusPageResponseDto } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
 import { Ctx, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 
 
@@ -18,8 +17,6 @@ export class WorkersController {
     @ApiBadRequestResponse({
         description: 'Invalid pagination parameters.'
     })
-    @ApiBearerAuth()
-    @Auth()
     @Get('/')
     async getWorkers(@Query(new ValidationPipe({ transform: false, whitelist: true }))  workerStatusPageDto: WorkersStatusPageDto) {
         return await this.workersService.findAllWorkers(workerStatusPageDto);

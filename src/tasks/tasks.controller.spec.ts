@@ -3,7 +3,6 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { TaskQueryParamsDto } from './dto/taskpage.dto';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('TasksController', () => {
   let tasksController: TasksController;
@@ -12,37 +11,11 @@ describe('TasksController', () => {
   const mockTasksService = {
     getTaskList: jest.fn(),
   };
-  
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TasksController],
-      providers: [
-        { 
-          provide: TasksService, 
-          useValue: mockTasksService 
-        },         
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
-      ],
+      providers: [{ provide: TasksService, useValue: mockTasksService }],
     }).compile();
 
     tasksController = module.get<TasksController>(TasksController);
