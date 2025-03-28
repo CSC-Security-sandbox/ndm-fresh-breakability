@@ -821,12 +821,12 @@ export class JobConfigService {
             userName: volume.fileServer.userName,
             password: volume.fileServer.password,
             protocol: volume.fileServer.protocol,
-            protocolVersion: volume.fileServer.protocolVersion.replace(/^v/, ''),
+            protocolVersion: volume.fileServer.protocolVersion?.replace(/^v/, ''),
             serverType: volume.fileServer.serverType,
         })}
       })
       
-      data.migrateConfigs.forEach((config) => {
+      data?.migrateConfigs?.forEach((config) => {
         const sourceVolume = pathToWorkerMapping.find(
           (p) => p.id === config.sourcePathId
         );
