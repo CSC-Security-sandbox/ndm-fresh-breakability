@@ -46,7 +46,10 @@ env:
     value: "datamigrator"
   - name: REPORT_DOWNLOAD_LOCATION
     value: "/reports"
-
+  - name: KEYCLOAK_BASE_URL
+    value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
+  - name: KEYCLOAK_REALM
+    value: "datamigrator"
   # - name: DB_USER # from secret
   #   value: ""
   # - name: DB_PASSWORD # from secret

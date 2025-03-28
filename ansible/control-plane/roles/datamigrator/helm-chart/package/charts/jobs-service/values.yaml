@@ -87,6 +87,10 @@ env:
     value: "src/templates"
   - name: START_CONSUMER
     value: "http://db-writer-service:3000"
+  - name: KEYCLOAK_BASE_URL
+    value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
+  - name: KEYCLOAK_REALM
+    value: "datamigrator"
 
 service:
   type: ClusterIP
