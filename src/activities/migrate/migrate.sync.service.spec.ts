@@ -9,16 +9,19 @@ import * as fs from 'fs';
 import * as utils from '../utils/utils';
 import * as crypto from 'crypto';
 import { CommandStatus, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { WorkerThreadService } from '../../thread/worker.thread.service';
 
 
 describe('MigrationSyncService', () => {
     let service: MigrationSyncService;
     let redisService: RedisService;
     let commonService: CommonActivityService;
+    let workerThreadService: WorkerThreadService;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
+                WorkerThreadService,
                 MigrationSyncService,
                 ConfigService,
                 Logger,
@@ -45,6 +48,7 @@ describe('MigrationSyncService', () => {
         service = module.get<MigrationSyncService>(MigrationSyncService);
         redisService = module.get<RedisService>(RedisService);
         commonService = module.get<CommonActivityService>(CommonActivityService);
+        workerThreadService = module.get<WorkerThreadService>(WorkerThreadService);
     });
 
     afterEach(() => {
