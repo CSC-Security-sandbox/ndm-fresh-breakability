@@ -613,17 +613,24 @@ describe("JobRunService", () => {
       const jobRunId = "12345";
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({
         id: jobRunId,
+        jobConfigId: "config1",
         jobConfig: {},
       } as any);
-      const queryBuilder: any = {
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue({
+        id: "config1",
+        jobType: JobType.MIGRATE,
+        futureScheduleAt: null,
+      } as any);
+
+      const inventoryQueryBuilder: any = {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest
-          .fn()
-          .mockResolvedValue([
-            { fileCount: "10", directoryCount: "5", totalFileSize: "5000" },
-          ]),
+        getRawOne: jest.fn().mockResolvedValue({
+          fileCount: "10",
+          directoryCount: "5",
+          totalFileSize: "5000"
+        }),
       };
 
       const operationErrorQueryBuilder: any = {
@@ -639,31 +646,27 @@ describe("JobRunService", () => {
 
       jest
         .spyOn(inventoryRepo, "createQueryBuilder")
-        .mockReturnValue(queryBuilder);
-      jest
-        .spyOn(operationErrorRepo, "createQueryBuilder")
-        .mockReturnValue(queryBuilder);
+        .mockReturnValue(inventoryQueryBuilder);
       jest
         .spyOn(operationErrorRepo, "createQueryBuilder")
         .mockReturnValue(operationErrorQueryBuilder);
 
-      expect(
-        await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed)
-      ).toBeUndefined();
+      jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed);
+
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
         where: { id: jobRunId },
-        relations: ["jobConfig"],
       });
 
-      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "inventory"
-      );
-      expect(queryBuilder.select).toHaveBeenCalled();
-      expect(queryBuilder.where).toHaveBeenCalledWith(
+      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith("inventory");
+      expect(inventoryQueryBuilder.select).toHaveBeenCalled();
+      expect(inventoryQueryBuilder.where).toHaveBeenCalledWith(
         "inventory.jobRunId = :jobRunId",
         { jobRunId }
       );
-      expect(queryBuilder.getRawMany).toHaveBeenCalled();
+      expect(inventoryQueryBuilder.getRawOne).toHaveBeenCalled();
 
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(operationErrorQueryBuilder.innerJoin).toHaveBeenCalledWith(
@@ -675,6 +678,15 @@ describe("JobRunService", () => {
         { jobRunId }
       );
       expect(operationErrorQueryBuilder.getRawMany).toHaveBeenCalled();
+
+      expect(jobRunRepo.update).toHaveBeenCalledWith(
+        { id: jobRunId },
+        {
+          status: JobRunStatus.Completed,
+          endTime: expect.any(Date),
+          jobStats: expect.anything()
+        }
+      );
     });
   });
 
@@ -1071,7 +1083,7 @@ describe("JobRunService", () => {
         targetvolumepath: "/target/path",
         targetfileserverprotocol: "FTP",
         targetconfigname: "TargetServer",
-        status: JobRunStatus.Completed,
+        status: JobRunStatus.Running,
         starttime: new Date(Date.now() - 10000),
         endtime: new Date(),
         jobstats: {
@@ -1103,7 +1115,7 @@ describe("JobRunService", () => {
   
     expect(result).toMatchObject([
       {
-        status: JobRunStatus.Completed,
+        status: JobRunStatus.Running,
         startTime: mockJobRuns[0].starttime,
         endTime: mockJobRuns[0].endtime,
         jobType: "DISCOVER",
@@ -1120,7 +1132,7 @@ describe("JobRunService", () => {
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
         totalScannedSize: "2.00 KB",
-        totalMigratedSize: "0",
+        totalMigratedSize: "0 B",
         errors: [{ errorType: "FileNotFound", count: 5 }],
       },
     ]);
@@ -1194,7 +1206,7 @@ describe("JobRunService", () => {
         },
         scannedFilesCount: "10",
         scannedDirectoriesCount: "5",
-        totalScannedSize: "",
+        totalScannedSize: "0 B",
         totalMigratedSize: "4.88 KB",
         errors: [],
       },
@@ -1380,7 +1392,7 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
-        totalMigratedSize: "0",
+        totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
       });
@@ -1506,7 +1518,7 @@ describe("JobRunService", () => {
         timeElapsed: endTime.getTime() - startTime.getTime(),
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
-        totalScannedSize: "",
+        totalScannedSize: "0 B",
         totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
@@ -1562,7 +1574,7 @@ describe("JobRunService", () => {
           jobRunId: "jobRun123",
           status: JobRunStatus.Running,
           totalScannedSize: "4.88 KB", // Assuming covertBytes converts bytes correctly
-          totalMigratedSize: "0",
+          totalMigratedSize: "0 B",
           tasks: [
             {
               taskId: "task1",
@@ -2019,6 +2031,11 @@ describe("JobRunService", () => {
         startTime: true,
         status: true,
         subStatus: true,
+        jobStats: {
+          fileCount: true,
+          directories: true,
+          totalSize: true,
+        },
         tasks: {
           createdAt: true,
           id: true,
