@@ -61,11 +61,24 @@ jobs:
           shell: cmd
           run: |
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
+
+        - name: Get short SHA
+          id: get_short_sha
+          run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
   
-        - name: Upload Windows Release Asset
+        - name: Create GitHub Release
+          id: create_release
+          uses: actions/create-release@v1
+          with:
+            tag_name: ${{ env.SHORT_SHA }}
+            release_name: Release-${{ env.SHORT_SHA }}
+            draft: false
+            prerelease: true
+      
+        - name: Upload Release Asset
           uses: actions/upload-release-asset@v1.0.1
           with:
-            upload_url: ${{ needs.Worker-package.outputs.release_upload_url }}
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
             asset_path: wininstaller\datamigrator-worker-setup.exe
-            asset_name: ${{ needs.Worker-package.outputs.release_tag }}-worker-installer.exe
+            asset_name: ${{ env.SHORT_SHA }}-windows-worker-installer.exe
             asset_content_type: application/octet-stream
