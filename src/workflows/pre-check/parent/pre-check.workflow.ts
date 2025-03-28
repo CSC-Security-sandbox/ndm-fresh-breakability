@@ -18,11 +18,11 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
 
     const response: PreCheckWorkflowResponse[] = []
 
-    workflowRequest.payload.serverCredentials.forEach((serverCredential) => {
+    workflowRequest.payload.serverCredentials.map((serverCredential) => {
         serverCredentials.set(serverCredential.id, serverCredential);
     });
 
-    workflowRequest.payload.preChecks.forEach((preCheck) => {
+    workflowRequest.payload.preChecks.map((preCheck) => {
         const serverResponse: PreCheckWorkflowResponse = {
             sourcePathId: preCheck.pathId,
             status: PreCheckStatus.SUCCESS,
@@ -36,7 +36,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
             isSource: true,
         }
         const sourceVersion = serverCredentials.get(preCheck.serverId).protocolVersion;
-        preCheck.destinations.forEach((destination) => {
+        preCheck.destinations.map((destination) => {
             const preCheckDestinationStatus: PreCheckDestinationStatus = {
                 destinationPathId: destination.pathId,
                 status: PreCheckStatus.SUCCESS ,
@@ -46,12 +46,11 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
             if(destination.workers.length === 0) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.NO_COMMON_WORKERS);
-                return;
             }
             if(sourceVersion !== serverCredentials.get(destination.serverId).protocolVersion) {
+                console.error(`Protocol version mismatch between source and destination ${preCheck.serverId} and ${destination.serverId}`);
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
-                return;
             }
             const workerDestinationTaskPaths: WorkerTaskPaths = {
                 pathId: destination.pathId,
@@ -59,7 +58,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 pathName: destination.pathName,
                 isSource: false
             }
-            destination.workers.forEach((workerId) => {
+            destination.workers.map((workerId) => {
                 if(!workers.includes(workerId))
                     workers.push(workerId);
                 if (workerTasks.has(workerId)) {
@@ -68,10 +67,13 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                     workerTasks.set(workerId, [workerSourceTaskPaths, workerDestinationTaskPaths]);
                 }
             })
+            console.log(`Worker Destination Task Paths: ${JSON.stringify(preCheckDestinationStatus)}`);
             serverResponse.destination.push(preCheckDestinationStatus);
         })
         response.push(serverResponse)
     });
+
+    console.debug(`Worker Tasks: ${JSON.stringify(response)}`);
 
 
     const workflows =workers.map((workerId) => executeChild(PreCheckWorkerValidationWorkflow, {
