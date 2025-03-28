@@ -1,4 +1,4 @@
-import { FileInfo, DMError, TaskStats, Task } from './metadata-types';
+import { FileInfo, DMError, TaskStats, Task, SpeedTestReadWriteInfo } from './metadata-types';
 import { Serializable } from './serializable';
 
 export interface Message<T> {
@@ -23,6 +23,7 @@ export interface StreamCollection<T extends Serializable> {
 export interface FileCollection extends StreamCollection<FileInfo> {}
 export interface ErrorCollection extends StreamCollection<DMError> {}
 export interface DirectoryCollection extends StreamCollection<FileInfo> {}
+export interface SpeedTestReadWriteCollection extends StreamCollection<SpeedTestReadWriteInfo> {}
 export interface TaskStatsCollection extends StreamCollection<TaskStats> {}
 export interface TaskCollection extends StreamCollection<Task> {}
 export interface UpdatedTaskCollection extends StreamCollection<Task> {}
