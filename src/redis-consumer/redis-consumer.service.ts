@@ -25,7 +25,7 @@ export class RedisConsumerService {
     private readonly keyPrefix = 'consumer';
     private readonly activeConsumersSetKey = 'activeConsumers';
     private logger = new Logger(this.constructor.name);
-    private batchSize: number = parseInt(process.env.BATCH_SIZE) || 1000;
+    private batchSize: number = parseInt(process.env.BATCH_SIZE) || 300;
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
     private processingQueue: Promise<void> = Promise.resolve();
 
