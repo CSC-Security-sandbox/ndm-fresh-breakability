@@ -95,7 +95,6 @@ export class CommonActivityService{
         throw new Error('Failed to get access token');
       }
 
-      console.log("got access token for report ------ss----- " , accessToken)
       
       await axios.post(
         `${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`,

@@ -135,7 +135,6 @@ export class SetupActivityService {
       if(!accessToken) {
         throw new Error('Failed to get access token');
       }
-      console.log('access token ---------->', accessToken);
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
         { jobRunId, workerIds: [this.workerId] },
