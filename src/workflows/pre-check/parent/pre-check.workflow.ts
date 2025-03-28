@@ -66,13 +66,11 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                     workerTasks.set(workerId, [workerSourceTaskPaths, workerDestinationTaskPaths]);
                 }
             })
-            console.log(`Worker Destination Task Paths: ${JSON.stringify(preCheckDestinationStatus)}`);
             serverResponse.destination.push(preCheckDestinationStatus);
         })
         response.push(serverResponse)
     });
 
-    console.debug(`Worker Tasks: ${JSON.stringify(response)}`);
 
 
     const workflows =workers.map((workerId) => executeChild(PreCheckWorkerValidationWorkflow, {
