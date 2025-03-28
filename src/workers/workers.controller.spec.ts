@@ -2,28 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
 import { WorkersStatusPageDto,  } from './dto/workers.page.dto';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('WorkersController', () => {
   let controller: WorkersController;
   let service: WorkersService;
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,10 +16,6 @@ describe('WorkersController', () => {
           useValue: {
             findAllWorkers: jest.fn(),
           },
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
         },
       ],
     }).compile();

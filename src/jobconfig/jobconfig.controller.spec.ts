@@ -8,28 +8,10 @@ import { JobConfigBulkMigrateRes } from './jobconfig.types';
 import { Response } from 'express';
 import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
 import { JobConfigSpeedTest } from './dto/jobspeedTest.dto';
-import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
   let service: JobConfigService;
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
-  };
 
   const mockJobConfigService = {
     createBulkDiscovery: jest.fn(),
@@ -55,10 +37,6 @@ describe('JobConfigController', () => {
         {
           provide: JobConfigService,
           useValue: mockJobConfigService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
         },
       ],
     }).compile();
