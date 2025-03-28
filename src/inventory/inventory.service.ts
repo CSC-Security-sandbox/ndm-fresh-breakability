@@ -198,7 +198,7 @@ export class InventoryService {
       // Save the task
       // Save all operation batches concurrently
       if (operationBatches.length > 0) {
-        await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
+        await Promise.all(operationBatches.map(batch => this.operationRepo.upsert(batch,["id"])));
       }
       this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {
