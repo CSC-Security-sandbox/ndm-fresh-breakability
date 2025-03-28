@@ -543,7 +543,7 @@ export class JobRunService {
 
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
-        this.logger.log(`jobRun for id ${jobRun.jobrunid} - ${JSON.stringify(jobRun)}`);
+        this.logger.debug(`jobRun for id ${jobRun.jobrunid} - with jobjobstats ${JSON.stringify(jobRun.jobjobstats)}`);
         const partialJobRunStats= {
           jobRunId: jobRun.jobrunid,
           status: jobRun.substatus || jobRun.status,

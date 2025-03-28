@@ -1053,11 +1053,7 @@ export class JobConfigService {
             scannedDirectoriesCount: BigInt(
               jobRunStats.directories || "0"
             )?.toString(),  
-            totalScannedSize:
-            jobConfig.jobType === JobType.DISCOVER
-                ? this.covertBytes(Number(jobRunStats?.totalSize || 0))
-                : "0 B",
-            totalMigratedSize: jobConfig.jobType === JobType.MIGRATE ? this.covertBytes(Number(jobRunStats?.totalSize || 0)) : "0 B",
+            totalScannedSize: this.covertBytes(Number(jobRunStats?.totalSize || 0)),
             errors: jobRunStats.errors,
         }
       }
