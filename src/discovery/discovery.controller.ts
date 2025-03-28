@@ -1,5 +1,5 @@
 import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger } from '@nestjs/common';
-import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
   Ctx,
@@ -9,6 +9,7 @@ import {
 } from "@nestjs/microservices";
 import { DiscoveryCompletedPayload } from 'src/discovery/discovery.interface';
 import { Pattern, ReportType } from 'src/discovery/pattern.enum';
+import { Auth, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('Get discovery inventory')
 @Controller('inventory')
@@ -18,6 +19,8 @@ export class DiscoveryController {
     private readonly discoveryService: DiscoveryService,
   ) { }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get('/')
   @ApiOperation({ summary: 'Discover file server' })
   @ApiQuery({
@@ -35,6 +38,8 @@ export class DiscoveryController {
     return await this.discoveryService.getDiscoveryByFileServerId(fileServerId);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Get('/with-path')
   @ApiOperation({ summary: 'Discover inventory of file server' })
   @ApiQuery({
@@ -62,6 +67,8 @@ export class DiscoveryController {
     return await this.discoveryService.getDiscoveryByFileServerIdAndParentPath(fileServerId, parentPath);
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Post('/download')
   @ApiOperation({ summary: 'Download reports based on jobRunId and report type' })
   @ApiBody({
@@ -106,6 +113,8 @@ export class DiscoveryController {
     return stream;
   }
 
+  @ApiBearerAuth()
+  @AuthWorker()
   @Post('/generate-report')
   @ApiOperation({ summary: 'Generate a blank report for a job run' })
   @ApiBody({
@@ -142,7 +151,8 @@ export class DiscoveryController {
     return "OK"
   }
 
-
+  @AuthWorker()
+  @ApiBearerAuth()
   @Post('/generate-jobs-report')
   @ApiOperation({ summary: 'Generate jobs report' })
   @ApiBody({
