@@ -6,7 +6,7 @@
     state: directory
     owner: "{{ vm_username }}"
     group: "{{ vm_username }}"
-    mode: '0755'
+    mode: "0755"
   loop:
     - { path: "/opt/datamigrator" }
     - { path: "/opt/datamigrator/bin" }
@@ -21,7 +21,7 @@
     dest: /etc/cloud/cloud.cfg.d/00-datamigrator-hostname-init.cfg
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
 
 - name: Copy boot script for microk8s
   become: yes
@@ -30,7 +30,7 @@
     dest: /opt/datamigrator/bin/microk8s-boot.sh
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
 
 - name: Copy systemd service file for boot script
   become: yes
@@ -39,21 +39,14 @@
     dest: /etc/systemd/system/boot-microk8s.service
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
 
 - name: Reload systemd daemon
   become: yes
   command: systemctl daemon-reload
 
-- name: Disable the boot-microk8s.service from starting on boot
+- name: Enable the microk8s boot service
   become: yes
   ansible.builtin.systemd_service:
     name: boot-microk8s.service
-    enabled: false
-    state: stopped
-
-# - name: Enable the microk8s boot service
-#   become: yes
-#   systemd:
-#     name: boot-microk8s.service
-#     enabled: yes
+    enabled: yes
