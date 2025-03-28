@@ -45,7 +45,7 @@ jobs:
             # Adjust the path to your generated Windows binary
             Rename-Item -Path "./pkg/worker-win-x64.exe" -NewName "worker.exe" -Force
             New-Item -ItemType Directory -Force -Path wininstaller
-            Move-Item -Path "./worker.exe" -Destination "wininstaller\worker.exe" -Force
+            Move-Item -Path "./pkg/worker.exe" -Destination "wininstaller\worker.exe" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
