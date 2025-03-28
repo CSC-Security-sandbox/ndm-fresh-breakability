@@ -37,7 +37,7 @@ jobs:
   
         - name: Build Windows Binary
           shell: cmd  
-          run: npm run pkg
+          run: npm run pkg -- --no-bytecode
   
         - name: Prepare Installer Directory
           shell: pwsh
