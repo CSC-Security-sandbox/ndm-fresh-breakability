@@ -36,13 +36,12 @@ export class SpeedTestReadActivity {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };    
     try{
       this.logger.log(`[${traceId}] Starting SpeedTest Read Activity`);
-      const jobContext: JobContext = await this.redisService.getJobContext(traceId);
-      const jobState: JobState = await jobContext.getJobState();
       payload.status = TaskStatus.RUNNING
       const result = await this.readTest(payload.fsDetails, traceId, volumeId);
       output.success = true;
       output.result = result;
       this.logger.log(`[${traceId}] SpeedTest Read Activity Completed.`);      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
       this.logger.error(`[${traceId}] Error encountered: ${errorMessage}`);
@@ -90,8 +89,6 @@ export class SpeedTestReadActivity {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };   
     try{
       this.logger.log(`[${traceId}] Starting SpeedTest Write Activity`);
-      const jobContext: JobContext = await this.redisService.getJobContext(traceId);
-      const jobState: JobState = await jobContext.getJobState();
       payload.status = TaskStatus.RUNNING
       const result = await this.writeTest(payload.fsDetails, traceId, volumeId);
       this.logger.log(`[${traceId}] SpeedTest Write Activity Completed.`);

@@ -3,7 +3,6 @@ import { SpeedTestReadActivity } from './speed-test-read-activities';
 import { Logger } from '@nestjs/common';
 import { promisify } from 'util';
 import { RedisService } from 'src/redis/redis.service';
-import { exec } from 'child_process';
 import { Readable, Writable } from 'stream';
 import * as fs  from 'fs';
 import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -29,8 +28,6 @@ jest.mock('fs', () => {
     },
   };
 });
-jest.mock('child_process');
-const execPromise = promisify(exec);
 
 describe('SpeedTestReadActivity', () => {
   let speedTestReadActivity: SpeedTestReadActivity;
@@ -72,127 +69,233 @@ describe('SpeedTestReadActivity', () => {
   });
 
   describe('readActivity', () => {
-    it('should log start and completion of read activity', async () => {
-      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
-      const traceId = 'traceId';
-      const volumeId = 'volumeId';
-      const fileSize = 1024 * 1024 * 1024;
-      const mockReadStream = new Readable({
-        read() {},
-      });
-      (fs.createReadStream as jest.Mock).mockReturnValue(mockReadStream);
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-      jest.spyOn(speedTestReadActivity, 'createFileIfNotExists').mockResolvedValue();
-      setTimeout(() => {
-        mockReadStream.emit('data', Buffer.alloc(fileSize / 2));
-        mockReadStream.emit('data', Buffer.alloc(fileSize / 2));
-        mockReadStream.emit('end');
-      }, 1000);
-
-      const result = await speedTestReadActivity.readActivity(payload, traceId, volumeId);
-      // expect(result.errors.size).toBe(0);
-      // expect(result.result["totalTimeTaken"]).toBeGreaterThan(1);
+    let mockReadTest: jest.SpyInstance;
+  
+    beforeEach(() => {
+      // Mock the readTest method
+      mockReadTest = jest.spyOn(speedTestReadActivity, 'readTest');
     });
-
-    it("should create file when it doesn't exist", async () => {
+  
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should log start and completion of read activity and return success', async () => {
+      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
       const traceId = 'traceId';
       const volumeId = 'volumeId';
-      const fileName = '1GB_zero_file.bin';
-      const basePath = `${traceId}/${volumeId}`;
-      const filePath = `${basePath}/${fileName}`;
-      const fileSize = 1024 * 1024 * 1024;
-      const buffer = Buffer.alloc(1024, 0);
-      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
-      const mockWriteStream = {
-        on: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+  
+      // Mock readTest to resolve successfully
+      const mockResult = {
+        speedLogs: [{ timeStamp: '1.0', speed: '10.0' }],
+        totalTimeTaken: 5,
+        fileSize: 1024 * 1024 * 1024,
+        bytesWritten: 1024 * 1024 * 1024,
+        speed: 10.0,
       };
-      (fs.promises.access as jest.Mock).mockRejectedValue(new Error('File not found'));
-      // (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      const mockCreateReadStream = new Readable({
-        read() {},
-      });
-      (fs.createReadStream as jest.Mock).mockReturnValue(mockCreateReadStream);
-      setTimeout(() => {
-        mockCreateReadStream.emit('data', Buffer.alloc(fileSize / 2));
-        mockCreateReadStream.emit('data', Buffer.alloc(fileSize / 2));
-        mockCreateReadStream.emit('end');
-      }, 1000);
-
-      jest.spyOn(speedTestReadActivity, 'createFileIfNotExists').mockImplementation();
-      jest.spyOn(speedTestReadActivity, 'createFile').mockResolvedValue({});
+      mockReadTest.mockResolvedValue(mockResult);
+  
       const result = await speedTestReadActivity.readActivity(payload, traceId, volumeId);
-      // expect(result.errors.size).toBe(0);
-      // expect(result.result["totalTimeTaken"]).toBeGreaterThan(1);
+  
+      // Assertions
+      expect(mockReadTest).toHaveBeenCalledWith(payload.fsDetails, traceId, volumeId);
+      expect(result.success).toBe(true);
+      expect(result.errors.length).toBe(0);
+      expect(result.result).toEqual(mockResult);
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Read Activity`);
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] SpeedTest Read Activity Completed.`);
     });
-
-    it("should return error when read failed", async () => {
+  
+    it('should handle errors from readTest and return default result', async () => {
+      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
       const traceId = 'traceId';
       const volumeId = 'volumeId';
-      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
-      const mockReadStream = new Readable({
-        read() {},
-      });
-      (fs.createReadStream as jest.Mock).mockReturnValue(mockReadStream);
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-      setTimeout(() => {
-        mockReadStream.emit('error', new Error('Read failed'));
-      }, 100);
-      
+  
+      // Mock readTest to throw an error
+      const mockError = new Error('Read test failed');
+      mockReadTest.mockRejectedValue(mockError);
+  
       const result = await speedTestReadActivity.readActivity(payload, traceId, volumeId);
+  
+      // Assertions
+      expect(mockReadTest).toHaveBeenCalledWith(payload.fsDetails, traceId, volumeId);
+      expect(result.success).toBe(false);
       expect(result.errors.length).toBe(1);
-      expect(result.errors[0] === "Read failed");
+      expect(result.errors[0]).toBe('Read test failed');
+      expect(result.result).toEqual({
+        speedLogs: [],
+        totalTimeTaken: -1,
+        fileSize: -1,
+        bytesWritten: -1,
+        speed: -1,
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(`[${traceId}] Error encountered: Read test failed`);
     });
   });
 
-  describe("writeActivity", () => {
-    it("should create file successfully and return speed logs", async () => {
+  describe('writeActivity', () => {
+    let mockWriteTest: jest.SpyInstance;
+  
+    beforeEach(() => {
+      // Mock the writeTest method
+      mockWriteTest = jest.spyOn(speedTestReadActivity, 'writeTest');
+    });
+  
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should log start and completion of write activity and return success', async () => {
+      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
       const traceId = 'traceId';
       const volumeId = 'volumeId';
-      const fileName = '1GB_zero_file.bin';
-      const basePath = `${traceId}/${volumeId}`;
-      const fileSize = 1024 * 1024 * 1024;
-      const buffer = Buffer.alloc(1024, 0);
-      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
-      (fs.promises.access as jest.Mock).mockRejectedValue(new Error('File not found'));
-      const mockCreateWriteStream = new Writable({
-        write(chunk, encoding, callback) {
-          callback();
-        },
-      });
-      mockCreateWriteStream.on = jest.fn();
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockCreateWriteStream);
-      setTimeout(() => {
-        mockCreateWriteStream.emit('finish');       
-      }, 1000);
-
-      jest.spyOn(speedTestReadActivity, 'createFile').mockResolvedValue({});
+  
+      // Mock writeTest to resolve successfully
+      const mockResult = {
+        speedLogs: [{ timeStamp: '1.0', speed: '10.0' }],
+        totalTimeTaken: 5,
+        fileSize: 1024 * 1024 * 1024,
+        bytesWritten: 1024 * 1024 * 1024,
+        speed: 10.0,
+      };
+      mockWriteTest.mockResolvedValue(mockResult);
+  
       const result = await speedTestReadActivity.writeActivity(payload, traceId, volumeId);
-      // expect(result.errors.size).toBe(0);
-      //TODO: how to check the write speed?
-    });
-    
+  
+      // Assertions
+      expect(mockWriteTest).toHaveBeenCalledWith(payload.fsDetails, traceId, volumeId);
+      expect(result.success).toBe(true);
+      expect(result.errors.length).toBe(0);
+      expect(result.result).toEqual(mockResult);
+  
+      // Verify logger calls
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Write Activity`);
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] SpeedTest Write Activity Completed.`);
 
-    it("should return error when write failed", async () => {
+    });
+  
+    it('should handle errors from writeTest and return default result', async () => {
+      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
       const traceId = 'traceId';
       const volumeId = 'volumeId';
-      const payload = { fsDetails: { hostname: 'example.com', workingDirectory: '/tmp' } };
-      const mockWriteStream = new Writable({
-        write(chunk, encoding, callback) {
-          callback();
-        },
-      });
-      mockWriteStream.on = jest.fn();
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      setTimeout(() => {
-        mockWriteStream.emit('error', new Error("Write failed"));
-      }, 1000);
-      
-      const result = await speedTestReadActivity.writeActivity(payload, traceId, volumeId)
+  
+      // Mock writeTest to throw an error
+      const mockError = new Error('Write test failed');
+      mockWriteTest.mockRejectedValue(mockError);
+  
+      const result = await speedTestReadActivity.writeActivity(payload, traceId, volumeId);
+  
+      // Assertions
+      expect(mockWriteTest).toHaveBeenCalledWith(payload.fsDetails, traceId, volumeId);
+      expect(result.success).toBe(false);
       expect(result.errors.length).toBe(1);
-      expect(result.errors[0] === "Write failed");
+      expect(result.errors[0]).toBe('Write test failed');
+      expect(result.result).toEqual({
+        speedLogs: [],
+        totalTimeTaken: -1,
+        fileSize: -1,
+        bytesWritten: -1,
+        speed: -1,
+      });
+  
+      // Verify logger calls
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Write Activity`);
+      expect(mockLogger.error).toHaveBeenCalledWith(`[${traceId}] Error encountered: Write test failed`);
     });
+  });
 
+  describe('networkPerformanceActivity', () => {
+    let mockMonitorPacketLoss: jest.SpyInstance;
+    let mockCalculatePingRtt: jest.SpyInstance;
+  
+    beforeEach(() => {
+      // Mock the monitorPacketLoss and calculatePingRtt methods
+      mockMonitorPacketLoss = jest.spyOn(speedTestReadActivity, 'monitorPacketLoss');
+      mockCalculatePingRtt = jest.spyOn(speedTestReadActivity, 'calculatePingRtt');
+    });
+  
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should log start and completion of network performance activity and return success', async () => {
+      const payload = { fsDetails: { hostname: 'example.com' } };
+      const traceId = 'traceId';
+  
+      // Mock monitorPacketLoss and calculatePingRtt to resolve successfully
+      mockMonitorPacketLoss.mockResolvedValue(5); // 5% packet loss
+      const mockRttResult = { min: 10, avg: 15, max: 20, mdev: 2 };
+      mockCalculatePingRtt.mockResolvedValue(mockRttResult);
+  
+      const result = await speedTestReadActivity.networkPerformanceActivity(payload, traceId);
+  
+      // Assertions
+      expect(mockMonitorPacketLoss).toHaveBeenCalledWith(payload.fsDetails.hostname);
+      expect(mockCalculatePingRtt).toHaveBeenCalledWith(payload.fsDetails.hostname, 10);
+      expect(result.success).toBe(true);
+      expect(result.errors.length).toBe(0);
+      expect(result.result).toEqual({
+        roundTripDelay: mockRttResult,
+        packetLoss: 5,
+      });
+  
+      // Verify logger calls
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Network Performance Activity`);
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] SpeedTest Network Performance Activity Completed.`);
+    });
+  
+    it('should handle errors from monitorPacketLoss and return default result', async () => {
+      const payload = { fsDetails: { hostname: 'example.com' } };
+      const traceId = 'traceId';
+  
+      // Mock monitorPacketLoss to throw an error
+      const mockError = new Error('Packet loss calculation failed');
+      mockMonitorPacketLoss.mockRejectedValue(mockError);
+  
+      const result = await speedTestReadActivity.networkPerformanceActivity(payload, traceId);
+  
+      // Assertions
+      expect(mockMonitorPacketLoss).toHaveBeenCalledWith(payload.fsDetails.hostname);
+      expect(result.success).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0]).toBe('Packet loss calculation failed');
+      expect(result.result).toEqual({
+        roundTripDelay: { min: -1, avg: -1, max: -1, mdev: -1 },
+        packetLoss: -1,
+      });
+  
+      // Verify logger calls
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Network Performance Activity`);
+      expect(mockLogger.error).toHaveBeenCalledWith(`[${traceId}] Error encountered: Packet loss calculation failed`);
+    });
+  
+    it('should handle errors from calculatePingRtt and return default result', async () => {
+      const payload = { fsDetails: { hostname: 'example.com' } };
+      const traceId = 'traceId';
+  
+      // Mock monitorPacketLoss to resolve successfully
+      mockMonitorPacketLoss.mockResolvedValue(5); // 5% packet loss
+      // Mock calculatePingRtt to throw an error
+      const mockError = new Error('Ping RTT calculation failed');
+      mockCalculatePingRtt.mockRejectedValue(mockError);
+  
+      const result = await speedTestReadActivity.networkPerformanceActivity(payload, traceId);
+  
+      // Assertions
+      expect(mockMonitorPacketLoss).toHaveBeenCalledWith(payload.fsDetails.hostname);
+      expect(mockCalculatePingRtt).toHaveBeenCalledWith(payload.fsDetails.hostname, 10);
+      expect(result.success).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0]).toBe('Ping RTT calculation failed');
+      expect(result.result).toEqual({
+        roundTripDelay: { min: -1, avg: -1, max: -1, mdev: -1 },
+        packetLoss: 5,
+      });
+  
+      // Verify logger calls
+      expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Starting SpeedTest Network Performance Activity`);
+      expect(mockLogger.error).toHaveBeenCalledWith(`[${traceId}] Error encountered: Ping RTT calculation failed`);
+
+    });
   });
 });

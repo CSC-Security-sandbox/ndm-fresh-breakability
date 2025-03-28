@@ -74,7 +74,7 @@ export class SetupActivityService {
     try {
       // Retrieve the protocol based on the protocol type
       const protocol = Protocols.getProtocol(ProtocolTypes[args.protocolType]);
-      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Protocol resolved: ${args.protocolType}`);
+      this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Protocol resolved: ${args.protocolType}`);
 
       // Get the base working directory from the configuration
       const workingDirectory = WorkersConfig.get('baseWorkingPath');
@@ -91,11 +91,11 @@ export class SetupActivityService {
       );
 
       // Mount the file system path
-      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Mounting path`);
+      this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Mounting path`);
       await this.mountPath(fsDetails, protocol, args.jobRunId);
 
       // Update worker configuration via an API call
-      this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
+      this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
         { jobRunId: args.jobRunId, workerIds: [this.workerId] }
