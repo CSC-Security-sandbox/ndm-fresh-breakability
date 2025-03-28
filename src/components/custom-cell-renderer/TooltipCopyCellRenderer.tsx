@@ -33,13 +33,17 @@ const TooltipCopyCellRenderer = ( value: string ) => {
         <Show.When isTrue={showTooltip}>
           <Tooltip placement="center">
             <Text className="flex">
-              {textCopied ?
-                "Copied!" :
-                <>
-                  {value}
-                  <CopyIcon onClick={copyText}/>
-                </>
-              }
+              <Show>
+                <Show.When isTrue={textCopied}>
+                  Copied!
+                </Show.When>
+                <Show.Else>
+                  <Box className="flex">
+                    {value}
+                    <CopyIcon onClick={copyText}/>
+                  </Box>
+                </Show.Else>
+              </Show>
             </Text>
           </Tooltip>
         </Show.When>
