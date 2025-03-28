@@ -60,7 +60,7 @@ jobs:
         - name: Build Windows Installer with Inno Setup
           shell: pwsh
           run: |
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" wininstaller\installer.iss
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
   
         - name: Upload Windows Release Asset
           uses: actions/upload-release-asset@v1.0.1
