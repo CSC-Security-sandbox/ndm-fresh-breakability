@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DMError, JobContextFactory, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { DMError, JobContextFactory, JobType, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { defaultDataConverter } from '@temporalio/common';
@@ -204,8 +204,12 @@ export class RedisConsumerService {
                     if (jobContext) {
                         this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
                         try {
-                            await jobContext.cleanup();
-                            this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
+                            if(jobContext && jobContext.jobConfig.jobType != 'CUT_OVER'){
+                             await jobContext.cleanup(); 
+                             this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
+                            }else{
+                              this.logger.log(`[${jobRunId}] Job context cleanup skipped for CUTOVER job.`);
+                            }
                         } catch (error) {
                             this.logger.error(`[${jobRunId}] Error during job cleanup: ${error.message}`);
                         }
