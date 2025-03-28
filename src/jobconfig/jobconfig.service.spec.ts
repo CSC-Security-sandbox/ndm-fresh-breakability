@@ -2480,7 +2480,8 @@ describe('JobConfigService', () => {
       expect(identityMappingRepo.save).toHaveBeenCalledTimes(2);
     });
     it('should parse blob data for SID template type', async () => {
-      const blobData = 'source1,target1\nsource2,target2\nsource3,target3';
+      const blobData =
+        "source sid,target sid\nsource1,target1\nsource2,target2\nsource3,target3";
       const templateType = TemplateType.SID;
 
       const result = await service.parseBlobData(blobData, templateType);
@@ -2493,7 +2494,8 @@ describe('JobConfigService', () => {
     });
 
     it('should parse blob data for GID template type', async () => {
-      const blobData = 'source1,target1,uid1,gid1\nsource2,target2,uid2,gid2\nsource3,target3,uid3,gid3';
+      const blobData =
+        "source gid,target gid,source uid,target uid\nsource1,target1,uid1,gid1\nsource2,target2,uid2,gid2\nsource3,target3,uid3,gid3";
       const templateType = TemplateType.GID;
 
       const result = await service.parseBlobData(blobData, templateType);
