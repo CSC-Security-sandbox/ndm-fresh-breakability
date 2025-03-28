@@ -146,12 +146,12 @@ export class InventoryService {
 
 
   async saveTasks(data: any) {
+    if (!data || !data.jobRunId || !data.taskType || !data.status) {
+
+      throw new Error("Invalid task data");
+    }
     try {
-      if (!data || !data.jobRunId || !data.taskType || !data.status) {
-
-        throw new Error("Invalid task data");
-      }
-
+     
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
 
       const taskId = id
