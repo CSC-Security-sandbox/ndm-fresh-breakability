@@ -1533,15 +1533,14 @@ describe('JobConfigService', () => {
           timeElapsed: 1000,
           scannedFilesCount: '10',
           scannedDirectoriesCount: '5',
-          totalScannedSize: '0 B',
-          totalMigratedSize: '4.88 KB',
+          totalScannedSize: '4.88 KB',
           errors: [],
         }],
         aggregateData: {
           timeElapsed: 1000,
           scannedFilesCount: '10',
           scannedDirectoriesCount: '5',
-          totalScannedSize: "0 B",
+          totalScannedSize: "4.88 KB",
         },
         errors: [],
       });
