@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { CommonActivityService } from '../common/common.service';
 import * as fs from 'fs';
 import { CommandStatus, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
-import { ScanDirCommandOutput } from './discovery.type';
+import { ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
 import * as utils from '../utils/utils';
 
 describe('DiscoveryScanActivity', () => {
@@ -190,21 +190,21 @@ describe('DiscoveryScanActivity', () => {
                 errorsInfo: [],
                 filesInfo: [],
                 dirsInfo: [],
-                taskStats:{},
+                taskStats: {},
             } as unknown as JobContext
             jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
             jest.spyOn(commonService, 'fetchOneTask').mockResolvedValue(mockTask);
             jest.spyOn(service, 'discover').mockResolvedValue({
-                errors:new Set(['fatal error']),
-                success : 0,
-                error : 1,
-                retryCount : 1,
-                isFatal : true,
-                files : 0,
-                folders : 0
+                errors: new Set(['fatal error']),
+                success: 0,
+                error: 1,
+                retryCount: 1,
+                isFatal: true,
+                files: 0,
+                folders: 0
             });
-            const scanResult = await service.scanActivity({ jobRunId:'1234' });
+            const scanResult = await service.scanActivity({ jobRunId: '1234' });
             expect(scanResult.noTaskFound).toBe(false);
             expect(scanResult.taskId).toBe(mockTask.id);
             expect(scanResult.files).toBe(0);
@@ -232,42 +232,42 @@ describe('DiscoveryScanActivity', () => {
                 appendToMigrationTask: jest.fn(),
                 appendToTaskStats: jest.fn(),
                 appendToTaskStatsList: jest.fn(),
-                jobState:{
-                    workers : [],
-                    tasks_completed : 1,
-                    tasks_total : 2,
-                    workers_agreed : [],
-                    status : 'RUNNING',
-                    failedWorkers : []
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
                 },
-                jobRunStatus:'RUNNING',
-                updatedTaskInfo:{
-                    lastId:'task-id'
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
                 },
-                getJobState : jest.fn().mockResolvedValue({}),
-                setJobState : jest.fn(),
-                getJobConfig : jest.fn(),
-                setJobRunStatus : jest.fn(),
-                setJobConfig : jest.fn(),
-                getJobRunStatus : jest.fn(),
-                errorsInfo : [],
-                filesInfo : [],
-                dirsInfo : [],
-                taskStats:{},
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
             } as unknown as JobContext
             jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
             jest.spyOn(commonService, 'fetchOneTask').mockResolvedValue(mockTask);
             jest.spyOn(service, 'discover').mockResolvedValue({
-                errors:new Set(['non-fatal error']),
-                success : 0,
-                error : 1,
-                retryCount : 1,
-                isFatal : false,
-                files : 0,
-                folders : 0
+                errors: new Set(['non-fatal error']),
+                success: 0,
+                error: 1,
+                retryCount: 1,
+                isFatal: false,
+                files: 0,
+                folders: 0
             });
-            const scanResult = await service.scanActivity({ jobRunId:'1234' });
+            const scanResult = await service.scanActivity({ jobRunId: '1234' });
             expect(scanResult.noTaskFound).toBe(false);
             expect(scanResult.taskId).toBe(mockTask.id);
             expect(scanResult.files).toBe(0);
@@ -286,33 +286,33 @@ describe('DiscoveryScanActivity', () => {
                 appendToMigrationTask: jest.fn(),
                 appendToTaskStats: jest.fn(),
                 appendToTaskStatsList: jest.fn(),
-                jobState:{
-                    workers : [],
-                    tasks_completed : 1,
-                    tasks_total : 2,
-                    workers_agreed : [],
-                    status : 'RUNNING',
-                    failedWorkers : []
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
                 },
-                jobRunStatus:'RUNNING',
-                updatedTaskInfo:{
-                    lastId:'task-id'
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
                 },
-                getJobState : jest.fn().mockResolvedValue({}),
-                setJobState : jest.fn(),
-                getJobConfig : jest.fn(),
-                setJobRunStatus : jest.fn(),
-                setJobConfig : jest.fn(),
-                getJobRunStatus : jest.fn(),
-                errorsInfo : [],
-                filesInfo : [],
-                dirsInfo : [],
-                taskStats:{},
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
             } as unknown as JobContext
             jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
             commonService.fetchOneTask = jest.fn().mockResolvedValue(null);
-            const scanResult = await service.scanActivity({ jobRunId:'1234' });
+            const scanResult = await service.scanActivity({ jobRunId: '1234' });
             expect(scanResult.noTaskFound).toBe(true);
             expect(scanResult.taskId).toBeUndefined();
             expect(scanResult.files).toBe(0);
@@ -321,59 +321,299 @@ describe('DiscoveryScanActivity', () => {
         });
     });
 
-    // describe('discover', () => {
-    //     it('should return discovery output', async () => {
-    //         const mockTask: any = {
-    //             id: 'task-id',
-    //             commands: [{ fPath: 'file1', ops: { 0: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, commandId: 'command-id', retryCount: 0, status: CommandStatus.READY }],
-    //             taskType: TaskType.SCAN,
-    //             status: TaskStatus.PENDING,
-    //             jobRunId: '1234',
-    //             workerId: 'test-worker',
-    //         }
-    //         const mockJobContext: JobContext = {
-    //             jobRunId: '1234',
-    //             jobConfig: {},
-    //             appendToUpdatedTaskList: jest.fn(),
-    //             appendToTaskList: jest.fn(),
-    //             appendToFileList: jest.fn(),
-    //             appendToDirList: jest.fn(),
-    //             appendToErrorList: jest.fn(),
-    //             appendToMigrationTask: jest.fn(),
-    //             appendToTaskStats: jest.fn(),
-    //             appendToTaskStatsList: jest.fn(),
-    //             jobState:{
-    //                 workers : [],
-    //                 tasks_completed : 1,
-    //                 tasks_total : 2,
-    //                 workers_agreed : [],
-    //                 status : 'RUNNING',
-    //                 failedWorkers : []
-    //             },
-    //             jobRunStatus:'RUNNING',
-    //             updatedTaskInfo:{
-    //                 lastId:'task-id'
-    //             },
-    //             getJobState : jest.fn().mockResolvedValue({}),
-    //             setJobState : jest.fn(),
-    //             getJobConfig : jest.fn(),
-    //             setJobRunStatus : jest.fn(),
-    //             setJobConfig : jest.fn(),
-    //             getJobRunStatus : jest.fn(),
-    //             errorsInfo : [],
-    //             filesInfo : [],
-    //             dirsInfo : [],
-    //             taskStats:{},
-    //         } as unknown as JobContext
+    describe('discover', () => {
+        it('should return discovery output', async () => {
+            const mockTask: any = {
+                id: 'task-id',
+                commands: [{ fPath: 'file1', ops: { 0: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, commandId: 'command-id', retryCount: 0, status: CommandStatus.READY }],
+                taskType: TaskType.SCAN,
+                status: TaskStatus.PENDING,
+                jobRunId: '1234',
+                workerId: 'test-worker',
+            }
+            const mockJobContext: JobContext = {
+                jobRunId: '1234',
+                jobConfig: {
+                    options: {
+                        excludeFilePattern: '',
+                        skipsFilesModifiedInLast: '',
+                    },
+                    sourceFileServer: {
+                        pathId: 'path-id',
+                    }
+                },
+                appendToUpdatedTaskList: jest.fn(),
+                appendToTaskList: jest.fn(),
+                appendToFileList: jest.fn(),
+                appendToDirList: jest.fn(),
+                appendToErrorList: jest.fn(),
+                appendToMigrationTask: jest.fn(),
+                appendToTaskStats: jest.fn(),
+                appendToTaskStatsList: jest.fn(),
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                },
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
+                },
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
+            } as unknown as JobContext
 
-    //         jest.spyOn(service, 'scanDirCommand').mockResolvedValue({
-    //             files: 1,
-    //             directory: 1,
-    //             isFatal: false,
-    //             error: undefined
-    //         } as ScanDirCommandOutput);
-    //         jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
+            jest.spyOn(service, 'scanDirCommand').mockResolvedValue({
+                files: 1,
+                directory: 1,
+                isFatal: false,
+                error: undefined
+            } as ScanDirCommandOutput);
+            jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
+            jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
+            jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
 
-    //     });
-    // }); 
+
+            const result = await service.discover({ task: mockTask, jobContext: mockJobContext });
+            expect(result).toEqual({
+                errors: new Set(),
+                success: 1,
+                error: 0,
+                retryCount: 0,
+                isFatal: false,
+                files: 1,
+                folders: 1
+            });
+        });
+
+        it('should return discovery output with errors', async () => {
+            const mockTask: any = {
+                id: 'task-id',
+                commands: [{ fPath: 'file1', ops: { 0: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } }, commandId: 'command-id', retryCount: 0, status: CommandStatus.READY }],
+                taskType: TaskType.SCAN,
+                status: TaskStatus.PENDING,
+                jobRunId: '1234',
+                workerId: 'test-worker',
+            }
+            const mockJobContext: JobContext = {
+                jobRunId: '1234',
+                jobConfig: {
+                    options: {
+                        excludeFilePattern: '',
+                        skipsFilesModifiedInLast: '',
+                    },
+                    sourceFileServer: {
+                        pathId: 'path-id',
+                    }
+                },
+                appendToUpdatedTaskList: jest.fn(),
+                appendToTaskList: jest.fn(),
+                appendToFileList: jest.fn(),
+                appendToDirList: jest.fn(),
+                appendToErrorList: jest.fn(),
+                appendToMigrationTask: jest.fn(),
+                appendToTaskStats: jest.fn(),
+                appendToTaskStatsList: jest.fn(),
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                },
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
+                },
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
+            } as unknown as JobContext
+            jest.spyOn(service, 'scanDirCommand').mockResolvedValue({
+                files: 1,
+                directory: 1,
+                isFatal: true,
+                error: 'Test error',
+            } as ScanDirCommandOutput);
+            jest.spyOn(utils, 'isFatalError').mockReturnValue(true);
+            jest.spyOn(redisService, 'setJobContext').mockResolvedValue({} as any);
+            jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
+            const result = await service.discover({ task: mockTask, jobContext: mockJobContext });
+            expect(result.success).toBe(0);
+            expect(result.error).toBe(1);
+            expect(result.files).toBe(1);
+            expect(result.folders).toBe(1);
+            expect(result.isFatal).toBe(true);
+        });
+    });
+
+    describe('scanDirCommand', () => {
+        it('should return scanDirCommand output', async () => {
+            const mockedJobContext: any = {
+                jobRunId: '1234',
+                jobConfig: {
+                    options: {
+                        excludeFilePattern: '',
+                        skipsFilesModifiedInLast: '',
+                    },
+                    sourceFileServer: {
+                        pathId: 'path-id',
+                    }
+                },
+                appendToUpdatedTaskList: jest.fn(),
+                appendToTaskList: jest.fn(),
+                appendToFileList: jest.fn(),
+                appendToDirList: jest.fn(),
+                appendToErrorList: jest.fn(),
+                appendToMigrationTask: jest.fn(),
+                appendToTaskStats: jest.fn(),
+                appendToTaskStatsList: jest.fn(),
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                },
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
+                },
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
+            }
+            const mockedInput = {
+                excludePatterns: [],
+                sourcePath: '/source/path',
+                sourcePrefix: 'mnt',
+                jobContext: mockedJobContext,
+                command: {
+                    fPath: 'file1',
+                    ops: { 0: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } },
+                    commandId: 'command-id',
+                    retryCount: 0,
+                    status: CommandStatus.READY
+                } as any,
+                skipFile: '',
+            }
+            jest.spyOn(service, 'getDirectoryContents').mockResolvedValue(['file1', 'file2']);
+            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'lstat').mockResolvedValue({
+                isDirectory: jest.fn().mockReturnValue(true),
+                isFile: jest.fn().mockReturnValue(false),
+                isSymbolicLink: jest.fn().mockReturnValue(false),
+            } as any);
+            jest.spyOn(utils, 'removePrefix').mockReturnValue('/source/path');
+            jest.spyOn(utils, 'getFileInfo').mockReturnValue({
+                fileName: 'file1',
+                filePath: '/source/path/file1',
+                fileSize: 100,
+                isDir: false,
+                isFile: true,
+                isLink: false,
+            } as any);
+
+            const result = await service.scanDirCommand(mockedInput);
+
+            expect(result.directory).toBe(2);
+            expect(result.files).toBe(0);
+            expect(result.isFatal).toBe(false);
+            expect(result.error).toBe(undefined);
+        });
+
+        // should catch error and appendToErrorList should be called
+        it('should handle error and return scanDirCommand output', async () => {
+            const mockedJobContext: any = {
+                jobRunId: '1234',
+                jobConfig: {
+                    options: {
+                        excludeFilePattern: '',
+                        skipsFilesModifiedInLast: '',
+                    },
+                    sourceFileServer: {
+                        pathId: 'path-id',
+                    }
+                },
+                appendToUpdatedTaskList: jest.fn(),
+                appendToTaskList: jest.fn(),
+                appendToFileList: jest.fn(),
+                appendToDirList: jest.fn(),
+                appendToErrorList: jest.fn(),
+                appendToMigrationTask: jest.fn(),
+                appendToTaskStats: jest.fn(),
+                appendToTaskStatsList: jest.fn(),
+                jobState: {
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                },
+                jobRunStatus: 'RUNNING',
+                updatedTaskInfo: {
+                    lastId: 'task-id'
+                },
+                getJobState: jest.fn().mockResolvedValue({}),
+                setJobState: jest.fn(),
+                getJobConfig: jest.fn(),
+                setJobRunStatus: jest.fn(),
+                setJobConfig: jest.fn(),
+                getJobRunStatus: jest.fn(),
+                errorsInfo: [],
+                filesInfo: [],
+                dirsInfo: [],
+                taskStats: {},
+            }
+            const mockedInput = {
+                excludePatterns: [],
+                sourcePath: '/source/path',
+                sourcePrefix: 'mnt',
+                jobContext: mockedJobContext,
+                command: {
+                    fPath: 'file1',
+                    ops: { 0: { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY } },
+                    commandId: 'command-id',
+                    retryCount: 0,
+                    status: CommandStatus.READY
+                } as any,
+            }
+            jest.spyOn(service, 'getDirectoryContents').mockResolvedValue(['file1', 'file2']);
+            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'lstat').mockRejectedValue(new Error('Test error'));
+            try {
+                await service.scanDirCommand(mockedInput as any);
+            } catch (error) {
+                expect(error).toBe('Test error');
+            }
+        });
+    })
 });

@@ -125,4 +125,3 @@ describe('DiscoveryActivity', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: Error: Axios error`);
   });
 });
- 
