@@ -214,6 +214,7 @@ describe("InventoryService", () => {
         fileName: "file.txt",
         filePath: "/path/to/file",
         createdAt: expect.any(Date),
+        error_type:'FATAL_ERROR'
       });
       expect(operationErrorRepo.save).toHaveBeenCalledWith(operationError);
     });
@@ -261,6 +262,7 @@ describe("InventoryService", () => {
         errorMessage: "Error",
         taskId: "taskId",
         createdAt: new Date(),
+        error_type: ErrorType.FATAL_ERROR
       };
 
       jest.spyOn(taskErrorRepo, "create").mockReturnValue(taskError as any);
@@ -273,6 +275,7 @@ describe("InventoryService", () => {
         errorMessage: "Error",
         taskId: "taskId",
         createdAt: expect.any(Date),
+        error_type:ErrorType.FATAL_ERROR
       });
       expect(taskErrorRepo.save).toHaveBeenCalledWith(taskError);
     });
@@ -337,17 +340,24 @@ describe("InventoryService", () => {
           fPath: "/path/to/file",
         },
       ];
-
-      jest.spyOn(taskRepo, "create").mockReturnValue(task as any);
-      jest.spyOn(taskRepo, 'findOne').mockResolvedValue(task as any);
-      jest.spyOn(operationRepo, "findOne").mockResolvedValue(null);
-      jest.spyOn(taskRepo, "save").mockResolvedValue(task as any);
-      jest.spyOn(operationRepo, "save").mockResolvedValue(operations as any);
-      jest.spyOn(operationRepo, "create").mockReturnValue(operations as any);
-
+    
+      jest.spyOn(taskRepo, "findOne").mockResolvedValue(null); // No existing task
+      jest.spyOn(taskRepo, "upsert").mockResolvedValue(task as any); // Mock upsert instead of create/save
+      jest.spyOn(operationRepo, "upsert").mockResolvedValue(operations as any);
+    
       await service.saveTasks(data);
-      expect(taskRepo.create).toHaveBeenCalledWith(task);
-      expect(taskRepo.save).toHaveBeenCalledWith(task);
+    
+      // Check that upsert was called instead of create/save
+      expect(taskRepo.upsert).toHaveBeenCalledWith(expect.objectContaining(task), ["id"]);
+      expect(operationRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "cmd1",
+            taskId: "taskId",
+          }),
+        ]),
+        ["id"]
+      );
     });
 
     it("should throw an error if task data is invalid", async () => {
