@@ -32,10 +32,12 @@ const DetailButton = ({ projectId }: { projectId: string }) => (
     verticalPlacement="bottom"
     Trigger="oval-hidden"
   >
-    <ActionMenu.Button onClick={() => copyToClipboard(projectId)}>
-      <Text>Project ID: {projectId.substring(0, 16)}...</Text>
-      <CopyIcon />
-    </ActionMenu.Button>
+    <ActionMenu.CopyButton
+        label="Project ID"
+        value={projectId}
+        tooltip={projectId}
+      >
+    </ActionMenu.CopyButton>
   </ActionMenu>
 );
 
