@@ -64,19 +64,11 @@ variable "ssh_communicator" {
 variable "aws_secret_key" {
   description = "AWS secret key"
   type        = string
-  default     = env("AWS_SECRET_ACCESS_KEY")
 }
 
 variable "aws_access_key" {
   description = "AWS access key"
   type        = string
-  default     = env("AWS_ACCESS_KEY_ID")
-}
-
-variable "aws_session_token" {
-  description = "AWS session token"
-  type        = string
-  default     = env("AWS_SESSION_TOKEN")
 }
 
 // AWS AMI and Instance Configuration
@@ -161,7 +153,6 @@ locals {
 source "amazon-ebs" "aws_ubuntu" {
   access_key    = var.aws_access_key
   secret_key    = var.aws_secret_key
-  token         = var.aws_session_token
   region        = var.aws_region
   ami_name      = "${var.project_name}-${var.component_name}-${local.formatted_timestamp}"
   instance_type = var.aws_packer_instance_type

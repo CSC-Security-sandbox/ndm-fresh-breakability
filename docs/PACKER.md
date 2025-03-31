@@ -19,9 +19,8 @@ Ensure the following tools are installed on your machine:
 
     **AWS:**
     ```bash
-    export AWS_ACCESS_KEY_ID="your-access-key"
-    export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-    export AWS_SESSION_TOKEN="your-session-token"
+    export PKR_VAR_aws_access_key="your-access-key"
+    export PKR_VAR_aws_secret_key="your-secret-access-key"
     ```
 
     **GCP:**
