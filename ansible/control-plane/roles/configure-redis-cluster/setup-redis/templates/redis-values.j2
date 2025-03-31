@@ -6,6 +6,10 @@ password: "welcome"
 service:
   type: ClusterIP
 
+redis:
+  configmap: |
+    loglevel debug
+
 persistence:
   enabled: true
   storageClass: "local-storage-redis"
