@@ -65,7 +65,10 @@ jobs:
 
         - name: Get short SHA
           id: get_short_sha
-          run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+          shell: pwsh
+          run: |
+            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
+            echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
   
         - name: Create GitHub Release
           id: create_release
