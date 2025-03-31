@@ -8,8 +8,54 @@ on:
     types: [created]
 
 jobs:
+  Worker-package:
+    runs-on: ubuntu-latest
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Replace GitHub Token Placeholder in .npmrc
+        run: |
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+
+      - name: Install dependencies and pkg
+        run: npm install && npm install pkg -g
+      
+      - name: Run Build
+        run: npm run build
+
+      - name: Build binary
+        run: npm run pkg
+    
+      - name: Zip pkg folder
+        run: zip -r pkg.zip pkg
+      
+      - name: Get short SHA
+        id: get_short_sha
+        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+
+      - name: Set SHA as output
+        id: set_sha
+        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_OUTPUT
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-binary-${{ env.SHORT_SHA }}
+          path: pkg.zip
+
   build:
     runs-on: windows-latest
+    needs: Worker-package
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -17,33 +63,17 @@ jobs:
     steps:
         - name: Checkout code
           uses: actions/checkout@v4
-  
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
+
+        - name: Download Binary Artifact
+          uses: actions/download-artifact@v4
           with:
-            node-version: '18'
-        
-        - name: Replace GitHub Token Placeholder in .npmrc (Windows)
-          shell: pwsh
-          run: |
-            (Get-Content .npmrc) -replace '\$\{GITOPS_USER_GITHUB_TOKEN\}', $env:GITOPS_USER_GITHUB_TOKEN | Set-Content .npmrc
-  
-        - name: Install dependencies and pkg
-          shell: cmd   
-          run: npm install && npm install pkg -g
-  
-        - name: Run Build
-          shell: cmd  
-          run: npm run build
-  
-        - name: Build Windows Binary
-          shell: cmd  
-          run: npm run pkg -- --no-bytecode
-  
+            name: worker-binary-${{ needs.Worker-package.outputs.SHORT_SHA }}
+            path: pkg
+
         - name: Prepare Installer Directory
           shell: pwsh
           run: |
-            # Adjust the path to your generated Windows binary
+            # Adjust the path to your downloaded Windows binary
             Rename-Item -Path "./pkg/worker-win-x64.exe" -NewName "worker.exe" -Force
             New-Item -ItemType Directory -Force -Path wininstaller
             Move-Item -Path "./pkg/worker.exe" -Destination "wininstaller\worker.exe" -Force
@@ -69,20 +99,64 @@ jobs:
           run: |
             $shortSha = $env:GITHUB_SHA.Substring(0, 6)
             echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
-  
-        - name: Create GitHub Release
-          id: create_release
-          uses: actions/create-release@v1
+
+        - name: Set SHA as output
+          id: set_sha
+          shell: pwsh
+          run: |
+            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
+            echo "SHORT_SHA=$shortSha" >> $GITHUB_OUTPUT
+
+        - name: Upload Installer Artifact
+          uses: actions/upload-artifact@v4
           with:
-            tag_name: ${{ env.SHORT_SHA }}
-            release_name: Release-${{ env.SHORT_SHA }}
-            draft: false
-            prerelease: true
-      
-        - name: Upload Release Asset
-          uses: actions/upload-release-asset@v1.0.1
-          with:
-            upload_url: ${{ steps.create_release.outputs.upload_url }}
-            asset_path: wininstaller\datamigrator-worker-setup.exe
-            asset_name: ${{ env.SHORT_SHA }}-windows-worker-installer.exe
-            asset_content_type: application/octet-stream
+            name: windows-installer-${{ env.SHORT_SHA }}
+            path: wininstaller\datamigrator-worker-setup.exe
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [Worker-package, build]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Get short SHA
+        id: get_short_sha
+        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+
+      - name: Download Binary Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worker-binary-${{ needs.Worker-package.outputs.SHORT_SHA }}
+          path: artifacts
+
+      - name: Download Installer Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-${{ needs.build.outputs.SHORT_SHA }}
+          path: artifacts
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.SHORT_SHA }}
+          release_name: Release-${{ env.SHORT_SHA }}
+          draft: false
+          prerelease: true
+
+      - name: Upload Binary Release Asset
+        uses: actions/upload-release-asset@v1.0.1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/worker-win-x64.exe
+          asset_name: ${{ env.SHORT_SHA }}-worker-binary.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Installer Release Asset
+        uses: actions/upload-release-asset@v1.0.1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/datamigrator-worker-setup.exe
+          asset_name: ${{ env.SHORT_SHA }}-windows-worker-installer.exe
+          asset_content_type: application/octet-stream
