@@ -11,7 +11,7 @@ const ErrorMessageContainer = ({
 }: ErrorMessageContainerType) => (
   <Box className="flex flex-col gap-2">
     <Box>{title}</Box>
-    <Box>Reason: {message}`</Box>
+    <Box>Reason: {message}</Box>
   </Box>
 );
 

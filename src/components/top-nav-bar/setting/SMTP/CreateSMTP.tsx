@@ -110,10 +110,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={
-            err?.message ||
-            "Failed to ${isEdit ? 'update' : 'add'} SMTP Details"
-          }
+          message={err?.message || (`Failed to ${isEdit ? "update" : "add"} SMTP Details.`)}
         />
       );
     }
