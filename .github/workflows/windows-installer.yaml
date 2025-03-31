@@ -39,13 +39,8 @@ jobs:
       - name: Zip pkg folder
         run: zip -r pkg.zip pkg
       
-      - name: Get short SHA
-        id: get_short_sha
+      - name: Set SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
-
-      - name: Set SHA as output
-        id: set_sha
-        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_OUTPUT
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
@@ -64,19 +59,28 @@ jobs:
         - name: Checkout code
           uses: actions/checkout@v4
 
+        - name: Set SHA
+          shell: pwsh
+          run: |
+            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
+            echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
+
         - name: Download Binary Artifact
           uses: actions/download-artifact@v4
           with:
-            name: worker-binary-${{ needs.Worker-package.outputs.SHORT_SHA }}
+            name: worker-binary-${{ env.SHORT_SHA }}
             path: pkg
+
+        - name: Extract Binary
+          shell: pwsh
+          run: |
+            Expand-Archive -Path "pkg\pkg.zip" -DestinationPath "pkg" -Force
 
         - name: Prepare Installer Directory
           shell: pwsh
           run: |
-            # Adjust the path to your downloaded Windows binary
-            Rename-Item -Path "./pkg/worker-win-x64.exe" -NewName "worker.exe" -Force
             New-Item -ItemType Directory -Force -Path wininstaller
-            Move-Item -Path "./pkg/worker.exe" -Destination "wininstaller\worker.exe" -Force
+            Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
@@ -93,20 +97,6 @@ jobs:
           run: |
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
 
-        - name: Get short SHA
-          id: get_short_sha
-          shell: pwsh
-          run: |
-            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
-            echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
-
-        - name: Set SHA as output
-          id: set_sha
-          shell: pwsh
-          run: |
-            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
-            echo "SHORT_SHA=$shortSha" >> $GITHUB_OUTPUT
-
         - name: Upload Installer Artifact
           uses: actions/upload-artifact@v4
           with:
@@ -120,20 +110,19 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Get short SHA
-        id: get_short_sha
+      - name: Set SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
 
       - name: Download Binary Artifact
         uses: actions/download-artifact@v4
         with:
-          name: worker-binary-${{ needs.Worker-package.outputs.SHORT_SHA }}
+          name: worker-binary-${{ env.SHORT_SHA }}
           path: artifacts
 
       - name: Download Installer Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-installer-${{ needs.build.outputs.SHORT_SHA }}
+          name: windows-installer-${{ env.SHORT_SHA }}
           path: artifacts
 
       - name: Create GitHub Release
