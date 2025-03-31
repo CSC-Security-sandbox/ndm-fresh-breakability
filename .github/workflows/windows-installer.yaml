@@ -134,13 +134,13 @@ jobs:
           draft: false
           prerelease: true
 
-      - name: Upload Binary Release Asset
+      - name: Upload Release Asset
         uses: actions/upload-release-asset@v1.0.1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/worker-win-x64.exe
-          asset_name: ${{ env.SHORT_SHA }}-worker-binary.exe
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/pkg.zip
+          asset_name: ${{ env.SHORT_SHA }}-worker.zip
+          asset_content_type: application/zip
 
       - name: Upload Installer Release Asset
         uses: actions/upload-release-asset@v1.0.1
