@@ -20,9 +20,9 @@ export abstract class SpeedTestJobContext {
   jobRunStatus: string;
   errorsInfo: ErrorCollection;
   filesInfo: FileCollection;
-  speedTestReadWriteInfo: SpeedTestReadWriteCollection;
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
+  speedTestReadWritesData: SpeedTestReadWriteCollection;
   migrateTask: MigrationTaskCollection;
   tasksInfo: TaskCollection;
   updatedTaskInfo :UpdatedTaskCollection
@@ -88,7 +88,7 @@ export abstract class SpeedTestJobContext {
 
 
   async appendToSpeedTestReadWriteInfo(speedTestReadWriteInfo: SpeedTestReadWriteInfo): Promise<string> {
-    return await this.speedTestReadWriteInfo.append(speedTestReadWriteInfo);
+    return await this.speedTestReadWritesData.append(speedTestReadWriteInfo);
   }
 
   async appendToDirList(dirInfo: FileInfo): Promise<string> {
@@ -124,7 +124,7 @@ export abstract class SpeedTestJobContext {
 
   async *speedTestReadWriteTask(readerName: string): AsyncGenerator<SpeedTestReadWriteInfo> {
     console.log('[Jobs Lib] Read speed Test Read Write speed task -> ', JSON.stringify(readerName));
-    yield* this.speedTestReadWriteInfo.read(readerName);
+    yield* this.speedTestReadWritesData.read(readerName);
   }
 
   async *groupReadFiles(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
@@ -218,10 +218,10 @@ export abstract class SpeedTestJobContext {
             lastId: this.tasksInfo.lastId,
           }
         : { numMessages: 0, lastId: '0-0' },
-      speedTestReadWriteInfo: this.speedTestReadWriteInfo
+        speedTestReadWritesData: this.speedTestReadWritesData
       ? {
-        numMessages: this.speedTestReadWriteInfo.numMessages,
-        lastId: this.speedTestReadWriteInfo.lastId,
+        numMessages: this.speedTestReadWritesData.numMessages,
+        lastId: this.speedTestReadWritesData.lastId,
         }
         : { numMessages: 0, lastId: '0-0' },
       migrateTask: this.migrateTask

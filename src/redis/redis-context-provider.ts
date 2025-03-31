@@ -62,7 +62,6 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
-    jobContext.SpeedTestReadWriteData = new RedisUpdatedSpeedTestReadWriteCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
     jobContext.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
     jobContext.migrateTask = new RedisMigrationTasksCollection(jobRunId, info.migrateTask.numMessages, info.migrateTask.lastId, this.redisClient);
     return jobContext;
@@ -122,6 +121,7 @@ export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProv
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
+    jobContext.speedTestReadWritesData = new RedisUpdatedSpeedTestReadWriteCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
     jobContext.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
     jobContext.migrateTask = new RedisMigrationTasksCollection(jobRunId, info.migrateTask.numMessages, info.migrateTask.lastId, this.redisClient);
     return jobContext;

@@ -22,7 +22,6 @@ export abstract class JobContext {
   filesInfo: FileCollection;
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
-  SpeedTestReadWriteData: SpeedTestReadWriteCollection;
   migrateTask: MigrationTaskCollection;
   tasksInfo: TaskCollection;
   updatedTaskInfo :UpdatedTaskCollection
