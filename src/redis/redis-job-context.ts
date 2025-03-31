@@ -9,6 +9,7 @@ import {
   RedisMigrationTasksCollection,
   RedisTaskCollection,
   RedisTaskStatsCollection,
+  RedisUpdatedSpeedTestReadWriteCollection
 } from './redis-collections';
 import { Logger } from '../utils/logging';
 import { SpeedTestJobContext } from '../types/speed-test-job-context';
@@ -34,6 +35,7 @@ export class RedisJobContext extends JobContext {
     this.tasksInfo = new RedisTaskCollection(jobRunId, 0, '0-0', redisClient);
     this.migrateTask = new RedisMigrationTasksCollection(jobRunId, 0, '0-0', redisClient);
     this.taskStats = new RedisTaskStatsCollection(jobRunId, 0, '0-0', redisClient);
+    this.SpeedTestReadWriteData = new RedisUpdatedSpeedTestReadWriteCollection(jobRunId, 0, '0-0', redisClient);
     this.errorsInfo = new RedisErrorCollection(jobRunId, 0, '0-0', redisClient);
     this.updatedTaskInfo = new RedisTaskCollection(jobRunId, 0, '0-0', redisClient);
   }
