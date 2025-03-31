@@ -9,7 +9,7 @@ async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity} = proxyActivities<SpeedTestReadActivity>({ startToCloseTimeout: '300s' });
+const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity, postInitialResultsActivity} = proxyActivities<SpeedTestReadActivity>({ startToCloseTimeout: '300s' });
 
 const {speedTestStatusUpdate: updateSpeedTestStatus} = proxyActivities<SpeedTestActivity>({ startToCloseTimeout: '5h' });
 
@@ -28,15 +28,16 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
     if(jobState.status !== JobRunStatus.Running) {
       return { message: `Job status changed to ${jobState.status}` };
     }
-
+    const data = await postInitialResultsActivity(traceId, workerId, args.fileServerId, tests);
+    
     let writeResult:SpeedTestOutput, readResult:SpeedTestOutput, networkPerformanceResult: SpeedTestOutput;
 
     if (tests.writeTest) {
-      writeResult = await writeActivity(args, traceId, volumeId);
+      writeResult = await writeActivity(args, traceId, volumeId, data.writeResultId);
     }
     
     if (tests.readTest) {
-      readResult = await readActivity(args, traceId, volumeId);
+      readResult = await readActivity(args, traceId, volumeId, data.readResultId);
     }
     
     if (tests.networkPerformance) {

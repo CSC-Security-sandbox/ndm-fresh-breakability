@@ -68,6 +68,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await contextProvider.getJobContext(traceId);
   }
 
+  async getSpeedTestJobContext(traceId: string) {
+    await this.ensureClient();
+    const contextProvider = JobContextFactory.getSpeedTestProvider('redis', this.client);
+    return await contextProvider.getJobContext(traceId);
+  }
+
   async setJobContext(traceId: string, jobContext: any) {
     await this.ensureClient();
     const serializedContext = jobContext.serialize();

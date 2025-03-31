@@ -1,5 +1,5 @@
 
-import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_STATUS, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_STATUS, SpeedTestReadWriteInfo, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -32,12 +32,12 @@ export class SpeedTestReadActivity {
     private readonly redisService: RedisService,
   ) {}
 
-  async readActivity(payload: any, traceId: string, volumeId:string): Promise<SpeedTestOutput> {
+  async readActivity(payload: any, traceId: string, volumeId:string, resultId:string): Promise<SpeedTestOutput> {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };    
     try{
       this.logger.log(`[${traceId}] Starting SpeedTest Read Activity`);
       payload.status = TaskStatus.RUNNING
-      const result = await this.readTest(payload.fsDetails, traceId, volumeId);
+      const result = await this.readTest(payload.fsDetails, traceId, volumeId, resultId);
       output.success = true;
       output.result = result;
       this.logger.log(`[${traceId}] SpeedTest Read Activity Completed.`);      
@@ -85,12 +85,12 @@ export class SpeedTestReadActivity {
     return output; // Return the original output object
   }
 
-  async writeActivity(payload: any, traceId: string, volumeId:string): Promise<SpeedTestOutput> {
+  async writeActivity(payload: any, traceId: string, volumeId:string, resultId:string): Promise<SpeedTestOutput> {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };   
     try{
       this.logger.log(`[${traceId}] Starting SpeedTest Write Activity`);
       payload.status = TaskStatus.RUNNING
-      const result = await this.writeTest(payload.fsDetails, traceId, volumeId);
+      const result = await this.writeTest(payload.fsDetails, traceId, volumeId, resultId);
       this.logger.log(`[${traceId}] SpeedTest Write Activity Completed.`);
       output.success = true;
       output.result = result;
@@ -110,6 +110,25 @@ export class SpeedTestReadActivity {
     return output;
   }
   
+  async postInitialResultsActivity(traceId: string, workerId: string, fileServerId: string,  tests: any): Promise<any> {
+    try {
+      const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
+      const data: any = {
+        traceId,
+        workerId,
+        fileServerID: fileServerId,
+        writeResult: tests.writeTest,
+        readResult: tests.readTest,
+        networkPerformanceResult: tests.networkPerformance,
+      };
+      const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/store-speed-test-initial-result`, data);
+      this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
+      return response.data;
+    } catch (error) {
+      this.logger.error(traceId, `Failed to post results to API: ${error.message}`);
+    }
+  }
+
   async postResultsActivity(traceId: string, workerId: string, fileServerId: string,  results: any) {
   try {
     const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
@@ -138,6 +157,8 @@ export class SpeedTestReadActivity {
         error: results.networkPerformanceResult.errors?.[0] || '',
       };
     }
+    console.log("JSON.stringify(data)=====================")
+    console.log(JSON.stringify(data))
     const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/store-speed-test-result`, data);
     this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
   } catch (error) {
@@ -235,16 +256,16 @@ export class SpeedTestReadActivity {
   }
 
   
-  async readTest(fsDetails: FileServerDetails, traceId: string, volumeId:string): Promise<any> {
+  async readTest(fsDetails: FileServerDetails, traceId: string, volumeId:string, resultId:string): Promise<any> {
       const basePath = `${fsDetails.workingDirectory}/${traceId}/${volumeId}`;
       const fileName = WorkersConfig.get('speedTestFileName');
-      return await this.readFile(basePath, fileName);
+      return await this.readFile(basePath, fileName, traceId, resultId);
   }
 
-  async writeTest(fsDetails: FileServerDetails, traceId: string, volumeId:string): Promise<any> {
+  async writeTest(fsDetails: FileServerDetails, traceId: string, volumeId:string, resultId:string): Promise<any> {
       const basePath =  `${fsDetails.workingDirectory}/${traceId}/${volumeId}`;
       const fileName = WorkersConfig.get('speedTestFileName');
-      return await this.createFile(basePath, fileName);
+      return await this.createFile(basePath, fileName, traceId, resultId);
   }
 
   
@@ -273,7 +294,7 @@ export class SpeedTestReadActivity {
     });
   }
 
-  async createFile(basePath: string, fileName: string) {
+  async createFile(basePath: string, fileName: string, jobRunId: string, resultId:string) {
     try {
       await this.ensureDirectoryExists(basePath);
       await this.checkDirPermissions(basePath,  fs.constants.W_OK);
@@ -292,20 +313,21 @@ export class SpeedTestReadActivity {
   
       const fileStream = fs.createWriteStream(filePath);
       let bytesWritten = 0;
-      const speedLogs: { timeStamp: string; speed: string }[] = [];
-  
-      // Log write speed every second
-      const intervalId = setInterval(() => {
-        const currentTime = performance.now();
-        const timeElapsed = (currentTime - startTime) / 1000; // Time in seconds
-        const speed = (bytesWritten / timeElapsed) / (1024 * 1024); // Speed in MB/s
-        const logMessage = `Write speed at ${timeElapsed.toFixed(2)} sec: ${speed.toFixed(2)} MB/s`;
-        this.logger.debug(logMessage);
-        speedLogs.push({
-          timeStamp: timeElapsed.toFixed(2),
-          speed: speed.toFixed(2),
-        });
-      }, 1000);
+        const jobContext = await this.redisService.getSpeedTestJobContext(jobRunId);
+
+        // Log write speed every second
+        const intervalId = setInterval(() => {
+          (async () => {
+            const currentTime = performance.now();
+            const timeElapsed = (currentTime - startTime) / 1000; // Time in seconds
+            const speed = (bytesWritten / timeElapsed) / (1024 * 1024); // Speed in MB/s
+            const logMessage = `Write speed at ${timeElapsed.toFixed(2)} sec: ${speed.toFixed(2)} MB/s`;
+            this.logger.debug(logMessage);
+            const speedData = new SpeedTestReadWriteInfo(timeElapsed.toFixed(2), speed.toFixed(2), resultId, jobRunId);
+            jobContext.appendToSpeedTestReadWriteInfo(speedData);
+            await this.redisService.setJobContext(jobRunId, jobContext);
+          })();
+        }, 1000);
   
       return new Promise((resolve, reject) => {
         // Timeout to stop the write process
@@ -317,7 +339,6 @@ export class SpeedTestReadActivity {
           const speed = (bytesWritten / totalTimeTaken) / (1024 * 1024); // Speed in MB/s
           this.logger.debug(`Write process timed out after ${timeout / 1000} seconds. Data written: ${bytesWritten} bytes.`);
           resolve({
-            speedLogs,
             totalTimeTaken,
             fileSize,
             bytesWritten,
@@ -353,7 +374,6 @@ export class SpeedTestReadActivity {
           const totalTimeTaken = (endTime - startTime) / 1000; // Time in seconds
           this.logger.debug(`${fileGB}GB file created in ${totalTimeTaken.toFixed(2)} seconds.`);
           resolve({
-            speedLogs,
             totalTimeTaken,
             fileSize,
             bytesWritten,
@@ -377,11 +397,11 @@ export class SpeedTestReadActivity {
     }
   }
 
-  async createFileIfNotExists(basePath: string, fileName: string) {
+  async createFileIfNotExists(basePath: string, fileName: string, jobRunId: string, resultId:string) {
 
     try {
       await fs.promises.open(path.join(basePath, fileName), 'wx');
-      await this.createFile(basePath, fileName);
+      await this.createFile(basePath, fileName, jobRunId, resultId);
     } catch (error) {
       if (error.code !== 'EEXIST') {
         throw error; // Rethrow if the error is not "file already exists"
@@ -389,8 +409,10 @@ export class SpeedTestReadActivity {
     }
   }
 
-  async readFile(basePath: string, fileName: string) {
+  async readFile(basePath: string, fileName: string, jobRunId: string, resultId:string): Promise<any> {
     try {
+      const jobContext = await this.redisService.getSpeedTestJobContext(jobRunId);
+
       const filePath = path.join(basePath, fileName);
       const fileGB = WorkersConfig.get('speedTestFileSize');
       const timeout = WorkersConfig.get('speedTestTimeout');
@@ -400,7 +422,7 @@ export class SpeedTestReadActivity {
       const fileSize = BYTES_IN_GB * fileGB;
   
       // Ensure file exists
-      await this.createFileIfNotExists(basePath, fileName);
+      await this.createFileIfNotExists(basePath, fileName, jobRunId, resultId);
   
       await this.checkDirPermissions(basePath,  fs.constants.R_OK);
   
@@ -410,20 +432,20 @@ export class SpeedTestReadActivity {
       // Read the file
       const fileStream = fs.createReadStream(filePath);
       let bytesRead = 0;
-      const speedLogs = [];
   
       // Log the read speed every second
       const intervalId = setInterval(() => {
-        const currentTime = performance.now();
-        const timeElapsed = (currentTime - startTime) / 1000; // time in seconds
-        const speed = (bytesRead / timeElapsed) / (1024 * 1024); // speed in MB/s
-        const logMessage = `Read speed at ${timeElapsed.toFixed(2)} sec: ${speed.toFixed(2)} MB/s`;
-        this.logger.debug(logMessage);
-        const speedData = {
-          timeStamp: timeElapsed.toFixed(2),
-          speed: speed.toFixed(2),
-        };
-        speedLogs.push(speedData);
+        (async () => {
+          const currentTime = performance.now();
+          const timeElapsed = (currentTime - startTime) / 1000; // time in seconds
+          const speed = (bytesRead / timeElapsed) / (1024 * 1024); // speed in MB/s
+          const logMessage = `Read speed at ${timeElapsed.toFixed(2)} sec: ${speed.toFixed(2)} MB/s`;
+          this.logger.debug(logMessage);
+          const speedData = new SpeedTestReadWriteInfo(timeElapsed.toFixed(2), speed.toFixed(2), resultId, jobRunId);
+          jobContext.appendToSpeedTestReadWriteInfo(speedData);
+          await this.redisService.setJobContext(jobRunId, jobContext);
+         
+        })();
       }, 1000);
   
       return new Promise((resolve, reject) => {
@@ -435,7 +457,6 @@ export class SpeedTestReadActivity {
           const speed = (bytesRead / totalTimeTaken) / (1024 * 1024); // speed in MB/s
           this.logger.debug(`Read process timed out after ${timeout / 1000} seconds. Data read: ${bytesRead} bytes.`);
           resolve({
-            speedLogs,
             totalTimeTaken,
             fileSize,
             bytesRead,
@@ -455,7 +476,6 @@ export class SpeedTestReadActivity {
           const speed = (bytesRead / totalTimeTaken) / (1024 * 1024); // speed in MB/s
           this.logger.debug(`${fileGB}GB file read in ${totalTimeTaken.toFixed(2)} seconds.`);
           resolve({
-            speedLogs,
             totalTimeTaken,
             fileSize,
             bytesRead,
