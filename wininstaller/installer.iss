@@ -23,7 +23,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "worker.exe"; DestDir: "{app}\binary"; Flags: ignoreversion
 Source: "winsw.exe"; DestDir: "{app}"; DestName: "DatamigratorWorker.exe"; Flags: ignoreversion
 Source: "service.xml"; DestDir: "{app}"; DestName: "DatamigratorWorker.xml"; Flags: ignoreversion
-Source: "worker.env.j2"; DestDir: "{tmp}"; Flags: dontcopy
+Source: "worker.env.j2"; DestDir: "{tmp}";
 
 [Dirs]
 Name: "{app}\logs"
