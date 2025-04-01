@@ -214,17 +214,17 @@ export class MigrationSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
-          if(syncOperation.ops[0].metadata?.size <= 1024) {
-            syncOperation.checksums = await this.copyFileWithChecksum(sourcePath, targetPath);
-          }
-          else{
+          // this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
+          // if(syncOperation.ops[0].metadata?.size <= 1024) {
+          //   syncOperation.checksums = await this.copyFileWithChecksum(sourcePath, targetPath);
+          // }
+          // else{
             this.logger.debug(`Copying file from ${sourcePath} to ${targetPath} using checksum with worker thread`);
             syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
-              sourcePath, destinationPath: targetPath, operationId: command.commandId
+              sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
             });
             this.logger.debug(`Output of copying file from ${sourcePath} to ${targetPath} is ${JSON.stringify(syncOperation.checksums)}`);
-          }
+          // }
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum: syncOperation.checksums } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
