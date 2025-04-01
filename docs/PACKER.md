@@ -17,6 +17,12 @@ Ensure the following tools are installed on your machine:
     export ARM_TENANT_ID="your-tenant-id"
     ```
 
+    **AWS:**
+    ```bash
+    export PKR_VAR_aws_access_key="your-access-key"
+    export PKR_VAR_aws_secret_key="your-secret-access-key"
+    ```
+
     **GCP:**
     ```bash
     gcloud auth application-default login
@@ -43,6 +49,8 @@ Navigate to the appropriate folder based on your cloud provider and the type of 
 - **Azure Worker:** `cd packer/azure/worker`
 - **GCP Control Plane:** `cd packer/gcp/control-plane`
 - **GCP Worker:** `cd packer/gcp/worker`
+- **AWS Control Plane:** `cd packer/aws/control-plane`
+- **AWS Worker:** `cd packer/aws/worker`
 - **VMware vSphere Control Plane:** `cd packer/vmware-vsphere/control-plane`
 - **VMware vSphere Worker:** `cd packer/vmware-vsphere/worker`
 
