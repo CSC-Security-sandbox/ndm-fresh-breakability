@@ -103,6 +103,16 @@ spec:
           periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 5 }}
         {{- end }}
         imagePullPolicy: Always
+        {{- if .Values.persistentVolume.enabled }}
+        volumeMounts:
+          - name: {{ .Values.persistentVolume.name }}
+            mountPath: {{ .Values.persistentVolume.mountPath }}
+      volumes:
+        - name: {{ .Values.persistentVolume.name }}
+          hostPath:
+            path: {{ .Values.persistentVolume.hostPath }}
+            type: DirectoryOrCreate
+        {{- end }}
 {{- end }}
         
 {{/* Default Template for Service. All Sub-Charts under this Chart can include the below template. */}}
@@ -157,7 +167,6 @@ spec:
     secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" .Values.appName) }}
   {{- end }}
 {{- end }}
-
 
 {{/* Default Template for HPA. All Sub-Charts under this Chart can include the below template. */}}
 {{- define "datamigrator.hpatemplate" }}
