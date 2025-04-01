@@ -23,12 +23,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "worker.exe"; DestDir: "{app}\binary"; Flags: ignoreversion
 Source: "winsw.exe"; DestDir: "{app}"; DestName: "DatamigratorWorker.exe"; Flags: ignoreversion
 Source: "service.xml"; DestDir: "{app}"; DestName: "DatamigratorWorker.xml"; Flags: ignoreversion
+Source: "worker.env.j2"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Dirs]
 Name: "{app}\logs"
-Name: "{app}\conf"
 Name: "{app}\mnt"
-Name: "{app}\bin"
 
 [Code]
 var
@@ -96,7 +95,7 @@ begin
   if CurStep = ssPostInstall then
   begin
     ConfigPath := ExpandConstant('{app}\binary\.env');
-    TemplatePath := ExpandConstant('{src}\worker.env.j2');
+    TemplatePath := ExpandConstant('{tmp}\worker.env.j2');
     Log('Creating configuration file at: ' + ConfigPath);
 
     if FileExists(TemplatePath) then
