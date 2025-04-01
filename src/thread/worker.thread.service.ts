@@ -17,10 +17,10 @@ export class WorkerThreadService{
     private workerDetails: Map<number, WorkerDetails> = new Map<number, WorkerDetails>();
 
     private sizes = [
-        {name:"1kb", maxFetch: 20}, 
-        {name: "1mb", maxFetch: 10}, 
-        {name: "10mb", maxFetch: 5}, 
-        {name: "100mb", maxFetch: 2}, 
+        {name:"1kb", maxFetch: 100}, 
+        {name: "1mb", maxFetch: 50}, 
+        {name: "10mb", maxFetch: 20}, 
+        {name: "100mb", maxFetch: 10}, 
         {name: "1gb", maxFetch: 1}
     ]
 
@@ -60,7 +60,6 @@ export class WorkerThreadService{
         let  j = 0, assignedThreadsForCurrentSize = 0
         for (let i = 0; i < count; i++) {
             const workerPath = path.join(__dirname + '/worker.thread.js')
-            this.logger.debug(`Starting worker thread with path: ${workerPath} for Band ${this.sizes[j]} ${j}`);
             const worker = new Worker(workerPath, { workerData: { operationBand: this.sizes[j].name, threadNumber: i } });
             this.workers.push(worker);
             this.availableWorkers.push(worker);
@@ -68,8 +67,6 @@ export class WorkerThreadService{
             assignedThreadsForCurrentSize++;
 
             worker.on('message', (results: WorkerThreadOutput[]) => {
-
-                this.logger.warn(`output from worker thread: ${JSON.stringify(results)}`);
 
                 results.map(result => {
                     // resolve the task
@@ -91,7 +88,6 @@ export class WorkerThreadService{
                 });
 
                 this.availableWorkers.push(worker);
-                this.logger.debug(`Worker thread: ${worker.threadId} is available`);
                 this.processQueue();
             });
 
@@ -113,8 +109,8 @@ export class WorkerThreadService{
     }
 
     handleWorkerThreadError(processId: number) {
-        const workerDetails = this.workerDetails.get(processId);
-        workerDetails.operatingTasks.forEach((taskId) => {
+        const workerDetails = this.workerDetails?.get(processId);
+        workerDetails?.operatingTasks?.forEach((taskId) => {
             const task = this.activeTasks.get(taskId);
             if(task){
                 this.logger.error(`Rejecting task with operationId: ${taskId}`);
@@ -127,35 +123,25 @@ export class WorkerThreadService{
     getTasks(bandName: string):ThreadTask[]{
         const band = this.sizes.find(size => size.name === bandName);
         const tasks = this.operationBands.get(bandName).task.splice(0, band.maxFetch);
-        this.logger.log(`Fetching tasks from band ${bandName} with ${tasks.length} tasks`);
         if(tasks.length > 0) return tasks;
         const index = this.sizes.indexOf(band);
         for(let i = index - 1; i >= 0; i--) {
             const tasks = this.operationBands.get(this.sizes[i].name).task.splice(0, this.sizes[i].maxFetch);
-            this.logger.log(`Fetching tasks from band ${this.sizes[i].name} with ${tasks.length} tasks`);
             if(tasks.length > 0) return tasks;
         }
         for(let i = index + 1; i < this.sizes.length; i++) {
             const tasks = this.operationBands.get(this.sizes[i].name).task.splice(0, this.sizes[i].maxFetch);
-            this.logger.log(`Fetching tasks from band ${this.sizes[i].name} with ${tasks.length} tasks`);
             if(tasks.length > 0) return tasks;
         }
-        // let remainingTasks = 0;
-        // this.operationBands.forEach((band) => {
-        //     remainingTasks += band.task.length;
-        // })
-        // this.logger.debug('remaining tasks: ', remainingTasks);
         return []
     }
 
     private processQueue() {
-        this.logger.error(`available threads ${this.availableWorkers.length }`)
+
         if (this.availableWorkers.length > 0) {
             const worker = this.availableWorkers.pop(); 
             const tasks:ThreadTask[] = this.getTasks(this.workerDetails.get(worker.threadId).operationBand);
-            this.logger.debug(`Processing queue with ${tasks.length} tasks for worker thread: ${worker.threadId}`);
             if (worker && tasks.length > 0) {
-                this.logger.debug(`Sending tasks to worker thread: ${JSON.stringify(tasks.length)}`);
                 const input: ThreadTaskInput[] = tasks.map((task: ThreadTask) => {
                     this.activeTasks.set(task.id, task);
                     const detail: ThreadTaskInput = {
@@ -176,7 +162,6 @@ export class WorkerThreadService{
     }
 
     async migrateWorkerThread({destinationPath, sourcePath, operationId, size}: MigrateFile): Promise<any> {
-        
         return new Promise((resolve, reject) => {
             const operationBand = this.getTaskBand(size);
             this.operationBands.get(operationBand).task.push({ 
@@ -185,7 +170,6 @@ export class WorkerThreadService{
                 Operation: ThreadOperation.COPY_FILE, 
                 resolve, reject,
             });
-            this.logger.debug(`Added task to band ${operationBand} with operationId: ${operationId} and current size: ${this.operationBands.get(operationBand).task.length}`);
             this.processQueue();
         })
     }

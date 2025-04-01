@@ -86,9 +86,9 @@ export class MigrationScanService {
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
 
-                this.logger.debug(`Item : ${item}`);
-                this.logger.debug(`relativeSourcePath : ${relativeSourcePath}`);
-                this.logger.debug(`lState -----> , ${JSON.stringify(sourceStat)}`)
+                // this.logger.debug(`Item : ${item}`);
+                // this.logger.debug(`relativeSourcePath : ${relativeSourcePath}`);
+                // this.logger.debug(`lState -----> , ${JSON.stringify(sourceStat)}`)
 
 
                 if (sourceStat.isDirectory()) {
@@ -176,7 +176,7 @@ export class MigrationScanService {
                     };
         
                     const result = await this.scanContent(scanInput);
-                    this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
+                    // this.logger.debug(`Result of scanContent: ${JSON.stringify(result)}`);
         
                     scanPath.files += result.files;
                     scanPath.folders += result.directory;

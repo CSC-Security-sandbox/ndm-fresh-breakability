@@ -1,11 +1,9 @@
-// import { ActivitiesModule } from "src/activities/activities.module";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { ThreadOperation, ThreadTaskInput, WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
+import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
 const { parentPort, workerData } = require('worker_threads');
 
-// const { NestFactory } = require('@nestjs/core');
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
 
 async function calculateChecksum(filePath: string): Promise<string> {
@@ -24,7 +22,6 @@ async function calculateChecksum(filePath: string): Promise<string> {
 }
 
 async function copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
-    console.debug(`Worker Thread - Copying file from ${sourceFile} to ${destinationFile}`);
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
