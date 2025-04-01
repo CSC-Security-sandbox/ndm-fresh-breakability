@@ -6,6 +6,7 @@ import { ConfigDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
@@ -18,6 +19,7 @@ describe('ConfigurationController', () => {
     updateConfiguration: jest.fn(),
     refreshConfig: jest.fn(),
     remove: jest.fn(),
+    isConfigNameUnique: jest.fn()
   };
 
   beforeEach(async () => {
@@ -107,6 +109,23 @@ describe('ConfigurationController', () => {
       expect(service.getConfigById).toHaveBeenCalledWith(configId);
     });
 
+  });
+
+  describe('checkUniqueConfigName', () => {
+    it('should return true if config name is unique', async () => {
+      jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
+      await expect(controller.isConfigNameUnique('project-id', 'config-name')).resolves.toEqual({ isUnique: true });
+    });
+
+    it('should throw NotFoundException if project ID is invalid', async () => {
+      jest.spyOn(service, 'isConfigNameUnique').mockRejectedValue(new NotFoundException('Invalid Project ID'));
+      await expect(controller.isConfigNameUnique('invalid-project-id', 'config-name')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name is not unique', async () => {
+      jest.spyOn(service, 'isConfigNameUnique').mockRejectedValue(new BadRequestException('Config name already exists for this project.'));
+      await expect(controller.isConfigNameUnique('project-id', 'config-name')).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('update', () => {
