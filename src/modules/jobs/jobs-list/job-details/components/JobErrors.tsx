@@ -9,7 +9,7 @@ import {
   NoticeTriangleIcon,
   SuccessIcon,
 } from "@netapp/bxp-style/react-icons/Notification";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import JobErrorsContainer from "@modules/jobs/jobs-list/job-details/components/JobErrorsContainer";
 import { JobRunErrorsOverviewApiType } from "@/types/app.type";
@@ -30,7 +30,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
     }
   }, [latestJobRunId, navigate]);
 
-  const getTotalErrorsCount = useCallback(() => errorDetails.reduce((acc, error) => acc + error.count, 0), [errorDetails]);
+  const getTotalErrorsCount = useMemo(() => errorDetails.reduce((acc, error) => acc + error.count, 0), [errorDetails]);
 
   return (
     <Card className="h-full">
@@ -41,7 +41,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
           ) : (
             <SuccessIcon color="success" />
           )}
-          <Text>Errors ({getTotalErrorsCount()})</Text>
+          <Text>Errors ({getTotalErrorsCount})</Text>
         </CardTitle>
         <Button
           onClick={handlerErrorNavigation}
