@@ -16,3 +16,14 @@ export const formatTotal = (
     unit,
   };
 };
+
+export const formattedValue = (value) => {
+  const strValue = value.toString();
+  const [integerPart, decimalPart] = strValue.split(".");
+
+  if (integerPart.length > 4) return `${integerPart.slice(0, 4)}...`;
+
+  return decimalPart
+    ? `${integerPart}.${decimalPart.slice(0, 2)}`
+    : integerPart;
+};
