@@ -195,7 +195,7 @@ export class OverviewService {
       const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
       const migratedSize  =  await this.inventoryRepository.query(
         `
-        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalDiscoveredSize"
+        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalMigratedSize"
         FROM (
           SELECT DISTINCT ON (i.path) i.file_size
           FROM  ${schema}.inventory i
