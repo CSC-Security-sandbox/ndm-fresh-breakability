@@ -3,7 +3,7 @@ name: Build Worker Binary and Windows Installer
 on:
   push:
     branches:
-      - ad/windows-worker-action
+      - main
   release:
     types: [created]
 
