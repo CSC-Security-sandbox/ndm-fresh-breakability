@@ -8,6 +8,7 @@ import { JobTaskErrorsTabsPropsType } from "@modules/jobs/job-task-errors/JobTas
 import { InnerTab } from "@netapp/bxp-design-system-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Show } from "@components/show/Show";
 
 const JobTaskErrorsTabs = ({
   currentErrorType,
@@ -41,24 +42,43 @@ const JobTaskErrorsTabs = ({
 
   return (
     <InnerTab>
-      {/* FATAL ERROR */}
-      <InnerTab.Button
-        isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR}
-        onClick={() => setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)}
-      >
-        Fatal Errors ({getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)})
-      </InnerTab.Button>
+      <Show>
+        {/* FATAL ERROR */}
+        <Show.When isTrue={getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR) > 0}>
+          <InnerTab.Button
+            isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR}
+            onClick={() => setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)}
+          >
+            Fatal Errors ({getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)})
+          </InnerTab.Button>
+        </Show.When>
 
-      {/* TRANSIENT ERROR */}
-      <InnerTab.Button
-        isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR}
-        onClick={() =>
-          setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)
-        }
-      >
-        Transient Errors (
-        {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)})
-      </InnerTab.Button>
+        {/* TRANSIENT ERROR */}
+        <Show.When isTrue={getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR) > 0}>
+          <InnerTab.Button
+            isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR}
+            onClick={() =>
+              setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)
+            }
+          >
+            Transient Errors (
+            {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)})
+          </InnerTab.Button>
+        </Show.When>
+
+        {/* RECOVERABLE ERRORS */}
+        <Show.When isTrue={getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR) > 0}>
+          <InnerTab.Button
+            isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR}
+            onClick={() =>
+              setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)
+            }
+          >
+            Recoverable Errors (
+            {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)})
+          </InnerTab.Button>
+        </Show.When>
+      </Show>
     </InnerTab>
   );
 };
