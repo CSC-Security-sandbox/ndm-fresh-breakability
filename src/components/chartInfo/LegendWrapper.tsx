@@ -1,5 +1,6 @@
 import { LegendWrapperPropsType } from "@/types/app.type";
 import Legends from "@components/chartInfo/Legends";
+import { formattedValue } from "@components/chartInfo/legends.utils";
 
 const LegendWrapper = ({
   title,
@@ -10,7 +11,7 @@ const LegendWrapper = ({
   return (
     <Legends
       title={title}
-      value={value?.length > 3 ? value.slice(0, 4) : value}
+      value={formattedValue(value)}
       color={color}
       unit={unit}
       valueTooltip={value?.length > 3 ? value.concat(" ", unit) : ""}
