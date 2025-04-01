@@ -9,7 +9,6 @@
     mode: "0755"
   loop:
     - { path: "/opt/datamigrator" }
-    - { path: "/opt/datamigrator/reports" }
     - { path: "/opt/datamigrator/bin" }
     - { path: "/opt/datamigrator/conf" }
     - { path: "/opt/datamigrator/logs" }
