@@ -83,20 +83,45 @@ begin
   end;
 end;
 
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  EnvContent: String;
+  EnvContent: AnsiString;
+  TemplateContent: AnsiString;
+  TempContent: String;
   ConfigPath: String;
+  TemplatePath: String;
+  CountMatch: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
     ConfigPath := ExpandConstant('{app}\binary\.env');
+    TemplatePath := ExpandConstant('{src}\worker.env.j2');
     Log('Creating configuration file at: ' + ConfigPath);
-    
-    EnvContent :=
-      'NODE_TLS_REJECT_UNAUTHORIZED=0' + #13#10 +
-      'KEYCLOAK_REALM=datamigrator' + #13#10 +
-      '' + #13#10 +
+
+    if FileExists(TemplatePath) then
+    begin
+      if not LoadStringFromFile(TemplatePath, TemplateContent) then
+      begin
+        Log('Failed to read template file: ' + TemplatePath);
+        MsgBox('Error reading template file.', mbError, MB_OK);
+        exit;
+      end;
+      Log('Successfully read template file');
+      TempContent := String(TemplateContent);
+      CountMatch := StringChangeEx(TempContent, 'BASE_WORKING_PATH=''/mnt/datamigrator''', '', True);
+      Log('Count Match is: '+ IntToStr(CountMatch));
+      Log('Removed BASE_WORKING_PATH from template');
+    end
+    else
+    begin
+      Log('Template worker.env.j2 not found at: ' + TemplatePath);
+      MsgBox('Template file missing.', mbError, MB_OK);
+      exit;
+    end;
+
+    EnvContent := 
+      TempContent + #13#10 + #13#10 +
       'WORKER_CONFIG_URL=https://' + ConfigControlPlaneIP + #13#10 +
       'WORKER_JOB_SERVICE_URL=https://' + ConfigControlPlaneIP + #13#10 +
       'WORKER_REPORT_SERVICE_URL=https://' + ConfigControlPlaneIP + #13#10 +
@@ -108,53 +133,7 @@ begin
       'REDIS_USERNAME=default' + #13#10 +
       'REDIS_PASSWORD=welcome' + #13#10 +
       'REDIS_PORT=6379' + #13#10 +
-      '' + #13#10 +
-      '#  ----------------------------- NFS ----------------------------------#' + #13#10 +
-      'NFS_WIN_LIST_PATH_CMD=''showmount -e ${HOST}''' + #13#10 +
-      'NFS_LINUX_LIST_PATH_CMD=''showmount -e ${HOST}''' + #13#10 +
-      'NFS_UNIX_LIST_PATH_CMD=''showmount -e ${HOST}''' + #13#10 +
-      '' + #13#10 +
-      'NFS_LINUX_MOUNT_PATH_CMD=''mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
-      'NFS_UNIX_MOUNT_PATH_CMD=''mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
-      '' + #13#10 +
-      'NFS_LINUX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
-      'NFS_UNIX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
-      '' + #13#10 +
-      'NFS_LINUX_CHECK_MOUNT_PATH_CMD=''mount | grep ${PATH}''' + #13#10 +
-      'NFS_UNIX_CHECK_MOUNT_PATH_CMD=''mount | grep ${PATH}''' + #13#10 +
-      '' + #13#10 +
-
-      '#  ----------------------------- SMB ----------------------------------#' + #13#10 +
-      'SMB_WIN_VALIDATE_CRED_CMD=''net use \\${HOST} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
-      '' + #13#10 +
-      'SMB_WIN_LIST_PATH_CMD=''net view ${HOST}''' + #13#10 +
-      'SMB_LINUX_LIST_PATH_CMD="smbclient -L ${HOST} -U ${USERNAME}%''${PASSWORD}''"' + #13#10 +
-      'SMB_UNIX_LIST_PATH_CMD="smbclient -L ${HOST} -U ${USERNAME}%''${PASSWORD}''"' + #13#10 +
-      '' + #13#10 +
-      'SMB_WIN_MOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
-      'SMB_WIN_CREATE_LINK_PATH_CMD=''powershell.exe New-Item -ItemType SymbolicLink -Path "${DIR_PATH}" -Target "\\${HOST}\${MOUNT_PATH}"''' + #13#10 +
-      'SMB_WIN_UNMOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /delete''' + #13#10 +
-      'SMB_WIN_UNLINK_PATH_CMD=''powershell.exe -Command "Remove-Item ${DIR_PATH} -Recurse -Force -Confirm:$false"''' + #13#10 +
-      'SMB_LINUX_MOUNT_PATH_CMD="mount -t cifs //${HOST}${MOUNT_PATH} ${DIR_PATH} -o username=${USERNAME},password=''${PASSWORD}''"' + #13#10 +
-      'SMB_UNIX_MOUNT_PATH_CMD=''mount_smbfs //${USERNAME}:${PASSWORD}@${HOST}${PATH} ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}''' + #13#10 +
-      '' + #13#10 +
-      'SMB_LINUX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
-      'SMB_UNIX_UNMOUNT_PATH_CMD=''umount ${DIR_PATH}''' + #13#10 +
-      'SMB_WIN_DISCONNECT_SESSION_CMD=''net use \\${HOST} /delete''' + #13#10 +
-      '' + #13#10 +
-
-      'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
-      '' + #13#10 +
-
-      '#  ----------------------------- NFS With Protocol ----------------------------------#' + #13#10 +
-      'NFS_LINUX_MOUNT_PATH_CMD=''mount -t nfs -o nfsvers=${PROTOCOL_VERSION} ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
-      'NFS_UNIX_MOUNT_PATH_CMD=''mount -t nfs -o nfsvers=${PROTOCOL_VERSION} ${HOST}:${MOUNT_PATH} ${DIR_PATH}''' + #13#10 +
-      '' + #13#10 +
-
-      '#  ----------------------------- SMB With Protocol ----------------------------------#' + #13#10 +
-      'SMB_WIN_MOUNT_PATH_CMD=''net use \\${HOST}\${MOUNT_PATH} /user:"${USERNAME}" "${PASSWORD}"''' + #13#10 +
-      'SMB_LINUX_MOUNT_PATH_CMD="mount -t cifs //${HOST}${MOUNT_PATH} ${DIR_PATH} -o username=${USERNAME},password=''${PASSWORD}'',vers=${PROTOCOL_VERSION}"' + #13#10 +
-      'SMB_UNIX_MOUNT_PATH_CMD=''mount_smbfs -o vers=${PROTOCOL_VERSION} //${USERNAME}:${PASSWORD}@${HOST}${PATH} ${BASE_DIR}/${JOB_RUN_ID}/${PATH_ID}''';
+      'BASE_WORKING_PATH=''C:\datamigrator\mnt''';
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin

@@ -65,6 +65,15 @@ jobs:
             $shortSha = $env:GITHUB_SHA.Substring(0, 6)
             echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
 
+        - name: Checkout worker.env.j2 from app-deployment repository
+          uses: actions/checkout@v4
+          with:
+            repository: ${{ github.repository_owner }}/app-deployment
+            token: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+            path: app-deployment
+            sparse-checkout: |
+              ansible/worker/roles/configure-worker/templates/worker.env.j2
+
         - name: Download Binary Artifact
           uses: actions/download-artifact@v4
           with:
@@ -81,6 +90,11 @@ jobs:
           run: |
             New-Item -ItemType Directory -Force -Path wininstaller
             Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
+
+        - name: Copy environment file
+          shell: pwsh
+          run: |
+            Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
