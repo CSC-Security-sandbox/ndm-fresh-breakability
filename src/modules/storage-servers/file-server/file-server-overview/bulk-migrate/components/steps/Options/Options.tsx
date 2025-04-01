@@ -98,6 +98,12 @@ const Options = () => {
                   <Popover>Download/Upload GID & UID Mapping</Popover>
                 </Box>
               }
+              errorMessage={
+                optionForm?.formErrors?.["upload_uid_mapping.fileName"]
+              }
+              showError={
+                optionForm?.formErrors?.["upload_uid_mapping.fileName"] ?? false
+              }
             />
           ) : (
             <FormFieldUploadFile
@@ -120,6 +126,12 @@ const Options = () => {
                   </Button>
                   <Popover>Download/Upload SID Mapping</Popover>
                 </Box>
+              }
+              errorMessage={
+                optionForm?.formErrors?.["upload_sid_mapping.fileName"]
+              }
+              showError={
+                optionForm?.formErrors?.["upload_sid_mapping.fileName"] ?? false
               }
             />
           )}
