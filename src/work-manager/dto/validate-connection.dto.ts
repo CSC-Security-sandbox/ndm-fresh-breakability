@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsString, IsArray, IsObject, IsOptional, ValidateNested, IsUUID } from 'class-validator';
+import { Trim } from '../../utils/transformers';
 
 class Protocol {
   @ApiProperty({ enum: ['NFS', 'SMB'], description: 'The type of protocol (NFS or SMB)' })
@@ -20,6 +21,7 @@ class Protocol {
 class FileServer {
   @ApiProperty({ description: 'The hostname of the file server' })
   @IsString()
+  @Trim()
   hostname: string;
 
   @ApiProperty({
