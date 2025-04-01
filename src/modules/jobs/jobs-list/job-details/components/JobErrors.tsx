@@ -30,6 +30,8 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
     }
   }, [latestJobRunId, navigate]);
 
+  const getTotalErrorsCount = useCallback(() => errorDetails.reduce((acc, error) => acc + error.count, 0), [errorDetails]);
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -39,8 +41,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
           ) : (
             <SuccessIcon color="success" />
           )}
-
-          <Text>Errors ({errorDetails?.length})</Text>
+          <Text>Errors ({getTotalErrorsCount()})</Text>
         </CardTitle>
         <Button
           onClick={handlerErrorNavigation}

@@ -42,23 +42,40 @@ const JobTaskErrorsTabs = ({
   return (
     <InnerTab>
       {/* FATAL ERROR */}
-      <InnerTab.Button
-        isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR}
-        onClick={() => setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)}
-      >
-        Fatal Errors ({getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)})
-      </InnerTab.Button>
+      {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR) > 0 &&
+        <InnerTab.Button
+          isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR}
+          onClick={() => setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)}
+        >
+          Fatal Errors ({getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR)})
+        </InnerTab.Button>
+      }
 
       {/* TRANSIENT ERROR */}
-      <InnerTab.Button
-        isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR}
-        onClick={() =>
-          setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)
-        }
-      >
-        Transient Errors (
-        {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)})
-      </InnerTab.Button>
+      {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR) > 0 &&
+        <InnerTab.Button
+          isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR}
+          onClick={() =>
+            setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)
+          }
+        >
+          Transient Errors (
+          {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR)})
+        </InnerTab.Button>
+      }
+
+      {/* RECOVERABLE ERRORS */}
+      {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR) > 0 &&
+        <InnerTab.Button
+          isActive={currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR}
+          onClick={() =>
+            setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)
+          }
+        >
+          Recoverable Errors (
+          {getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)})
+        </InnerTab.Button>
+      }
     </InnerTab>
   );
 };
