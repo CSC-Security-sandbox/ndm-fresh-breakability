@@ -124,6 +124,7 @@
       "/dist",
       "/test/",
       "/entities/",
+      "src/middleware",
       "src/utils"
     ]
   }
