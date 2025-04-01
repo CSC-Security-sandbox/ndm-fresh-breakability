@@ -243,39 +243,6 @@ export interface GetAllWorkersApiType {
   status: string;
 }
 
-interface TableColumnStateType {
-  mustShow: boolean;
-  isHidden: boolean;
-}
-
-interface SelectionStateType {
-  rows: Record<string, any>;
-  count: number;
-  isDirty: boolean;
-  isMulti: boolean;
-}
-
-interface FilterStateType {
-  columns: Record<string, any>;
-  count: number;
-}
-
-interface SortStateType {
-  column: number;
-  sortOrder: "asc" | "desc";
-}
-
-interface PaginationType {
-  pageIndex: number;
-  pageRows: any[];
-  pageCount: number;
-}
-
-export interface AssociatedUsersPropsType {
-  user?: string;
-  role?: string;
-}
-
 export interface AssociatedUsersOptionsType {
   user: { label: string; value: string };
   role: { label: string; value: string };
@@ -443,7 +410,7 @@ export interface JobRowType {
   errors: number;
   totalRuns: number;
   createdAt: string;
-  updatedAt: string; 
+  updatedAt: string;
 }
 
 export interface FileServerOverviewApi {
