@@ -5,4 +5,4 @@ vite.config.js
 **/build/**,
 **/coverage/**
 **/yarn.lock
-**/package-lock.json
+# **/package-lock.json

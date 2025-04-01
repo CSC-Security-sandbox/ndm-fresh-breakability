@@ -1,13 +1,14 @@
-import { FileServerOverviewApi } from "@/types/app.type";
-import { Box } from "@components/container/index";
-import { DoughnutChart } from "@netapp/bxp-design-system-react";
-import LegendWrapper from "@components/chartInfo/LegendWrapper";
-import { Tooltip } from "@netapp/bxp-design-system-react";
-import React, { useMemo } from "react";
 import {
   calculateTotal,
   formatTotal,
 } from "@components/chartInfo/legends.utils";
+
+import { Box } from "@components/container/index";
+import { DoughnutChart } from "@netapp/bxp-design-system-react";
+import { FileServerOverviewApi } from "@/types/app.type";
+import LegendWrapper from "@components/chartInfo/LegendWrapper";
+import { Tooltip } from "@netapp/bxp-design-system-react";
+import { useMemo } from "react";
 
 const StorageChart = ({
   storageDetails: {
@@ -20,8 +21,10 @@ const StorageChart = ({
   storageDetails: FileServerOverviewApi["storageDetails"];
 }) => {
   const [totalDiscoveredSizeInDigit, unit] = totalDiscoveredSize.split(" ");
-  const [totalPendingSizeInDigit] = totalPendingSize.split(" ");
-  const [totalMigratedSizeInDigit] = totalMigratedSize.split(" ");
+  const [totalPendingSizeInDigit, totalPendingSizeUnit] =
+    totalPendingSize.split(" ");
+  const [totalMigratedSizeInDigit, totalMigratedSizeUnit] =
+    totalMigratedSize.split(" ");
 
   const totalSize = useMemo(() => {
     return calculateTotal([
@@ -66,13 +69,13 @@ const StorageChart = ({
           title="Pending"
           value={totalPendingSizeInDigit}
           color="bg-orange-500"
-          unit={unit}
+          unit={totalPendingSizeUnit}
         />
         <LegendWrapper
           title="Migrated"
           value={totalMigratedSizeInDigit}
           color="bg-teal-500"
-          unit={unit}
+          unit={totalMigratedSizeUnit}
         />
         {totalFileServers !== undefined && (
           <LegendWrapper
