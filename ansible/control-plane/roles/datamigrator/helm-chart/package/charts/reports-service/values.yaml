@@ -88,3 +88,9 @@ liquibase:
   args:
     - "update"
     - "--source-vault"
+
+persistentVolume:
+  enabled: true
+  name: reports-volume
+  mountPath: /reports
+  hostPath: /data/reports
