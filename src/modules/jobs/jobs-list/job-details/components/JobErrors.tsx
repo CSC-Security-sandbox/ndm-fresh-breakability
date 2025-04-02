@@ -30,7 +30,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
     }
   }, [latestJobRunId, navigate]);
 
-  const getTotalErrorsCount = useMemo(() => errorDetails.reduce((acc, error) => acc + error.count, 0), [errorDetails]);
+  const getTotalErrorsCount = useMemo(() => errorDetails.reduce((acc, error) => acc + Number(error.count), 0), [errorDetails]);
 
   return (
     <Card className="h-full">
