@@ -9,7 +9,6 @@ import {
   TaskStatsCollection,
   UpdatedTaskCollection,
   MigrationTaskCollection,
-  SpeedTestReadWriteCollection,
 
 } from './stream-collection';
 

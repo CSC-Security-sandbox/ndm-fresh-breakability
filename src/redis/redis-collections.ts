@@ -111,7 +111,7 @@ export class RedisTaskStatsCollection
   }
 }
 
-export class RedisUpdatedSpeedTestReadWriteCollection
+export class RedisSpeedTestReadWriteCollection
   extends RedisStreamCollection<SpeedTestReadWriteInfo>
   implements SpeedTestReadWriteCollection
 {
@@ -123,7 +123,7 @@ export class RedisUpdatedSpeedTestReadWriteCollection
   ) {
     super(
       jobRunId,
-      JobUtils.getRedisKey(jobRunId, 'tasks-updated'),
+      JobUtils.getRedisKey(jobRunId, 'speed-test-read-write'),
       numMessages,
       lastId,
       redisClient,
