@@ -72,16 +72,17 @@ export class InventoryService {
   }
 
   async saveSpeedLogsEntries(data: any) {
-    try{
-      const writeLogEntry = Object.assign(new SpeedLogEntryEntity(), {
+    try {
+      // Create and save the new record
+      const writeLogEntry = this.SpeedLogEntryRepo.create({
         speedLogId: data.testType,
         timeStamp: data.timeStamp,
         speed: Number(data.speed),
       });
       await this.SpeedLogEntryRepo.save(writeLogEntry);
-    }
-    catch (err) {
-    throw new Error('Error while saving Speed Log records to the database');
+    } catch (err) {
+      console.error('Error while saving Speed Log records to the database:', err);
+      throw new Error('Error while saving Speed Log records to the database');
     }
   }
 
