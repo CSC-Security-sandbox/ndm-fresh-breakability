@@ -8,21 +8,25 @@ import { STATUS_TYPE } from "@modules/storage-servers/file-server/file-server-ov
 export const hasUniqueStatus = (
   data: DataItem[]
 ): Record<StatusType, boolean> => {
-  const statuses: Record<StatusType, any> = STATUS_TYPE;
+  const statuses: Record<StatusType, boolean> = { ...STATUS_TYPE };
+  const uniqueStatuses = Array.from(new Set(data.map((item) => item.status)));
 
-  const uniqueStatuses = new Set(data.map((item) => item.status));
+  if (uniqueStatuses.length === 1) {
+    const [uniqueStatus] = uniqueStatuses;
 
-  if (uniqueStatuses.size === 1) {
-    const uniqueStatus = Array.from(uniqueStatuses)[0];
     if (uniqueStatus === JOB_STATUS_TYPE_ENUM.STOPPED) {
-      // Disable all buttons if the status is STOPPED
-      return STATUS_TYPE;
-    } else if (uniqueStatus in statuses) {
-      // Enable only the button corresponding to the unique status
-      Object.keys(statuses).forEach((status) => {
-        statuses[status as StatusType] = status === uniqueStatus;
-      });
+      return statuses; // All buttons disabled
+    }
+
+    if (uniqueStatus in statuses) {
+      return Object.fromEntries(
+        Object.keys(statuses).map((status) => [status, status === uniqueStatus])
+      ) as Record<StatusType, boolean>;
     }
   }
-  return statuses;
+
+  // Enable all buttons for multiple statuses
+  return Object.fromEntries(
+    Object.keys(statuses).map((status) => [status, true])
+  ) as Record<StatusType, boolean>;
 };
