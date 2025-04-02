@@ -46,6 +46,7 @@ import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import path from "node:path";
 import { JobRunStats } from "./dto/jobstats";
+import { SendMailService } from "src/utils/send-email";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -67,7 +68,8 @@ export class JobRunService {
     private readonly configService: ConfigService,
     private readonly jobRunInitService: JobRunInitService,
     private readonly redisService: RedisService,
-    private workFlowService: WorkflowService
+    private workFlowService: WorkflowService,
+    private sendMailService: SendMailService 
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -649,10 +651,10 @@ export class JobRunService {
     });
     if (!jobRunDetails)
       throw new Error(`Job run with id ${jobRunId} not found`);
-    if (status !== JobRunStatus.Running) {
-      const jobConfig = await this.jobConfigRepo.findOne({
-        where: { id: jobRunDetails.jobConfigId },
-      });
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where: { id: jobRunDetails.jobConfigId },
+    });
+    if (status !== JobRunStatus.Running && status !== JobRunStatus.Pending) {
       if (
         jobConfig &&
         jobConfig.futureScheduleAt &&
@@ -679,12 +681,36 @@ export class JobRunService {
         );
       }
       const jobRunStats:JobRunStats = await this.calculateJobRunStats(jobRunId);
+      if(jobConfig && jobConfig.jobType === JobType.MIGRATE){
+        const mailBody = `Hello,
+        The following Migrate job has been completed for below Paths:
+         + <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+         + <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+         + <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+         + <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+         `;
+        const payload = { body: mailBody };
+        this.logger.log("Sending Mail for job completion with payload",JSON.stringify(payload));
+        await this.sendMailService.sendMail(payload);
+      }
      this.logger.log("job Run Stats",JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
         { id: jobRunId },
         { status: status, endTime: new Date(),jobStats: jobRunStats}
       );
     } else {
+      if(jobConfig && jobConfig.jobType === JobType.MIGRATE){
+        const mailBody = `Hello,
+        The following Migrate job has been started for below Paths:
+         + <p>Source Path:${jobConfig.sourcePath.volumePath}</p>
+         + <p>Target Path:${jobConfig.targetPath.volumePath}</p>
+         + <p>Source:${jobConfig.sourcePath.fileServer.host}</p>
+         + <p>Target:${jobConfig.targetPath.fileServer.host}</p>
+         `;
+        const payload = { body: mailBody };
+        this.logger.log("Sending Mail for job start with payload",JSON.stringify(payload));
+        await this.sendMailService.sendMail(payload);
+      }
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
     }
   }
