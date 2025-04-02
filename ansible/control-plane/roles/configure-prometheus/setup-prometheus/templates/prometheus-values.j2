@@ -44,7 +44,7 @@ alertmanager:
     receivers:
       - name: webhook-receiver
         webhook_configs:
-          - url: 'http://admin-service-service.datamigrator.svc.cluster.local:3000/api/v1/email'
+          - url: 'http://admin-service-service.datamigrator.svc.cluster.local:3000/api/v1/email/external'
             send_resolved: true
 
   persistence:
