@@ -241,7 +241,10 @@ describe('ConfigurationService', () => {
 
   describe('createConfiguration', () => {
     it('should create and save a new configuration', async () => {
-      mockConfigRepository.create.mockReturnValue(mockConfig);
+      mockConfigRepository.create.mockReturnValue({
+        ...mockConfig,
+        fileServers: [mockFileServer],
+      });
       mockWorkerRepository.find.mockResolvedValue([mockWorker]);
       jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
 
