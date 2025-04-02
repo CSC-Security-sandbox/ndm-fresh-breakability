@@ -1,6 +1,6 @@
 import { SpeedTestJobConfig } from './speed-test-job-config';
 import { JobState } from './job-state';
-import { DMError, FileInfo, TaskStats, Task } from './metadata-types';
+import { DMError, FileInfo, TaskStats, Task, SpeedTestReadWriteInfo } from './metadata-types';
 import {
   FileCollection,
   ErrorCollection,
@@ -9,6 +9,7 @@ import {
   TaskStatsCollection,
   UpdatedTaskCollection,
   MigrationTaskCollection,
+  SpeedTestReadWriteCollection,
 
 } from './stream-collection';
 
@@ -21,6 +22,7 @@ export abstract class SpeedTestJobContext {
   filesInfo: FileCollection;
   dirsInfo: DirectoryCollection;
   taskStats: TaskStatsCollection;
+  speedTestReadWritesData: SpeedTestReadWriteCollection;
   migrateTask: MigrationTaskCollection;
   tasksInfo: TaskCollection;
   updatedTaskInfo :UpdatedTaskCollection
@@ -84,6 +86,11 @@ export abstract class SpeedTestJobContext {
     return await this.filesInfo.append(fileInfo);
   }
 
+
+  async appendToSpeedTestReadWriteInfo(speedTestReadWriteInfo: SpeedTestReadWriteInfo): Promise<string> {
+    return await this.speedTestReadWritesData.append(speedTestReadWriteInfo);
+  }
+
   async appendToDirList(dirInfo: FileInfo): Promise<string> {
     return await this.dirsInfo.append(dirInfo);
   }
@@ -115,6 +122,11 @@ export abstract class SpeedTestJobContext {
     yield* this.filesInfo.read(readerName);
   }
 
+  async *speedTestReadWriteTask(readerName: string): AsyncGenerator<SpeedTestReadWriteInfo> {
+    console.log('[Jobs Lib] Read speed Test Read Write speed task -> ', JSON.stringify(readerName));
+    yield* this.speedTestReadWritesData.read(readerName);
+  }
+
   async *groupReadFiles(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
     yield* this.filesInfo.groupRead(readerName,batchSize);
   }
@@ -136,6 +148,7 @@ export abstract class SpeedTestJobContext {
     console.log('[Jobs Lib] Group read tasks -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.tasksInfo.groupRead(readerName,batchSize);
   }
+
 
   async *readTaskStats(readerName: string): AsyncGenerator<TaskStats> {
     console.log('[Jobs Lib] Read task stats -> ', JSON.stringify(readerName));
@@ -204,6 +217,12 @@ export abstract class SpeedTestJobContext {
             numMessages: this.tasksInfo.numMessages,
             lastId: this.tasksInfo.lastId,
           }
+        : { numMessages: 0, lastId: '0-0' },
+        speedTestReadWritesData: this.speedTestReadWritesData
+      ? {
+        numMessages: this.speedTestReadWritesData.numMessages,
+        lastId: this.speedTestReadWritesData.lastId,
+        }
         : { numMessages: 0, lastId: '0-0' },
       migrateTask: this.migrateTask
         ? {

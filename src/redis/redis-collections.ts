@@ -1,4 +1,4 @@
-import { DMError, FileInfo, Task, TaskStats } from '../types/metadata-types';
+import { DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
 import {
   DirectoryCollection,
   ErrorCollection,
@@ -6,6 +6,7 @@ import {
   TaskCollection,
   TaskStatsCollection,
   UpdatedTaskCollection,
+  SpeedTestReadWriteCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
@@ -103,6 +104,26 @@ export class RedisTaskStatsCollection
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'tasks-stats'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisSpeedTestReadWriteCollection
+  extends RedisStreamCollection<SpeedTestReadWriteInfo>
+  implements SpeedTestReadWriteCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'speed-test-read-write'),
       numMessages,
       lastId,
       redisClient,

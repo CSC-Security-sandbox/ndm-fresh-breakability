@@ -64,6 +64,33 @@ export class FileInfo implements Serializable {
   }        
 }
 
+export class SpeedTestReadWriteInfo implements Serializable {
+  timeStamp: string;
+  speed: string;
+  testType: string;
+  jobRunId: string;
+  
+  constructor(
+    timeStamp: string,
+    speed: string,
+    testType: string,
+    jobRunId: string,
+  ) {
+    this.timeStamp = timeStamp;
+    this.speed = speed
+    this.testType = testType;
+    this.jobRunId = jobRunId;
+  }
+
+  serialize(): string {
+    return JSON.stringify(this);
+  }
+
+  static deserialize(serialized: string): FileInfo {
+    return JSON.parse(serialized);
+  }        
+}
+
 export enum TaskStatsType {
   numFiles = 'Number of Files',
   numDirs = 'Number of Dirs',

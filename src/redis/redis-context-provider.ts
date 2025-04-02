@@ -3,7 +3,7 @@ import { JobConfig } from '../types/job-config';
 import { RedisClientType } from 'redis';
 import { RedisJobContext, RedisSpeedTestJobContext } from './redis-job-context';
 import { Logger } from '../utils/logging';
-import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection } from './redis-collections';
+import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection, RedisSpeedTestReadWriteCollection } from './redis-collections';
 import { JobState } from '../types/job-state';
 import { SpeedTestJobConfig } from 'src/types/speed-test-job-config';
 import { SpeedTestJobContext } from '../types/speed-test-job-context';
@@ -121,6 +121,7 @@ export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProv
     jobContext.errorsInfo = new RedisErrorCollection(jobRunId, info.errorsInfo.numMessages, info.errorsInfo.lastId, this.redisClient);
     jobContext.tasksInfo = new RedisTaskCollection(jobRunId, info.tasksInfo.numMessages, info.tasksInfo.lastId, this.redisClient);
     jobContext.taskStats = new RedisTaskStatsCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
+    jobContext.speedTestReadWritesData = new RedisSpeedTestReadWriteCollection(jobRunId, info.taskStats.numMessages, info.taskStats.lastId, this.redisClient);
     jobContext.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, info.updatedTaskInfo.numMessages, info.updatedTaskInfo.lastId, this.redisClient);
     jobContext.migrateTask = new RedisMigrationTasksCollection(jobRunId, info.migrateTask.numMessages, info.migrateTask.lastId, this.redisClient);
     return jobContext;
