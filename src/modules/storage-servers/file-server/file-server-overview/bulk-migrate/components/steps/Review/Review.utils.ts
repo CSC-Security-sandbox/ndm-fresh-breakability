@@ -13,12 +13,8 @@ export const getPreCheckStatus = (data: any): PreCheckStatus => {
       (destinationItem: any) => destinationItem?.status === "success"
     );
 
-    if (completedItem?.status === "success") {
-      if (allDestinationsSuccess) {
-        acc?.success.push(completedItem?.sourcePathId);
-      } else {
-        getAllErrors(completedItem, acc);
-      }
+    if (completedItem?.status === "success" && allDestinationsSuccess) {
+      acc?.success.push(completedItem?.sourcePathId);
     } else {
       getAllErrors(completedItem, acc);
     }
