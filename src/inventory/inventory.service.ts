@@ -12,7 +12,7 @@ import { OperationsEntity } from "../entities/operation.entity";
 import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
 import { OperationStatus } from "../enum/queues.enum";
-import { Repository, UpdateResult } from "typeorm";
+import { DataSource, Repository, UpdateResult } from "typeorm";
 import { CreateInventory } from "./inventory.types";
 import { randomUUID } from "crypto";
 
@@ -21,6 +21,7 @@ export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(TaskEntity)
@@ -153,26 +154,37 @@ export class InventoryService {
     try {
      
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
-
       const taskId = id
       if (!taskId) {
         this.logger.error("Task ID not found");
         return;
       }
-      let task = await this.taskRepo.findOne({ where: { id } });
-      if (task) {
-        task.status = task.status != 'COMPLETED' ? status : task.status;
-        task.workerId = workerId;
-      } else {
-        task = this.taskRepo.create({
-          id,
-          jobRunId,
-          status,
-          taskType,
-          workerId,
+      const queryRunner = this.dataSource.createQueryRunner(); // Create query runner
+
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        const task = await queryRunner.manager.findOne(TaskEntity, {
+          where: { id },
+          lock: { mode: "pessimistic_write" }, // Lock for concurrency
         });
+  
+        if (!task || task.status !== 'COMPLETED') {
+          await queryRunner.manager.upsert(
+            TaskEntity,
+            { id, jobRunId, status, taskType, workerId },
+            ['id']
+          );
+        }
+  
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction(); 
+        this.logger.error("Failed to save task records:", error);
+      } finally {
+        await queryRunner.release(); 
       }
-      await this.taskRepo.upsert(task, ['id']);
+    
 
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
