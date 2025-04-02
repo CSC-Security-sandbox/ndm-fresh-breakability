@@ -33,7 +33,16 @@ export class ValidateWorkingDirectoryActivity {
       errorMessage: null
     };
 
-    if (!payload.exportPathPresent) {
+    if(!payload?.exportPathWorkingDirectoryProvided) {
+      try {
+        await this.handleMountAndUnmountPaths(traceId, payload);      
+      } catch (error) {
+        const errorMessage = this.getNfsMountErrorMessage(error);
+        this.logger.error(`Error while mounting: ${errorMessage}`);
+        configStatusPayload.status = ConfigStatus.ERRORED;
+        configStatusPayload.errorMessage = errorMessage;
+      }
+    } else if (!payload.exportPathPresent) {
       this.logger.log("Invalid Export Path");
       configStatusPayload.status = ConfigStatus.ERRORED;
       configStatusPayload.errorMessage = ConfigError.INVALID_EXPORT_PATH;
@@ -46,9 +55,8 @@ export class ValidateWorkingDirectoryActivity {
         configStatusPayload.status = isValid ? ConfigStatus.ACTIVE : ConfigStatus.ERRORED;
         configStatusPayload.errorMessage = isValid ? null : ConfigError.INVALID_WORKING_DIRECTORY;
       } catch (error) {
-      const errorMessage = error?.message.includes('RPC prog. not avail') ? `The server does not support to provided NFS version. Please use a valid version.` : error?.message;
-
-        this.logger.error(`Working directory validation error: ${error?.message}`);
+        const errorMessage = this.getNfsMountErrorMessage(error);
+        this.logger.error(`Working directory validation error: ${errorMessage}`);
         configStatusPayload.status = ConfigStatus.ERRORED;
         configStatusPayload.errorMessage = errorMessage;
       }
@@ -64,6 +72,45 @@ export class ValidateWorkingDirectoryActivity {
         ? `Validation failed: ${configStatusPayload.errorMessage}`
         : `Export path and Working directory validated successfully for workerId ${this.workerId}`,
     };
+  }
+
+  private getNfsMountErrorMessage(error: any): string {
+    const errorMsg = error?.message;
+
+    if (errorMsg.includes('illegal NFS version value')) {
+      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+    } else if (errorMsg.includes('RPC prog. not avail')) {
+      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+    } else {
+      return errorMsg;
+    }
+  }
+
+  async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
+    const baseMountDir = WorkersConfig.get('baseWorkingPath');
+
+    for (const fileServer of payload.listPathPayload) {
+      const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+
+      const mountPathPayload = {
+        hostname: fileServer.host,
+        username: fileServer.username,
+        password: fileServer.password,
+        protocolVersion: fileServer.protocolVersion,
+        path: payload.exportPath,
+        mountBasePath: baseMountDir,
+        pathId: traceId,
+        jobRunId: traceId,
+      };
+
+      this.logger.log(`Mounting export path for host ${fileServer.host}`);
+      await protocol.mountPath(traceId, mountPathPayload);
+      this.logger.log("Mounted export path successfully");
+
+      this.logger.log(`Unmounting export path for host ${fileServer.host}`);
+      await protocol.unmountPath(traceId, mountPathPayload);
+      this.logger.log("Unmounted export path successfully");
+    }
   }
 
   async updateConfigStatus(apiUrl: string, accessToken: string, payload: ConfigStatusPayload) {
