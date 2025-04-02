@@ -121,7 +121,7 @@ export class SpeedTestReadActivity {
         readResult: tests.readTest,
         networkPerformanceResult: tests.networkPerformance,
       };
-      const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/store-speed-test-initial-result`, data);
+      const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/speed-test/intial-result`, data);
       this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
       return response.data;
     } catch (error) {
@@ -321,9 +321,9 @@ export class SpeedTestReadActivity {
             const currentTime = performance.now();
             const timeElapsed = (currentTime - startTime) / 1000; // Time in seconds
             const speed = (bytesWritten / timeElapsed) / (1024 * 1024); // Speed in MB/s
-            const logMessage = `Write speed at ${timeElapsed.toFixed(2)} sec: ${speed.toFixed(2)} MB/s`;
+            const logMessage = `Write speed at ${Math.round(timeElapsed)} sec: ${speed.toFixed(2)} MB/s`;
             this.logger.debug(logMessage);
-            const speedData = new SpeedTestReadWriteInfo(timeElapsed.toFixed(2), speed.toFixed(2), resultId, jobRunId);
+            const speedData = new SpeedTestReadWriteInfo(Math.round(timeElapsed).toString(), speed.toFixed(2), resultId, jobRunId);
             jobContext.appendToSpeedTestReadWriteInfo(speedData);
             await this.redisService.setJobContext(jobRunId, jobContext);
           })();
