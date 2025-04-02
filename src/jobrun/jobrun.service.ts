@@ -684,12 +684,14 @@ export class JobRunService {
       if(jobConfig && jobConfig.jobType === JobType.MIGRATE){
         const mailBody = `Hello,
         The following Migrate job has been completed for below Paths:
-         + <p>Source Path:${jobConfig.sourcePath.volumePath}</p>
-         + <p>Target Path:${jobConfig.targetPath.volumePath}</p>
-         + <p>Source:${jobConfig.sourcePath.fileServer.host}</p>
-         + <p>Target:${jobConfig.targetPath.fileServer.host}</p>
-         ` 
-        await this.sendMailService.sendMail(mailBody);
+         + <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+         + <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+         + <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+         + <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+         `;
+        const payload = { body: mailBody };
+        this.logger.log("Sending Mail for job completion with payload",JSON.stringify(payload));
+        await this.sendMailService.sendMail(payload);
       }
      this.logger.log("job Run Stats",JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
@@ -704,8 +706,10 @@ export class JobRunService {
          + <p>Target Path:${jobConfig.targetPath.volumePath}</p>
          + <p>Source:${jobConfig.sourcePath.fileServer.host}</p>
          + <p>Target:${jobConfig.targetPath.fileServer.host}</p>
-         ` 
-        await this.sendMailService.sendMail(mailBody);
+         `;
+        const payload = { body: mailBody };
+        this.logger.log("Sending Mail for job start with payload",JSON.stringify(payload));
+        await this.sendMailService.sendMail(payload);
       }
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
     }

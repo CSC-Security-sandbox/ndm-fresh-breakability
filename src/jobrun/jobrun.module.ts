@@ -26,6 +26,7 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { SendMailService } from 'src/utils/send-email';
 
 
 @Module({
@@ -36,7 +37,7 @@ import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
         WorkerModule,
         RedisModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

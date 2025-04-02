@@ -18,7 +18,7 @@ export default registerAs(
       startConsumer: process.env.START_CONSUMER || 'http://localhost:3009',
     },
     email:{
-      sendMail: process.env.SEND_MAIL || 'http://localhost:3001',
+      sendMail: process.env.SEND_EMAIL || 'http://localhost:3001',
     }
   }),
 );

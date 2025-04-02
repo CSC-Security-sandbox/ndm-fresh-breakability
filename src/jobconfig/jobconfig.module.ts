@@ -23,6 +23,7 @@ import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping
 import { RedisModule } from 'src/redis/redis.module';
 import { JobRunService } from 'src/jobrun/jobrun.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { SendMailService } from "src/utils/send-email";
 
 @Module({
     imports: [
@@ -30,7 +31,7 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
         TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity, JobIdMappingEntity,InventoryEntity, ProjectEntity,VolumeEntity,FileServerEntity,FileServerWorkingDirectoryMappingEntity, JobRunEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, WorkerEntity,IdentityMappingEntity,IdentityConfigCrossMappingEntity,OperationErrorEntity]),
         RedisModule
     ],
-    providers: [JobConfigService,WorkflowService],
+    providers: [JobConfigService,WorkflowService,SendMailService],
     controllers: [JobConfigController]
 })
 export class JobConfigModule {}

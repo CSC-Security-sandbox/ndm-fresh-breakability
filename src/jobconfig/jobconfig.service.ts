@@ -643,17 +643,26 @@ export class JobConfigService {
       if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
         await this.saveIdentityMappingsWithMap(jobConfigIds, parsedMappings, identityMap, templateType);
       }
-      const mailBody = `Hello,
-      The following Migrate jobs have been created:
-      ` + savedJobConfigs.
-              map((jobConfig) =>{
-                `<p>Job ID: ${jobConfig.id}</p>
-                <p>Source Path: ${jobConfig.sourcePath.volumePath}</p>
-                <p>Target Path: ${jobConfig.targetPath.volumePath}</p>
-                <p>Job Type: ${jobConfig.jobType}</p>    `
-              });
-      await this.sendMailService.sendMail(mailBody);
-      return (await this.jobConfigRepo.save(jobConfigs)).map(
+
+      
+      const mailBody =
+        `Hello,<br/>
+      The following Migrate jobs has been created:<br/><br/>
+      ` +
+        savedJobConfigs
+          .map(
+            (jobConfig) => `
+                <p>Job ID: ${jobConfig.id}</p>
+                <p>Source Path: ${jobConfig.sourcePath?.volumePath}</p>
+                <p>Target Path: ${jobConfig.targetPath?.volumePath}</p>
+                <p>Job Type: ${jobConfig.jobType}</p>
+                <br/>
+              `
+          )
+          .join('');
+      const payload = { body: mailBody };
+      await this.sendMailService.sendMail(payload);
+      return savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,

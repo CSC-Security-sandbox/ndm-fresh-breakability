@@ -66,6 +66,7 @@ import { JobRunStats } from "./dto/jobstats";
 import * as parser from "cron-parser";
 import exp from "constants";
 import e from "express";
+import { SendMailService } from "src/utils/send-email";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -83,6 +84,7 @@ describe("JobRunService", () => {
   let identityMappingRepo: Repository<IdentityMappingEntity>;
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
   let redisService: RedisService;
+  let sendMailService: SendMailService;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -100,6 +102,7 @@ describe("JobRunService", () => {
         JobRunInitService,
         JobConfigService,
         RedisService,
+        SendMailService,
         {
           provide: getRepositoryToken(JobRunEntity),
           useValue: {
@@ -412,6 +415,7 @@ describe("JobRunService", () => {
     inventoryRepo = module.get<Repository<InventoryEntity>>(
       getRepositoryToken(InventoryEntity)
     );
+    sendMailService = module.get<SendMailService>(SendMailService);
   });
 
   it("should update job config and job run status when cutover is rejected", async () => {

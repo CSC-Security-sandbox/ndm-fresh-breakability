@@ -29,6 +29,7 @@ import { JobConfigService } from './jobconfig.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { v4 as uuid } from 'uuid';
+import { SendMailService } from 'src/utils/send-email';
 
 describe('JobConfigService', () => {
   let service: JobConfigService;
@@ -54,6 +55,7 @@ describe('JobConfigService', () => {
   let operationErrorRepo: Repository<OperationErrorEntity>;
   let redisService: RedisService
   let workFlowService: WorkflowService;
+  let sendMailService: SendMailService;
 
 
 
@@ -79,6 +81,7 @@ describe('JobConfigService', () => {
         JobConfigService,
         RedisService,
         WorkflowService,
+        SendMailService,
         { provide: ConfigService, useValue: configService },
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: LoggerService, useValue: loggerService },
@@ -298,6 +301,7 @@ describe('JobConfigService', () => {
     identityMappingRepo = module.get<Repository<IdentityMappingEntity>>(getRepositoryToken(IdentityMappingEntity));
     identityCrossMappingRepo = module.get<Repository<IdentityConfigCrossMappingEntity>>(getRepositoryToken(IdentityConfigCrossMappingEntity));
     operationErrorRepo = module.get<Repository<OperationErrorEntity>>(getRepositoryToken(OperationErrorEntity));
+    sendMailService = module.get<SendMailService>(SendMailService);
   });
 
   it('should create a speed test job successfully', async () => {
