@@ -30,7 +30,7 @@
   become: yes
   command: systemctl daemon-reload
 
-- name: Enable the microk8s boot service
+- name: Enable the start rpc-statd service
   become: yes
   systemd:
     name: start-rpc-statd.service
