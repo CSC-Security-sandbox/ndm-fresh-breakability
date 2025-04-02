@@ -20,6 +20,7 @@ import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { SendMailService } from 'src/util/send-email';
 
 @Injectable()
 export class ConfigurationService {
@@ -38,7 +39,8 @@ export class ConfigurationService {
         @InjectRepository(ProjectEntity)
         private readonly projectEntity: Repository<ProjectEntity>,
         private loggerFactory: LoggerFactory,
-        private readonly workFlowService: WorkflowService
+        private readonly workFlowService: WorkflowService,
+        private readonly sendMailService: SendMailService
     ) {
         this.logger = this.loggerFactory.create(ConfigurationService.name)
     }
@@ -445,7 +447,28 @@ export class ConfigurationService {
             const update = await this.configEntity.save(config);
 
             await this.startValidateWorkingDirectoryWorkflow(createConfig, update.id, traceId);
-         
+
+            const workerNames = config.fileServers.flatMap((fileServer) => { 
+                return fileServer.workers.map((worker) => {
+                    return worker?.workerName;
+                });
+            });
+                  
+            const htmlContent = `
+            <p>Hello</p>
+            <p>Config ${update.configName} has been created successfully</p>
+            <p>with below server details:</p>
+            ${createConfig.fileServers.map(fileServer => `
+                <p>Server Name: ${fileServer.host}</p>
+                <p>Server Type: ${fileServer.serverType}</p>
+                <p>Protocol: ${fileServer.protocol}</p>
+                <p>Workers: ${workerNames.length>0?workerNames.join(', '):'Workers are not associated with the file server'}</p>
+            `).join('')}
+        `;
+        
+            const payload = { body: htmlContent };
+            this.logger.log(`Sending email for config creation ${update.id} with payload ${JSON.stringify(payload)}`);        
+            await this.sendMailService.sendMail(payload);
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
                 pathId: createConfig?.workingDirectory?.pathId,
@@ -543,8 +566,31 @@ export class ConfigurationService {
 
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
+            const existingWorkers = config.fileServers.flatMap(fileServer => fileServer.workers);
+            console.log('existingWorkers', existingWorkers);
             config.fileServers = await Promise.all(fileServerPromises);
+            const newWorkers = updateConfig.fileServers.flatMap(fileServer => fileServer.workers);
+            console.log('newWorkers', newWorkers);
+            const removedWorkers = existingWorkers.filter(worker => !newWorkers.includes(worker.workerId));
+            console.log('removed', removedWorkers);
+            
             const update = await this.configEntity.save(config);
+            const htmlContent = `
+            <p>Hello</p>
+            <p>Config ${update.configName} has been updated successfully</p>
+            ${
+                removedWorkers.length > 0
+                  ? `
+                  <p>Below is the list of deassociated workers:</p>
+                  ${removedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
+              `
+                  : ''
+              }
+           `;
+        
+            const payload = { body: htmlContent };
+            this.logger.log(`Sending email for config updation ${update.id} with payload ${JSON.stringify(payload)}`);        
+            await this.sendMailService.sendMail(payload);
 
             await this.startValidateWorkingDirectoryWorkflow(updateConfig, update.id, traceId);
 

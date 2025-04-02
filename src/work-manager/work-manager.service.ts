@@ -12,6 +12,7 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
+import { SendMailService } from 'src/util/send-email';
 
 @Injectable()
 export class WorkManagerService {
@@ -26,6 +27,7 @@ export class WorkManagerService {
     @InjectRepository(ConfigEntity)
     private readonly configRepo: Repository<ConfigEntity>,
     private readonly configService: ConfigService,
+    private readonly sendMailService: SendMailService
   ) {
     this.logger = this.loggerFactory.create(WorkManagerService.name);
   }
@@ -72,6 +74,9 @@ export class WorkManagerService {
       });
 
       const result = await this.workerEntity.save(newWorker);
+      const htmlContent = `<p>Hello</p> The Seceret Client Id ${id} has been used from address ${ip} <p></p>`;
+      const payload = { body: htmlContent };   
+      await this.sendMailService.sendMail(payload);
       await this.workerEntity.update(
         { workerId: result.workerId },
         { workerName: `Worker-${result.workerNumber}` },
