@@ -15,6 +15,7 @@ import { OperationStatus } from "../enum/queues.enum";
 import { Repository, UpdateResult } from "typeorm";
 import { CreateInventory } from "./inventory.types";
 import { randomUUID } from "crypto";
+import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 
 @Injectable()
 export class InventoryService {
@@ -33,7 +34,13 @@ export class InventoryService {
     private readonly operationErrorRepo: Repository<OperationErrorEntity>,
 
     @InjectRepository(TaskErrorEntity)
-    private readonly taskErrorRepo: Repository<TaskErrorEntity>
+    private readonly taskErrorRepo: Repository<TaskErrorEntity>,
+
+    @InjectRepository(SpeedLogEntity)
+    private speedLogRepo: Repository<SpeedLogEntity>,
+
+    @InjectRepository(SpeedLogEntryEntity)
+    private SpeedLogEntryRepo: Repository<SpeedLogEntryEntity>,
   ) {
 
   }
@@ -61,6 +68,20 @@ export class InventoryService {
       birthTime: file?.birthTime ?? null,
       pathId: pathId,
     };
+  }
+
+  async saveSpeedLogsEntries(data: any) {
+    try{
+      const writeLogEntry = Object.assign(new SpeedLogEntryEntity(), {
+        speedLogId: data.testType,
+        timeStamp: data.timeStamp,
+        speed: Number(data.speed),
+      });
+      await this.SpeedLogEntryRepo.save(writeLogEntry);
+    }
+    catch (err) {
+    throw new Error('Error while saving Speed Log records to the database');
+    }
   }
 
 
