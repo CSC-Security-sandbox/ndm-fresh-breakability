@@ -214,20 +214,13 @@ export class MigrationSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          this.logger.debug(`Copying file from ${sourcePath} to ${targetPath}`);
-          if(syncOperation.ops[0].metadata?.size <= 1024) {
-            syncOperation.checksums = await this.copyFileWithChecksum(sourcePath, targetPath);
-          }
-          else{
-            this.logger.debug(`Copying file from ${sourcePath} to ${targetPath} using checksum with worker thread`);
-            syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
-              sourcePath, destinationPath: targetPath, operationId: command.commandId
-            });
-            this.logger.debug(`Output of copying file from ${sourcePath} to ${targetPath} is ${JSON.stringify(syncOperation.checksums)}`);
-          }
+          syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
+            sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
+          });
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED, checksum: syncOperation.checksums } as any;
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
+          this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}`);
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           syncOperation.errors.add(error.code)
@@ -237,11 +230,11 @@ export class MigrationSyncService {
       }
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_DIR) {
         try {
-          this.logger.debug(`Copying DIR from ${sourcePath} to ${targetPath}`);
           await this.ensureDirectoryExists(targetPath);
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
         } catch (error) {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
+          this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}`);
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
@@ -250,7 +243,6 @@ export class MigrationSyncService {
       }
     }
     if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
-      this.logger.debug(`Meta Data Updating from ${sourcePath} to ${targetPath} : ${JSON.stringify(ops[1])}`);
       const result = await this.stampMetaData(targetPath, sourcePath, ops[1].metadata, jobContext, command)
       result.errors.forEach(error => syncOperation.errors.add(error))
       syncOperation.ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
@@ -322,7 +314,6 @@ export class MigrationSyncService {
                   syncTask.success++;
   
                   await this.redisService.setJobContext(task.jobRunId, jobContext);
-                  this.logger.debug(`[${jobRunId}] Migrated ${command.fPath} successfully`);
               }
           })
       );

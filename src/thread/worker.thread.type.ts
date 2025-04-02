@@ -6,6 +6,16 @@ export interface ThreadTask {
     id: string;
 }
 
+export interface WorkerDetails{
+    operationBand: string;
+    operatingTasks:  string[];
+}
+
+export interface OperationBand{
+    numberOfThreads: number;
+    task: ThreadTask[];
+}
+
 export interface ThreadTaskInput {
     data: any;
     Operation: ThreadOperation;
@@ -16,8 +26,14 @@ export interface WorkerThreadOutput {
     data: any;
     id: string;
     Operation: ThreadOperation;
-    isResolved : boolean;
-    isRejected : boolean;
+    isResolved? : boolean;
+    isRejected ?: boolean;
+}
+
+export interface WorkerThreadInput {
+    data: any;
+    id: string;
+    Operation: ThreadOperation;
 }
 
 export enum ThreadOperation {
@@ -29,4 +45,5 @@ export interface MigrateFile{
     sourcePath: string;
     destinationPath: string;
     operationId: string;
+    size: number;
 }

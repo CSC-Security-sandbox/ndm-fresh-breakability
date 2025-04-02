@@ -137,7 +137,6 @@ export class CommonActivityService{
       const tasks = await jobContext.groupReadTasks('consumer-1', 1);
       for await (const task of tasks) {
         if(task) {
-          this.logger.debug(`Task: ${JSON.stringify(task)}`);
           return task;
         }
       }
@@ -153,7 +152,6 @@ export class CommonActivityService{
       const tasks = await jobContext.groupReadMigrationTask('consumer-1', 1);
       for await (const task of tasks) {
         if(task) {
-          this.logger.debug(`Task: ${JSON.stringify(task)}`);
           return task;
         }
       }
