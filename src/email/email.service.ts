@@ -6,6 +6,7 @@ import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { Repository } from 'typeorm';
 import hbs from 'nodemailer-express-handlebars';
+import { NOTIFICATION_TYPE } from './dto/notification.type';
 
 @Injectable()
 export class EmailService {
@@ -14,15 +15,15 @@ export class EmailService {
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
   ) {}
-  async setupAndSendMail(emailContent: any) {
+  async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
-      await this.setupTransporter(emailContent);
+      await this.setupTransporter(emailContent, notificationType);
     } catch (error) {
       return { message: error.message, statusCode: 500 };
     }
     return { message: 'Email sent successfully', statusCode: 200 };
   }
-  async setupTransporter(emailContent: any) {
+  async setupTransporter(emailContent: any, notificationType: string) {
     try {
       const smtpSettings = await this.getSMTPSettings();
       const smtpConfig: any = {
@@ -64,29 +65,21 @@ export class EmailService {
         socketTimeout: 5000,
         connectionTimeout: 5000,
       });
-
-      this.transporter.use(
-        'compile',
-        hbs({
-          viewEngine: {
-        extname: '.hbs',
-        layoutsDir: path.join(__dirname, '../../templates/views/email'),
-        defaultLayout: false,
-        partialsDir: path.join(__dirname, '../../templates/views/email'),
-          },
-          viewPath: path.join(__dirname, '../../templates/views/email'),
-          extName: '.hbs',
-        }),
-      );
+      const templateName = notificationType === NOTIFICATION_TYPE.FAILURE? "failure" : 'success';
+      this.setupTemplateBasdOnNotificationType(templateName);
       await this.transporter.verify();
+
       const fromAddress = smtpSettings.find(
         (setting) => setting.settingKey === 'SMTP_FROM_EMAIL',
       )?.settingValue;
       const toAddress = smtpSettings.find(
         (setting) => setting.settingKey === 'SMTP_TO_EMAIL',
       )?.settingValue;
-
-      await this.sendEmail(emailContent, fromAddress, toAddress);
+      if(notificationType === NOTIFICATION_TYPE.FAILURE){
+      await this.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
+      }else{
+       await this.sendEmailForSuccessEvent(emailContent, fromAddress, toAddress);
+      }
     } catch (error) {
       console.error(
         'Error setting up SMTP transporter and sending mail:',
@@ -98,7 +91,7 @@ export class EmailService {
     }
   }
 
-  async sendEmail(emailContent: any, from: string, to: string) {
+  async sendEmailForFailureEvents(emailContent: any, from: string, to: string) {
     const { alerts } = emailContent;
     const severity = alerts[0]?.labels?.severity || 'unknown';
     const podName = alerts[0]?.labels?.pod || 'N/A';
@@ -109,7 +102,7 @@ export class EmailService {
       from: from,
       to: to,
       subject: `DataMigrator Alert - Severity: ${severity}`,
-      template: 'alert',
+      template: 'failure',
       context: {
         severity,
         podName,
@@ -130,5 +123,50 @@ export class EmailService {
       where: { settingType: SettingType.SMTP },
     });
     return smtpSettings;
+  }
+
+  async setupAndSendMailForSuccessEvents(
+    emailContent: any,
+    notificationType: string,
+  ) {
+    try {
+      await this.setupTransporter(emailContent, notificationType);
+    } catch (error) {
+      return { message: error.message, statusCode: 500 };
+    }
+    return { message: 'Email sent successfully', statusCode: 200 };
+  }
+
+  async setupTemplateBasdOnNotificationType(templateName: string) {
+    this.transporter.use(
+      'compile',
+      hbs({
+        viewEngine: {
+          extname: ".hbs",
+          layoutsDir: path.join(__dirname, '../../templates/views'),
+          defaultLayout: templateName
+        },
+        viewPath: path.join(__dirname, '../../templates/views'),
+        extName: '.hbs',
+      }),
+    );
+  }
+  async sendEmailForSuccessEvent(content: any, from: string, to: string) {
+    const body = content?.body;
+    const mailOptions = {
+      from: from,
+      to: to,
+      subject: `DataMigrator Alert`,
+      template: 'success',
+      context: {
+        body
+      },
+    };
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error('Error sending email:', error.message);
+      throw new Error(`Error sending email: ${error.message}`);
+    }
   }
 }
