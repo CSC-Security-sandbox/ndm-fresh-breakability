@@ -16,7 +16,7 @@ jest.mock('@temporalio/workflow', () => {
             scanPath: jest.fn(),
             publishScanTask: jest.fn(),
             fetchScanTask: jest.fn(),
-            getJobState: jest.fn(),
+            getJobState: jest.fn(() => ({ status: JobRunStatus.Running })),
             updateStatus: jest.fn(),
             setJobState: jest.fn(),
             updateLastEntry: jest.fn()
@@ -55,12 +55,6 @@ describe('ScanWorkflow', () => {
         const jobRunId = 'test-job-run-id';
         const workerId = 'test-worker-id';
 
-        mockGetJobStateActivity.mockResolvedValue({ status: JobRunStatus.Running });
-        mockUpdateStatusActivity.mockImplementation(() => {
-            return new Promise((resolve) => {
-                resolve({ message: 'Status updated successfully' });
-            });
-        });
         mockScanActivity.mockResolvedValue({ isFatal: false, noTaskFound: false });
         mockPublishTaskActivity.mockResolvedValue(undefined);
 
