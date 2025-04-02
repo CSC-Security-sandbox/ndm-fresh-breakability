@@ -17,23 +17,20 @@ export const getPreCheckStatus = (data: any): PreCheckStatus => {
       if (allDestinationsSuccess) {
         acc?.success.push(completedItem?.sourcePathId);
       } else {
-        acc?.failed.push(completedItem?.sourcePathId);
-        acc?.errors.push({
-          sourcePathId: completedItem?.sourcePathId,
-          errors: flattenErrors(completedItem?.errors),
-        });
+        getAllErrors(completedItem, acc);
       }
     } else {
-      const destinationErrors = flattenErrors(completedItem?.destination);
-      acc?.failed.push(completedItem?.sourcePathId);
-      acc?.errors.push({
-        sourcePathId: completedItem?.sourcePathId,
-        errors: [
-          ...(completedItem?.errors || []),
-          ...(destinationErrors || []),
-        ],
-      });
+      getAllErrors(completedItem, acc);
     }
+  };
+
+  const getAllErrors = (completedItem, acc) => {
+    const destinationErrors = flattenErrors(completedItem?.destination);
+    acc?.failed.push(completedItem?.sourcePathId);
+    acc?.errors.push({
+      sourcePathId: completedItem?.sourcePathId,
+      errors: [...(completedItem?.errors || []), ...(destinationErrors || [])],
+    });
   };
 
   const flattenErrors = (items: any[]): any[] => {
