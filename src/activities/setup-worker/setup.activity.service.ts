@@ -11,6 +11,7 @@ import { RedisService } from 'src/redis/redis.service';
 import * as util from 'util';
 
 import { WorkersConfig } from 'src/config/app.config';
+import { SetupWorkerParams } from '../types/tasks';
 @Injectable()
 export class SetupActivityService {
   readonly workerId: string;
@@ -68,7 +69,7 @@ export class SetupActivityService {
   async  waitFor(milliseconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
-  async speedTestSetup(args: any): Promise<any> {
+  async speedTestSetup(args: SetupWorkerParams): Promise<any> {
     this.logger.log(`[${args.jobRunId}] - [${this.workerId}] Setting up worker`);
 
     try {
@@ -130,7 +131,7 @@ export class SetupActivityService {
   }
 
   async setup(jobRunId: string): Promise<SetupOutput> {
-    console.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
+    this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     try {
       const context = await this.redisService.getJobContext(jobRunId);
       if (!context) {
@@ -140,7 +141,7 @@ export class SetupActivityService {
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
       const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
       // mount source path
-      console.log(
+      this.logger.log(
         `[${jobRunId}] - [${this.workerId}] Setting up worker`,
       );
       await this.mountPath(
@@ -161,7 +162,7 @@ export class SetupActivityService {
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
         { jobRunId, workerIds: [this.workerId] },
       );
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await this.waitFor(1000);
       return {
         jobRunId,
         status: 'success',
@@ -170,7 +171,7 @@ export class SetupActivityService {
         message: `Worker ${this.workerId} successfully set up.`,
       };
     } catch (error) {
-      console.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
+      this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
       return {
         jobRunId,
         status: 'error',
@@ -200,7 +201,7 @@ export class SetupActivityService {
         message: `Cleanup successful.`,
       };
     } catch (error) {
-      console.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
+      this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
       return {
         jobRunId,
         status: 'error',
@@ -261,7 +262,7 @@ export class SetupActivityService {
         message: `Cleanup successful.`,
       };
     } catch (error) {
-      console.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
+      this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
       return {
         jobRunId,
         status: 'error',

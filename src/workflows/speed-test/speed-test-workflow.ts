@@ -9,6 +9,7 @@ import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { JobType, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
@@ -93,7 +94,7 @@ export async function SpeedTestWorkflow({
 
     const jobState = await getJobStateActivity(traceId);
     const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
-    const newJobState = { ...jobState, workers: uniqueWorkers, status: 'RUNNING' } as any;
+    const newJobState = { ...jobState, workers: uniqueWorkers, status: TaskStatus.RUNNING} as any;
     await setJobStateActivity(traceId, newJobState);
     log(traceId, `Starting SpeedTestJobWorkflow for workerId: ${workerId} and fsDetails: ${fsDetails}`);
     while (true) {
@@ -141,7 +142,7 @@ export async function SpeedTestWorkflow({
       log(traceId, `Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
       try {
         return await executeChild(CleanupWorkerWorkflow, {
-          args: [{ jobRunId: traceId, jobType: "SPEED_TEST", fsDetails, protocolType}],
+          args: [{ jobRunId: traceId, jobType: JobType.SPEED_TEST, fsDetails, protocolType}],
           workflowId: `CleanupWorkerWorkflow-${traceId}`,
           taskQueue: `${workerId}-TaskQueue`,
           ...options,

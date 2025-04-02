@@ -30,3 +30,9 @@ export enum  JobReportType {
     CUT_OVER = 'CUT_OVER',
     DISCOVER= 'DISCOVER'
 }
+export enum  JobServiceJobType {
+    MIGRATE = 'MIGRATE',
+    CUT_OVER = 'CUT_OVER',
+    DISCOVER= 'DISCOVER',
+    SPEED_TEST= 'SPEED_TEST'
+}
