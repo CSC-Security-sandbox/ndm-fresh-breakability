@@ -61,5 +61,17 @@ describe('RedisService', () => {
     await service.setJobContext(traceId, jobContext);
     expect((service as any).client.set).toHaveBeenCalledWith(traceId, 'serialized');
   });
+
+  describe('onModuleInit', () => {
+    it('should create a Redis client', async () => {
+      const mockClient = {
+        connect: jest.fn(),
+        on: jest.fn(),
+      };
+      (service as any).createClient = jest.fn().mockResolvedValue(mockClient);
+      await service.onModuleInit();
+      expect((service as any).createClient).toHaveBeenCalled();
+    });
+  })
 });
  

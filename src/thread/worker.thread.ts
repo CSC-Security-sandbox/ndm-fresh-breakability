@@ -8,7 +8,7 @@ const { parentPort } = require('worker_threads');
 // const { NestFactory } = require('@nestjs/core');
 console.log('Worker Thread - Starting Worker Thread');
 
-async function calculateChecksum(filePath: string): Promise<string> {
+export async function calculateChecksum(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(filePath)) {
       return reject(new Error(`File not found: ${filePath}`));
@@ -23,7 +23,7 @@ async function calculateChecksum(filePath: string): Promise<string> {
   });
 }
 
-async function copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
+export async function copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
     console.debug(`Worker Thread - Copying file from ${sourceFile} to ${destinationFile}`);
     if (!fs.existsSync(sourceFile)) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
