@@ -25,7 +25,7 @@ export const hasUniqueStatus = (
     }
   }
 
-  // Enable all buttons for multiple statuses
+  // Disable all buttons for multiple statuses
   return Object.fromEntries(
     Object.keys(statuses).map((status) => [status, true])
   ) as Record<StatusType, boolean>;
