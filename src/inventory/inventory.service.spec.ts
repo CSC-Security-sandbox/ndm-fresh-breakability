@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Logger } from "@nestjs/common";
-import { InsertResult, Repository } from "typeorm";
+import { DataSource, InsertResult, Repository } from "typeorm";
 import { InventoryService } from "./inventory.service";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { TaskEntity } from "../entities/task.entity";
@@ -24,8 +24,23 @@ describe("InventoryService", () => {
   let operationRepo: Repository<OperationsEntity>;
   let operationErrorRepo: Repository<OperationErrorEntity>;
   let taskErrorRepo: Repository<TaskErrorEntity>;
+  let dataSourceMock: Partial<DataSource>;
 
   beforeEach(async () => {
+   
+    dataSourceMock = {
+      createQueryRunner: jest.fn().mockReturnValue({
+        connect: jest.fn(),
+        startTransaction: jest.fn(),
+        manager: {
+          findOne: jest.fn(),
+          upsert: jest.fn(),
+        },
+        commitTransaction: jest.fn(),
+        rollbackTransaction: jest.fn(),
+        release: jest.fn(),
+      }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryService,
@@ -50,6 +65,7 @@ describe("InventoryService", () => {
           useClass: Repository,
         },
         Logger,
+        { provide: DataSource, useValue: dataSourceMock }
       ],
     }).compile();
 
