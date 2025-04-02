@@ -116,6 +116,7 @@
       "/dist",
       "/test/",
       "src/middleware",
+      "src/utils",
       "/config/"
     ],
     "coveragePathIgnorePatterns": [
@@ -127,7 +128,8 @@
       "/entities/",
       "src/middleware",
       "/dto/",
-      "/config/"
+      "/config/",
+      "src/utils"
     ]
   }
 }

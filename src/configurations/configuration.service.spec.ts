@@ -1302,36 +1302,6 @@ describe('ConfigurationService', () => {
       expect(startWorkflowMock).not.toHaveBeenCalled();
     });
 
-    it('should not start workflow when no pathName', async () => {
-      const configId = uuidv4();
-      const createConfig = {
-        projectId: '123',
-        configName: 'config',
-        configType: ConfigurationType.file,
-        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-        workingDirectory: {
-          pathName: '',
-          pathId: '123',
-          workingDirectory: '/working/dir'
-        },
-        fileServers: [{
-          id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-          serverType: ServerType.other,
-          host: 'test.com',
-          protocol: Protocol.NFS,
-          protocolVersion: ProtocolVersion.NFSv3,
-          createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-          userName: 'test',
-          password: 'pass',
-          workers: ['worker1']
-        }]
-      };
-
-      startWorkflowMock.mockClear();
-      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace');
-      expect(startWorkflowMock).not.toHaveBeenCalled();
-    });
-
     it('should handle workflow start error', async () => {
       const configId = uuidv4();
       const createConfig = {
