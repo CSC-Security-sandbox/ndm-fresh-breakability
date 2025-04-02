@@ -437,7 +437,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT,
+                status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
@@ -587,7 +587,7 @@ export class ConfigurationService {
             })
         });
 
-        if(payload?.workerIds?.length > 0 && createConfig?.workingDirectory?.pathName?.length > 0) {                
+        if(payload?.workerIds?.length > 0) {
             this.logger.debug('started ValidateWorkingDirectoryWorkflow');            
             const startWorkFlowPayload: StartWorkFlowPayload = {
                 workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
