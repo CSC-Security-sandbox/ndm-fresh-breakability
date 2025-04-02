@@ -30,7 +30,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
     }
   }, [latestJobRunId, navigate]);
 
-  const getTotalErrorsCount = useMemo(() => errorDetails.reduce((acc, error) => acc + Number(error.count), 0), [errorDetails]);
+  const totalErrorsCount = useMemo(() => errorDetails.reduce((acc, error) => acc + Number(error.count), 0), [errorDetails]);
 
   return (
     <Card className="h-full">
@@ -41,7 +41,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
           ) : (
             <SuccessIcon color="success" />
           )}
-          <Text>Errors ({getTotalErrorsCount})</Text>
+          <Text>Errors ({totalErrorsCount})</Text>
         </CardTitle>
         <Button
           onClick={handlerErrorNavigation}
