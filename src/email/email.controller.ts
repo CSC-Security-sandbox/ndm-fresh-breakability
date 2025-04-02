@@ -1,19 +1,31 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { EmailService } from './email.service';
+import { Body, Controller, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
-import  {EmailDto} from './dto/emailDto';
+import { EmailDto } from './dto/emailDto';
+import { EmailService } from './email.service';
+import { Not } from 'typeorm';
+import { NOTIFICATION_TYPE } from './dto/notification.type';
 
 @Controller('/api/v1/email')
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
-  @Post()
+  @Post("/external")
   @ApiOperation({
-    summary: 'Send Email',
-    description: 'Send Email',
-  })
+    summary: 'Send Email Notification',
+    description: 'Sends an email notification, primarily used for alerting failures or important system events.',
+})
   @ApiBody({ type:  EmailDto })
   @ApiTags('Email')
   create(@Body() emailContent: EmailDto) {
-    return this.emailService.setupAndSendMail(emailContent);
+    return this.emailService.setupAndSendMail(emailContent,NOTIFICATION_TYPE.FAILURE);
+  }
+
+  @Post("/internal")
+  @ApiOperation({
+    summary: 'Send Email Notification',
+    description: 'Sends an email notification for successful events, confirming completion or status updates',
+})
+  @ApiTags('Email')
+  createInternal(@Body() content: any) {
+    return this.emailService.setupAndSendMailForSuccessEvents(content,NOTIFICATION_TYPE.SUCCESS);
   }
 }

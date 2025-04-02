@@ -42,7 +42,7 @@ describe('EmailController', () => {
 
       controller.create(emailContent);
 
-      expect(setupAndSendMailSpy).toHaveBeenCalledWith(emailContent);
+      expect(setupAndSendMailSpy).toHaveBeenCalledWith(emailContent,'FAILURE');
     });
   });
 });
