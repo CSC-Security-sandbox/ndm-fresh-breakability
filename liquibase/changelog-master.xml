@@ -58,4 +58,8 @@
       <sqlFile path="liquibase/20250322_01_updated_jobs_report_path_based.sql" splitStatements="false"/>
    </changeSet>
 
+   <changeSet id="9013" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250401_01_discovery_proc.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>
