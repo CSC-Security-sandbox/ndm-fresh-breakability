@@ -36,7 +36,6 @@ const ManageUsers = () => {
 
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
-
       .unwrap()
       .then(() => {
         notify.success(
