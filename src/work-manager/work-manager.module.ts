@@ -10,6 +10,7 @@ import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { WorkManagerController } from './work-manager.controller';
 import { WorkManagerService } from './work-manager.service';
+import { SendMailService } from 'src/util/send-email';
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { WorkManagerService } from './work-manager.service';
     AuthKeycloakModule
   ],
   controllers: [WorkManagerController],
-  providers: [WorkManagerService]
+  providers: [WorkManagerService,SendMailService]
 })
 export class WorkManagerModule {}

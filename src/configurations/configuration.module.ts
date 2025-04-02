@@ -13,6 +13,7 @@ import { WorkflowModule } from 'src/workflow/workflow.module';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { SendMailService } from 'src/util/send-email';
 
 @Module({
     imports: [
@@ -22,7 +23,7 @@ import { ProjectEntity } from 'src/entities/project.entity';
         AuthKeycloakModule,
         WorkflowModule
     ],
-    providers:[ConfigurationService],
+    providers:[ConfigurationService,SendMailService],
     controllers: [ConfigurationController]
 })
 export class ConfigurationModule {}

@@ -11,6 +11,7 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigEntity } from '../entities/config.entity';
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { SendMailService } from 'src/util/send-email';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -21,6 +22,7 @@ describe('WorkManagerService', () => {
   let configServiceMock: Partial<ConfigService>;
   let loggerInstance: LoggerService;
   let configRepo: Repository<ConfigEntity>;
+  let sendMailService: SendMailService;
 
   beforeEach(async () => {
     workerEntityMock = {
@@ -57,6 +59,7 @@ describe('WorkManagerService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkManagerService,
+        SendMailService,
         { provide: getRepositoryToken(WorkerEntity), useValue: workerEntityMock },
         { provide: getRepositoryToken(JobRunEntity), useValue: jobRunEntityMock },
         { provide: getRepositoryToken(ConfigEntity), useValue: { update: jest.fn() } },
@@ -69,6 +72,7 @@ describe('WorkManagerService', () => {
     service = module.get<WorkManagerService>(WorkManagerService);
     loggerInstance = loggerFactoryMock.create!(WorkManagerService.name);
     configRepo = module.get<Repository<ConfigEntity>>(getRepositoryToken(ConfigEntity));
+    sendMailService = module.get<SendMailService>(SendMailService);
   });
 
   afterEach(() => {

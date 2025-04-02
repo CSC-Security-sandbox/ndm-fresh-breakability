@@ -10,6 +10,9 @@ export default registerAs(
     feature:{
       enableVersionFetch: process.env.ENABLE_VERSIONS_FETCH === 'true' || false,
       enablePreListPath: process.env.ENABLE_PRE_LIST_PATH  === 'true' || false
+    },
+    email:{
+      sendMail: process.env.SEND_EMAIL || 'http://localhost:3001',
     }
   }),
 );
