@@ -191,7 +191,8 @@ export class SetupActivityService {
         protocol,
         jobRunId,
       );
-        await new Promise((resolve) => setTimeout( resolve, 1000));
+      await this.waitFor(1000);
+
 
       return {
         jobRunId,

@@ -4,6 +4,7 @@ import { SpeedTestReadActivity } from 'src/activities/speed-test/speed-test-read
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import { SpeedTestOutput } from 'src/activities/speed-test/speed-test.type';
+import { TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -23,7 +24,7 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
   log(traceId, `Starting SpeedTestWorkerWorkflow with args-->: ${JSON.stringify(tests)}`);
   
   try {
-    await updateSpeedTestStatus(traceId, 'RUNNING');
+    await updateSpeedTestStatus(traceId, TaskStatus.RUNNING);
     const jobState = await getJobStateActivity(traceId);
     if(jobState.status !== JobRunStatus.Running) {
       return { message: `Job status changed to ${jobState.status}` };
