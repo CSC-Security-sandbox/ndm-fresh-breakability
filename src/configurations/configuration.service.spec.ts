@@ -18,6 +18,8 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
 import { WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { ListPathWorkflowStatus } from './configuration.types';
+import { SendMailService } from 'src/util/send-email';
+import { ConfigService } from '@nestjs/config';
 
 const mockConfig = { id: uuidv4(), configName: 'Test Config', configType: 'Type1' };
 const mockFileServer = { id: uuidv4(), host: 'localhost', serverType: 'Type1', workers: [], volumes: [] };
@@ -96,6 +98,8 @@ describe('ConfigurationService', () => {
   let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
   let workflowService:WorkflowService;
   let projectRepository: Repository<ProjectEntity>;
+  let sendMailService: SendMailService;
+  let configService:ConfigService
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -118,6 +122,8 @@ describe('ConfigurationService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ConfigurationService,
+        SendMailService,
+        ConfigService,
         {
           provide: getRepositoryToken(ConfigEntity),
           useValue: mockConfigRepository,
@@ -147,6 +153,12 @@ describe('ConfigurationService', () => {
           provide: WorkflowService,
           useValue: mockWorkflowService,
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(),
+          },  
+        }
       ],
     }).compile();
 
@@ -155,6 +167,7 @@ describe('ConfigurationService', () => {
     configRepository = module.get(getRepositoryToken(ConfigEntity));
     projectRepository = module.get(getRepositoryToken(ProjectEntity));
     mappingRepository = module.get(getRepositoryToken(FileServerWorkingDirectoryMappingEntity));
+    sendMailService = module.get<SendMailService>(SendMailService);
   });
 
   describe('getAllConfig', () => {
@@ -228,7 +241,10 @@ describe('ConfigurationService', () => {
 
   describe('createConfiguration', () => {
     it('should create and save a new configuration', async () => {
-      mockConfigRepository.create.mockReturnValue(mockConfig);
+      mockConfigRepository.create.mockReturnValue({
+        ...mockConfig,
+        fileServers: [mockFileServer],
+      });
       mockWorkerRepository.find.mockResolvedValue([mockWorker]);
       jest.spyOn(service, 'isConfigNameUnique').mockResolvedValue({ isUnique: true });
 
