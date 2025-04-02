@@ -23,3 +23,6 @@ export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
 export {SyncWorkflow} from '../workflows/migration/core/sync.workflow'
 
 export {ReportingWorkflow} from '../workflows/reporting/reporting.workflow'
+
+export {SpeedTestJobWorkflow} from '../workflows/speed-test/speed-test-job-workflow'
+export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
