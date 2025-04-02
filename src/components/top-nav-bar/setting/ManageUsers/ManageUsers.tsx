@@ -36,6 +36,7 @@ const ManageUsers = () => {
 
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
+      .unwrap()
       .then(() => {
         notify.success(
           `${body.enable ? "Enabled" : "Disabled"} access for user ${
