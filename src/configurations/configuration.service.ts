@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
-import { ConfigStatus, WorkFlows } from 'src/constants/enums';
+import { ConfigStatus, ProtocolVersionError, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
@@ -137,62 +137,73 @@ export class ConfigurationService {
 
     async getConfigById(id: string) {
         try {
-        if(!isUUID(id)) 
-            throw new BadRequestException('Invalid configId')
-        const config =  await this.configEntity.findOne({
-            select: {
-                id: true,
-                configName: true,
-                configType: true,
-                projectId: true,
-                scannedDate: true,
-                status: true,
-                workingDirectory: {
-                    pathName: true,
-                    workingDirectory: true,
-                    pathId: true
-                },
-                fileServers:{
+            if (!isUUID(id))
+                throw new BadRequestException('Invalid configId');
+
+            const config = await this.configEntity.findOne({
+                select: {
                     id: true,
-                    host: true,
-                    serverType: true,
-                    protocol: true,
-                    userName: true,
-                    password: true,
-                    isRefreshed: true,
-                    protocolVersion: true,
-                    volumes:{
+                    configName: true,
+                    configType: true,
+                    projectId: true,
+                    scannedDate: true,
+                    status: true,
+                    errorMessage: true,
+                    workingDirectory: {
+                        pathName: true,
+                        workingDirectory: true,
+                        pathId: true
+                    },
+                    fileServers: {
                         id: true,
-                        volumePath: true,
-                        jobConfig: {
+                        host: true,
+                        serverType: true,
+                        protocol: true,
+                        userName: true,
+                        password: true,
+                        isRefreshed: true,
+                        protocolVersion: true,
+                        volumes: {
                             id: true,
-                            jobType: true,
-                            jobRunDetails: {
+                            volumePath: true,
+                            jobConfig: {
                                 id: true,
-                                status: true
+                                jobType: true,
+                                jobRunDetails: {
+                                    id: true,
+                                    status: true
+                                }
                             }
                         }
                     }
-                }
-            },
-            where: { id },
-            relations: {
-                project: true,
-                fileServers: {
-                    workers: true,
-                    volumes: {
-                        jobConfig: {
-                              jobRunDetails: true  
-                        }    
-                    }
-                        
                 },
-                workingDirectory: true 
+                where: { id },
+                relations: {
+                    project: true,
+                    fileServers: {
+                        workers: true,
+                        volumes: {
+                            jobConfig: {
+                                jobRunDetails: true
+                            }
+                        }
+                    },
+                    workingDirectory: true
+                }
+            });
+
+            if (!config) throw new NotFoundException(`Config for id ${id} not found.`);
+
+            if (config.errorMessage && config.errorMessage.includes(ProtocolVersionError.PROTOCOL_VERSION_ERROR)) {
+                if (config.fileServers) {
+                    config.fileServers = config.fileServers.map(server => ({
+                        ...server,
+                        volumes: []
+                    }));
+                }
             }
-        });
-     
-        if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
-        return config;
+
+            return config;
         } catch (error) {
             this.logger.error(`Error fetching config by ID: ${error.message}`);
             if (error instanceof BadRequestException || error instanceof NotFoundException) {
