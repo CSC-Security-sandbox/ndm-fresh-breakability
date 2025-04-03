@@ -10,7 +10,7 @@ interface TooltipRendererProps {
 }
 
 const TooltipRenderer = ({ cellValue, cellComponent, showTooltip = true }: TooltipRendererProps) => {
-  console.log({ cellValue, cellComponent, showTooltip })
+
   return (
     <Box className="Table-module_cell-value__ss5_Y">
       {cellComponent}
