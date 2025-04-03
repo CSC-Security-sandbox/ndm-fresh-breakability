@@ -7,7 +7,7 @@ import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
-import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
+import { JobConfigSpeedTest, SpeedTestInitResult, SpeedTestResult } from './dto/jobspeedTest.dto'
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
@@ -40,6 +40,13 @@ export class JobConfigController {
     }
     const jobConfig = await this.jobConfigService.createSpeedTest(speedTest);
     return jobConfig;
+  }
+
+  @ApiOperation({ summary: 'Store Speed test Result' })
+  @ApiResponse({ status: 200, description: 'Speed test Initial Result has been successfully Stored.' })
+  @Post('/speed-test/intial-result')
+  async storeSpeedTestInitialResult(@Body() speedTestResult: SpeedTestInitResult): Promise<any>{
+    return this.jobConfigService.storeInitialSpeedTestResult(speedTestResult);
   }
 
   @ApiOperation({ summary: 'Get all Speed test jobs' })

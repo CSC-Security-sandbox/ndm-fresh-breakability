@@ -591,6 +591,7 @@ export class JobRunInitService {
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {
+    console.log("Starting Stream Consumer for jobRunId:", jobRunId);
     try {
       const START_CONSUMER_URL = this.configService.get<string>("app.paths.startConsumer");
       let response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, { jobRunId });

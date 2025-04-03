@@ -8,6 +8,7 @@ import { JobConfigBulkMigrateRes } from './jobconfig.types';
 import { Response } from 'express';
 import { JobConfigBulkMigrateResStatus, JobType, TemplateType } from 'src/constants/enums';
 import { JobConfigSpeedTest } from './dto/jobspeedTest.dto';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
 
 describe('JobConfigController', () => {
   let controller: JobConfigController;
@@ -28,6 +29,8 @@ describe('JobConfigController', () => {
     sendCsvFile: jest.fn(),
     getNoticeBoardDetailsByProjectId: jest.fn(),
     precheckValidation: jest.fn(),
+    storeInitialSpeedTestResult: jest.fn(),
+    createSpeedTest: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -233,6 +236,30 @@ describe('JobConfigController', () => {
         };
         await expect(controller.createSpeedTest(speedTest)).rejects.toThrow(BadRequestException);
         await expect(controller.createSpeedTest(speedTest)).rejects.toThrow('Source path IDs cannot be empty.');
+      });
+
+      it('should call service.createSpeedTest and return the result', async () => {
+        const speedTest = { speedTests: [{ id: 1 }] };
+        const mockResult = [new SpeedTestConfigEntity()];
+        jest.spyOn(service, 'createSpeedTest').mockResolvedValue(mockResult);
+  
+        const result = await controller.createSpeedTest(speedTest as any);
+  
+        expect(service.createSpeedTest).toHaveBeenCalledWith(speedTest);
+        expect(result).toEqual(mockResult);
+      });
+    });
+
+    describe('storeSpeedTestInitialResult', () => {
+      it('should call service.storeInitialSpeedTestResult and return the result', async () => {
+        const speedTestResult = { traceId: 'trace-id' };
+        const mockResult = { writeResultId: 1, readResultId: 2, networkResultId: 3 };
+        jest.spyOn(service, 'storeInitialSpeedTestResult').mockResolvedValue(mockResult);
+  
+        const result = await controller.storeSpeedTestInitialResult(speedTestResult as any);
+  
+        expect(service.storeInitialSpeedTestResult).toHaveBeenCalledWith(speedTestResult);
+        expect(result).toEqual(mockResult);
       });
     });
   })

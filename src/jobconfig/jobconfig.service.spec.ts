@@ -626,6 +626,62 @@ describe('JobConfigService', () => {
 
   });
 
+  describe('storeInitialSpeedTestResult', () => {
+  
+    it('should store initial speed test result successfully', async () => {
+      const mockSpeedTest = {
+        traceId: 'trace-id',
+        workerId: 'worker-id',
+        fileServerID: 'file-server-id',
+        writeResult: true,
+        readResult: true,
+        networkPerformanceResult: true,
+      };
+  
+      const mockWriteLog = { id: 'write-log-id' };
+      const mockReadLog = { id: 'read-log-id' };
+      const mockNetworkResult = { id: 'network-result-id' };
+  
+      jest.spyOn(speedLogRepo, 'save').mockResolvedValueOnce(mockWriteLog as any);
+      jest.spyOn(speedLogRepo, 'save').mockResolvedValueOnce(mockReadLog as any);
+      jest.spyOn(networkPerformanceResultRepo, 'save').mockResolvedValue(mockNetworkResult as any);
+      jest.spyOn(speedTestResultRepo, 'save').mockResolvedValue({} as any);
+  
+      const result = await service.storeInitialSpeedTestResult(mockSpeedTest as any);
+  
+      expect(result).toEqual({
+        writeResultId: 'write-log-id',
+        readResultId: 'read-log-id',
+        networkResultId: 'network-result-id',
+      });
+  
+      expect(speedLogRepo.save).toHaveBeenCalledTimes(2);
+      expect(networkPerformanceResultRepo.save).toHaveBeenCalledTimes(1);
+      expect(speedTestResultRepo.save).toHaveBeenCalledTimes(1);
+    });
+  
+    it('should handle errors and throw HttpException', async () => {
+      const mockSpeedTest = {
+        traceId: 'trace-id',
+        workerId: 'worker-id',
+        fileServerID: 'file-server-id',
+        writeResult: true,
+        readResult: true,
+        networkPerformanceResult: true,
+      };
+  
+      jest.spyOn(speedLogRepo, 'save').mockImplementation(() => {
+        throw new Error('Test error');
+      });
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+  
+      await expect(service.storeInitialSpeedTestResult(mockSpeedTest as any)).rejects.toThrow(HttpException);
+  
+      expect(loggerSpy).toHaveBeenCalledWith('Failed to store initial speed test result', expect.any(String));
+    });
+  });
+
+
   it('should fetch all speed test job runs successfully', async () => {
     const mockJobConfigs = [
       {

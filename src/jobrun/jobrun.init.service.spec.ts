@@ -201,12 +201,13 @@ describe('JobRunInitService', () => {
 
   describe('getJobConfigSpeedTest', () => {
     it('should return the job configuration for speed test', async () => {
+      const excludeOlderThan  =  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       const jobConfigId = 'jobConfigId';
       const mockJobConfig = {
         id: jobConfigId,
         preserveAccessTime: true,
         excludeFilePatterns: '*.txt',
-        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        excludeOlderThan: excludeOlderThan, // 30 days ago
         sourcePath: {
           volumePath: '/path/to/source',
           id: 'sourcePathId',
@@ -231,7 +232,7 @@ describe('JobRunInitService', () => {
       const expectedJobRunConfig: JobRunConfig = {
         preserveAccessTime: true,
         excludeFilePatterns: '*.txt',
-        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        excludeOlderThan: excludeOlderThan, // 30 days ago
         connection: {
           sourceCredential: {
             path: '/path/to/source',

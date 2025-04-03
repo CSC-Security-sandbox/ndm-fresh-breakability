@@ -32,7 +32,7 @@ export class NetworkPerformanceResultEntity {
   id: string;
 
   @ApiProperty({ description: 'Packet loss percentage' })
-  @Column({name: 'packet_loss', type: 'integer', nullable: false })
+  @Column({name: 'packet_loss', type: 'float', nullable: false })
   packetLoss: number;
 
   @ApiProperty({ description: 'Minimum round trip delay' })
