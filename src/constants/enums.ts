@@ -47,3 +47,7 @@ export enum WorkFlows{
     LIST_PATHS = 'ListPathsWorkflow',
     VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow'
 }
+
+export enum ProtocolVersionError{
+    PROTOCOL_VERSION_ERROR = 'The server does not support to provided protocol version. Please use a valid protocol version.'
+}
