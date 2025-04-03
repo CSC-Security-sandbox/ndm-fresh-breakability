@@ -175,7 +175,7 @@ export class DiscoveryScanActivity {
 
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
 
-                if (sourceStat.isSymbolicLink() || shouldExcludeOrSkip({
+                if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,
                     excludePatterns,
@@ -188,6 +188,7 @@ export class DiscoveryScanActivity {
                 const fileInfo: FileInfo = await getFileInfo({ name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
 
                 if (sourceStat.isDirectory()) {
+                    if(sourceStat.isSymbolicLink()) continue;
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;
                     scanDirOutput.directory++;

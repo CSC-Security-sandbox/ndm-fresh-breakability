@@ -89,12 +89,12 @@ export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promi
 
 export function getFileType(stats: fs.Stats): FileType {
     switch (true) {
+      case stats.isSymbolicLink():
+        return FileType.SYMBOLIC_LINK;
       case stats.isFile():
         return FileType.FILE;
       case stats.isDirectory():
         return FileType.DIRECTORY;
-      case stats.isSymbolicLink():
-        return FileType.SYMBOLIC_LINK;
       case stats.isSocket():
         return FileType.SOCKET;
       case stats.isFIFO():

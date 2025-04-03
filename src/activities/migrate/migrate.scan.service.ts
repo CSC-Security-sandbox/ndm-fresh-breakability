@@ -75,7 +75,7 @@ export class MigrationScanService {
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
-                if (sourceStat.isSymbolicLink() || shouldExcludeOrSkip({
+                if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,
                     excludePatterns,
@@ -91,7 +91,7 @@ export class MigrationScanService {
                 // this.logger.debug(`lState -----> , ${JSON.stringify(sourceStat)}`)
 
 
-                if (sourceStat.isDirectory()) {
+                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {
                     syncContentOutput.directory++;
                     const id = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.lastId = id;
