@@ -1,4 +1,4 @@
-import { FileInfo, JobContext, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
+import { FileInfo, JobContext, Protocol, Task, TaskStats } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface DiscoveryPayload {
   data?: Task;
@@ -48,6 +48,21 @@ export interface FileEntry {
     depth: number;
     commandId: string;
 }
+
+export interface SetupWorkerParams {
+  jobRunId: string;
+  hostname: string;
+  protocols:  Protocol[];
+  pathId: string;
+  path: string;
+  userName: string;
+  password: string;
+  protocolType: string;
+  fileServerId: string;
+  volumeId: string;
+  tests: any;
+}
+
 export enum FileType {
     FILE = "FILE",
     DIRECTORY = "DIRECTORY",

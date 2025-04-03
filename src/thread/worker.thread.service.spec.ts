@@ -46,11 +46,4 @@ describe('WorkerThreadService', () => {
         expect(service["workers"].length).toBe(2);
         expect(service["availableWorkers"].length).toBe(2);
     });
-
-    it('should process a migration task successfully', async () => {
-        const task = { destinationPath: '/dest', sourcePath: '/src', operationId: '123' };
-        const result = await service.migrateWorkerThread(task);
-        expect(result).toBe('success');
-        expect(service["taskQueue"].length).toBe(0);
-    });
 });

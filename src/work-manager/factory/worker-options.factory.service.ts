@@ -14,6 +14,8 @@ import { WorkFlowType } from "./worker-options.types";
 import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
 import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 import { CommonActivityService } from "src/activities/common/common.service";
+import { SpeedTestActivity } from "src/activities/speed-test/speed-test.activities";
+import { SpeedTestReadActivity } from "src/activities/speed-test/speed-test-read-activities";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -28,7 +30,9 @@ export class WorkerOptionsService {
     private readonly migrationSyncService:MigrationSyncService,
     private readonly validateWorkingDirectoryActivity: ValidateWorkingDirectoryActivity,
     private readonly precheckActivity:PrecheckActivity,
-    private readonly commonActivityService:CommonActivityService
+    private readonly commonActivityService:CommonActivityService,
+    private readonly speedTestActivities: SpeedTestActivity,
+    private readonly speedTestReadActivity: SpeedTestReadActivity,
     
   ) {}
 
@@ -73,6 +77,13 @@ export class WorkerOptionsService {
             preCheckPath: this.precheckActivity.preCheckPath.bind(this.precheckActivity),
             validateWorkingDirectory: this.validateWorkingDirectoryActivity.validateWorkingDirectory.bind(this.validateWorkingDirectoryActivity),
             isValidDirectory: this.validateWorkingDirectoryActivity.isValidDirectory.bind(this.validateWorkingDirectoryActivity),
+            speedTestSetup: this.setupActivityService.speedTestSetup.bind(this.setupActivityService),
+            speedTestCleanup: this.setupActivityService.speedTestCleanup.bind(this.setupActivityService),
+            speedTestStatusUpdate: this.speedTestActivities.speedTestStatusUpdate.bind(this.speedTestActivities),
+            readActivity: this.speedTestReadActivity.readActivity.bind(this.speedTestReadActivity),
+            networkPerformanceActivity: this.speedTestReadActivity.networkPerformanceActivity.bind(this.speedTestReadActivity),
+            writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
+            postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Protocols, ProtocolTypes } from "src/protocols/protocols";
 import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from "src/workflows/pre-check/pre-check.types";
 import { PreCheckPathOutput } from "./precheck-activity.type";
-import { Protocols, ProtocolTypes } from "src/protocols/protocols";
 
 
 const fs = require('fs').promises;

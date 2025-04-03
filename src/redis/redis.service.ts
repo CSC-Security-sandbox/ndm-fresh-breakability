@@ -72,7 +72,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.ensureClient();
     const serializedContext = jobContext.serialize();
     await this.client.set(traceId, serializedContext);
-    this.logger.log(`[${traceId}] Job context saved to Redis.`);
   }
 
   async getJobState(traceId: string): Promise<any> {
@@ -97,6 +96,5 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async getOwnerIdentity(jobContext: JobContext, id: string, type: 'SID' | 'UID' | 'GID') {
     return this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
-    // return "S-1-5-21-3999091835-2882602610-3139272401-1001"
   }
 }

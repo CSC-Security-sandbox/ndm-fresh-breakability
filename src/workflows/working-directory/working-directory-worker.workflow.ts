@@ -35,8 +35,10 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   }
 
   const exportPath = paths.includes(args.payload.exportPath);
+  const exportPathWorkingDirectoryProvided = (args.payload.exportPath.length > 0) && (args.payload.workingDirectory.length > 0);
 
   args.payload['exportPathPresent'] = exportPath;
+  args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
 
   log(args.traceId, `Starting ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
   return await workingDirectoryActivity(args.traceId, args.payload);

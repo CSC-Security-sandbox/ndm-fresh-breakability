@@ -5,6 +5,7 @@ import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
 import { CutOverStatus } from './migrate.type';
+import { HttpService } from '@nestjs/axios';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -18,6 +19,7 @@ describe('MigrationTaskService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MigrationTaskService,
+        { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
         {
           provide: ConfigService,
           useValue: {
@@ -192,6 +194,7 @@ describe('MigrationTaskService', () => {
           const module: TestingModule = await Test.createTestingModule({
             providers: [
               MigrationTaskService,
+              { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
               {
                 provide: ConfigService,
                 useValue: {

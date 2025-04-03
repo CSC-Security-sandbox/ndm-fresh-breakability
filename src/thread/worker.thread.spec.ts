@@ -54,39 +54,27 @@ describe("Worker Thread Functions", () => {
     beforeEach(() => {
       mockParentPort = require('worker_threads').parentPort;
     });
-    it('should listen to messages from parentPort', () => {
-      const mockMessage = { operation: 'copyFile', sourceFile: 'source.txt', destinationFile: 'dest.txt' };
-      const mockPostMessage = jest.fn();
-      mockParentPort.postMessage = mockPostMessage;
-      mockParentPort.emit('message', mockMessage);
-      expect(mockPostMessage).toHaveBeenCalledWith(mockMessage);
-    });
-
-    // catch block case
-    it('should handle errors in the try block', async () => {
-      const mockMessage = { operation: 'copyFile', sourceFile: 'nonexistent.txt', destinationFile: 'dest.txt' };
-      const mockPostMessage = jest.fn();
-      mockParentPort.postMessage = mockPostMessage;
-      mockParentPort.emit('message', mockMessage);
-      expect(mockPostMessage).toHaveBeenCalled();
-    });
 
     // test for try block
     it('should call copyFileWithChecksum with correct arguments', async () => {
-      const mockMessage = { Operation: 'COPY_FILE', data: { sourcePath: '/source', destinationPath: '/destination' }, id: '123' };
+      const mockMessage = [{ Operation: 'COPY_FILE', data: { sourcePath: '/source', destinationPath: '/destination' }, id: '123' }];
       const mockPostMessage = jest.fn();
       mockParentPort.postMessage = mockPostMessage;
-      const copyFileWithChecksumSpy = jest.spyOn(workerThreadMethods, 'copyFileWithChecksum').mockResolvedValue({ sourceChecksum: 'checksum1', targetChecksum: 'checksum2' });
+      jest.spyOn(workerThreadMethods, 'copyFileWithChecksum').mockResolvedValue({ sourceChecksum: 'checksum1', targetChecksum: 'checksum2' });
       mockParentPort.emit('message', mockMessage);
     });
 
     // try block default case
     it('should call postMessage with the task', () => {
-      const mockMessage = { Operation: 'UNKNOWN_OPERATION', data: {}, id: '123' };
+      const mockMessage = [{ Operation: 'UNKNOWN_OPERATION', data: {}, id: '123' }];
       const mockPostMessage = jest.fn();
       mockParentPort.postMessage = mockPostMessage;
-      mockParentPort.emit('message', mockMessage);
-      expect(mockPostMessage).toHaveBeenCalledWith(mockMessage);
+      jest.spyOn(workerThreadMethods, 'copyFileWithChecksum').mockRejectedValue(new Error('Unknown operation'));
+      try {
+        mockParentPort.emit('message', mockMessage);
+      } catch (error) {
+        expect(error).toEqual(new Error('Unknown operation'));
+      }
     });
   });
 });

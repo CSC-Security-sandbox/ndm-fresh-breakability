@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import axios from 'axios';
+import { HttpService } from '@nestjs/axios';
 
 jest.mock('axios');
 
@@ -13,6 +14,7 @@ describe('DiscoveryActivity', () => {
   let mockLogger: Partial<Logger>;
   let mockRedisService: Partial<RedisService>;
   let mockCommonService: Partial<CommonActivityService>;
+  let httpService: Partial<HttpService>;
 
   beforeEach(() => {
     mockConfigService = {
@@ -45,6 +47,7 @@ describe('DiscoveryActivity', () => {
 
     discoveryActivity = new DiscoveryActivity(
       mockConfigService as ConfigService,
+      httpService as HttpService,
       mockLogger as Logger,
       mockRedisService as RedisService,
       mockCommonService as CommonActivityService
