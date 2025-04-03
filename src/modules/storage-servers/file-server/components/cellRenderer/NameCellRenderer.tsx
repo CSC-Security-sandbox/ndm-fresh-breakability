@@ -11,7 +11,7 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
         <Heading
           level="16"
           color="text-title"
-          className="cursor-pointer font-bold overflow-hidden text-ellipsis"
+          className="cursor-pointer font-bold"
           onClick={() => navigate(`/file-server/${params?.row?.id}`)}
         >
           {params?.row?.configName}
