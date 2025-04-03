@@ -1,17 +1,17 @@
 ---
-- name: Update apt package index
+- name: 2.1. Update apt package index
   apt:
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Ensure essential packages are installed
+- name: 2.2. Ensure essential packages are installed
   apt:
     name:
       - nfs-common
       - smbclient
     state: present
 
-- name: Copy systemd service file for boot script
+- name: 2.3. Copy systemd service file for boot script
   become: yes
   template:
     src: ./templates/start-rpc-statd-service.j2
@@ -20,15 +20,15 @@
     group: root
     mode: "0644"
 
-- name: Reload systemd daemon
+- name: 2.4. Reload systemd daemon
   become: yes
   command: systemctl daemon-reload
 
-- name: Enable the start rpc-statd service
+- name: 2.5. Enable the start rpc-statd service
   become: yes
   systemd:
     name: start-rpc-statd.service
     enabled: yes
 
-- name: Set the hostname
+- name: 2.6. Set the hostname
   command: hostnamectl set-hostname datamigrator
