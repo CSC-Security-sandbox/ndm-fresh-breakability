@@ -1,6 +1,10 @@
 import { LegendWrapperPropsType } from "@/types/app.type";
 import Legends from "@components/chartInfo/Legends";
-import { formattedValue } from "@components/chartInfo/legends.utils";
+import {
+  truncateLargeNumber,
+  legendWrapperTooltipFormatter,
+} from "@components/chartInfo/legends.utils";
+import { memo } from "react";
 
 const LegendWrapper = ({
   title,
@@ -11,12 +15,12 @@ const LegendWrapper = ({
   return (
     <Legends
       title={title}
-      value={formattedValue(value)}
+      value={truncateLargeNumber(value)}
       color={color}
       unit={unit}
-      valueTooltip={value?.length > 3 ? value.concat(" ", unit) : ""}
+      valueTooltip={legendWrapperTooltipFormatter(value, unit)}
     />
   );
 };
 
-export default LegendWrapper;
+export default memo(LegendWrapper);
