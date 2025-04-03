@@ -422,7 +422,7 @@ export class ConfigurationService {
                 const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
                 credentials.push({
                     details: {
-                        hostname: fileServer.host,
+                        hostname: fileServer.host.trim(),
                         username: fileServer.userName,
                         password: fileServer?.password
                     },
@@ -430,7 +430,7 @@ export class ConfigurationService {
                     workers: workers.map(it=>it.workerId)
                 })
                 return this.fileServerEntity.create({
-                    host: fileServer.host,
+                    host: fileServer.host.trim(),
                     serverType: fileServer.serverType,
                     workers: workers,
                     createdBy: userId,
@@ -470,7 +470,7 @@ export class ConfigurationService {
             <p>Config ${update.configName} has been created successfully</p>
             <p>with below server details:</p>
             ${createConfig.fileServers.map(fileServer => `
-                <p>Server Name: ${fileServer.host}</p>
+                <p>Server Name: ${fileServer.host.trim()}</p>
                 <p>Server Type: ${fileServer.serverType}</p>
                 <p>Protocol: ${fileServer.protocol}</p>
                 <p>Workers: ${workerNames.length>0?workerNames.join(', '):'Workers are not associated with the file server'}</p>
@@ -531,7 +531,7 @@ export class ConfigurationService {
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
-                const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
+                const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host.trim())
                 const workers = await this.WorkerEntity.find({where: {workerId : In(update?.workers)}});
 
                 credentials.push({
@@ -546,7 +546,7 @@ export class ConfigurationService {
                 
                 return this.fileServerEntity.create({
                     id: fileServer.id,
-                    host: fileServer.host,
+                    host: fileServer.host.trim(),
                     serverType: fileServer.serverType,
                     workers: workers,
                     createdBy: fileServer.createdBy,
@@ -621,7 +621,7 @@ export class ConfigurationService {
             const payload: ListPathDTO = {
                 type: fileServer?.protocol,
                 protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
-                host: fileServer?.host,
+                host: fileServer?.host.trim(),
                 username: fileServer?.userName,
                 password: fileServer?.password
             }
