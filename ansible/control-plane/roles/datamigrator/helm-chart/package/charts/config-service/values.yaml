@@ -63,6 +63,8 @@ env:
     value: "datamigrator"
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
+  - name: SEND_EMAIL
+    value: "http://admin-service-service:3000"
 
 service:
   type: ClusterIP
