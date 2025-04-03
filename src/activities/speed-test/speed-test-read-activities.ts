@@ -157,8 +157,6 @@ export class SpeedTestReadActivity {
         error: results.networkPerformanceResult.errors?.[0] || '',
       };
     }
-    console.log("JSON.stringify(data)=====================")
-    console.log(JSON.stringify(data))
     const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/store-speed-test-result`, data);
     this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
   } catch (error) {

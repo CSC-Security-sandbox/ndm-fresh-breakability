@@ -14,7 +14,6 @@ const {
 export async function SetupWorkerWorkflow(
   args: any,
 ): Promise<SetupOutput> {
-  console.log(`Starting SetupWorkerWorkflow with `);
   await log( args.traceId,`Starting SetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
   if(args.fileServer.jobConfig.jobType=="SPEED_TEST") {
     const params = {
