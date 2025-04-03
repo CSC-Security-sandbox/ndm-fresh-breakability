@@ -6,10 +6,8 @@ const NfsUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
     (fileServer: any) => fileServer.protocol === "NFS"
   );
 
-  const cellComponent = () => nfsFileServer?.userName || "-";
-
   return (
-    <CellValueWithTooltip cellValue={nfsFileServer?.userName} cellComponent={cellComponent()}/>
+    <CellValueWithTooltip cellValue={nfsFileServer?.userName} cellComponent={nfsFileServer?.userName || "-"}/>
   );
 };
 

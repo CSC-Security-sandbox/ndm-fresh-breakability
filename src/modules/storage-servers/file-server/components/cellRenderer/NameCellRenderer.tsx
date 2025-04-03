@@ -6,21 +6,19 @@ import CellValueWithTooltip from "@/utils/CellValueWithTooltip";
 const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const navigate = useNavigate();
 
-  const cellComponent = () => {
-    return (
-        <Heading
-          level="16"
-          color="text-title"
-          className="cursor-pointer font-bold"
-          onClick={() => navigate(`/file-server/${params?.row?.id}`)}
-        >
-          {params?.row?.configName}
-        </Heading>
-    );
-  };
-
   return (
-    <CellValueWithTooltip cellValue={params?.row?.configName} cellComponent={cellComponent()}/>
+    <CellValueWithTooltip cellValue={params?.row?.configName}
+      cellComponent={
+        <Heading
+            level="16"
+            color="text-title"
+            className="cursor-pointer font-bold"
+            onClick={() => navigate(`/file-server/${params?.row?.id}`)}
+          >
+            {params?.row?.configName}
+          </Heading>
+      }
+    />
   );
 };
 

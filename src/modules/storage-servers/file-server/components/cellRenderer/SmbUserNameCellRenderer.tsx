@@ -6,10 +6,8 @@ const SmbUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
     (fileServer: any) => fileServer?.protocol === "SMB"
   );
 
-  const cellComponent = () => smbFileServer?.userName || "-";
-
   return (
-    <CellValueWithTooltip cellValue={smbFileServer?.userName || "-"} cellComponent={cellComponent()} showTooltip={smbFileServer?.userName ? true : false} />
+    <CellValueWithTooltip cellValue={smbFileServer?.userName || "-"} cellComponent={smbFileServer?.userName || "-"} showTooltip={smbFileServer?.userName ? true : false} />
   );
 };
 

@@ -6,10 +6,8 @@ const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
     (fileServer: any) => fileServer?.protocol === "SMB"
   );
 
-  const cellComponent = () => smbFileServer?.host || "-"
-
   return (
-    <CellValueWithTooltip cellValue={smbFileServer?.host || "-"} cellComponent={cellComponent()} showTooltip={smbFileServer?.host ? true : false} />
+    <CellValueWithTooltip cellValue={smbFileServer?.host || "-"} cellComponent={smbFileServer?.host || "-"} showTooltip={smbFileServer?.host ? true : false} />
   );
 };
 
