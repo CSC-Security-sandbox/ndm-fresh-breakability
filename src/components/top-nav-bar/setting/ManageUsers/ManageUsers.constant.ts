@@ -1,8 +1,12 @@
 import * as Yup from "yup";
 
 export const CREATE_USER_FORM_VALIDATION_SCHEMA = Yup.object().shape({
+
   email: Yup.string()
-    .email("Enter a valid email")
+    .matches(
+      /^(?!.*[._-]{2})[a-zA-Z0-9]+([._-]?[a-zA-Z0-9]+)*@[a-zA-Z0-9]+(-?[a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/,
+      "Enter a valid email"
+    )
     .required("Email is required"),
   first_name: Yup.string().required("First Name is required"),
   last_name: Yup.string().required("Last Name is required"),
