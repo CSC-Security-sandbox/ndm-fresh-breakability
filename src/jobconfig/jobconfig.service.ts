@@ -42,7 +42,7 @@ import {
   JobConfigDiscoverBulk,
   JobConfigPrecheck, MigrateConfig
 } from "./dto/jobdicoverybulk.dto";
-import { JobConfigSpeedTest, SpeedTestResult, SpeedTestInitResult } from './dto/jobspeedTest.dto'
+import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
 
 import { JobListingDTO } from "./dto/joblisting.dto";
 import {

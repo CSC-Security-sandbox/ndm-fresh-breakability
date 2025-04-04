@@ -62,32 +62,6 @@ export class SpeedLog {
   speed: string;
 }
 
-export class SpeedTestInitResult {
-  @ApiProperty({ description: 'UUID of traceId', required: true })
-  @IsUUID()
-  traceId: string;
-
-  @ApiProperty({ description: 'UUID of workerId', required: true })
-  @IsUUID()
-  workerId: string;
-
-  @ApiProperty({ description: 'UUID of fileServerID', required: true })
-  @IsUUID()
-  fileServerID: string;
-
-  @ApiProperty({ description: 'Write result of the speed test' })
-  @IsBoolean()
-  writeResult: boolean;
-
-  @ApiProperty({ description: 'Read result of the speed test' })
-  @IsBoolean()
-  readResult: boolean;
-
-  @ApiProperty({ description: 'Network performance result' })
-  @IsBoolean()
-  networkPerformanceResult: boolean;
-}
-
 export class WriteReadResult {
   @ApiProperty({ description: 'Total time taken for the operation', example: 2.982695291 })
   @IsNumber()
