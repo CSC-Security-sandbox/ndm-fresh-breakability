@@ -116,11 +116,23 @@ const CreateUserForm = ({
                   form={form}
                   name="first_name"
                   label="First Name"
+                  onBlur={(e: any) => {
+                    form.resetForm({
+                      ...form?.formState,
+                      first_name: e.target.value.trim(),
+                    });
+                  }}
                 />
                 <FormFieldInputNew
                   form={form}
                   name="last_name"
                   label="Last Name"
+                  onBlur={(e: any) => {
+                    form.resetForm({
+                      ...form?.formState,
+                      last_name: e.target.value.trim(),
+                    });
+                  }}
                 />
               </Box>
               <FormFieldInputNew form={form} name="email" label="Email" />

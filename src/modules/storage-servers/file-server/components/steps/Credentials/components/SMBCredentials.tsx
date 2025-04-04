@@ -22,6 +22,12 @@ const SMBCredentials = () => {
           placeholder="Username"
           disabled={isJobRunning}
           label="Username"
+          onBlur={(e: any) => {
+            smbCredentialsForm.resetForm({
+              ...smbCredentialsForm?.formState,
+              userName: e.target.value.trim(),
+            });
+          }}
         />
         <FormFieldInputNew
           form={smbCredentialsForm}
@@ -30,6 +36,12 @@ const SMBCredentials = () => {
           type="password"
           label="Password"
           disabled={isJobRunning}
+          onBlur={(e: any) => {
+            smbCredentialsForm.resetForm({
+              ...smbCredentialsForm?.formState,
+              password: e.target.value.trim(),
+            });
+          }}
         />
         <FormFieldSelect
           label="Protocol Version"

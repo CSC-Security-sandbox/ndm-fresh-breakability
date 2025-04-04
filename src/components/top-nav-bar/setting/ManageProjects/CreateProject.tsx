@@ -139,7 +139,6 @@ const CreateProjectForm = ({
     setIsLoading(true);
     try {
       await handleUpdateProject(editSelectedProject?.id);
-
       try {
         await handleAssociateUsers(editSelectedProject?.id);
         resetProjectForm();
@@ -212,6 +211,12 @@ const CreateProjectForm = ({
               label="Project Name"
               placeholder="Project Name"
               name="project_name"
+              onBlur={(e: any) => {
+                createProjectForm.resetForm({
+                  ...createProjectForm?.formState,
+                  project_name: e.target.value.trim(),
+                });
+              }}
               disabled={editMode}
             />
             <FormFieldTextArea

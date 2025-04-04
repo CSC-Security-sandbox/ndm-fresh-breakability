@@ -21,6 +21,12 @@ const Credentials = () => {
             disabled={isJobRunning}
             placeholder="Host Name"
             label="Host Name"
+            onBlur={(e: any) => {
+              hostCredentialsForm.resetForm({
+                ...hostCredentialsForm?.formState,
+                host: e.target.value.trim(),
+              });
+            }}
           />
         </Box>
       </FormFrame>

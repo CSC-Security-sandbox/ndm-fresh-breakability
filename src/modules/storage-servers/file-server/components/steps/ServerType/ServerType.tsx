@@ -18,6 +18,12 @@ const ServerType = () => {
           placeholder="Name"
           disabled={isJobRunning}
           label="Name"
+          onBlur={(e: any) => {
+            serverTypeForm.resetForm({
+              ...serverTypeForm?.formState,
+              configName: e.target.value.trim(),
+            });
+          }}
         />
 
         <FormFieldSelect

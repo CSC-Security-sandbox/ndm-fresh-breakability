@@ -22,6 +22,12 @@ const NFSCredentials = () => {
           placeholder="Username"
           disabled={isJobRunning}
           label="Username"
+          onBlur={(e: any) => {
+            nfsCredentialsForm.resetForm({
+              ...nfsCredentialsForm?.formState,
+              userName: e.target.value.trim(),
+            });
+          }}
         />
         <FormFieldInputNew
           form={nfsCredentialsForm}
@@ -31,6 +37,12 @@ const NFSCredentials = () => {
           type="password"
           disabled={isJobRunning}
           isOptional
+          onBlur={(e: any) => {
+            nfsCredentialsForm.resetForm({
+              ...nfsCredentialsForm?.formState,
+              password: e.target.value.trim(),
+            });
+          }}
         />
         <FormFieldSelect
           label="Protocol Version"

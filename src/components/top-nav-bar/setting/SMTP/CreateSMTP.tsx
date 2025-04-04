@@ -110,7 +110,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || (`Failed to ${isEdit ? "update" : "add"} SMTP Details.`)}
+          message={
+            err?.message ||
+            `Failed to ${isEdit ? "update" : "add"} SMTP Details.`
+          }
         />
       );
     }
@@ -127,20 +130,48 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
                 form={smtpForm}
                 name="ip_address"
                 label="IP Address"
+                onBlur={(e: any) => {
+                  smtpForm.resetForm({
+                    ...smtpForm?.formState,
+                    ip_address: e.target.value.trim(),
+                  });
+                }}
               />
-              <FormFieldInputNew form={smtpForm} name="port" label="Port" />
+              <FormFieldInputNew
+                form={smtpForm}
+                name="port"
+                label="Port"
+                onBlur={(e: any) => {
+                  smtpForm.resetForm({
+                    ...smtpForm?.formState,
+                    port: e.target.value.trim(),
+                  });
+                }}
+              />
             </Box>
             <Box className="flex gap-4">
               <FormFieldInputNew
                 form={smtpForm}
                 name="user_name"
                 label="Username"
+                onBlur={(e: any) => {
+                  smtpForm.resetForm({
+                    ...smtpForm?.formState,
+                    user_name: e.target.value.trim(),
+                  });
+                }}
               />
               <FormFieldInputNew
                 form={smtpForm}
                 name="password"
                 type="password"
                 label="Password"
+                onBlur={(e: any) => {
+                  smtpForm.resetForm({
+                    ...smtpForm?.formState,
+                    password: e.target.value.trim(),
+                  });
+                }}
               />
             </Box>
             <FormFieldInputNew

@@ -48,6 +48,12 @@ const DefaultCreateProjectForm = ({
               name="project_name"
               placeholder="Project Name"
               label="Project Name"
+              onBlur={(e: any) => {
+                createProjectForm.resetForm({
+                  ...createProjectForm?.formState,
+                  project_name: e.target.value.trim(),
+                });
+              }}
             />
             <FormFieldTextArea
               isOptional
