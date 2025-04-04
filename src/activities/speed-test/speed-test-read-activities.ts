@@ -109,27 +109,8 @@ export class SpeedTestReadActivity {
     }
     return output;
   }
-  
-  async postInitialResultsActivity(traceId: string, workerId: string, fileServerId: string,  tests: any): Promise<any> {
-    try {
-      const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
-      const data: any = {
-        traceId,
-        workerId,
-        fileServerID: fileServerId,
-        writeResult: tests.writeTest,
-        readResult: tests.readTest,
-        networkPerformanceResult: tests.networkPerformance,
-      };
-      const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/speed-test/intial-result`, data);
-      this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
-      return response.data;
-    } catch (error) {
-      this.logger.error(traceId, `Failed to post results to API: ${error.message}`);
-    }
-  }
 
-  async postResultsActivity(traceId: string, workerId: string, fileServerId: string,  results: any) {
+  async postResultsActivity(traceId: string, workerId: string, fileServerId: string,  results: any): Promise<any> {
   try {
     const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
     const data: any = {
@@ -137,28 +118,29 @@ export class SpeedTestReadActivity {
       workerId,
       fileServerID: fileServerId,
     };
-    if (results.writeResult) {
+    if (results?.writeResult) {
       data.writeResult = {
         ...results.writeResult.result,
         error: results.writeResult.errors?.[0] || '',
       };
     }
     
-    if (results.readResult) {
+    if (results?.readResult) {
       data.readResult = {
         ...results.readResult.result,
         error: results.readResult.errors?.[0] || '',
       };
     }
     
-    if (results.networkPerformanceResult) {
+    if (results?.networkPerformanceResult) {
       data.networkPerformanceResult = {
         ...results.networkPerformanceResult.result,
         error: results.networkPerformanceResult.errors?.[0] || '',
       };
     }
-    const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/store-speed-test-result`, data);
+    const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/speed-test/store-result`, data);
     this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
+    return response.data;
   } catch (error) {
     this.logger.error(traceId, `Failed to post results to API: ${error.message}`);
   }

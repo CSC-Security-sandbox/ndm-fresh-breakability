@@ -84,7 +84,6 @@ export class WorkerOptionsService {
             networkPerformanceActivity: this.speedTestReadActivity.networkPerformanceActivity.bind(this.speedTestReadActivity),
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
-            postInitialResultsActivity: this.speedTestReadActivity.postInitialResultsActivity.bind(this.speedTestReadActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
