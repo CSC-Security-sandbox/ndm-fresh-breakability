@@ -35,16 +35,37 @@ export class AuthService {
   }
  
   private generateRandomPassword(length: number): string {
-    const specialCharacters = "!@#$%^&*()-_=+[]{}|;:,.<>?";
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+[\]{}|;:,.<>?]).+$/;
- 
-    return Array.from({ length }, () =>
-        crypto.randomBytes(1).toString("base64").replace(/[^a-zA-Z0-9]/g, () =>
-            specialCharacters[Math.floor(Math.random() * specialCharacters.length)]
-        )
-    ).join("").slice(0, length).replace(/(.+)/, (pwd) => regex.test(pwd) ? pwd : this.generateRandomPassword(length));
-}
- 
+    const charSet = {
+      lowerCase: Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i)).join(''), // a-z alphabets string
+      upperCase: Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).join(''), // A-Z alphabets string
+      digits: Array.from({ length: 10 }, (_, i) => String.fromCharCode(48 + i)).join(''),   // 0-9 numbers string
+      specialCharacters: '!@#$%^&*()-_=+[]{}|;:,.<>?'
+    };
+    const allCharacters = Object.values(charSet).join('');
+
+    const getRandomChar = (chars: string): string => {
+      const array = new Uint32Array(1);
+      crypto.getRandomValues(array);
+
+      return chars[array[0] % chars.length];
+    };
+
+    // Ensure at least one char of each required type is included
+    let password = [
+      getRandomChar(charSet.lowerCase),
+      getRandomChar(charSet.upperCase),
+      getRandomChar(charSet.digits),
+      getRandomChar(charSet.specialCharacters),
+    ];
+
+    // Fill the rest of the password length with random characters
+    for (let i = password.length; i < length; i++) {
+      password.push(getRandomChar(allCharacters));
+    }
+
+    return password.join('');
+  }
+
   async inviteUser(
     username: string,
     firstName: string,
