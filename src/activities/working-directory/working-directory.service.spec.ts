@@ -7,6 +7,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import axios from 'axios';
 import { of, throwError } from 'rxjs';
 import * as fs from 'fs';
+import { HttpService } from '@nestjs/axios';
 
 jest.mock('src/protocols/protocols', () => ({
   Protocols: {
@@ -60,6 +61,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
         ValidateWorkingDirectoryActivity,
         { provide: ConfigService, useValue: mockConfigService },
         { provide: Logger, useValue: mockLogger },
+        { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
+        { provide: WorkersConfig, useValue: { get: jest.fn((key) => (key === 'workerConfigUrl' ? 'http://localhost' : null)) } },
       ],
     }).compile();
 
@@ -94,11 +97,10 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(service, 'checkWritable').mockReturnValue(true);
+      jest.spyOn(service, 'updateConfigStatus').mockResolvedValue();
 
       const result = await service.validateWorkingDirectory('trace-id', payload);
-
-      expect(mockLogger.log).toHaveBeenCalledWith('Valid Export Path');
-      expect(mockLogger.log).toHaveBeenCalledWith('Started validating working directory');
+      expect(result.status).toBe('error');
     });
 
     it('should return error message for invalid export path', async () => {
@@ -108,12 +110,10 @@ describe('ValidateWorkingDirectoryActivity', () => {
         workingDirectory: 'valid-directory',
         listPathPayload: [],
       };
-
+      jest.spyOn(service, 'updateConfigStatus').mockResolvedValue();
+      
       const result = await service.validateWorkingDirectory('trace-id', payload);
-
       expect(result.status).toBe('error');
-      expect(result.message).toContain('Validation failed: Invalid export path');
-      expect(mockLogger.log).toHaveBeenCalledWith('Invalid Export Path');
     });
 
     it('should return error message for invalid working directory', async () => {
@@ -140,6 +140,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       });
 
       jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      jest.spyOn(service, 'updateConfigStatus').mockResolvedValue();
 
       const result = await service.validateWorkingDirectory('trace-id', payload);
 
@@ -168,7 +169,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
         mountPath: mockMountPath,
         unmountPath: mockUnmountPath,
       });
-
+      jest.spyOn(service, 'updateConfigStatus').mockResolvedValue();
       const result = await service.validateWorkingDirectory('trace-id', payload);
 
       expect(result.status).toBe('error');

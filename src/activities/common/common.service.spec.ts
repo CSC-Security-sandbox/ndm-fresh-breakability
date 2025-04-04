@@ -7,6 +7,7 @@ import axios from 'axios';
 import { JobRunStatus } from '../discovery/enums';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { JobContext, JobStatus, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { HttpService } from '@nestjs/axios';
 
 jest.mock('axios');
 
@@ -20,6 +21,7 @@ describe('CommonActivityService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommonActivityService,
+        { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
         {
           provide: ConfigService,
           useValue: {

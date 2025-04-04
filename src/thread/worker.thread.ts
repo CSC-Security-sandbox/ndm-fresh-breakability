@@ -6,7 +6,7 @@ const { parentPort, workerData } = require('worker_threads');
 
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
 
-async function calculateChecksum(filePath) {
+export async function calculateChecksum(filePath) {
   const hash = crypto.createHash('sha256');
   const stream = fs.createReadStream(filePath);
   
@@ -17,7 +17,7 @@ async function calculateChecksum(filePath) {
   return hash.digest('hex');
 }
 
-async function smartCopy(source, target) {
+export async function smartCopy(source, target) {
 
   if (!fs.existsSync(source)) {
     throw new Error(`Source file does not exist: ${source}`);

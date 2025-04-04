@@ -20,7 +20,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async createClient(): Promise<void> {
+  async createClient(): Promise<void> {
     if (this.client && this.client.isOpen) {
       return;
     }

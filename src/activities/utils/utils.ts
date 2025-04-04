@@ -138,10 +138,6 @@ export function getFileType(stats: fs.Stats): FileType {
     }
 }
 
-
-
-
-
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
   basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
@@ -260,5 +256,4 @@ export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 export const getSID = (filePath: string) => {
     const getSIDCommand= `powershell.exe -Command "(Get-Acl '${filePath}').Owner"`;
     return execSync(getSIDCommand, { encoding: "utf-8" }).trim();
-
 }
