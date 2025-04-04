@@ -1,80 +1,169 @@
-import * as fs from "fs";
-import * as workerThreadMethods from "./worker.thread";
-
-jest.mock("crypto", () => ({
-  createHash: jest.fn(() => ({
-    update: jest.fn(),
-    digest: jest.fn(() => "mockedchecksum")
-  }))
-}));
-
-jest.mock('worker_threads', () => {
-  const EventEmitter = require('events');
-  const mockParentPort = new EventEmitter();
+jest.mock("worker_threads", () => {
   return {
-    parentPort: mockParentPort
+    parentPort: {
+      on: jest.fn(),     
+      postMessage: jest.fn()
+    },
+    workerData: { threadNumber: 1, operationBand: "testBand" }
   };
 });
+import * as fs from "fs";
+import * as crypto from "crypto";
 
-describe("Worker Thread Functions", () => {
-  afterEach(() => {
-    jest.clearAllMocks();
+import { Readable, Writable } from "stream";
+
+import { calculateChecksum, smartCopy } from "./worker.thread";
+
+jest.mock("fs");
+jest.mock("crypto");
+
+describe("smartCopy", () => {
+  const sourcePath = "source.txt";
+  const destPath = "dest/target.txt";
+  const mockData = Buffer.from("test file data");
+
+  beforeEach(() => {
+    jest.resetAllMocks();
   });
 
-  describe("calculateChecksum", () => {
-    it("should reject if file does not exist", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValue(false);
-      await expect(workerThreadMethods.calculateChecksum("nonexistent.file"))
-        .rejects.toThrow("File not found");
-    });
-
-    it("should resolve with a checksum", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValue(true);
-      const mockStream = {
-        on: jest.fn().mockImplementation((event, callback) => {
-          if (event === "end") callback();
-        })
-      };
-      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
-      const checksum = await workerThreadMethods.calculateChecksum("test.file");
-      expect(checksum).toBe("mockedchecksum");
-    });
-  });
-
-  describe("copyFileWithChecksum", () => {
-    it("should throw an error if source file does not exist", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValue(false);
-      await expect(workerThreadMethods.copyFileWithChecksum("source.file", "dest.file"))
-        .rejects.toThrow("Source file does not exist");
-    });
-  });
-
-  describe('parentPort.on event', () => {
-    let mockParentPort;
-    beforeEach(() => {
-      mockParentPort = require('worker_threads').parentPort;
-    });
-
-    // test for try block
-    it('should call copyFileWithChecksum with correct arguments', async () => {
-      const mockMessage = [{ Operation: 'COPY_FILE', data: { sourcePath: '/source', destinationPath: '/destination' }, id: '123' }];
-      const mockPostMessage = jest.fn();
-      mockParentPort.postMessage = mockPostMessage;
-      jest.spyOn(workerThreadMethods, 'copyFileWithChecksum').mockResolvedValue({ sourceChecksum: 'checksum1', targetChecksum: 'checksum2' });
-      mockParentPort.emit('message', mockMessage);
-    });
-
-    // try block default case
-    it('should call postMessage with the task', () => {
-      const mockMessage = [{ Operation: 'UNKNOWN_OPERATION', data: {}, id: '123' }];
-      const mockPostMessage = jest.fn();
-      mockParentPort.postMessage = mockPostMessage;
-      jest.spyOn(workerThreadMethods, 'copyFileWithChecksum').mockRejectedValue(new Error('Unknown operation'));
-      try {
-        mockParentPort.emit('message', mockMessage);
-      } catch (error) {
-        expect(error).toEqual(new Error('Unknown operation'));
+  const mockFsStream = (data: Buffer) => {
+    const readable = new Readable({
+      read() {
+        this.push(data);
+        this.push(null);
       }
     });
+    return readable;
+  };
+
+  const mockAsyncReadableStream = (data: Buffer) => {
+    const readable = new Readable({
+      read() {
+        this.push(data);
+        this.push(null);
+      }
+    });
+
+    // mock for-await-of support
+    (readable as any)[Symbol.asyncIterator] = async function* () {
+      yield data;
+    };
+
+    return readable;
+  };
+
+  const mockWritableStream = () => {
+    const writable = new Writable();
+    writable._write = (chunk, encoding, callback) => {
+      callback();
+    };
+    return writable;
+  };
+
+  it("should copy file and match checksums", async () => {
+    (fs.existsSync as jest.Mock).mockImplementation((p) => p === sourcePath || p === "dest");
+
+    (fs.createReadStream as jest.Mock).mockImplementation((path: string) => {
+      return mockFsStream(mockData);
+    });
+
+    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+    const fakeHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue("fakeChecksum"),
+    };
+
+    // First for streaming write, second for checksum comparison
+    (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+    const result = await smartCopy(sourcePath, destPath);
+
+    expect(fs.existsSync).toHaveBeenCalledWith(sourcePath);
+    expect(result.sourceChecksum).toEqual("fakeChecksum");
+    expect(result.targetChecksum).toEqual("fakeChecksum");
+  });
+
+  it("should throw error if source does not exist", async () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(false);
+    await expect(smartCopy("nonexistent.txt", destPath)).rejects.toThrow("Source file does not exist");
+  });
+
+  it("should create target directory if it doesn’t exist", async () => {
+    (fs.existsSync as jest.Mock).mockImplementation((p) => p === sourcePath);
+
+    const mkdirSyncMock = jest.fn();
+    (fs.mkdirSync as any) = mkdirSyncMock;
+
+    (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+    const fakeHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue("checksum123"),
+    };
+
+    (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+    const result = await smartCopy(sourcePath, destPath);
+
+    expect(mkdirSyncMock).toHaveBeenCalledWith("dest", { recursive: true });
+    expect(result.sourceChecksum).toBe("checksum123");
+  });
+
+  it("should throw error if checksums do not match", async () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+    const streamHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValueOnce("checksum-1"),
+    };
+
+    const checksumHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValueOnce("checksum-2"),
+    };
+
+    (crypto.createHash as jest.Mock).mockReturnValueOnce(streamHash).mockReturnValueOnce(checksumHash);
+
+    (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+    await expect(smartCopy(sourcePath, destPath)).rejects.toThrow("Checksum mismatch");
+  });
+});
+
+describe("calculateChecksum", () => {
+
+  const mockAsyncReadableStream = (data: Buffer) => {
+    const readable = new Readable({
+      read() {
+        this.push(data);
+        this.push(null);
+      }
+    });
+
+    // mock for-await-of support
+    (readable as any)[Symbol.asyncIterator] = async function* () {
+      yield data;
+    };
+
+    return readable;
+  };
+
+  it("should return the sha256 checksum of file", async () => {
+    const fakeHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue("testChecksum"),
+    };
+
+    (crypto.createHash as jest.Mock).mockReturnValue(fakeHash);
+    (fs.createReadStream as jest.Mock).mockImplementation(() => mockAsyncReadableStream(Buffer.from("abc")));
+
+    const checksum = await calculateChecksum("dummy.txt");
+
+    expect(checksum).toBe("testChecksum");
+    expect(fakeHash.update).toHaveBeenCalled();
+    expect(fakeHash.digest).toHaveBeenCalledWith("hex");
   });
 });

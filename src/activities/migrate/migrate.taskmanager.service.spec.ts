@@ -1,273 +1,239 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { MigrationTaskService } from './migrate.taskmanager.service';
-import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
-import { RedisService } from 'src/redis/redis.service';
-import axios from 'axios';
-import { CutOverStatus } from './migrate.type';
 import { HttpService } from '@nestjs/axios';
+import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import { RedisService } from 'src/redis/redis.service';
+import { getAccessToken } from '../common/token.util';
+import { MigrationTaskService } from './migrate.taskmanager.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+jest.mock('../common/token.util', () => ({
+  getAccessToken: jest.fn(),
+}));
+
 describe('MigrationTaskService', () => {
   let service: MigrationTaskService;
-  let logger: Logger;
-  let redisService: RedisService;
+  let configService: Partial<ConfigService>;
+  let logger: Partial<Logger>;
+  let redisService: Partial<RedisService>;
+  let httpService: Partial<HttpService>;
 
   beforeEach(async () => {
+    configService = {
+      get: jest.fn((key: string) => {
+        switch (key) {
+          case 'worker.workerId':
+            return 'test-worker';
+          case 'worker.workerJobServiceUrl':
+            return 'http://job-service';
+          case 'worker.workerReportServiceUrl':
+            return 'http://report-service';
+          case 'worker.fetchTaskBatchMigration':
+            return 2;
+          case 'worker.scanTaskDirBatch':
+            return 2;
+          default:
+            return null;
+        }
+      }),
+    };
+
+    logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+    };
+
+    redisService = {
+      getJobContext: jest.fn(),
+    };
+
+    httpService = {
+      // You can add more methods if needed
+      post: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MigrationTaskService,
-        { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config = {
-                'worker.workerId': 'test-worker-id',
-                'worker.workerJobServiceUrl': 'http://worker-job-service',
-                'worker.workerReportServiceUrl': 'http://report-service',
-                'worker.fetchTaskBatchMigration': 5,
-                'worker.scanTaskDirBatch': 500,
-              };
-              return config[key];
-            }),
-          },
-        },
-        {
-          provide: Logger,
-          useValue: {
-            log: jest.fn(),
-            error: jest.fn(),
-          },
-        },
-        {
-          provide: RedisService,
-          useValue: {
-            getJobContext: jest.fn(),
-            setJobContext: jest.fn(),
-          },
-        },
+        { provide: ConfigService, useValue: configService },
+        { provide: Logger, useValue: logger },
+        { provide: RedisService, useValue: redisService },
+        { provide: HttpService, useValue: httpService },
       ],
     }).compile();
 
     service = module.get<MigrationTaskService>(MigrationTaskService);
-    logger = module.get<Logger>(Logger);
-    redisService = module.get<RedisService>(RedisService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+    jest.clearAllMocks();
   });
 
   describe('publishScanTask', () => {
-    it('should handle errors during task publishing', async () => {
-      const jobRunId = 'test-job-run-id';
-      jest
-        .spyOn(redisService, 'getJobContext')
-        .mockRejectedValue(new Error('Redis error'));
+    it('should publish tasks successfully when commands batch is less than scanTaskDirBatch', async () => {
 
-      const result = await service.publishScanTask({ jobRunId });
+      const fakeDirs = [{ path: '/dir1' }];
+      const asyncDirIterator = {
+        async *[Symbol.asyncIterator]() {
+          for (const d of fakeDirs) {
+            yield d;
+          }
+        },
+      };
 
-      expect(logger.error).toHaveBeenCalledWith(
-        `[${jobRunId}] Error in publishing task: Redis error`,
-      );
-      expect(result).toEqual({
-        jobRunId,
-        status: 'error',
-        message: `Failed to publish task for Job run id ${jobRunId} : Error: Redis error`,
-      });
+      const fakeJobContext = {
+        groupReadDirs: jest.fn().mockResolvedValue(asyncDirIterator),
+        appendToTaskList: jest.fn().mockResolvedValue('lastTaskId'),
+        tasksInfo: {},
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-1' });
+      expect(result).toBeDefined();
+    });
+
+    it('should publish tasks successfully when commands batch reaches scanTaskDirBatch', async () => {
+      const fakeDirs = [{ path: '/dir1' }, { path: '/dir2' }];
+      const asyncDirIterator = {
+        async *[Symbol.asyncIterator]() {
+          for (const d of fakeDirs) {
+            yield d;
+          }
+        },
+      };
+
+      const fakeJobContext = {
+        groupReadDirs: jest.fn().mockResolvedValue(asyncDirIterator),
+        appendToTaskList: jest.fn().mockResolvedValue('lastTaskId'),
+        tasksInfo: {},
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-2' });
+      expect(result).toBeDefined();
+    });
+
+    it('should handle errors during publishScanTask', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('publish error'));
+      const result = await service.publishScanTask({ jobRunId: 'job-3' });
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('publish error');
+      expect(logger.error).toHaveBeenCalledWith('[job-3] Error in publishing task: publish error');
     });
   });
 
   describe('fetchScanTask', () => {
-    it('should handle errors during task fetching', async () => {
-      const jobRunId = 'test-job-run-id';
-      jest
-        .spyOn(redisService, 'getJobContext')
-        .mockRejectedValue(new Error('Redis error'));
+    it('should fetch scan tasks successfully', async () => {
+      const fakeTasks = [{ id: 'task1' }, { id: 'task2' }];
+      const asyncTaskIterator = {
+        async *[Symbol.asyncIterator]() {
+          for (const t of fakeTasks) {
+            yield t;
+          }
+        },
+      };
+      const fakeJobContext = {
+        groupReadTasks: jest.fn().mockResolvedValue(asyncTaskIterator),
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
 
-      const result = await service.fetchScanTask({ jobRunId });
+      const result = await service.fetchScanTask({ jobRunId: 'job-4' });
+      expect(result.tasks).toEqual(fakeTasks);
+    });
 
-      expect(logger.error).toHaveBeenCalledWith(
-        `[${jobRunId}] Failed to fetch the task: Error: Redis error`,
-      );
-      expect(result).toEqual({ tasks: [] });
+    it('should return an empty tasks array on error in fetchScanTask', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('fetch error'));
+      const result = await service.fetchScanTask({ jobRunId: 'job-4' });
+      expect(result.tasks).toEqual([]);
+      expect(logger.error).toHaveBeenCalledWith('[job-4] Failed to fetch the task: Error: fetch error');
+    });
+  });
+
+  describe('fetchMigrationTask', () => {
+    it('should fetch migration tasks successfully', async () => {
+      const fakeTasks = [{ id: 'migTask1' }];
+      const asyncTaskIterator = {
+        async *[Symbol.asyncIterator]() {
+          for (const t of fakeTasks) {
+            yield t;
+          }
+        },
+      };
+      const fakeJobContext = {
+        groupReadMigrationTask: jest.fn().mockResolvedValue(asyncTaskIterator),
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
+
+      const result = await service.fetchMigrationTask({ jobRunId: 'job-5' });
+      expect(result.tasks).toEqual(fakeTasks);
+    });
+
+    it('should return an empty tasks array on error in fetchMigrationTask', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('fetch migration error'));
+      const result = await service.fetchMigrationTask({ jobRunId: 'job-5' });
+      expect(result.tasks).toEqual([]);
+      expect(logger.error).toHaveBeenCalledWith('[job-5] Failed to fetch the task: Error: fetch migration error');
     });
   });
 
   describe('generateCOCReport', () => {
-    it('should trigger COC report generation successfully', async () => {
-      const jobRunId = 'test-job-run-id';
+    it('should trigger generateCOCReport successfully', async () => {
+      (getAccessToken as jest.Mock).mockResolvedValue('token123');
       mockedAxios.get.mockResolvedValue({});
 
-      const result = await service.generateCOCReport(jobRunId);
-
+      const result = await service.generateCOCReport('job-6');
+      expect(result).toEqual({ message: 'Triggering generateCOCReport successful for job id: job-6' });
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'http://report-service/api/v1/report/job-run/coc-report/test-job-run-id',
+        'http://report-service/api/v1/report/job-run/coc-report/job-6',
+        { headers: { Authorization: 'Bearer token123' } },
       );
-      expect(result).toEqual({
-        message:
-          'Triggering generateCOCReport successful for job id: test-job-run-id',
-      });
+      expect(logger.log).toHaveBeenCalledWith('[job-6] Triggering generateCOCReport successful');
     });
 
-    it('should handle errors during COC report generation', async () => {
-      const jobRunId = 'test-job-run-id';
-      mockedAxios.get.mockRejectedValue(new Error('Axios error'));
+    it('should handle error when access token is not obtained in generateCOCReport', async () => {
+      (getAccessToken as jest.Mock).mockResolvedValue(null);
+      const result = await service.generateCOCReport('job-7');
+      expect(result).toEqual({ message: 'Error while Triggering generateCOCReport for the job id : job-7' });
+    });
 
-      const result = await service.generateCOCReport(jobRunId);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        `[${jobRunId}] Failed to Trigger generateCOCReport: Error: Axios error | for url : http://report-service/api/v1/report/job-run/coc-report/test-job-run-id`,
-      );
-      expect(result).toEqual({
-        message:
-          'Error while Triggering generateCOCReport for the job id : test-job-run-id',
-      });
+    it('should handle axios.get error in generateCOCReport', async () => {
+      (getAccessToken as jest.Mock).mockResolvedValue('token123');
+      mockedAxios.get.mockRejectedValue(new Error('report error'));
+      const result = await service.generateCOCReport('job-8');
+      expect(result).toEqual({ message: 'Error while Triggering generateCOCReport for the job id : job-8' });
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to Trigger generateCOCReport'));
     });
   });
 
   describe('updateCutOverStatus', () => {
     it('should update cutover status successfully', async () => {
-      const jobRunId = 'test-job-run-id';
-      const status = 'COMPLETED';
+      (getAccessToken as jest.Mock).mockResolvedValue('token123');
       mockedAxios.put.mockResolvedValue({});
 
-      const result = await service.updateCutOverStatus({
-        jobRunId,
-        status: 'COMPLETED' as CutOverStatus,
-      });
-
+      const input = { jobRunId: 'job-9', status: 'COMPLETED' };
+      const result = await service.updateCutOverStatus(input as any);
+      expect(result).toEqual({ message: 'Job status updated for job id: job-9' });
       expect(mockedAxios.put).toHaveBeenCalledWith(
-        `http://worker-job-service/api/v1/job-run/cutover/${jobRunId}/${status}`,
+        'http://job-service/api/v1/job-run/cutover/job-9/COMPLETED',
+        {},
+        { headers: { Authorization: 'Bearer token123' } },
       );
-      expect(result).toEqual({
-        message: 'Job status updated for job id: test-job-run-id',
-      });
+      expect(logger.log).toHaveBeenCalledWith('[job-9] status updated to COMPLETED');
     });
 
-    it('should handle errors during cutover status update', async () => {
-      const jobRunId = 'test-job-run-id';
-      const status = 'COMPLETED';
-      mockedAxios.put.mockRejectedValue(new Error('Axios error'));
-
-      const result = await service.updateCutOverStatus({
-        jobRunId,
-        status: status as CutOverStatus,
-      });
-
-      expect(logger.error).toHaveBeenCalledWith(
-        `[${jobRunId}] Failed to update status: Error: Axios error`,
-      );
-      expect(result).toEqual({
-        message:
-          'Error while updating the status of the job id : test-job-run-id',
-      });
+    it('should return error when access token is not obtained in updateCutOverStatus', async () => {
+      (getAccessToken as jest.Mock).mockResolvedValue(null);
+      const input = { jobRunId: 'job-10', status: 'FAILED' };
+      const result = await service.updateCutOverStatus(input as any);
+      expect(result).toEqual({ message: 'Error while updating the status of the job id : job-10' });
     });
 
-    describe('publishScanTask', () => {
-      it('should handle errors during task publishing', async () => {
-        const jobRunId = 'test-job-run-id';
-        jest
-          .spyOn(redisService, 'getJobContext')
-          .mockRejectedValue(new Error('Redis error'));
-
-        const result = await service.publishScanTask({ jobRunId });
-
-        expect(logger.error).toHaveBeenCalledWith(
-          `[${jobRunId}] Error in publishing task: Redis error`,
-        );
-        expect(result).toEqual({
-          jobRunId,
-          status: 'error',
-          message: `Failed to publish task for Job run id ${jobRunId} : Error: Redis error`,
-        });
-      });
-
-      describe('MigrationTaskService', () => {
-        let service: MigrationTaskService;
-        let logger: Logger;
-
-        beforeEach(async () => {
-          const module: TestingModule = await Test.createTestingModule({
-            providers: [
-              MigrationTaskService,
-              { provide: HttpService, useValue: { get: jest.fn(), post: jest.fn(), delete: jest.fn(), update: jest.fn(), patch: jest.fn(), put: jest.fn() } },
-              {
-                provide: ConfigService,
-                useValue: {
-                  get: jest.fn((key: string) => {
-                    const config = {
-                      'worker.workerId': 'test-worker-id',
-                      'worker.workerJobServiceUrl': 'http://worker-job-service',
-                      'worker.workerReportServiceUrl': 'http://report-service',
-                      'worker.fetchTaskBatchMigration': 5,
-                      'worker.scanTaskDirBatch': 500,
-                    };
-                    return config[key];
-                  }),
-                },
-              },
-              {
-                provide: Logger,
-                useValue: {
-                  log: jest.fn(),
-                  error: jest.fn(),
-                },
-              },
-              {
-                provide: RedisService,
-                useValue: {
-                  getJobContext: jest.fn(),
-                  setJobContext: jest.fn(),
-                },
-              },
-            ],
-          }).compile();
-
-          service = module.get<MigrationTaskService>(MigrationTaskService);
-          logger = module.get<Logger>(Logger);
-          redisService = module.get<RedisService>(RedisService);
-        });
-
-        it('should be defined', () => {
-          expect(service).toBeDefined();
-        });
-
-        describe('generateCOCReport', () => {
-          it('should trigger COC report generation successfully', async () => {
-            const jobRunId = 'test-job-run-id';
-            mockedAxios.get.mockResolvedValue({});
-
-            const result = await service.generateCOCReport(jobRunId);
-
-            expect(mockedAxios.get).toHaveBeenCalledWith(
-              'http://report-service/api/v1/report/job-run/coc-report/test-job-run-id',
-            );
-            expect(result).toEqual({
-              message:
-                'Triggering generateCOCReport successful for job id: test-job-run-id',
-            });
-          });
-
-          it('should handle errors during COC report generation', async () => {
-            const jobRunId = 'test-job-run-id';
-            mockedAxios.get.mockRejectedValue(new Error('Axios error'));
-
-            const result = await service.generateCOCReport(jobRunId);
-
-            expect(logger.error).toHaveBeenCalledWith(
-              `[${jobRunId}] Failed to Trigger generateCOCReport: Error: Axios error | for url : http://report-service/api/v1/report/job-run/coc-report/test-job-run-id`,
-            );
-            expect(result).toEqual({
-              message:
-                'Error while Triggering generateCOCReport for the job id : test-job-run-id',
-            });
-          });
-        });
-      });
+    it('should handle axios.put error in updateCutOverStatus', async () => {
+      (getAccessToken as jest.Mock).mockResolvedValue('token123');
+      mockedAxios.put.mockRejectedValue(new Error('put error'));
+      const input = { jobRunId: 'job-11', status: 'FAILED' };
+      const result = await service.updateCutOverStatus(input as any);
+      expect(result).toEqual({ message: 'Error while updating the status of the job id : job-11' });
     });
   });
 });
