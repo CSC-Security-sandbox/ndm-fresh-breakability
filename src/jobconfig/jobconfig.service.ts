@@ -483,7 +483,7 @@ export class JobConfigService {
         for (const worker of fileServerConfig.workers) {
           const workerEntity = this.SpeedTestConfigWorkerRepo.create({
             workersId: worker,
-            jobId: savedSpeedTestConfig.id,
+            speedTestConfigId: savedSpeedTestConfig.id,
           });
           workersEntity.push(workerEntity);
         }

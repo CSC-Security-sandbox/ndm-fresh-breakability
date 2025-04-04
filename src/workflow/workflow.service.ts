@@ -35,7 +35,7 @@ export class WorkflowService {
 
     async startWorkflow(workflowName: WorkFlows, payload: StartWorkFlowPayload): Promise<WorkflowHandleWithFirstExecutionRunId> {
         try{
-            console.log('payload------->', JSON.stringify(payload))
+            this.logger.log('payload------->', JSON.stringify(payload))
             const client = await this.getClient();
             this.logger.log(`Starting workflow: ${workflowName}`);
             const handle: WorkflowHandleWithFirstExecutionRunId = await client.workflow.start(workflowName, payload);

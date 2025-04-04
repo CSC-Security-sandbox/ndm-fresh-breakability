@@ -63,8 +63,6 @@ export class JobRunInitService {
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(SpeedTestConfigEntity)
     private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
-    @InjectRepository(SpeedTestConfigWorkerEntity)
-    private SpeedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(FileServerEntity)
@@ -552,9 +550,9 @@ export class JobRunInitService {
       jobState
     );
     await jobContext.appendToTaskList(task);
-    console.debug("JobContext created and appended initial task ---> ", task);
+    this.logger.debug("JobContext created and appended initial task ---> ", task);
     await this.redisService.setJobContext(jobRunId, jobContext);
-    console.debug("JobContext Saved to Redis");
+    this.logger.debug("JobContext Saved to Redis");
   }
 
   // ------------------ CreateInitialTask -------------------- //
@@ -585,13 +583,13 @@ export class JobRunInitService {
         : "",
       jobRunConfig.excludeFilePatterns
     );
-    console.log("Initial Task created ---> ", JSON.stringify(task));
+    this.logger.log("Initial Task created ---> ", JSON.stringify(task));
     return task;
   }
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {
-    console.log("Starting Stream Consumer for jobRunId:", jobRunId);
+    this.logger.log("Starting Stream Consumer for jobRunId:", jobRunId);
     try {
       const START_CONSUMER_URL = this.configService.get<string>("app.paths.startConsumer");
       let response = await axios.post(`${START_CONSUMER_URL}/api/v1/redis-consumer/start`, { jobRunId });
