@@ -91,6 +91,8 @@ env:
     value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
   - name: KEYCLOAK_REALM
     value: "datamigrator"
+  - name: SEND_EMAIL
+    value: "http://admin-service-service:3000"
 
 service:
   type: ClusterIP
