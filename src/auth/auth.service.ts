@@ -33,13 +33,13 @@ export class AuthService {
       throw new InternalServerErrorException("Failed to get Keycloak token");
     }
   }
- 
+
   private generateRandomPassword(length: number): string {
     const charSet = {
-      lowerCase: Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i)).join(''), // a-z alphabets string
-      upperCase: Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).join(''), // A-Z alphabets string
-      digits: Array.from({ length: 10 }, (_, i) => String.fromCharCode(48 + i)).join(''),   // 0-9 numbers string
-      specialCharacters: '!@#$%^&*()-_=+[]{}|;:,.<>?'
+      lowerCase: "abcdefghijklmnopqrstuvwxyz",
+      upperCase: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      digits: "0123456789",
+      specialCharacters: "!@#$%^&*()-_=+[]{}|;:,.<>?",
     };
     const allCharacters = Object.values(charSet).join('');
 
