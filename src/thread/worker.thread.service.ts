@@ -17,9 +17,9 @@ export class WorkerThreadService{
     private workerDetails: Map<number, WorkerDetails> = new Map<number, WorkerDetails>();
 
     private sizes = [
-        {name:"1kb", maxFetch: 100}, 
-        {name: "1mb", maxFetch: 50}, 
-        {name: "10mb", maxFetch: 20}, 
+        {name:"1kb", maxFetch: 1500}, 
+        {name: "1mb", maxFetch: 1000}, 
+        {name: "10mb", maxFetch: 100}, 
         {name: "100mb", maxFetch: 10}, 
         {name: "1gb", maxFetch: 1}
     ]

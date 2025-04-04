@@ -6,68 +6,58 @@ const { parentPort, workerData } = require('worker_threads');
 
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
 
-export async function calculateChecksum(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!fs.existsSync(filePath)) {
-      return reject(new Error(`File not found: ${filePath}`));
-    }
-    
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', (err) => reject(err));
-  });
+export async function calculateChecksum(filePath) {
+  const hash = crypto.createHash('sha256');
+  const stream = fs.createReadStream(filePath);
+  
+  for await (const chunk of stream) {
+    hash.update(chunk);
+  }
+  
+  return hash.digest('hex');
 }
 
-export async function copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
-    console.debug(`Worker Thread - Copying file from ${sourceFile} to ${destinationFile}`);
-    if (!fs.existsSync(sourceFile)) {
-      throw new Error(`Source file does not exist: ${sourceFile}`);
-    }
+export async function smartCopy(source, target) {
 
-    const destDir = path.dirname(destinationFile);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-  
-    const hash = crypto.createHash("sha256");
-  
-    await new Promise<void>((resolve, reject) => {
-      const readStream = fs.createReadStream(sourceFile, {
-        highWaterMark: 1024*1024,
-      });
-      const writeStream = fs.createWriteStream(destinationFile);
-  
-      readStream.on("data", (chunk) => {
-        hash.update(chunk);
-        if (!writeStream.write(chunk)) readStream.pause();
-      });
-  
-      writeStream.on("drain", () => readStream.resume());
-  
-      readStream.on("end", () => writeStream.end());
-      writeStream.on("finish", resolve);
-      readStream.on("error", reject);
-      writeStream.on("error", reject);
+  if (!fs.existsSync(source)) {
+    throw new Error(`Source file does not exist: ${source}`);
+  }
 
+  const destDir = path.dirname(target);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
+    const readStream = fs.createReadStream(source, { highWaterMark: 1024 * 1024 });
+    const writeStream = fs.createWriteStream(target);
+    let hash;
+
+    hash = crypto.createHash('sha256');
+    readStream.on('data', (chunk) => hash.update(chunk));
+
+    const targetChecksum  = await new Promise((resolve, reject) => {
+      readStream.pipe(writeStream)
+        .on('error', reject)
+        .on('finish', () => {
+          resolve( hash?.digest('hex'));
+        });
     });
-  
-    const sourceChecksum = hash.digest("hex");
-    const targetChecksum = await calculateChecksum(destinationFile);
-  
+    const sourceChecksum = await calculateChecksum(source);
     if (sourceChecksum !== targetChecksum) {
-      throw new Error(`Checksum mismatch for file ${destinationFile}. Checksum: ${sourceChecksum} != ${targetChecksum}`);
+      throw new Error(`Checksum mismatch for file ${target}. Checksum: ${sourceChecksum} != ${targetChecksum}`);
     }
     return {sourceChecksum, targetChecksum};
-}
+  }
 
 
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
-        const result = await copyFileWithChecksum(task.data.sourcePath, task.data.destinationPath);
+        const startTime = Date.now();
+        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath);
+        const  endTime = Date.now();
+        // log the time taken for the operation
+        console.log(`Time taken for ${task.data.sourcePath} operation: ${endTime - startTime} ms`);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
         return {  isRejected: true, id: task.id, data: error, Operation: task.Operation };

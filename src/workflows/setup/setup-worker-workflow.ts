@@ -17,7 +17,7 @@ export async function SetupWorkerWorkflow(
   args: any,
 ): Promise<SetupOutput> {
   await log( args.traceId,`Starting SetupWorkerWorkflow with args: ${JSON.stringify(args)}`);
-  if(args.fileServer.jobConfig.jobType==JobServiceJobType.SPEED_TEST) {
+  if(args.fileServer?.jobConfig.jobType==JobServiceJobType.SPEED_TEST) {
     const params: SetupWorkerParams = {
       jobRunId: args.jobRunId,
       hostname: args.hostname,

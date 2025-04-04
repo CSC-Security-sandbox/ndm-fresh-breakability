@@ -35,7 +35,9 @@ export class ValidateWorkingDirectoryActivity {
 
     if(!payload?.exportPathWorkingDirectoryProvided) {
       try {
-        await this.handleMountAndUnmountPaths(traceId, payload);      
+        await this.handleMountAndUnmountPaths(traceId, payload);
+        configStatusPayload.status = ConfigStatus.ACTIVE;
+        configStatusPayload.errorMessage = null;
       } catch (error) {
         const errorMessage = this.getNfsMountErrorMessage(error);
         this.logger.error(`Error while mounting: ${errorMessage}`);
@@ -81,35 +83,42 @@ export class ValidateWorkingDirectoryActivity {
       return 'The server does not support to provided protocol version. Please use a valid protocol version.';
     } else if (errorMsg.includes('RPC prog. not avail')) {
       return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+    } else if(errorMsg.includes('Protocol not supported for')) {
+      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
     } else {
       return errorMsg;
     }
   }
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
-    const baseMountDir = WorkersConfig.get('baseWorkingPath');
+    try {
+      const baseMountDir = WorkersConfig.get('baseWorkingPath');
 
-    for (const fileServer of payload.listPathPayload) {
-      const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+      for (const fileServer of payload.listPathPayload) {
+        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
-      const mountPathPayload = {
-        hostname: fileServer.host,
-        username: fileServer.username,
-        password: fileServer.password,
-        protocolVersion: fileServer.protocolVersion,
-        path: payload.exportPath,
-        mountBasePath: baseMountDir,
-        pathId: traceId,
-        jobRunId: traceId,
-      };
+        const mountPathPayload = {
+          hostname: fileServer.host,
+          username: fileServer.username,
+          password: fileServer.password,
+          protocolVersion: fileServer.protocolVersion,
+          path: payload.fetchedPath,
+          mountBasePath: baseMountDir,
+          pathId: traceId,
+          jobRunId: traceId,
+        };
 
-      this.logger.log(`Mounting export path for host ${fileServer.host}`);
-      await protocol.mountPath(traceId, mountPathPayload);
-      this.logger.log("Mounted export path successfully");
+        this.logger.log(`Mounting export path for host ${fileServer.host}`);
+        await protocol.mountPath(traceId, mountPathPayload);
+        this.logger.log("Mounted export path successfully");
 
-      this.logger.log(`Unmounting export path for host ${fileServer.host}`);
-      await protocol.unmountPath(traceId, mountPathPayload);
-      this.logger.log("Unmounted export path successfully");
+        this.logger.log(`Unmounting export path for host ${fileServer.host}`);
+        await protocol.unmountPath(traceId, mountPathPayload);
+        this.logger.log("Unmounted export path successfully");
+      }
+    } catch (error) {
+      this.logger.error(`Error while mounting the path - ${error?.message || error}`);
+      throw new Error(error?.message || error);
     }
   }
 
@@ -183,8 +192,8 @@ export class ValidateWorkingDirectoryActivity {
         if (isDirectoryValid && hasWritePermission) break;
       }
     } catch (error) {
-      this.logger.error(`Working Directory validation error: ${error?.message}`);
-      throw new Error(error.message);
+      this.logger.error(`Working Directory validation error: ${error?.message || error}`);
+      throw new Error(error?.message || error);
     }
 
     return isDirectoryValid && hasWritePermission;
