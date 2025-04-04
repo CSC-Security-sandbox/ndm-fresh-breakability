@@ -1,13 +1,7 @@
-import {
-  TASK_STATUS_TYPE_ENUM,
-  TASK_TYPE_TYPE_ENUM,
-  WorkerApiType,
-} from "@/types/app.type";
+import { TASK_STATUS_TYPE_ENUM, TASK_TYPE_TYPE_ENUM } from "@/types/app.type";
 import { getGrafanaLogUrl, toTitleCase } from "@/utils/common.utils";
 import { useLazyGetJobTasksQuery } from "@api/jobsApi";
-import { useGetAllWorkersQuery } from "@api/workersApi";
 import { Box } from "@components/container/index";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   Breadcrumbs,
   Button,
@@ -22,6 +16,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import TaskFilters from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/TaskFilters";
 import { TASKS_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/tasks.constants";
 import { BreadcrumbsArrowIcon } from "@netapp/bxp-style/react-icons/Navigation";
+import useFetchWorkers from "@hooks/useFetchWorkers";
 
 const JobTasks = () => {
   const [searchParams] = useSearchParams();
@@ -40,12 +35,7 @@ const JobTasks = () => {
   const [currentFilters, setCurrentFilters] = useState<any>(
     status ? { status: [{ label: toTitleCase(status), value: status }] } : {}
   );
-  const { selectedProjectId } = useSelectedProjectId();
-  const { data: workers } = useGetAllWorkersQuery<{
-    data: WorkerApiType[];
-  }>({
-    projectId: selectedProjectId,
-  });
+  const { workers } = useFetchWorkers();
 
   const preSelectedFilter: any = {};
   if (status) preSelectedFilter.status = status;

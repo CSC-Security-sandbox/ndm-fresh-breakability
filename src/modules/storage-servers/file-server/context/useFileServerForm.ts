@@ -82,7 +82,7 @@ export const useFileServerForm = () => {
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
 
   const fetchWorkers = async () => {
-    await getAllWorkers({ projectId: selectedProjectId })
+    await getAllWorkers(`?projectId=${selectedProjectId}`)
       .unwrap()
       .then((resp) => {
         const allWorkersWithNameAndId: WorkerIdWithNameType = {};
