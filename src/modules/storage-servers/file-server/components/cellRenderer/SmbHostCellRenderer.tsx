@@ -1,5 +1,5 @@
 import { BlueXpTableRowType } from "@/types/app.type";
-import CellValueWithTooltip from "@/utils/CellValueWithTooltip";
+import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
 
 const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const smbFileServer = params?.row?.fileServers.find(
@@ -7,7 +7,9 @@ const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   );
 
   return (
-    <CellValueWithTooltip cellValue={smbFileServer?.host || "-"} cellComponent={smbFileServer?.host || "-"} showTooltip={smbFileServer?.host ? true : false} />
+    <TooltipRenderer tooltipContent={smbFileServer?.host || "-"} show={smbFileServer?.host ? true : false}>
+      {smbFileServer?.host || "-"}
+    </TooltipRenderer>
   );
 };
 

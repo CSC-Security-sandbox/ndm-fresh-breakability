@@ -1,24 +1,22 @@
 import { BlueXpTableRowType } from "@/types/app.type";
 import { Heading } from "@netapp/bxp-design-system-react";
 import { useNavigate } from "react-router-dom";
-import CellValueWithTooltip from "@/utils/CellValueWithTooltip";
+import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
 
 const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const navigate = useNavigate();
 
   return (
-    <CellValueWithTooltip cellValue={params?.row?.configName}
-      cellComponent={
-        <Heading
-            level="16"
-            color="text-title"
-            className="cursor-pointer font-bold"
-            onClick={() => navigate(`/file-server/${params?.row?.id}`)}
-          >
-            {params?.row?.configName}
-          </Heading>
-      }
-    />
+    <TooltipRenderer tooltipContent={params?.row?.configName}>
+      <Heading
+        level="16"
+        color="text-title"
+        className="cursor-pointer font-bold"
+        onClick={() => navigate(`/file-server/${params?.row?.id}`)}
+      >
+        {params?.row?.configName}
+      </Heading>
+    </TooltipRenderer>
   );
 };
 

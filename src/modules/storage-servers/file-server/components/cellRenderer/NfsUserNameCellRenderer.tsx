@@ -1,5 +1,5 @@
 import { BlueXpTableRowType } from "@/types/app.type";
-import CellValueWithTooltip from "@/utils/CellValueWithTooltip";
+import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
 
 const NfsUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const nfsFileServer = params?.row?.fileServers.find(
@@ -7,7 +7,9 @@ const NfsUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   );
 
   return (
-    <CellValueWithTooltip cellValue={nfsFileServer?.userName} cellComponent={nfsFileServer?.userName || "-"}/>
+    <TooltipRenderer tooltipContent={nfsFileServer?.userName}>
+      {nfsFileServer?.userName || "-"}
+    </TooltipRenderer>
   );
 };
 
