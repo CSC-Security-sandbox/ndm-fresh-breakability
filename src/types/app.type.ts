@@ -758,3 +758,9 @@ export interface smtpValuesType {
   SMTP_FROM_EMAIL: string;
   SMTP_TO_EMAIL: string;
 }
+
+export interface TooltipRendererProps {
+  tooltipContent: string;
+  children: React.ReactNode;
+  show?: boolean;
+}
