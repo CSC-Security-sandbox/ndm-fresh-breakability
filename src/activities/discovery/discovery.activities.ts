@@ -194,5 +194,5 @@ export class DiscoveryActivity {
   }
 
 }
-// const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false, 1001, 1001, 2048, true, new Date(), new Date(), new Date(), "", "", "", 0);
+
 
