@@ -70,7 +70,8 @@ export class EmailService {
         socketTimeout: 5000,
         connectionTimeout: 5000,
       });
-      const templateName = notificationType === NOTIFICATION_TYPE.FAILURE? "failure" : 'success';
+      const templateName =
+        notificationType === NOTIFICATION_TYPE.FAILURE ? 'failure' : 'success';
       this.setupTemplateBasdOnNotificationType(templateName);
       await this.transporter.verify();
 
@@ -80,10 +81,18 @@ export class EmailService {
       const toAddress = smtpSettings.find(
         (setting) => setting.settingKey === 'SMTP_TO_EMAIL',
       )?.settingValue;
-      if(notificationType === NOTIFICATION_TYPE.FAILURE){
-      await this.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
-      }else{
-       await this.sendEmailForSuccessEvent(emailContent, fromAddress, toAddress);
+      if (notificationType === NOTIFICATION_TYPE.FAILURE) {
+        await this.sendEmailForFailureEvents(
+          emailContent,
+          fromAddress,
+          toAddress,
+        );
+      } else {
+        await this.sendEmailForSuccessEvent(
+          emailContent,
+          fromAddress,
+          toAddress,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -136,10 +145,17 @@ export class EmailService {
       this.logger.error(`Error sending email: ${error.message}`);
       throw new Error(`Error sending email: ${error.message}`);
     } finally {
-      if(emailContent.status === EmailContentStatus.FIRING) {
+      if (emailContent.status === EmailContentStatus.FIRING) {
         await this.syncEmailRepo.save(syncEmail);
       } else {
-        await this.syncEmailRepo.update({ incidentStatus: IncidentStatus.OPEN, alertSource: podName ?? instanceName, alertName: alertName }, { incidentStatus: IncidentStatus.CLOSED });
+        await this.syncEmailRepo.update(
+          {
+            incidentStatus: IncidentStatus.OPEN,
+            alertSource: podName ?? instanceName,
+            alertName: alertName,
+          },
+          { incidentStatus: IncidentStatus.CLOSED },
+        );
       }
     }
   }
@@ -168,9 +184,9 @@ export class EmailService {
       'compile',
       hbs({
         viewEngine: {
-          extname: ".hbs",
+          extname: '.hbs',
           layoutsDir: path.join(__dirname, '../../templates/views'),
-          defaultLayout: templateName
+          defaultLayout: templateName,
         },
         viewPath: path.join(__dirname, '../../templates/views'),
         extName: '.hbs',
@@ -185,11 +201,11 @@ export class EmailService {
       subject: `DataMigrator Alert`,
       template: 'success',
       context: {
-        body
+        body,
       },
     };
     try {
-      const info = await this.transporter.sendMail(mailOptions);
+      await this.transporter.sendMail(mailOptions);
     } catch (error) {
       console.error('Error sending email:', error.message);
       throw new Error(`Error sending email: ${error.message}`);

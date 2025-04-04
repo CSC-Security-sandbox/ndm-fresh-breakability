@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { Project } from '../entities/project.entity';
@@ -25,7 +29,7 @@ export class ProjectService {
   async create(
     accountId: string,
     createProjectDto: CreateProjectDto,
-    userPermissionResponse:UserPermissionResponse
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<Project> {
     const account = await this.accountRepository.findOneBy({ id: accountId });
     if (!account) {
@@ -35,7 +39,7 @@ export class ProjectService {
     const existingProject = await this.projectRepository.findOneBy({
       project_name: createProjectDto.project_name,
     });
- 
+
     if (existingProject) {
       throw new ConflictException(
         `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
@@ -46,11 +50,15 @@ export class ProjectService {
       ...createProjectDto,
       account,
     });
-    project.created_by = userPermissionResponse.user.id
+    project.created_by = userPermissionResponse.user.id;
     return this.projectRepository.save(project);
   }
 
-  async update(id: string, updateProjectDto: UpdateProjectDto, userPermissionResponse:UserPermissionResponse): Promise<void> {
+  async update(
+    id: string,
+    updateProjectDto: UpdateProjectDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<void> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
       updated_by: userPermissionResponse.user.id,
@@ -144,10 +152,10 @@ export class ProjectService {
     if (!account) {
       throw new NotFoundException(`Account with ${account_id} not found`);
     }
-   
+
     if (userPermissionResponse.user.roles[0].projects.length > 0) {
       const userId = userPermissionResponse.user.id;
-  
+
       const userRoles = await this.userRoleRepository.find({
         where: {
           userId: userId,
@@ -155,9 +163,9 @@ export class ProjectService {
         },
         select: ['projectId'],
       });
-  
+
       const allowedProjectIds = userRoles.map((ur) => ur.projectId);
-  
+
       options.where = {
         id: In(allowedProjectIds),
         ...filter,
@@ -168,7 +176,7 @@ export class ProjectService {
         ...filter,
       };
     }
-   
+
     const projects = await this.projectRepository.find(options);
 
     const transformedProjects = await Promise.all(

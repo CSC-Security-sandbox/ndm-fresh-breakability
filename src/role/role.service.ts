@@ -13,7 +13,10 @@ export class RoleService {
     private roleRepository: Repository<Role>,
   ) {}
 
-  create(createRoleDto: CreateRoleDto, userPermissionResponse:UserPermissionResponse): Promise<Role> {
+  create(
+    createRoleDto: CreateRoleDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<Role> {
     const role = this.roleRepository.create({
       ...createRoleDto,
       role_status: 'active',
@@ -35,7 +38,11 @@ export class RoleService {
     return await this.roleRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateRoleDto: UpdateRoleDto, userPermissionResponse:UserPermissionResponse): Promise<void> {
+  async update(
+    id: string,
+    updateRoleDto: UpdateRoleDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<void> {
     await this.roleRepository.update(id, {
       ...updateRoleDto,
       updated_by: userPermissionResponse.user.id,

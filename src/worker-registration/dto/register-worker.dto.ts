@@ -1,4 +1,3 @@
-
 import { IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -7,7 +6,6 @@ export class RegisterWorkerDto {
   @IsUUID()
   projectId: string;
 }
-
 
 export class RegisterWorkerResponseDto {
   @ApiProperty({ description: 'WorkerId' })
@@ -22,7 +20,11 @@ export class RegisterWorkerResponseDto {
   @IsString()
   controlPlaneIp: string;
 
-  constructor(workerId?: string, workerSecret?: string, controlPlaneIp?: string) {
+  constructor(
+    workerId?: string,
+    workerSecret?: string,
+    controlPlaneIp?: string,
+  ) {
     this.workerId = workerId;
     this.workerSecret = workerSecret;
     this.controlPlaneIp = controlPlaneIp;

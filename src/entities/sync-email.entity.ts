@@ -10,7 +10,7 @@ export enum IncidentStatus {
 export class SyncEmail extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-  
+
   @Column({ type: 'jsonb', name: 'mail_content', nullable: false })
   mailContent: Record<string, any>;
 
@@ -33,5 +33,4 @@ export class SyncEmail extends Base {
 
   @Column({ name: 'alertname', type: 'text', nullable: true })
   alertName: string;
-  
 }

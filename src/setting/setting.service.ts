@@ -6,7 +6,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
 
-
 @Injectable()
 export class SettingService {
   constructor(
@@ -15,37 +14,23 @@ export class SettingService {
   ) {}
   async create(createSettingDto: CreateSettingDto[]) {
     try {
-      if (createSettingDto.length > 0 && createSettingDto.some(setting => setting.settingType === 'SMTP')) {
-        const isSMTPConnectionSuccessful = await this.testSMTPConnection(createSettingDto);
+      if (
+        createSettingDto.length > 0 &&
+        createSettingDto.some((setting) => setting.settingType === 'SMTP')
+      ) {
+        const isSMTPConnectionSuccessful =
+          await this.testSMTPConnection(createSettingDto);
         console.log('isSMTPConnectionSuccessful:', isSMTPConnectionSuccessful);
         if (!isSMTPConnectionSuccessful) {
           throw new HttpException(
-        {
-          message: 'SMTP connection test failed',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+            {
+              message: 'SMTP connection test failed',
+              statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            },
+            HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
       }
-      const createdSettings = await Promise.all(
-        createSettingDto.map(async (setting) => {
-          const existingSetting = await this.settingsRepo.find({
-            where: { settingKey: setting.settingKey },
-          });
-          if (existingSetting.length > 0) {
-            throw new HttpException(
-              {
-                message: `Setting with key ${setting.settingKey} already exists`,
-                statusCode: HttpStatus.BAD_REQUEST,
-              },
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          const settingEntity = this.settingsRepo.create(setting);
-          return await this.settingsRepo.save(settingEntity);
-        }),
-      );
 
       return {
         message: 'Settings created successfully',
@@ -62,30 +47,46 @@ export class SettingService {
       );
     }
   }
-  async testSMTPConnection(createSettingDto: CreateSettingDto[]):Promise<boolean> {
-    let isVerificationSuccessful:boolean = false;
-    const smtpConfig:any = {
-      host: createSettingDto.find(setting => setting.settingKey === 'SMTP_HOST').settingValue, 
-      port: createSettingDto.find(setting => setting.settingKey === 'SMTP_PORT').settingValue,                
-      secure: false,            
-     
+  async testSMTPConnection(
+    createSettingDto: CreateSettingDto[],
+  ): Promise<boolean> {
+    let isVerificationSuccessful: boolean = false;
+    const smtpConfig: any = {
+      host: createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_HOST',
+      ).settingValue,
+      port: createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_PORT',
+      ).settingValue,
+      secure: false,
     };
-    if(createSettingDto.find(setting => setting.settingKey === 'SMTP_USER_NAME')?.settingValue
-       && createSettingDto.find(setting => setting.settingKey === 'SMTP_PASSWORD')?.settingValue){
+    if (
+      createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_USER_NAME',
+      )?.settingValue &&
+      createSettingDto.find((setting) => setting.settingKey === 'SMTP_PASSWORD')
+        ?.settingValue
+    ) {
       smtpConfig.auth = {
-        user: createSettingDto.find(setting => setting.settingKey === 'SMTP_USER_NAME')?.settingValue,
-        pass: createSettingDto.find(setting => setting.settingKey === 'SMTP_PASSWORD')?.settingValue,
-      }
+        user: createSettingDto.find(
+          (setting) => setting.settingKey === 'SMTP_USER_NAME',
+        )?.settingValue,
+        pass: createSettingDto.find(
+          (setting) => setting.settingKey === 'SMTP_PASSWORD',
+        )?.settingValue,
+      };
     }
     try {
-      const transporter:Transporter = nodemailer.createTransport({
+      const transporter: Transporter = nodemailer.createTransport({
         host: smtpConfig.host,
         port: parseInt(smtpConfig.port),
         secure: smtpConfig.secure,
-        auth: smtpConfig.auth ? {
-          user: smtpConfig.auth.user,
-          pass: smtpConfig.auth.pass,
-        } : undefined,
+        auth: smtpConfig.auth
+          ? {
+              user: smtpConfig.auth.user,
+              pass: smtpConfig.auth.pass,
+            }
+          : undefined,
         socketTimeout: 5000,
         connectionTimeout: 5000,
       });
@@ -140,28 +141,27 @@ export class SettingService {
   }
   async updateSetting(updateSettingDto: CreateSettingDto[]) {
     try {
-      for(const settingObj of updateSettingDto){
-      const setting = await this.settingsRepo.findOne({
-        where: { settingKey: settingObj.settingKey },
-      });
-      if (!setting) {
-        throw new HttpException(
-          {
-            message: `Setting with key ${settingObj.settingKey} not found`,
-            statusCode: HttpStatus.NOT_FOUND,
-          },
-          HttpStatus.NOT_FOUND,
-        );
+      for (const settingObj of updateSettingDto) {
+        const setting = await this.settingsRepo.findOne({
+          where: { settingKey: settingObj.settingKey },
+        });
+        if (!setting) {
+          throw new HttpException(
+            {
+              message: `Setting with key ${settingObj.settingKey} not found`,
+              statusCode: HttpStatus.NOT_FOUND,
+            },
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        setting.settingValue = settingObj.settingValue;
+        setting.description = settingObj.description;
+        await this.settingsRepo.save(setting);
       }
-      setting.settingValue = settingObj.settingValue;
-      setting.description = settingObj.description; 
-      await this.settingsRepo.save(setting);
-    }
-    return {
-      message: 'Setting updated successfully',
-      statusCode: HttpStatus.OK,
-    };
-
+      return {
+        message: 'Setting updated successfully',
+        statusCode: HttpStatus.OK,
+      };
     } catch (error) {
       throw new HttpException(
         {

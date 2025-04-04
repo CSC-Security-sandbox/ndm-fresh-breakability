@@ -40,7 +40,9 @@ describe('SettingService', () => {
     }).compile();
 
     service = module.get<SettingService>(SettingService);
-    settingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
+    settingsRepo = module.get<Repository<GlobalSettings>>(
+      getRepositoryToken(GlobalSettings),
+    );
   });
 
   afterEach(() => {
@@ -50,12 +52,19 @@ describe('SettingService', () => {
   describe('create', () => {
     it('should throw an error if SMTP connection fails', async () => {
       const createSettingDto: CreateSettingDto[] = [
-        { settingKey: 'SMTP_HOST', settingValue: 'localhost', description: 'SMTP Host', settingType: SettingType.SMTP },
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'localhost',
+          description: 'SMTP Host',
+          settingType: SettingType.SMTP,
+        },
       ];
       jest.spyOn(settingsRepo, 'find').mockResolvedValue([]);
       jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(false);
 
-      await expect(service.create(createSettingDto)).rejects.toThrow(HttpException);
+      await expect(service.create(createSettingDto)).rejects.toThrow(
+        HttpException,
+      );
     });
 
     it('should throw an error if setting already exists', async () => {
@@ -64,41 +73,67 @@ describe('SettingService', () => {
           settingKey: 'SMTP_HOST',
           settingValue: 'smtp.gmail.com',
           description: 'SMTP Host for sending emails',
-          settingType: SettingType.SMTP
+          settingType: SettingType.SMTP,
         },
       ];
 
-      jest.spyOn(settingsRepo, 'find').mockResolvedValue([{
-        settingKey: 'SMTP_HOST',
-        settingValue: 'smtp.gmail.com',
-        description: 'SMTP Host for sending emails',
-        settingType: SettingType.SMTP,
-        id: '1',
-        created_at: new Date(),
-        created_by: '',
-        updated_at: new Date(),
-        updated_by: '',
-        populateWhoColumns: jest.fn(),
-      }]);
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue([
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          description: 'SMTP Host for sending emails',
+          settingType: SettingType.SMTP,
+          id: '1',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+      ]);
 
-      await expect(service.create(createSettingDto)).rejects.toThrow(HttpException);
+      await expect(service.create(createSettingDto)).rejects.toThrow(
+        HttpException,
+      );
     });
   });
 
   describe('testSMTPConnection', () => {
     it('should return true for a successful SMTP connection', async () => {
       const createSettingDto: CreateSettingDto[] = [
-        { settingKey: 'SMTP_HOST', settingValue: 'localhost', description: 'SMTP Host', settingType: SettingType.SMTP },
-        { settingKey: 'SMTP_PORT', settingValue: '587', description: 'SMTP Port', settingType: SettingType.SMTP },
-        { settingKey: 'SMTP_USER_NAME', settingValue: 'user', description: 'SMTP User', settingType: SettingType.SMTP },
-        { settingKey: 'SMTP_PASSWORD', settingValue: 'pass', description: 'SMTP Password', settingType: SettingType.SMTP },
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'localhost',
+          description: 'SMTP Host',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_USER_NAME',
+          settingValue: 'user',
+          description: 'SMTP User',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PASSWORD',
+          settingValue: 'pass',
+          description: 'SMTP Password',
+          settingType: SettingType.SMTP,
+        },
       ];
 
       const transporterMock = {
         verify: jest.fn().mockResolvedValue(true),
         sendMail: jest.fn(),
       };
-      jest.spyOn(nodemailer, 'createTransport').mockReturnValue(transporterMock as any);
+      jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue(transporterMock as any);
 
       const result = await service.testSMTPConnection(createSettingDto);
       expect(result).toBe(true);
@@ -106,15 +141,27 @@ describe('SettingService', () => {
 
     it('should return false for a failed SMTP connection', async () => {
       const createSettingDto: CreateSettingDto[] = [
-        { settingKey: 'SMTP_HOST', settingValue: 'localhost', description: 'SMTP Host', settingType: SettingType.SMTP },
-        { settingKey: 'SMTP_PORT', settingValue: '587', description: 'SMTP Port', settingType: SettingType.SMTP },
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'localhost',
+          description: 'SMTP Host',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: SettingType.SMTP,
+        },
       ];
 
       const transporterMock = {
         verify: jest.fn().mockRejectedValue(new Error('Connection failed')),
         sendMail: jest.fn(),
       };
-      jest.spyOn(nodemailer, 'createTransport').mockReturnValue(transporterMock as any);
+      jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue(transporterMock as any);
 
       const result = await service.testSMTPConnection(createSettingDto);
       expect(result).toBe(false);
@@ -123,7 +170,9 @@ describe('SettingService', () => {
 
   describe('findAll', () => {
     it('should throw an error if retrieval fails', async () => {
-      jest.spyOn(settingsRepo, 'find').mockRejectedValue(new Error('Database error'));
+      jest
+        .spyOn(settingsRepo, 'find')
+        .mockRejectedValue(new Error('Database error'));
 
       await expect(service.findAll()).rejects.toThrow(HttpException);
     });
@@ -155,15 +204,24 @@ describe('SettingService', () => {
   describe('updateSetting', () => {
     it('should update an existing setting', async () => {
       const updateSettingDto: CreateSettingDto[] = [
-        { settingKey: 'SMTP_HOST', settingValue: 'newhost', description: 'Updated host', settingType: SettingType.SMTP },
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'newhost',
+          description: 'Updated host',
+          settingType: SettingType.SMTP,
+        },
       ];
       const existingSetting: GlobalSettings = {
-        id: '1', settingKey: 'SMTP_HOST', settingValue: 'localhost', description: '', settingType: SettingType.SMTP,
+        id: '1',
+        settingKey: 'SMTP_HOST',
+        settingValue: 'localhost',
+        description: '',
+        settingType: SettingType.SMTP,
         created_at: new Date(),
         created_by: '',
         updated_at: new Date(),
         updated_by: '',
-        populateWhoColumns: jest.fn()
+        populateWhoColumns: jest.fn(),
       };
       jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(existingSetting);
       jest.spyOn(settingsRepo, 'save').mockResolvedValue({
@@ -181,13 +239,18 @@ describe('SettingService', () => {
 
     it('should throw an error if setting not found', async () => {
       const updateSettingDto: CreateSettingDto[] = [
-        { settingKey: 'SMTP_HOST', settingValue: 'newhost', description: 'Updated host', settingType: SettingType.SMTP },
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'newhost',
+          description: 'Updated host',
+          settingType: SettingType.SMTP,
+        },
       ];
       jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(HttpException);
+      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
+        HttpException,
+      );
     });
   });
 });
-
-  

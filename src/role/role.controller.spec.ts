@@ -52,14 +52,14 @@ describe('RoleController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -89,7 +89,9 @@ describe('RoleController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(role);
 
-    expect(await controller.create(createRoleDto, userPermissionResponseMock)).toEqual(role);
+    expect(
+      await controller.create(createRoleDto, userPermissionResponseMock),
+    ).toEqual(role);
   });
 
   it('should find all roles', async () => {
@@ -154,7 +156,9 @@ describe('RoleController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateRoleDto, userPermissionResponseMock)).toBeUndefined();
+    expect(
+      await controller.update('1', updateRoleDto, userPermissionResponseMock),
+    ).toBeUndefined();
   });
 
   it('should delete an role', async () => {

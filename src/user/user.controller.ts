@@ -8,12 +8,16 @@ import {
   Delete,
   Query,
   Request,
-  BadRequestException
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
@@ -30,7 +34,10 @@ export class UserController {
     summary: 'Create a new User',
     description: UserDescriptions.CreateUsersDescription,
   })
-  create(@Body() createUserDto: CreateUserDto, @Request() getUserPermissions:UserPermissionResponse) {
+  create(
+    @Body() createUserDto: CreateUserDto,
+    @Request() getUserPermissions: UserPermissionResponse,
+  ) {
     return this.userService.create(createUserDto, getUserPermissions);
   }
 
@@ -76,9 +83,15 @@ export class UserController {
     @Query('limit') limit: number = 10,
     @Query('sortField') sortField: string = 'id',
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
-    @Query('filter') filter: string = "{}",
+    @Query('filter') filter: string = '{}',
   ) {
-    return this.userService.findAll(page, limit, sortField, sortOrder, JSON.parse(filter));
+    return this.userService.findAll(
+      page,
+      limit,
+      sortField,
+      sortOrder,
+      JSON.parse(filter),
+    );
   }
 
   @Auth()
@@ -113,7 +126,11 @@ export class UserController {
     summary: 'Update User by ID',
     description: UserDescriptions.UpdateUserById,
   })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Request() userPermissions:UserPermissionResponse) {
+  update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @Request() userPermissions: UserPermissionResponse,
+  ) {
     return this.userService.update(id, updateUserDto, userPermissions);
   }
 
@@ -127,7 +144,6 @@ export class UserController {
   delete(@Param('id') id: string) {
     return this.userService.delete(id);
   }
-
 
   @Auth(Permission.UpdateUser)
   @ApiBearerAuth()

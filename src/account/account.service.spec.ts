@@ -36,14 +36,14 @@ describe('AccountService', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should create an account', async () => {
     const createAccountDto: CreateAccountDto = { account_name: 'test' };
@@ -62,7 +62,9 @@ describe('AccountService', () => {
     jest.spyOn(repository, 'create').mockReturnValue(account);
     jest.spyOn(repository, 'save').mockResolvedValue(account);
 
-    expect(await service.create(createAccountDto, userPermissionResponseMock)).toEqual(account);
+    expect(
+      await service.create(createAccountDto, userPermissionResponseMock),
+    ).toEqual(account);
     expect(repository.create).toHaveBeenCalledWith(createAccountDto);
     expect(repository.save).toHaveBeenCalledWith(account);
   });
@@ -120,8 +122,6 @@ describe('AccountService', () => {
 
   it('should update an account', async () => {
     const updateAccountDto: UpdateAccountDto = { account_name: 'test' };
-
-    
 
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 

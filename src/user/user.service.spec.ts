@@ -6,7 +6,6 @@ import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserService } from './user.service';
 import { User } from '../entities/user.entity';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Account } from '../entities/account.entity';
 import { Role } from '../entities/role.entity';
@@ -18,8 +17,6 @@ describe('UserService', () => {
   let service: UserService;
   let userRepository: Repository<User>;
   let roleRepository: Repository<Role>;
-  let accountRepository: Repository<Account>;
-  let projectRepository: Repository<Project>;
   let userRoleRepository: Repository<UserRole>;
   let rolePermissionRepository: Repository<RolePermission>;
 
@@ -57,12 +54,8 @@ describe('UserService', () => {
     service = module.get<UserService>(UserService);
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
     roleRepository = module.get<Repository<Role>>(getRepositoryToken(Role));
-    rolePermissionRepository = module.get<Repository<RolePermission>>(getRepositoryToken(RolePermission));
-    accountRepository = module.get<Repository<Account>>(
-      getRepositoryToken(Account),
-    );
-    projectRepository = module.get<Repository<Project>>(
-      getRepositoryToken(Project),
+    rolePermissionRepository = module.get<Repository<RolePermission>>(
+      getRepositoryToken(RolePermission),
     );
     userRoleRepository = module.get<Repository<UserRole>>(
       getRepositoryToken(UserRole),
@@ -83,27 +76,29 @@ describe('UserService', () => {
   } as UserPermissionResponse;
 
   it('should create a user', async () => {
-    
     const createUserDto = {
       email: 'test@example.com',
-      first_name:'', 
-      last_name:'', 
-      user_status:'active',
+      first_name: '',
+      last_name: '',
+      user_status: 'active',
       password: 'password123',
       populateWhoColumns: jest.fn(),
     };
- 
+
     const mockUser = {
       ...createUserDto,
       user_status: 'active',
       id: 'generated-user-id',
     };
- 
+
     jest.spyOn(userRepository, 'create').mockReturnValue(mockUser as any);
     jest.spyOn(userRepository, 'save').mockResolvedValue(mockUser as any);
- 
-    const user = await service.create(createUserDto, userPermissionResponseMock);
- 
+
+    const user = await service.create(
+      createUserDto,
+      userPermissionResponseMock,
+    );
+
     expect(user).toEqual(mockUser);
     expect(userRepository.create).toHaveBeenCalledWith({
       ...createUserDto,
@@ -113,16 +108,6 @@ describe('UserService', () => {
   });
 
   it('should find all users', async () => {
-    const baseAtts = {
-      created_at: new Date(),
-      created_by: randomUUID(),
-      updated_at: new Date(),
-      updated_by: randomUUID(),
-      user_roles: [],
-      projects: [],
-      populateWhoColumns: jest.fn(),
-    };
-   
     const users = [
       {
         id: '1',
@@ -157,9 +142,9 @@ describe('UserService', () => {
         populateWhoColumns: jest.fn(),
       },
     ];
-   
+
     jest.spyOn(userRepository, 'find').mockResolvedValue(users);
-   
+
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(users[0]);
 
     jest
@@ -172,7 +157,7 @@ describe('UserService', () => {
 
     const result = await service.findAll();
     expect(userRepository.find).toHaveBeenCalled();
-   
+
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -185,7 +170,7 @@ describe('UserService', () => {
           email: 'test2',
           user_status: 'active',
         }),
-      ])
+      ]),
     );
   });
 
@@ -206,7 +191,9 @@ describe('UserService', () => {
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
 
-    await expect(service.getUserProjectsAndPermissions(email, projectId)).rejects.toThrow(
+    await expect(
+      service.getUserProjectsAndPermissions(email, projectId),
+    ).rejects.toThrow(
       new NotFoundException(`User has no role in project with ID ${projectId}`),
     );
   });
@@ -225,7 +212,10 @@ describe('UserService', () => {
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
     jest.spyOn(service, 'getPermissionsByRoles').mockResolvedValue(permissions);
 
-    const result = await service.getUserProjectsAndPermissions(email, projectId);
+    const result = await service.getUserProjectsAndPermissions(
+      email,
+      projectId,
+    );
 
     expect(result).toEqual({
       projectId: 'project-id-123',
@@ -238,11 +228,17 @@ describe('UserService', () => {
   it('should return all projects and permissions for the user', async () => {
     const email = 'test@example.com';
     const userRole1 = new UserRole();
-    userRole1.project = { id: 'project-id-1', project_name: 'Project 1' } as any;
+    userRole1.project = {
+      id: 'project-id-1',
+      project_name: 'Project 1',
+    } as any;
     userRole1.role = { id: 'role-id-1', role_name: 'Admin' } as any;
 
     const userRole2 = new UserRole();
-    userRole2.project = { id: 'project-id-2', project_name: 'Project 2' } as any;
+    userRole2.project = {
+      id: 'project-id-2',
+      project_name: 'Project 2',
+    } as any;
     userRole2.role = { id: 'role-id-2', role_name: 'Editor' } as any;
 
     const user = new User();
@@ -252,11 +248,13 @@ describe('UserService', () => {
     const permissions2 = ['read'];
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-    jest.spyOn(service, 'getPermissionsByRoles').mockImplementation((roleId: string) => {
-      if (roleId === 'role-id-1') return Promise.resolve(permissions1);
-      if (roleId === 'role-id-2') return Promise.resolve(permissions2);
-      return Promise.resolve([]);
-    });
+    jest
+      .spyOn(service, 'getPermissionsByRoles')
+      .mockImplementation((roleId: string) => {
+        if (roleId === 'role-id-1') return Promise.resolve(permissions1);
+        if (roleId === 'role-id-2') return Promise.resolve(permissions2);
+        return Promise.resolve([]);
+      });
 
     const result = await service.getUserProjectsAndPermissions(email);
 
@@ -283,7 +281,9 @@ describe('UserService', () => {
       { permission: { permission_name: 'write' } },
     ];
 
-    jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue(rolePermissions as any);
+    jest
+      .spyOn(rolePermissionRepository, 'find')
+      .mockResolvedValue(rolePermissions as any);
 
     const result = await service.getPermissionsByRoles(roleId);
 
@@ -294,8 +294,8 @@ describe('UserService', () => {
     const user = {
       id: '1',
       email: 'test',
-      first_name:'',
-      name:'',
+      first_name: '',
+      name: '',
       last_name: '',
       user_status: 'active',
       created_at: new Date(),
@@ -335,8 +335,8 @@ describe('UserService', () => {
     const user = {
       id: '1',
       email: 'test@example.com',
-      first_name:'',
-      name:'',
+      first_name: '',
+      name: '',
       last_name: '',
       user_status: 'active',
       created_at: new Date(),
@@ -351,9 +351,9 @@ describe('UserService', () => {
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
 
     jest.spyOn(userRepository, 'remove').mockResolvedValue(user);
-    
+
     await service.delete('1');
-    
+
     expect(userRepository.findOne).toHaveBeenCalledWith({
       where: { id: '1' },
       relations: ['user_roles'],

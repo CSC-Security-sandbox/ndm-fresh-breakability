@@ -1,4 +1,6 @@
-import workerRegisterConfig, { WorkerRegisterConfig } from './workerregister.config';
+import workerRegisterConfig, {
+  WorkerRegisterConfig,
+} from './workerregister.config';
 
 describe('Worker Register Configuration', () => {
   beforeEach(() => {

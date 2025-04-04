@@ -2,17 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkerRegistrationService } from './worker-registration.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import { InternalServerErrorException } from '@nestjs/common';
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
-
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('WorkerRegistrationService', () => {
   let service: WorkerRegistrationService;
-  let configService: ConfigService;
 
   const mockKeycloakConfig: KeycloakAdminConfig = {
     keycloakUrl: 'http://keycloak-url',
@@ -36,7 +34,6 @@ describe('WorkerRegistrationService', () => {
     }).compile();
 
     service = module.get<WorkerRegistrationService>(WorkerRegistrationService);
-    configService = module.get<ConfigService>(ConfigService);
     jest.clearAllMocks();
   });
 
@@ -51,14 +48,16 @@ describe('WorkerRegistrationService', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://keycloak-url/realms/master/protocol/openid-connect/token',
         expect.any(URLSearchParams),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
       );
     });
 
     it('should throw an InternalServerErrorException when the request fails', async () => {
       mockedAxios.post.mockRejectedValue(new Error('Network error'));
 
-      await expect(service.getAdminAccessToken()).rejects.toThrow(InternalServerErrorException);
+      await expect(service.getAdminAccessToken()).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 
@@ -69,7 +68,9 @@ describe('WorkerRegistrationService', () => {
       const mockAccessToken = 'mock-access-token';
       const mockRegisterResponse = { status: 201 };
 
-      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { access_token: mockAccessToken },
+      });
       mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
 
       const result = await service.registerWorker(validDetails);
@@ -79,18 +80,24 @@ describe('WorkerRegistrationService', () => {
 
     it('should throw InternalServerErrorException when details are invalid', async () => {
       const invalidDetails: RegisterWorkerDto = { projectId: '' };
-      await expect(service.registerWorker(invalidDetails)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.registerWorker(invalidDetails)).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
 
     it('should throw InternalServerErrorException when registration response status is not 201', async () => {
       const mockAccessToken = 'mock-access-token';
-      const mockRegisterResponse = { status: 400 }; 
+      const mockRegisterResponse = { status: 400 };
 
-      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { access_token: mockAccessToken },
+      });
       mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
 
       await expect(service.registerWorker(validDetails)).rejects.toThrow(
-        new InternalServerErrorException(`Unexpected error occurred while registering worker`)
+        new InternalServerErrorException(
+          `Unexpected error occurred while registering worker`,
+        ),
       );
     });
 
@@ -99,11 +106,13 @@ describe('WorkerRegistrationService', () => {
       const axiosError = new Error('Axios error') as any;
       axiosError.response = { data: 'Detailed axios error message' };
       jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
-      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { access_token: mockAccessToken },
+      });
       mockedAxios.post.mockRejectedValueOnce(axiosError);
 
       await expect(service.registerWorker(validDetails)).rejects.toThrow(
-        new InternalServerErrorException(axiosError.response.data)
+        new InternalServerErrorException(axiosError.response.data),
       );
     });
 
@@ -111,11 +120,15 @@ describe('WorkerRegistrationService', () => {
       const mockAccessToken = 'mock-access-token';
       const nonAxiosError = new Error('Non-Axios error');
       jest.spyOn(axios, 'isAxiosError').mockReturnValue(false);
-      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: mockAccessToken } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { access_token: mockAccessToken },
+      });
       mockedAxios.post.mockRejectedValueOnce(nonAxiosError);
 
       await expect(service.registerWorker(validDetails)).rejects.toThrow(
-        new InternalServerErrorException('Unexpected error occurred while registering worker')
+        new InternalServerErrorException(
+          'Unexpected error occurred while registering worker',
+        ),
       );
     });
   });

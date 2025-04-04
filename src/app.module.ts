@@ -23,7 +23,6 @@ import { SettingModule } from './setting/setting.module';
 import { GlobalSettings } from './entities/global-setting.entity';
 import { EmailModule } from './email/email.module';
 
-
 @Module({
   imports: [
     TypeOrmModule.forFeature([

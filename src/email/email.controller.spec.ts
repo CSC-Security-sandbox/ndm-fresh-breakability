@@ -15,13 +15,12 @@ jest.mock('nodemailer-express-handlebars', () => ({
 describe('EmailController', () => {
   let controller: EmailController;
   let service: EmailService;
-  let globalSettingsRepo: Repository<GlobalSettings>;
-  let syncEmailRepo: Repository<SyncEmail>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EmailController],
-      providers: [EmailService,
+      providers: [
+        EmailService,
         {
           provide: getRepositoryToken(GlobalSettings),
           useClass: Repository,
@@ -35,21 +34,19 @@ describe('EmailController', () => {
 
     controller = module.get<EmailController>(EmailController);
     service = module.get<EmailService>(EmailService);
-    globalSettingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
-    syncEmailRepo = module.get<Repository<SyncEmail>>(getRepositoryToken(SyncEmail));
   });
 
   describe('create', () => {
     it('should call emailService.setupAndSendMail with the provided email content', () => {
       const emailContent: EmailDto = {
-        body: undefined
+        body: undefined,
       };
 
       const setupAndSendMailSpy = jest.spyOn(service, 'setupAndSendMail');
 
       controller.create(emailContent);
 
-      expect(setupAndSendMailSpy).toHaveBeenCalledWith(emailContent,'FAILURE');
+      expect(setupAndSendMailSpy).toHaveBeenCalledWith(emailContent, 'FAILURE');
     });
   });
 });

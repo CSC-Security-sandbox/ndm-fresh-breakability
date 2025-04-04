@@ -11,7 +11,6 @@ import { UserRole } from '../entities/user-role.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
-
 describe('UserController', () => {
   let controller: UserController;
   let service: UserService;
@@ -55,7 +54,7 @@ describe('UserController', () => {
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(UserRole), 
+          provide: getRepositoryToken(UserRole),
           useClass: Repository,
         },
         {
@@ -63,15 +62,15 @@ describe('UserController', () => {
           useValue: mockJwtService,
         },
         {
-          provide: getRepositoryToken(Role), 
+          provide: getRepositoryToken(Role),
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(Project), 
+          provide: getRepositoryToken(Project),
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(Account), 
+          provide: getRepositoryToken(Account),
           useClass: Repository,
         },
       ],
@@ -85,14 +84,14 @@ describe('UserController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -106,21 +105,21 @@ describe('UserController', () => {
     const createUserDto = {
       email: 'test@test1.com',
       user_status: 'active',
-      first_name:'',
-      last_name:''
+      first_name: '',
+      last_name: '',
     };
     const user = {
       id: '1',
       ...createUserDto,
       user_status: 'active',
-      first_name:'',
-      last_name:'',
-      name:'',
+      first_name: '',
+      last_name: '',
+      name: '',
       created_at: new Date(),
       created_by: '1',
       updated_at: new Date(),
       updated_by: '1',
-      email:'test@test1.com',
+      email: 'test@test1.com',
       projects: [],
       user_roles: [],
       populateWhoColumns: jest.fn(),
@@ -128,16 +127,18 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(user);
 
-    expect(await controller.create(createUserDto, userPermissionResponseMock)).toEqual(user);
+    expect(
+      await controller.create(createUserDto, userPermissionResponseMock),
+    ).toEqual(user);
   });
 
   it('should find all users', async () => {
     const users = [
       {
         id: '1',
-        first_name:'',
-        last_name:'',
-        name:'',
+        first_name: '',
+        last_name: '',
+        name: '',
         email: 'test',
         user_status: 'active',
         created_at: new Date(),
@@ -152,9 +153,9 @@ describe('UserController', () => {
         id: '2',
         email: 'test2',
         user_status: 'active',
-        first_name:'',
-        last_name:'',
-        name:'',
+        first_name: '',
+        last_name: '',
+        name: '',
         created_at: new Date(),
         created_by: '1',
         updated_at: new Date(),
@@ -167,7 +168,7 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'findAll').mockResolvedValue(users);
 
-    expect(await controller.findAll(1,1,'id','ASC', "{}")).toEqual(users);
+    expect(await controller.findAll(1, 1, 'id', 'ASC', '{}')).toEqual(users);
     expect(await controller.findAll()).toEqual(users);
   });
 
@@ -181,11 +182,16 @@ describe('UserController', () => {
       permissionsOfProject: ['read', 'write'],
     };
 
-    jest.spyOn(service, 'getUserProjectsAndPermissions').mockResolvedValue(mockResponse);
+    jest
+      .spyOn(service, 'getUserProjectsAndPermissions')
+      .mockResolvedValue(mockResponse);
 
     const result = await controller.getUserPermissions(email, projectId);
 
-    expect(service.getUserProjectsAndPermissions).toHaveBeenCalledWith(email, projectId);
+    expect(service.getUserProjectsAndPermissions).toHaveBeenCalledWith(
+      email,
+      projectId,
+    );
     expect(result).toEqual(mockResponse);
   });
 
@@ -206,11 +212,16 @@ describe('UserController', () => {
       },
     ];
 
-    jest.spyOn(service, 'getUserProjectsAndPermissions').mockResolvedValue(mockResponse);
+    jest
+      .spyOn(service, 'getUserProjectsAndPermissions')
+      .mockResolvedValue(mockResponse);
 
     const result = await controller.getUserPermissions(email);
 
-    expect(service.getUserProjectsAndPermissions).toHaveBeenCalledWith(email, undefined);
+    expect(service.getUserProjectsAndPermissions).toHaveBeenCalledWith(
+      email,
+      undefined,
+    );
     expect(result).toEqual(mockResponse);
   });
 
@@ -219,9 +230,9 @@ describe('UserController', () => {
       id: '1',
       email: 'test',
       user_status: 'active',
-      first_name:'',
-      last_name:'',
-      name:'',
+      first_name: '',
+      last_name: '',
+      name: '',
       created_at: new Date(),
       created_by: '1',
       updated_at: new Date(),
@@ -243,7 +254,9 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateUserDto, userPermissionResponseMock)).toBeUndefined();
+    expect(
+      await controller.update('1', updateUserDto, userPermissionResponseMock),
+    ).toBeUndefined();
   });
 
   it('should delete an user', async () => {

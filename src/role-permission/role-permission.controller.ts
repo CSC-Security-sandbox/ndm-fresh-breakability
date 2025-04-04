@@ -7,12 +7,18 @@ import {
   Param,
   Delete,
   Query,
-  Request
+  Request,
 } from '@nestjs/common';
 import { RolePermissionService } from './role-permission.service';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
 import { UpdateRolePermissionDto } from './dto/update-role-permission.dto';
-import { ApiBody, ApiQuery, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiQuery,
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { RolePermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
@@ -30,11 +36,14 @@ export class RolePermissionController {
     description: RolePermissionDescription.CreateRolePermissionDescription,
   })
   @ApiBody({ type: CreateRolePermissionDto })
-  create(@Body() createRolePermissionDto: CreateRolePermissionDto, @Request() userPermissionResponse:UserPermissionResponse) {
+  create(
+    @Body() createRolePermissionDto: CreateRolePermissionDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
     return this.rolePermissionService.create(
       createRolePermissionDto.role_id,
       createRolePermissionDto,
-      userPermissionResponse
+      userPermissionResponse,
     );
   }
 

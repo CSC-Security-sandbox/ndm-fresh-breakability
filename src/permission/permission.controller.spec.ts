@@ -27,7 +27,6 @@ describe('PermissionController', () => {
     logger: jest.fn(),
     getKey: jest.fn(),
   };
- 
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -53,14 +52,14 @@ describe('PermissionController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -89,7 +88,9 @@ describe('PermissionController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(permission);
 
-    expect(await controller.create(createPermissionDto, userPermissionResponseMock)).toEqual(permission);
+    expect(
+      await controller.create(createPermissionDto, userPermissionResponseMock),
+    ).toEqual(permission);
   });
 
   it('should find all permissions', async () => {
@@ -152,7 +153,13 @@ describe('PermissionController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updatePermissionDto, userPermissionResponseMock)).toBeUndefined();
+    expect(
+      await controller.update(
+        '1',
+        updatePermissionDto,
+        userPermissionResponseMock,
+      ),
+    ).toBeUndefined();
   });
 
   it('should delete an permission', async () => {

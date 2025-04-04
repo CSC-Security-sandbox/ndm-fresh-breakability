@@ -13,7 +13,10 @@ export class AccountService {
     private accountRepository: Repository<Account>,
   ) {}
 
-  create(createAccountDto: CreateAccountDto, userPermissions:UserPermissionResponse): Promise<Account> {
+  create(
+    createAccountDto: CreateAccountDto,
+    userPermissions: UserPermissionResponse,
+  ): Promise<Account> {
     const account = this.accountRepository.create(createAccountDto);
     account.populateWhoColumns(userPermissions.user.id);
     return this.accountRepository.save(account);
@@ -41,7 +44,11 @@ export class AccountService {
     return await this.accountRepository.findOneBy({ id: id });
   }
 
-  async update(id: string, updateAccountDto: UpdateAccountDto, userPermissionResponse:UserPermissionResponse): Promise<void> {
+  async update(
+    id: string,
+    updateAccountDto: UpdateAccountDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<void> {
     await this.accountRepository.update(id, {
       ...updateAccountDto,
       updated_by: userPermissionResponse.user.id,

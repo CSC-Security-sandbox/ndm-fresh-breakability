@@ -9,7 +9,10 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserRole } from '../entities/user-role.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Project, Account, User, UserRole]), AuthKeycloakModule],
+  imports: [
+    TypeOrmModule.forFeature([Project, Account, User, UserRole]),
+    AuthKeycloakModule,
+  ],
   controllers: [ProjectController],
   providers: [ProjectService],
 })

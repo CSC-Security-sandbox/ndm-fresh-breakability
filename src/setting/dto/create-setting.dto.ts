@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsString } from 'class-validator';
+import { IsString } from 'class-validator';
 
 export class CreateSettingDto {
   @ApiProperty({ description: 'Global Setting Key Name', example: 'SMTP_HOST' })
@@ -17,7 +17,7 @@ export class CreateSettingDto {
   })
   @IsString()
   description: string;
- 
+
   @ApiProperty({ description: 'setting type', example: 'SMTP', nullable: true })
   settingType: SettingType;
 }

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkerRegistrationController } from './worker-registration.controller';
 import { WorkerRegistrationService } from './worker-registration.service';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
-import { Auth, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { BadRequestException } from '@nestjs/common';
 
 describe('WorkerRegistrationController', () => {
@@ -18,14 +18,17 @@ describe('WorkerRegistrationController', () => {
           useValue: {
             registerWorker: jest.fn(),
           },
-        },{
+        },
+        {
           provide: JwtService,
-          useValue:{}
-        }
+          useValue: {},
+        },
       ],
     }).compile();
 
-    controller = module.get<WorkerRegistrationController>(WorkerRegistrationController);
+    controller = module.get<WorkerRegistrationController>(
+      WorkerRegistrationController,
+    );
     service = module.get<WorkerRegistrationService>(WorkerRegistrationService);
   });
 
@@ -49,7 +52,9 @@ describe('WorkerRegistrationController', () => {
         projectId: 'worker',
       };
 
-      jest.spyOn(service, 'registerWorker').mockRejectedValue(new BadRequestException('Error registering worker'));
+      jest
+        .spyOn(service, 'registerWorker')
+        .mockRejectedValue(new BadRequestException('Error registering worker'));
 
       try {
         await controller.registerWorker(registerWorkerDto);

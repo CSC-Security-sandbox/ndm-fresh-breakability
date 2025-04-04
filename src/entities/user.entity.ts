@@ -31,7 +31,7 @@ export class User extends Base {
   @Column({ length: 80 })
   user_status: string;
 
-  get name() : string {
+  get name(): string {
     return `${this.first_name || ''} ${this.last_name || ''}`.trim();
   }
 }

@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
 import { SettingService } from './setting.service';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -22,7 +14,8 @@ export class SettingController {
   @ApiBearerAuth()
   @ApiBody({ type: CreateSettingDto, isArray: true })
   @ApiOperation({
-    summary: 'Create Account', description: 'Create Global Settings',
+    summary: 'Create Account',
+    description: 'Create Global Settings',
   })
   async create(@Body() createSettingDto: CreateSettingDto[]) {
     return await this.settingService.create(createSettingDto);
