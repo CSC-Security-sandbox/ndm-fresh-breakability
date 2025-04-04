@@ -492,7 +492,6 @@ export class RedisConsumerService {
 
                 case ConsumerType.speedtestTask:
                     // Handle file processing
-                    console.log("Speed Test Task Data: ", data);
                     this.inventoryService.saveSpeedLogsEntries(data);
                     break;
 

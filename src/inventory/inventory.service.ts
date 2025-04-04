@@ -81,7 +81,7 @@ export class InventoryService {
       });
       await this.SpeedLogEntryRepo.save(writeLogEntry);
     } catch (err) {
-      console.error('Error while saving Speed Log records to the database:', err);
+      this.logger.error('Error while saving Speed Log records to the database:', err);
       throw new Error('Error while saving Speed Log records to the database');
     }
   }
