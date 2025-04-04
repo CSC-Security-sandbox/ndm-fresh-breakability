@@ -138,18 +138,19 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 
 ### Steps for Connecting Worker VM (When setting up data plane for the first time)
 1. Login to a Windows VM for accessing the application. This is needed because NetApp Azure VMs are not accessible from the outside.
-2. Login to one of the following Windows VMs via Bastion:
+   Search for any of the Virtual machine listed below on Azure UI and then Login to the Windows VMs via Bastion:
     - `ndm-alpha-windows-1` - `10.0.0.124`
     - `ndm-alpha-windows-2` - `10.0.0.125`
     - `ndm-alpha-windows-3` - `10.0.0.126`
-3. Bastion connection details:
+2. Bastion connection details:
     - **Authentication type**: VM Password
-    - For username and password, reach out to Doshi, Anurag, or Patil, Praful.
+    - For username and password, reach out to Anurag Doshi/Praful Patil/Ashish Sinha
 
 ### Steps for Worker VM (When setting up data plane for the first time)
 
 - Login to a windows VM for accessing the application. This is needed because netapp azure VM are not accessible from the outside.
-- Navigate to the Datamigrator UI on the control plane IP: `https://IP_ADDRESS/`. The initial username is `admin@datamigrator.local` and password is `welcome`.
+- Navigate to the Datamigrator UI on the control plane IP: `https://IP_ADDRESS/`. This `IP_ADDRESS` is the control plane IP address.
+  The initial username is `admin@datamigrator.local` and password is `welcome`.
 - Create a project.
 - Click on "View instructions to set up worker".
 - Connect to the worker VM SSH
