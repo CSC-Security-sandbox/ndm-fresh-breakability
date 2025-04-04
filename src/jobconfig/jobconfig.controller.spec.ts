@@ -29,7 +29,6 @@ describe('JobConfigController', () => {
     sendCsvFile: jest.fn(),
     getNoticeBoardDetailsByProjectId: jest.fn(),
     precheckValidation: jest.fn(),
-    storeInitialSpeedTestResult: jest.fn(),
     createSpeedTest: jest.fn(),
   };
 
@@ -250,17 +249,5 @@ describe('JobConfigController', () => {
       });
     });
 
-    describe('storeSpeedTestInitialResult', () => {
-      it('should call service.storeInitialSpeedTestResult and return the result', async () => {
-        const speedTestResult = { traceId: 'trace-id' };
-        const mockResult = { writeResultId: 1, readResultId: 2, networkResultId: 3 };
-        jest.spyOn(service, 'storeInitialSpeedTestResult').mockResolvedValue(mockResult);
-  
-        const result = await controller.storeSpeedTestInitialResult(speedTestResult as any);
-  
-        expect(service.storeInitialSpeedTestResult).toHaveBeenCalledWith(speedTestResult);
-        expect(result).toEqual(mockResult);
-      });
-    });
   })
 })
