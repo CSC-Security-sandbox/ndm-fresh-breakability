@@ -18,18 +18,18 @@
 
 - name: Configure prometheus
   import_playbook: configure-prometheus.yaml
-  when: local_cluster is not defined
+  # when: local_cluster is not defined
 
 - name: Configure fluentbit
   import_playbook: configure-fluentbit.yaml
-  when: local_cluster is not defined
+  # when: local_cluster is not defined
 
 - name: Configure fluentd
-  import_playbook: configure_fluentd.yaml
+  import_playbook: configure-fluentd.yaml
 
 - name: Configure grafana
   import_playbook: configure-grafana.yaml
-  when: local_cluster is not defined
+  # when: local_cluster is not defined
 
 - name: Configure redis
   import_playbook: configure-redis-standalone.yaml
