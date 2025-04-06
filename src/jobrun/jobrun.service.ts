@@ -660,8 +660,7 @@ export class JobRunService {
         jobConfig.jobType === JobType.MIGRATE
       ) {
         try {
-          const date = parser
-          .parseExpression(jobConfig.futureScheduleAt).next().toDate();
+          const date = parser.parseExpression(jobConfig.futureScheduleAt).next().toDate();
           await this.jobConfigRepo.update({ id: jobConfig.id }, { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING });
         } catch (e) {
           throw new Error(`Invalid cron expression in futureScheduleAt: ${e.message}`);
