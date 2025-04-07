@@ -97,17 +97,14 @@ export abstract class JobContext {
   }
 
   async appendToTaskList(task: Task): Promise<string> {
-    console.log('[Jobs Lib] Appending task to task list -> ', JSON.stringify(task));
     return await this.tasksInfo.append(task);
   }
 
   async appendToErrorList(errorInfo: DMError): Promise<string> {
-    console.log('[Jobs Lib] Appending error to error list -> ', JSON.stringify(errorInfo));
     return await this.errorsInfo.append(errorInfo);
   }
 
   async appendToUpdatedTaskList(task: Task): Promise<string> {
-    console.log('[Jobs Lib] Appending task to updated task list -> ', JSON.stringify(task));
     return await this.updatedTaskInfo.append(task);
   }
 
@@ -124,7 +121,6 @@ export abstract class JobContext {
   }
 
   async *groupReadDirs(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
-    console.log('[Jobs Lib] Group read dirs -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.dirsInfo.groupRead(readerName,batchSize);
   }
 
@@ -133,27 +129,22 @@ export abstract class JobContext {
   }
 
   async *groupReadTasks(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    console.log('[Jobs Lib] Group read tasks -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.tasksInfo.groupRead(readerName,batchSize);
   }
 
   async *readTaskStats(readerName: string): AsyncGenerator<TaskStats> {
-    console.log('[Jobs Lib] Read task stats -> ', JSON.stringify(readerName));
     yield* this.taskStats.read(readerName);
   }
 
   async *groupReadTaskStats(readerName: string,batchSize:number): AsyncGenerator<TaskStats> {
-    console.log('[Jobs Lib] Group read task stats -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.taskStats.groupRead(readerName,batchSize);
   }
 
   async *groupReadMigrationTask(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    console.log('[Jobs Lib] Group read migration task -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.migrateTask.groupRead(readerName,batchSize);
   }
 
   async *readMigrationTask(readerName: string): AsyncGenerator<Task> {
-    console.log('[Jobs Lib] Read migration task -> ', JSON.stringify(readerName));
     yield* this.migrateTask.read(readerName);
   }
 
@@ -162,17 +153,14 @@ export abstract class JobContext {
   }
 
   async *groupReadErrors(readerName: string,batchSize:number): AsyncGenerator<DMError> {
-    console.log('[Jobs Lib] Group read errors -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.errorsInfo.groupRead(readerName,batchSize);
   }
 
   async *readUpdatedTaskInfo(readerName: string): AsyncGenerator<Task> {
-    console.log('[Jobs Lib] Read updated task info -> ', JSON.stringify(readerName));
     yield* this.updatedTaskInfo.read(readerName);
   }
 
   async *groupReadUpdatedTaskInfo(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    console.log('[Jobs Lib] Group read updated task info -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
     yield* this.updatedTaskInfo.groupRead(readerName,batchSize);
   }
 
