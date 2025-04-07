@@ -21,6 +21,9 @@ volumeMounts:
 plugins:
   - fluent-plugin-grafana-loki
 
+securityContext:
+  runAsGroup: 999
+
 fileConfigs:
   01_sources.conf: |-
     ## logs from podman
@@ -54,6 +57,7 @@ fileConfigs:
     <source>
       @type systemd
       tag host.microk8s
+      path /var/log/journal
       matches [ 
         {"_SYSTEMD_UNIT": "snap.microk8s.daemon-apiserver-kicker.service"},
         {"_SYSTEMD_UNIT": "snap.microk8s.daemon-cluster-agent.service"},
@@ -68,9 +72,13 @@ fileConfigs:
       <storage>
         @type local
         persistent true
-        path /var/log/fluentd-journald-cursor
+        path /var/log/fluentd-journald-cursor.json
       </storage>
     </source>
+
+    <match>
+      @type stdout
+    </match>
     # expose metrics in prometheus format
     <source>
       @type prometheus
