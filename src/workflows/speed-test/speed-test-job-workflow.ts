@@ -29,15 +29,16 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
     if(jobState.status !== JobRunStatus.Running) {
       return { message: `Job status changed to ${jobState.status}` };
     }
-
+    const data = await postResultsActivity(traceId, workerId, args.fileServerId, null)
+    
     let writeResult:SpeedTestOutput, readResult:SpeedTestOutput, networkPerformanceResult: SpeedTestOutput;
 
     if (tests.writeTest) {
-      writeResult = await writeActivity(args, traceId, volumeId);
+      writeResult = await writeActivity(args, traceId, volumeId, data.writeResultId);
     }
     
     if (tests.readTest) {
-      readResult = await readActivity(args, traceId, volumeId);
+      readResult = await readActivity(args, traceId, volumeId, data.readResultId);
     }
     
     if (tests.networkPerformance) {
