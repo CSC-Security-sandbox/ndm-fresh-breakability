@@ -20,6 +20,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { TaskErrorEntity } from "src/entities/task-error.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
+import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
 
 export default registerAs('typeorm', (): DataSourceOptions => (
     {
@@ -33,6 +34,6 @@ export default registerAs('typeorm', (): DataSourceOptions => (
         synchronize: false,
         dropSchema: false,
         logging: false,
-        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity, SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity,TaskErrorEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity],
+        entities: [WorkerEntity, ConfigEntity, InventoryEntity, FileServerEntity, VolumeEntity, ProjectEntity, JobConfigEntity, JobIdMappingEntity, JobRunEntity, TaskEntity, OperationsEntity, WorkerJobRunMap,JobOptionsEntity,FileServerWorkingDirectoryMappingEntity, SpeedTestConfigEntity , SpeedTestConfigWorkerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity,TaskErrorEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity],
         migrations: []
 }))
