@@ -42,4 +42,12 @@
    <changeSet id="5021" author="anarvekar">
       <sqlFile path="liquibase/20250324_03_alter_jobrun_table_add_column_jobstats.sql"/>
    </changeSet>
+
+   <changeSet id="5022" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_01_create_error_remedies_table.sql"/>
+   </changeSet>
+
+   <changeSet id="5023" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_2_seed_error_remedies.sql"/>
+   </changeSet>
 </databaseChangeLog>

@@ -67,6 +67,8 @@ import * as parser from "cron-parser";
 import exp from "constants";
 import e from "express";
 import { SendMailService } from "src/utils/send-email";
+import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
+import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -85,6 +87,7 @@ describe("JobRunService", () => {
   let identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>;
   let redisService: RedisService;
   let sendMailService: SendMailService;
+  let errorRemedyService: ErrorRemedyService;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -103,6 +106,7 @@ describe("JobRunService", () => {
         JobConfigService,
         RedisService,
         SendMailService,
+        ErrorRemedyService,
         {
           provide: getRepositoryToken(JobRunEntity),
           useValue: {
@@ -381,6 +385,18 @@ describe("JobRunService", () => {
             setJobContext: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(ErrorRemedyEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          }
+        },
         ConfigService,
         EventEmitter2,
       ],
@@ -392,6 +408,7 @@ describe("JobRunService", () => {
     workFlowService = module.get<WorkflowService>(WorkflowService);
     jobRunInitService = module.get<JobRunInitService>(JobRunInitService);
     jobConfigService = module.get<JobConfigService>(JobConfigService);
+    errorRemedyService = module.get<ErrorRemedyService>(ErrorRemedyService);
     operationErrorRepo = module.get<Repository<OperationErrorEntity>>(
       getRepositoryToken(OperationErrorEntity)
     );
@@ -657,6 +674,7 @@ describe("JobRunService", () => {
 
       jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
       jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(errorRemedyService, 'getDistinctErrorCodes').mockResolvedValue([] as any);
 
       await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed);
 
@@ -2184,11 +2202,15 @@ describe("JobRunService", () => {
         errorCounts: { FileNotFound: 5, PermissionDenied: 3 },
       };
       jest.spyOn(service, "calculateJobRunStats").mockResolvedValue(mockJobRunStats as any);
+      jest.spyOn(errorRemedyService, 'getDistinctErrorCodes').mockResolvedValue([] as any);
   
       await service.updateJobRunStatus(jobRunId, status);
   
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
-      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunDetails.jobConfigId } });
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunDetails.jobConfigId },
+        relations: { sourcePath: { fileServer: true }, targetPath: { fileServer: true } }
+      });
   
       expect(jobConfigRepo.update).toHaveBeenCalledWith(
         { id: jobConfigDetails.id },
@@ -2229,13 +2251,17 @@ describe("JobRunService", () => {
       jest.spyOn(parser, "parseExpression").mockImplementation(() => {
         throw new Error("Invalid cron expression");
       });
+      jest.spyOn(errorRemedyService, 'getDistinctErrorCodes').mockResolvedValue([] as any);
   
       await expect(service.updateJobRunStatus(jobRunId, status)).rejects.toThrow(
         "Invalid cron expression in futureScheduleAt: Invalid cron expression"
       );
   
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunId } });
-      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({ where: { id: jobRunDetails.jobConfigId } });
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunDetails.jobConfigId },
+        relations: { sourcePath: { fileServer: true }, targetPath: { fileServer: true } }
+      });
       expect(jobConfigRepo.update).not.toHaveBeenCalled();
       expect(jobRunRepo.update).not.toHaveBeenCalled();
     });
@@ -2492,4 +2518,41 @@ describe("JobRunService", () => {
       }
     });
   });
+
+  describe('sendErrorRemedyEmail', () => {
+    it('should send email with correct parameters', async () => {
+      const jobRunId = '1234';
+      const errorCodes = ['ERROR_CODE'];
+      jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+      jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([{ 
+        errorCode: 'ERROR_CODE',
+        description: 'Error description',
+        resolutionSteps: 'Resolution steps',
+        referenceCommands: 'Reference commands',
+       }] as any);
+      await service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' });
+      expect(sendMailService.sendMail).toHaveBeenCalled();
+    });
+
+    it('should throw error if sendMail fails', async () => {
+      const jobRunId = '1234';
+      const errorCodes = ['ERROR_CODE'];
+      jest.spyOn(sendMailService, 'sendMail').mockRejectedValue(new Error('Email sending failed'));
+      jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([{ 
+        errorCode: 'ERROR_CODE',
+        description: 'Error description',
+        resolutionSteps: 'Resolution steps',
+        referenceCommands: 'Reference commands',
+       }] as any);
+      await expect(service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' })).rejects.toThrow('Email sending failed');
+    });
+
+    it('should not call sendMail if errorCodes is empty', async () => {
+      const jobRunId = '1234';
+      const errorCodes: string[] = [];
+      jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+      await service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' });
+      expect(sendMailService.sendMail).not.toHaveBeenCalled();
+    });
+  })
 });
