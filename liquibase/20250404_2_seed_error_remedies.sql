@@ -20,7 +20,7 @@ INSERT INTO error_remedies (error_code, description, resolution_steps, reference
 
 -- DISK/FILESYSTEM ERRORS
 ('TASK_NO_SPACE_LEFT', 'No space left on device for task.', 'Free up disk space or expand the disk.', 'df -h; du -sh * | sort -h'),
-('OP_NO_SPACE_LEFT', 'Operation failed due to full disk.', 'Clear unused data or increase disk quota.', 'rm -rf /var/log/*.gz'),
+('OP_NO_SPACE_LEFT', 'Operation failed due to full disk.', 'Clear unused data or increase disk quota.', 'df -h; du -sh * | sort -h'),
 
 ('TASK_READ_ONLY_FILESYSTEM', 'Task tried to write to a read-only file system.', 'Remount filesystem with write access or choose another directory.', 'mount -o remount,rw /mount/point'),
 ('OP_READ_ONLY_FILESYSTEM', 'Operation failed due to read-only mount.', 'Use writable mount or remount the FS.', 'mount | grep ro,'),
@@ -59,8 +59,8 @@ INSERT INTO error_remedies (error_code, description, resolution_steps, reference
 ('OP_SERVER_DISCONNECTED', 'Server disconnected during operation.', 'Ensure the server is stable and reachable.', 'ping <host>; systemctl restart <service>'),
 
 -- FALLBACK / UNKNOWN
-('TASK_UNKNOWN_ERROR', 'An unknown error occurred in task.', 'Inspect logs and contact support.', 'tail -n 100 /var/log/app.log'),
-('OP_UNKNOWN_ERROR', 'Unidentified error occurred.', 'Check system logs or enable verbose mode.', 'export DEBUG=true'),
+('TASK_UNKNOWN_ERROR', 'An unknown error occurred in task.', 'Inspect logs and contact support.', 'tail -n 100 /opt/datamigrator/logs/datamigrator-worker.log | grep JOB_RUN_ID'),
+('OP_UNKNOWN_ERROR', 'Unidentified error occurred.', 'Check system logs or enable verbose mode.', 'tail -n 100 /opt/datamigrator/logs/datamigrator-worker.log | grep JOB_RUN_ID'),
 
 ('TASK_GENERAL_FAILURE', 'General task failure.', 'Retry or check dependencies.', 'journalctl -xe'),
-('OP_GENERAL_FAILURE', 'General failure in operation.', 'Review logs and validate inputs.', 'cat /var/log/syslog | tail');
+('OP_GENERAL_FAILURE', 'General failure in operation.', 'Review logs and validate inputs.', 'cat /opt/datamigrator/logs/datamigrator-worker.log | tail');
