@@ -3,9 +3,9 @@ import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_S
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as net from 'net';
+// import * as net from 'net';
 import * as ping from 'ping';
-import * as raw from 'raw-socket';
+// import * as raw from 'raw-socket';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
 import { getErrorCode, getFilePermissions, getFileType, shouldExclude } from '../utils/utils';
@@ -67,7 +67,9 @@ export class SpeedTestReadActivity {
       payload.status = TaskStatus.RUNNING;
 
   
-      const packetLoss = await this.monitorPacketLoss(payload.fsDetails.hostname);
+      // const packetLoss = await this.monitorPacketLoss(payload.fsDetails.hostname);
+      const packetLoss = await this.calculatePacketLoss(payload.fsDetails.hostname, 10);
+      
       result.packetLoss =  packetLoss
       const rtt = await this.calculatePingRtt(payload.fsDetails.hostname, 10);
       result.roundTripDelay = rtt
@@ -146,55 +148,88 @@ export class SpeedTestReadActivity {
   }
 }
 
-  async monitorPacketLoss(destinationIP: string): Promise<number> {
-    const totalPackets = 1000;
-    let retries = 0;
-    const sentSequences = new Set<number>();
-    const socket = raw.createSocket({ protocol: raw.Protocol.TCP });
+  // async monitorPacketLoss(destinationIP: string): Promise<number> {
+  //   const totalPackets = 1000;
+  //   let retries = 0;
+  //   const sentSequences = new Set<number>();
+  //   const socket = raw.createSocket({ protocol: raw.Protocol.TCP });
 
+  //   try {
+  //     for (let i = 0; i < totalPackets; i++) {
+  //       const seqNumber = Math.floor(Math.random() * 0xffffffff);
+  //       const buffer = Buffer.alloc(40);
+  //       buffer.fill(0);
+
+  //       // Set SYN flag
+  //       buffer[13] = 0x02;
+
+  //       // Write sequence number to the buffer
+  //       buffer.writeUInt32BE(seqNumber, 4);
+
+  //       // Calculate checksum
+  //       raw.writeChecksum(buffer, 16, raw.createChecksum(buffer));
+
+  //       try {
+  //         socket.send(buffer, 0, buffer.length, destinationIP, (error) => {
+  //           if (error) {
+  //             throw new Error(`Failed to send packet: ${error.message}`);
+  //           }
+  //         });
+
+  //         if (sentSequences.has(seqNumber)) {
+  //           retries++;
+  //         } else {
+  //           sentSequences.add(seqNumber);
+  //         }
+  //       } catch (error) {
+  //         throw new Error(`Error sending packet: ${error.message}`);
+  //       }
+  //     }
+
+  //     await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for responses
+  //   } catch (error) {
+  //     socket.close();
+  //     throw error; // Propagate the error to the parent function
+  //   }
+
+  //   socket.close();
+
+  //   const packetLoss = (retries / totalPackets) * 100;
+  //   this.logger.debug(`Packet Loss to ${destinationIP}: ${packetLoss.toFixed(2)}%`);
+  //   return packetLoss;
+  // }
+
+  async calculatePacketLoss(destinationIP: string, totalPackets: number): Promise<number> {
+    let successfulPings = 0;
+  
     try {
       for (let i = 0; i < totalPackets; i++) {
-        const seqNumber = Math.floor(Math.random() * 0xffffffff);
-        const buffer = Buffer.alloc(40);
-        buffer.fill(0);
-
-        // Set SYN flag
-        buffer[13] = 0x02;
-
-        // Write sequence number to the buffer
-        buffer.writeUInt32BE(seqNumber, 4);
-
-        // Calculate checksum
-        raw.writeChecksum(buffer, 16, raw.createChecksum(buffer));
-
         try {
-          socket.send(buffer, 0, buffer.length, destinationIP, (error) => {
-            if (error) {
-              throw new Error(`Failed to send packet: ${error.message}`);
-            }
+          const res = await ping.promise.probe(destinationIP, {
+            timeout: 5, // Timeout in seconds
+            extra: ['-c', '1'], // Send only one ping packet per iteration
           });
-
-          if (sentSequences.has(seqNumber)) {
-            retries++;
+  
+          if (res.alive) {
+            successfulPings++;
+            this.logger.debug(`Ping ${i + 1}: Success`);
           } else {
-            sentSequences.add(seqNumber);
+            this.logger.warn(`Ping ${i + 1}: Destination unreachable`);
           }
         } catch (error) {
-          throw new Error(`Error sending packet: ${error.message}`);
+          this.logger.error(`Error during ping ${i + 1}: ${error.message}`);
         }
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for responses
+  
+      // Calculate packet loss percentage
+      const packetLoss = ((totalPackets - successfulPings) / totalPackets) * 100;
+  
+      this.logger.debug(`Packet Loss to ${destinationIP}: ${packetLoss.toFixed(2)}%`);
+  
+      return packetLoss ;
     } catch (error) {
-      socket.close();
       throw error; // Propagate the error to the parent function
     }
-
-    socket.close();
-
-    const packetLoss = (retries / totalPackets) * 100;
-    this.logger.debug(`Packet Loss to ${destinationIP}: ${packetLoss.toFixed(2)}%`);
-    return packetLoss;
   }
   
   async calculatePingRtt(destinationIP: string, totalPackets: number): Promise<RoundTripDelay> {
