@@ -1285,11 +1285,12 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate: nextDate(
+        nextScheduleDate:job.jobconfigstatus === JobStatus.Active ? nextDate(
           job.jobtype,
           job.firstrunat,
-          job.futureschedule
-        ),
+          job.futureschedule,
+          
+        ) : null,
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
