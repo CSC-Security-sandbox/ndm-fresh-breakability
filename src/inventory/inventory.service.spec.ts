@@ -16,6 +16,8 @@ import {
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
+import { SpeedLogEntity } from "../entities/speed-test.entity";
+import { SpeedLogEntryEntity } from "../entities/speed-test.entity";
 
 describe("InventoryService", () => {
   let service: InventoryService;
@@ -24,7 +26,10 @@ describe("InventoryService", () => {
   let operationRepo: Repository<OperationsEntity>;
   let operationErrorRepo: Repository<OperationErrorEntity>;
   let taskErrorRepo: Repository<TaskErrorEntity>;
+  let speedLogEntityRepo: Repository<SpeedLogEntity>;
+  let speedLogEntryEntityRepo: Repository<SpeedLogEntryEntity>;
   let dataSourceMock: Partial<DataSource>;
+
 
   beforeEach(async () => {
    
@@ -51,6 +56,32 @@ describe("InventoryService", () => {
         {
           provide: getRepositoryToken(TaskEntity),
           useClass: Repository,
+        },        
+        {
+          provide: getRepositoryToken(SpeedLogEntity),
+          useClass: Repository,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SpeedLogEntryEntity),
+          useClass: Repository,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(OperationsEntity),
