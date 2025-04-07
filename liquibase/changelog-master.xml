@@ -50,4 +50,9 @@
    <changeSet id="5023" author="dinesh_seervi">
       <sqlFile path="liquibase/20250404_2_seed_error_remedies.sql"/>
    </changeSet>
+  
+   <changeSet id="5024" author="adityav2">
+      <sqlFile path="liquibase/20250404_01_alter_speed_test_tables.sql"/>
+   </changeSet>
+
 </databaseChangeLog>

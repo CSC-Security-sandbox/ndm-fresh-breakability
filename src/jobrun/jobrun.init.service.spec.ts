@@ -7,7 +7,7 @@ import { FileServerEntity } from '../entities/fileserver.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RedisService } from '../redis/redis.service';
 import { DeepPartial, In, LessThan, Repository } from 'typeorm';
-import { SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from 'src/entities/speed-test-job-config.entity';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { JobStatus as JS } from 'src/constants/enums';
@@ -26,7 +26,6 @@ describe('JobRunInitService', () => {
   let service: JobRunInitService;
   let jobRunRepo: Repository<JobRunEntity>;
   let speedTestConfigRepo: Repository<SpeedTestConfigEntity>;
-  let speedTestConfigWorkerRepo: Repository<SpeedTestConfigWorkerEntity>;
   let jobConfigRepo: Repository<JobConfigEntity>;
   let fileServerRepo: Repository<FileServerEntity>;
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
@@ -48,10 +47,6 @@ describe('JobRunInitService', () => {
         },
         {
           provide: getRepositoryToken(SpeedTestConfigEntity),
-          useClass: Repository,
-        },
-        {
-          provide: getRepositoryToken(SpeedTestConfigWorkerEntity),
           useClass: Repository,
         },
         {
@@ -122,9 +117,6 @@ describe('JobRunInitService', () => {
     );
     speedTestConfigRepo = module.get<Repository<SpeedTestConfigEntity>>(
       getRepositoryToken(SpeedTestConfigEntity)
-    );
-    speedTestConfigWorkerRepo = module.get<Repository<SpeedTestConfigWorkerEntity>>(
-      getRepositoryToken(SpeedTestConfigWorkerEntity)
     );
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(
       getRepositoryToken(JobConfigEntity)
@@ -201,12 +193,13 @@ describe('JobRunInitService', () => {
 
   describe('getJobConfigSpeedTest', () => {
     it('should return the job configuration for speed test', async () => {
+      const excludeOlderThan  =  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       const jobConfigId = 'jobConfigId';
       const mockJobConfig = {
         id: jobConfigId,
         preserveAccessTime: true,
         excludeFilePatterns: '*.txt',
-        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        excludeOlderThan: excludeOlderThan, // 30 days ago
         sourcePath: {
           volumePath: '/path/to/source',
           id: 'sourcePathId',
@@ -231,7 +224,7 @@ describe('JobRunInitService', () => {
       const expectedJobRunConfig: JobRunConfig = {
         preserveAccessTime: true,
         excludeFilePatterns: '*.txt',
-        excludeOlderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        excludeOlderThan: excludeOlderThan, // 30 days ago
         connection: {
           sourceCredential: {
             path: '/path/to/source',

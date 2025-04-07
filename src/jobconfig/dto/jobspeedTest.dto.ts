@@ -28,7 +28,7 @@ class speedTests{
   writeTest: boolean;
   @ApiProperty({ description: 'packet loss test' })
   @IsBoolean()
-  packetLossTest: boolean;
+  networkPerformance: boolean;
 
 }
 
@@ -51,24 +51,7 @@ export class speedTestConfigOptions{
   test: speedTests;
 }
 
-
-export class SpeedLog {
-  @ApiProperty({ description: 'Timestamp of the speed log', example: '1.00' })
-  @IsString()
-  timeStamp: string;
-
-  @ApiProperty({ description: 'Speed at the given timestamp', example: '1933.12' })
-  @IsString()
-  speed: string;
-}
-
 export class WriteReadResult {
-  @ApiProperty({ description: 'Logs of speed over time', isArray: true, type: SpeedLog })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => SpeedLog)
-  speedLogs: SpeedLog[];
-
   @ApiProperty({ description: 'Total time taken for the operation', example: 2.982695291 })
   @IsNumber()
   totalTimeTaken: number;

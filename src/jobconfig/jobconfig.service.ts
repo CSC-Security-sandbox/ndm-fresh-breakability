@@ -210,76 +210,76 @@ export class JobConfigService {
     }
   }
 
-  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<void> {
+  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<{ writeResultId?: number; readResultId?: number; networkResultId?: number }> {
     try {
       this.logger.log('Storing speed test result', JSON.stringify(speedTest));
+
+      // Find existing SpeedTestResultEntity by traceId, workerId, and fileServerId
+      const existingResult = await this.speedTestResultRepo.findOne({
+        where: {
+          traceId: speedTest.traceId,
+          workerId: speedTest.workerId,
+          fileServerId: speedTest.fileServerID,
+        },
+        relations: ['writeResult', 'readResult', 'networkPerformanceResult'],
+      });
+
+      let writeLog, readLog, networkPerformanceResult;
   
-      let writeResult, readResult, networkResult;
+      // Update or create writeResult
+      writeLog = existingResult?.writeResult || new SpeedLogEntity();
+      Object.assign(writeLog, {
+        totalTimeTaken: speedTest.writeResult?.totalTimeTaken ?? -1,
+        fileSize: speedTest.writeResult?.fileSize ?? -1,
+        error: speedTest.writeResult?.error ?? "",
+      });
+      writeLog = await this.speedLogRepo.save(writeLog);
   
-      // Store writeResult if present
-      if (speedTest.writeResult) {
-        const writeLog = Object.assign(new SpeedLogEntity(), {
-          totalTimeTaken: speedTest.writeResult.totalTimeTaken,
-          fileSize: speedTest.writeResult.fileSize,
-          error: speedTest.writeResult.error,
+      // Update or create readResult
+        readLog = existingResult?.readResult || new SpeedLogEntity();
+        Object.assign(readLog, {
+          totalTimeTaken: speedTest.readResult?.totalTimeTaken ?? -1,
+          fileSize: speedTest.readResult?.fileSize ?? -1,
+          error: speedTest.readResult?.error ?? "",
         });
-        writeResult = await this.speedLogRepo.save(writeLog);
+        readLog = await this.speedLogRepo.save(readLog);
   
-        for (const log of speedTest.writeResult.speedLogs) {
-          const writeLogEntry = Object.assign(new SpeedLogEntryEntity(), {
-            speedLogId: writeResult.id,
-            timeStamp: log.timeStamp,
-            speed: Number(log.speed),
-          });
-          await this.SpeedLogEntryRepo.save(writeLogEntry);
-        }
-      }
+      // Update or create networkPerformanceResult
+        networkPerformanceResult = {
+          ...existingResult?.networkPerformanceResult, // Use existing data if available
+          packetLoss: speedTest.networkPerformanceResult?.packetLoss ?? -1,
+          roundTripDelayMin: speedTest.networkPerformanceResult?.roundTripDelay?.min ?? -1,
+          roundTripDelayAvg: speedTest.networkPerformanceResult?.roundTripDelay?.avg ?? -1,
+          roundTripDelayMax: speedTest.networkPerformanceResult?.roundTripDelay?.max ?? -1,
+          roundTripDelayMdev: speedTest.networkPerformanceResult?.roundTripDelay?.mdev ?? -1,
+          error: speedTest.networkPerformanceResult?.error ?? "",
+        };
   
-      // Store readResult if present
-      if (speedTest.readResult) {
-        const readLog = Object.assign(new SpeedLogEntity(), {
-          totalTimeTaken: speedTest.readResult.totalTimeTaken,
-          fileSize: speedTest.readResult.fileSize,
-          error: speedTest.readResult.error,
-        });
-        readResult = await this.speedLogRepo.save(readLog);
+        // Save the updated or new networkPerformanceResult
+        networkPerformanceResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
   
-        for (const log of speedTest.readResult.speedLogs) {
-          const readLogEntry = Object.assign(new SpeedLogEntryEntity(), {
-            speedLogId: readResult.id,
-            timeStamp: log.timeStamp,
-            speed: Number(log.speed),
-          });
-          await this.SpeedLogEntryRepo.save(readLogEntry);
-        }
-      }
-  
-      // Store networkPerformanceResult if present
-      if (speedTest.networkPerformanceResult) {
-        const networkPerformanceResult = Object.assign(new NetworkPerformanceResultEntity(), {
-          packetLoss: speedTest.networkPerformanceResult.packetLoss,
-          roundTripDelayMin: speedTest.networkPerformanceResult.roundTripDelay.min,
-          roundTripDelayAvg: speedTest.networkPerformanceResult.roundTripDelay.avg,
-          roundTripDelayMax: speedTest.networkPerformanceResult.roundTripDelay.max,
-          roundTripDelayMdev: speedTest.networkPerformanceResult.roundTripDelay.mdev,
-          error: speedTest.networkPerformanceResult.error,
-        });
-        networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
-      }
-  
-      // Store speedTestResult
-      const speedTestResult = Object.assign(new SpeedTestResultEntity(), {
+      // Update or create SpeedTestResultEntity
+      const speedTestResult = {
+        ...existingResult, // Use existing data if available
         traceId: speedTest.traceId,
         workerId: speedTest.workerId,
         fileServerId: speedTest.fileServerID,
-        writeResult: writeResult,
-        readResult: readResult,
-        networkPerformanceResult: networkResult,
-      });
+        writeResult: writeLog,
+        readResult: readLog,
+        networkPerformanceResult: networkPerformanceResult,
+      };
   
-      await this.speedTestResultRepo.save(speedTestResult);
+      // Save the updated or new speedTestResult
+      const savedResult = await this.speedTestResultRepo.save(speedTestResult);
   
       this.logger.log('Speed test result stored successfully');
+  
+      // Return the IDs of the saved entities
+      return {
+        writeResultId: writeLog?.id,
+        readResultId: readLog?.id,
+        networkResultId: networkPerformanceResult?.id,
+      };
     } catch (error) {
       this.logger.error('Failed to store speed test result', error.stack);
       throw new HttpException(
@@ -403,8 +403,8 @@ export class JobConfigService {
         fileServersMap.get(result.fileServerId).workers.push({
           workerName: worker?.workerName || "unknown",
           workerId: result.workerId,
-          readSpeed: readSpeed.length ? readSpeed : null,
-          writeSpeed: writeSpeed.length ? writeSpeed : null,
+          readSpeed: readSpeed.length ? readSpeed : [],
+          writeSpeed: writeSpeed.length ? writeSpeed : [],
           rtd: result.networkPerformanceResult?.roundTripDelayAvg ?? null,
           packetLoss: result.networkPerformanceResult?.packetLoss ?? null,
           readError,
@@ -475,7 +475,7 @@ export class JobConfigService {
           protocol: fileServerConfig.protocol,
           readTest:fileServerConfig.test.readTest,
           writeTest:fileServerConfig.test.writeTest,
-          packetLossTest:fileServerConfig.test.packetLossTest,
+          packetLossTest:fileServerConfig.test.networkPerformance,
         });
         entries.push(speedTestConfig);
         const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
@@ -483,7 +483,7 @@ export class JobConfigService {
         for (const worker of fileServerConfig.workers) {
           const workerEntity = this.SpeedTestConfigWorkerRepo.create({
             workersId: worker,
-            jobId: savedSpeedTestConfig.id,
+            speedTestConfigId: savedSpeedTestConfig.id,
           });
           workersEntity.push(workerEntity);
         }
