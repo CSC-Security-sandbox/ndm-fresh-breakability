@@ -2520,43 +2520,39 @@ describe("JobRunService", () => {
   });
 
   describe('sendErrorRemedyEmail', () => {
-    // should call sendEmail with correct parameters
     it('should send email with correct parameters', async () => {
-      jest.spyOn(errorRemedyService, 'getDistinctErrorCodes').mockResolvedValue([{ errorCode: 'error_1' }]);
-      jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([{
-        errorCode: 'error_1',
+      const jobRunId = '1234';
+      const errorCodes = ['ERROR_CODE'];
+      jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+      jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([{ 
+        errorCode: 'ERROR_CODE',
         description: 'Error description',
-        resolutionSteps: 'Error resolution',
-        referenceCommands: 'Error reference commands',
-      }] as any);
-
-      const jobRunId = 'jobRunId';
-      await service.sendErrorRemedyEmail({
-        jobRunId,
-        sourcePath: 'sourcePath',
-        targetPath: 'targetPath',
-        sourceHost: 'sourceHost',
-        targetHost: 'targetHost',
-        jobType: 'jobType',
-      });
-      expect(errorRemedyService.getDistinctErrorCodes).toHaveBeenCalledWith(jobRunId);
-      expect(errorRemedyService.findByErrorCodes).toHaveBeenCalledWith(['error_1']);
+        resolutionSteps: 'Resolution steps',
+        referenceCommands: 'Reference commands',
+       }] as any);
+      await service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' });
+      expect(sendMailService.sendMail).toHaveBeenCalled();
     });
 
+    it('should throw error if sendMail fails', async () => {
+      const jobRunId = '1234';
+      const errorCodes = ['ERROR_CODE'];
+      jest.spyOn(sendMailService, 'sendMail').mockRejectedValue(new Error('Email sending failed'));
+      jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([{ 
+        errorCode: 'ERROR_CODE',
+        description: 'Error description',
+        resolutionSteps: 'Resolution steps',
+        referenceCommands: 'Reference commands',
+       }] as any);
+      await expect(service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' })).rejects.toThrow('Email sending failed');
+    });
 
-    // should not call sendEmail if no error codes are found
-    it('should not call sendEmail if no error codes are found', async () => {
-      jest.spyOn(errorRemedyService, 'getDistinctErrorCodes').mockResolvedValue([]);
-      const jobRunId = 'jobRunId';
-      await service.sendErrorRemedyEmail({
-        jobRunId,
-        sourcePath: 'sourcePath',
-        targetPath: 'targetPath',
-        sourceHost: 'sourceHost',
-        targetHost: 'targetHost',
-        jobType: 'jobType',
-      });
-      expect(errorRemedyService.getDistinctErrorCodes).toHaveBeenCalledWith(jobRunId);
+    it('should not call sendMail if errorCodes is empty', async () => {
+      const jobRunId = '1234';
+      const errorCodes: string[] = [];
+      jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+      await service.sendErrorRemedyEmail({ jobRunId, errorCodes, sourceHost: '', sourcePath: '', targetHost: '', targetPath: '', jobType: '' });
+      expect(sendMailService.sendMail).not.toHaveBeenCalled();
     });
   })
 });

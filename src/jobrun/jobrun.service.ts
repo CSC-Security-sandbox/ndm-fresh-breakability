@@ -670,26 +670,30 @@ export class JobRunService {
       }
       const jobRunStats: JobRunStats = await this.calculateJobRunStats(jobRunId);
       if (jobConfig && (jobConfig.jobType === JobType.MIGRATE || jobConfig.jobType === JobType.CUT_OVER)) {
-        this.logger.log(`Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`);
-        const mailBody = `Hello,
-        The following ${jobConfig.jobType} job has been completed for below Paths:
-         + <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
-         + <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
-         + <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
-         + <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
-         `;
-        const payload = { body: mailBody };
-        this.logger.log("Sending Mail for job completion with payload", JSON.stringify(payload));
-        await this.sendMailService.sendMail(payload);
-        // check if job run has errors
-        await this.sendErrorRemedyEmail({ 
-          jobRunId, 
-          sourcePath: jobConfig.sourcePath?.volumePath, 
-          targetPath: jobConfig.targetPath?.volumePath, 
-          sourceHost: jobConfig.sourcePath?.fileServer?.host, 
-          targetHost: jobConfig.targetPath?.fileServer?.host,
-          jobType: jobConfig.jobType
-        });
+        const errorCodes = await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
+        if(!!errorCodes.length) {
+          await this.sendErrorRemedyEmail({ 
+            jobRunId, 
+            sourcePath: jobConfig.sourcePath?.volumePath, 
+            targetPath: jobConfig.targetPath?.volumePath, 
+            sourceHost: jobConfig.sourcePath?.fileServer?.host, 
+            targetHost: jobConfig.targetPath?.fileServer?.host,
+            jobType: jobConfig.jobType,
+            errorCodes
+          });
+        } else {
+          this.logger.log(`Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`);
+          const mailBody = `Hello, <br/>
+          The following ${jobConfig.jobType} job has been completed for below Paths:
+          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+          `;
+          const payload = { body: mailBody };
+          this.logger.log("Sending Mail for job completion with payload", JSON.stringify(payload));
+          await this.sendMailService.sendMail(payload);
+        }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
       await this.jobRunRepo.update({ id: jobRunId }, { status: status, endTime: new Date(), jobStats: jobRunStats });
@@ -697,10 +701,10 @@ export class JobRunService {
       if(jobConfig && (jobConfig.jobType === JobType.MIGRATE || jobConfig.jobType === JobType.CUT_OVER)){
         const mailBody = `Hello,
           The following ${jobConfig.jobType} job has been started for below Paths:
-          + <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
-          + <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
-          + <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
-          + <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
         `;
         const payload = { body: mailBody };
         this.logger.log("Sending Mail for job start with payload", JSON.stringify(payload));
@@ -807,30 +811,32 @@ export class JobRunService {
     targetPath,
     sourceHost,
     targetHost,
-    jobType
+    jobType,
+    errorCodes
   }): Promise<void> {
-    const errorCodes = await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
-    if(!!errorCodes.length) {
-      const errorRemedies = await this.errorRemedyService.findByErrorCodes(errorCodes.map((error) => error.errorCode));
-      this.logger.log("Error Remedies ", JSON.stringify(errorRemedies));
-      const errorRemediesMailBody = `Hello,
-      The following ${jobType} job (${jobRunId}) has errored for below Paths:
-      + <p>Source: ${sourceHost}</p>
-      + <p>Source Path: ${sourcePath}</p>
-      + <p>Target: ${targetHost}</p>
-      + <p>Target Path: ${targetPath}</p>
-      + <br/>
-      + <p> Error Details: </p>
-      ${errorRemedies.map((error) => `
-        <p>Error Code: ${error.errorCode}</p>
-        <p>Description: ${error.description}</p>
-        <p>Resolution Steps: ${error.resolutionSteps}</p>
-        <p>Reference Commands: <code>${error.referenceCommands}</code> </p>
-        <br/>`
-      ).join("")}`;
-      const errorRemediesPayload = { body: errorRemediesMailBody };
-      this.logger.log("Sending Mail for job completion with errorRemediesPayload", JSON.stringify(errorRemediesPayload));
-      await this.sendMailService.sendMail(errorRemediesPayload);
+    if(!errorCodes || errorCodes.length === 0) {
+      this.logger.log(`No error codes found for job run ${jobRunId}`);
+      return;
     }
+    const errorRemedies = await this.errorRemedyService.findByErrorCodes(errorCodes.map((error) => error.errorCode));
+    this.logger.log("Error Remedies ", JSON.stringify(errorRemedies));
+    const errorRemediesMailBody = `Hello, <br/>
+      The following ${jobType} job (${jobRunId}) has errored for below Paths: <br/>
+      <p>Source: ${sourceHost}</p>
+      <p>Source Path: ${sourcePath}</p>
+      <p>Target: ${targetHost}</p>
+      <p>Target Path: ${targetPath}</p>
+      <br/>
+      <p> Error Details: </p>
+      ${errorRemedies.map((error) => `
+      <p>Error Code: ${error.errorCode}</p>
+      <p>Description: ${error.description}</p>
+      <p>Resolution Steps: ${error.resolutionSteps}</p>
+      <p>Reference Commands: <code>${error.referenceCommands}</code> </p>
+      <br/>`
+    ).join("")}`;
+    const errorRemediesPayload = { body: errorRemediesMailBody };
+    this.logger.log("Sending Mail for job completion with errorRemediesPayload", JSON.stringify(errorRemediesPayload));
+    await this.sendMailService.sendMail(errorRemediesPayload);
   }
 }
