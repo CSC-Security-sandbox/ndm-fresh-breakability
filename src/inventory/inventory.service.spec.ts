@@ -16,8 +16,8 @@ import {
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
-import { SpeedLogEntity } from "src/entities/speed-test.entity";
-import { SpeedLogEntryEntity } from "src/entities/speed-test.entity";
+import { SpeedLogEntity } from "../entities/speed-test.entity";
+import { SpeedLogEntryEntity } from "../entities/speed-test.entity";
 
 describe("InventoryService", () => {
   let service: InventoryService;
