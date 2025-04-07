@@ -53,6 +53,9 @@
   
    <changeSet id="5024" author="adityav2">
       <sqlFile path="liquibase/20250404_01_alter_speed_test_tables.sql"/>
+
+   <changeSet id="5025" author="abhishek">
+      <sqlFile path="liquibase/20250401_01_create_worker_stats_table.sql"/>
    </changeSet>
 
 </databaseChangeLog>
