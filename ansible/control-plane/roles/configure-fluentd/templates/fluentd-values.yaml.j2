@@ -18,6 +18,9 @@ volumeMounts:
   - name: fluentd-logs
     mountPath: /fluentd-logs
 
+plugins:
+  - fluent-plugin-grafana-loki
+
 fileConfigs:
   01_sources.conf: |-
     ## logs from podman
@@ -48,6 +51,26 @@ fileConfigs:
       emit_unmatched_lines true
     </source>
 
+    <source>
+      @type systemd
+      tag host.microk8s
+      matches [ 
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-apiserver-kicker.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-cluster-agent.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-etcd.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-k8s-dqlite.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-apiserver-proxy.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-containerd.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-flanneld.service"},
+        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-kubelite.service"}
+      ]
+      read_from_head true 
+      <storage>
+        @type local
+        persistent true
+        path /var/log/fluentd-journald-cursor
+      </storage>
+    </source>
     # expose metrics in prometheus format
     <source>
       @type prometheus
@@ -104,6 +127,39 @@ fileConfigs:
     </label>
   04_outputs.conf: |-
     <label @OUTPUT>
+      <match **>
+        @type copy
+        <store>
+          @type relabel
+          @label @LOKI
+        </store>
+        <store>
+          @type relabel
+          @label @FILE
+        </store>
+      </match>
+    </label>
+
+    <label @LOKI>
+      <match **>
+        @type loki
+        url http://loki-gateway.grafana.svc.cluster.local:80
+        tenant ndm-1
+        extract_kubernetes_labels false
+        remove_keys kubernetes
+        extra_labels {"job":"fluentd"}
+        <label>
+          app $.kubernetes.labels.app
+          namespace $.kubernetes.namespace_name
+          pod $.kubernetes.pod_name
+          container $.kubernetes.container_name
+        </label>
+        flush_interval 10s
+        flush_at_shutdown true
+      </match>
+    </label>
+
+    <label @FILE>
       <filter **>
         @type record_transformer
         enable_ruby true
@@ -117,14 +173,16 @@ fileConfigs:
       
       <match **>
         @type file
-        path /fluentd-logs/${namespace}/${pod_name}/${container_name}-%Y-%m-%d-%H-%M
+        path /fluentd-logs/%Y-%m-%d/${namespace}/${pod_name}/${container_name}
         append true
         <buffer time,namespace,pod_name,container_name>
           @type file
+          path /var/log/fluentd-buffers
           timekey 24h
           timekey_wait 120
           timekey_use_utc false
-          flush_mode immediate
+          flush_mode interval
+          flush_interval 5s
           flush_at_shutdown true
         </buffer>
         
