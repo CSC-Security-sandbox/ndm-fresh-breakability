@@ -8,6 +8,8 @@ export const nextDate = (jobType: string, runDate: Date, cron: string) => {
         case JobType.CUT_OVER:
                 return runDate && runDate > new Date() ? runDate : null;
         default:
+            if(runDate && runDate > new Date())
+                return runDate;
             return cron ? parser.parseExpression(cron).next().toDate(): null
     }
 }

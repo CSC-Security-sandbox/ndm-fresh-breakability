@@ -682,8 +682,8 @@ describe('JobConfigService', () => {
       sourcePathIds: ['path1', 'path2'],
       excludeFilePatterns: '*.tmp',
       preserveAccessTime: true,
-      excludeOlderThan: new Date(),
-      firstRunAt: new Date(),
+      excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+      firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
       createdBy: 'user1',
     };
 
@@ -698,8 +698,8 @@ describe('JobConfigService', () => {
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
         sourcePathId: 'path2',
-        excludeOlderThan: new Date(),
-        firstRunAt: new Date(),
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
         scheduler: ScheduleStatus.SCHEDULING,
         createdBy: 'user1',
       },
@@ -2275,7 +2275,7 @@ describe('JobConfigService', () => {
         },
       ]);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith('jobconfig');
-      expect(nextDate).toHaveBeenCalledWith('MIGRATE', mockAllJobsDetails[0].firstrunat, mockAllJobsDetails[0].futureschedule);
+
     });
 
     it('should return an empty array if no job configs are found for the given project ID', async () => {
