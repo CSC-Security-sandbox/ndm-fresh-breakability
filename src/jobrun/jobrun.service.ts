@@ -832,7 +832,7 @@ export class JobRunService {
       <p>Error Code: ${error.errorCode}</p>
       <p>Description: ${error.description}</p>
       <p>Resolution Steps: ${error.resolutionSteps}</p>
-      <p>Reference Commands: <code>${error.referenceCommands}</code> </p>
+      <p>Reference Commands: <code>${!!error.referenceCommands ? error.referenceCommands : '' }</code> </p>
       <br/>`
     ).join("")}`;
     const errorRemediesPayload = { body: errorRemediesMailBody };

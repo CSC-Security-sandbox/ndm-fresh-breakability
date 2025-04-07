@@ -41,7 +41,7 @@ INSERT INTO error_remedies (error_code, description, resolution_steps, reference
 ('OP_OPERATION_TIMED_OUT', 'The operation exceeded its time limit.', 'Adjust timeout settings or debug latency.', 'traceroute <host>'),
 
 ('TASK_NETWORK_DOWN', 'Network interface appears to be down.', 'Reconnect or troubleshoot the interface.', 'ip a; nmcli device status'),
-('OP_NETWORK_DOWN', 'Operation failed due to no network.', 'Restart network or check configuration.', 'systemctl restart NetworkManager'),
+('OP_NETWORK_DOWN', 'Operation failed due to no network.', 'Restart network or check configuration.', ''),
 
 ('TASK_CONNECTION_REFUSED', 'The target actively refused the connection.', 'Check if the target service is running.', 'nc -zv <host> <port>'),
 ('OP_CONNECTION_REFUSED', 'Connection attempt was rejected.', 'Verify target availability and firewall.', 'ss -ltnp'),
