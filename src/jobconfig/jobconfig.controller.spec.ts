@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobConfigController } from './jobconfig.controller';
 import { JobConfigService } from './jobconfig.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BulkMigrateJobConfig, MigrateConfig } from './dto/bulkMigrateJob.dto';
 import { JobConfigDiscoverBulk, JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { JobConfigBulkMigrateRes } from './jobconfig.types';
@@ -250,4 +250,52 @@ describe('JobConfigController', () => {
     });
 
   })
+
+  it('should throw a BadRequestException for an invalid project ID', async () => {
+    const invalidProjectId = '';
+
+    jest
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
+      .mockImplementation(() => {
+        throw new BadRequestException('Invalid project ID');
+      });
+
+    await expect(
+      controller.getNoticeBoardDetailsByProjectId(invalidProjectId),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(service.getNoticeBoardDetailsByProjectId).toHaveBeenCalledWith(invalidProjectId);
+  });
+
+  it('should throw a NotFoundException if notice board details are not found', async () => {
+    const mockProjectId = 'nonExistentProjectId';
+
+    jest
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
+      .mockImplementation(() => {
+        throw new NotFoundException('Notice board not found');
+      });
+
+    await expect(
+      controller.getNoticeBoardDetailsByProjectId(mockProjectId),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(service.getNoticeBoardDetailsByProjectId).toHaveBeenCalledWith(mockProjectId);
+  });
+
+  it('should handle internal server errors', async () => {
+    const mockProjectId = 'projectId123';
+
+    jest
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
+      .mockImplementation(() => {
+        throw new Error('Internal server error');
+      });
+
+    await expect(
+      controller.getNoticeBoardDetailsByProjectId(mockProjectId),
+    ).rejects.toThrow(Error);
+
+    expect(service.getNoticeBoardDetailsByProjectId).toHaveBeenCalledWith(mockProjectId);
+  });
 })

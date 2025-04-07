@@ -2343,6 +2343,26 @@ describe('JobConfigService', () => {
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(BadRequestException);
   });
+
+  it('should return the project if found for the given project ID', async () => {
+    const mockProjectId = '739bb103-99fa-41c0-afa7-22bdc0c10d26';
+    const mockProject = {
+      id: 'jobConfig1',
+      projectName: "mockProject",
+      startDate: new Date('2025-04-07T09:25:10.379Z'),
+      projectDescription: 'Active',
+      accountId: '739bb103-99fa-41c0-afa7-22bdc0c10d26',
+    };
+  
+    jest.spyOn(projectRepo, 'findOne').mockResolvedValue(mockProject as any);
+  
+    // Await the result of the asynchronous method
+    const result = await service.getConfigsByProjectId(mockProjectId);
+  
+    // Assert the result matches the mock project
+    expect(result).toEqual(mockProject);
+  });
+
   it('should handle cases where targetPath is null in job configs', async () => {
     const mockProjectId = 'projectId';
     const date = new Date()
@@ -3365,7 +3385,42 @@ describe('JobConfigService', () => {
       });
       expect(result).toEqual({ workflowId: 'mock-workflow-id' });
     });
+    it('should return Destination path not found', async () => {
+      const mockData = {
+        migrateConfigs: [
+          {
+            sourcePathId: 'source-1',
+            destinationPathId: ['dest-1'],
+          },
+        ],
+        preserveAccessTime: true,
+      };
 
+      const mockVolumes = [
+        {
+          id: 'source-1',
+          volumePath: '/mnt/source',
+          fileServer: {
+            id: 'server-1',
+            host: 'localhost',
+            userName: 'user',
+            password: 'pass',
+            protocol: 'sftp',
+            protocolVersion: 'v1',
+            serverType: 'Linux',
+            workers: [],
+          },
+        }
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockVolumes as any);
+      configService.get.mockReturnValue('/base/path');
+      jest.spyOn(workFlowService, 'startWorkflow').mockResolvedValue({ workflowId: 'mock-workflow-id' } as any);
+
+      const result = await service.precheck(mockData);
+      expect(result.erros).toEqual(['DESTINATION_PATH_NOT_FOUND'])
+    });
+    
     it('should return error when destination path is not found', async () => {
       const mockData = {
         migrateConfigs: [
