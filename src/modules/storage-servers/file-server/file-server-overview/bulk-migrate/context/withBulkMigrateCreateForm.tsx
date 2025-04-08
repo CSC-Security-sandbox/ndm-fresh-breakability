@@ -45,7 +45,6 @@ import {
   createSelectedMountPathsObject,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
-import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review.utils";
 import { Button, useForm, useTable } from "@netapp/bxp-design-system-react";
 import dayjs from "dayjs";
 import { useFormik } from "formik";
@@ -53,6 +52,7 @@ import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
+import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.utils";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
