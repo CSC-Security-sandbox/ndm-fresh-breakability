@@ -56,10 +56,10 @@ const CreateProjectForm = ({
       project_description: editSelectedProject?.project_description || "",
     });
     if (editMode) {
-      getAllAssociatedUser({ project_id: editSelectedProject?.id })
-        .unwrap()
-        .then((res) => {
-          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
+      (async () => {
+        try {
+          const res = await getAllAssociatedUser({ project_id: editSelectedProject?.id });
+          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.data?.map(
             (userRoles: any) => ({
               user: {
                 label: userRoles?.user?.email,
@@ -72,13 +72,13 @@ const CreateProjectForm = ({
             })
           );
           setAssociatedUsers(tempAssociatedUsers);
-        })
-        .catch((error) => {
+        } catch (error) {
           notify.error(
             "Failed to get list of associated users for this project."
           );
           console.error({ error, level: "Get Associate user list" });
-        });
+        }
+      })();
     }
   }, [editSelectedProject]);
 
