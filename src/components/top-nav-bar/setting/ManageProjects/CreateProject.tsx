@@ -8,6 +8,8 @@ import {
   Card,
   Heading,
   WizardFooter,
+  Tooltip,
+  Text,
 } from "@netapp/bxp-design-system-react";
 import Box from "@/components/container/Box";
 import AssociateUsers from "@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers";
@@ -48,6 +50,7 @@ const CreateProjectForm = ({
   const [associatedUsers, setAssociatedUsers] = useState<
     AssociatedUsersOptionsType[]
   >([]);
+  const [failedToFetchAssociateUsers, setFailedToFetchAssociateUsers] = useState<boolean>(false);
 
   useEffect(() => {
     createProjectForm.resetForm({
@@ -58,8 +61,8 @@ const CreateProjectForm = ({
     if (editMode) {
       (async () => {
         try {
-          const res = await getAllAssociatedUser({ project_id: editSelectedProject?.id });
-          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.data?.map(
+          const res = await getAllAssociatedUser({ project_id: editSelectedProject?.id }).unwrap();
+          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
             (userRoles: any) => ({
               user: {
                 label: userRoles?.user?.email,
@@ -73,6 +76,7 @@ const CreateProjectForm = ({
           );
           setAssociatedUsers(tempAssociatedUsers);
         } catch (error) {
+          setFailedToFetchAssociateUsers(true);
           notify.error(
             "Failed to get list of associated users for this project."
           );
@@ -273,10 +277,18 @@ const CreateProjectForm = ({
             onClick={createProjectForm.handleFormSubmit(
               editMode ? handleSubmitUpdateProject : handleSubmitCreateProject
             )}
-            disabled={!(createProjectForm.isValid && createProjectForm.dirty)}
+            disabled={!(createProjectForm.isValid && createProjectForm.dirty) || failedToFetchAssociateUsers}
             isSubmitting={isLoading}
           >
             Submit
+            {failedToFetchAssociateUsers &&
+              <Tooltip>
+                <Text>
+                  Please note: There was an issue while fetching the list of associated users for this project.
+                  As a result, you won't be able to update the project at this time.
+                </Text>
+              </Tooltip>
+            }
           </Button>
         </Box>
       </WizardFooter>
