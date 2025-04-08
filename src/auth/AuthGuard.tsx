@@ -12,6 +12,7 @@ import { useRefreshUserTokenMutation } from "@api/userApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import { ProjectApiType } from "@/types/app.type";
 import { useLazyGetAllAccountsQuery } from "@api/accountApi";
+import NoProjects from "@components/500/NoProjects";
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const auth = useAuth();
@@ -23,6 +24,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const [getUserPermissionsApi] = useLazyGetUserPermissionsQuery();
   const refreshTimeoutRef = useRef<any>(null);
   const [refreshUserToken] = useRefreshUserTokenMutation({});
+  const [showNoProjectsPage, setShowNoProjectsPage] = useState<boolean>(false);
 
   const refreshToken = async () => {
     const refresh_token = Cookies.get("refresh_token");
@@ -124,8 +126,12 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       (async () => {
         const resp = await getUserPermissionsApi("").unwrap();
         dispatch(setUserPermissions(resp));
-        await getAccounts();
-        getProjects();
+        if (resp?.roles?.length > 0) {
+          await getAccounts();
+          getProjects();
+        } else {
+          setShowNoProjectsPage(true);
+        }
       })();
     }
   }, [
@@ -151,6 +157,10 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     );
   } else if (auth.error) {
     return <div>Oops... {auth.error.message}</div>;
+  } else if (showNoProjectsPage) {
+    return (
+      <NoProjects />
+    );
   } else if (auth.isAuthenticated && !isPageReady) {
     Cookies.set("access_token", auth.user?.access_token || "");
     Cookies.set("refresh_token", auth.user?.refresh_token || "");
