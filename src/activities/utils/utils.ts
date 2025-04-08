@@ -33,6 +33,7 @@ export const getFilePermissions = (stats: fs.Stats) : string =>{
 
 export const shouldExclude = ( fullPath: string, excludePatterns: string[] ): boolean =>{
     if (!excludePatterns.length) return false;
+    excludePatterns = excludePatterns.map((pattern) => pattern.trim()).filter((pattern) => pattern.length > 0);
     const normalizedPath = fullPath.endsWith('/') ? fullPath : `${fullPath}/`;
     const regexPatterns = excludePatterns.map((pattern) => {
       const escapedPattern = pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&');
