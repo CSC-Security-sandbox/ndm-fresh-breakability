@@ -2,12 +2,13 @@ import { useState } from "react";
 import {
   Button,
   WizardFooter,
+  Card,
+  Text,
 } from "@netapp/bxp-design-system-react";
 import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useAuth } from "react-oidc-context";
 import { Box } from "@components/container/index";
-import { Card, Text } from "@netapp/bxp-design-system-react";
 import EmptyNavBar from "@modules/create-first-project/components/EmptyNavBar";
 
 const NoProjects = () => {
@@ -28,15 +29,14 @@ const NoProjects = () => {
     } catch (error) {
       setIsLoading(false);
       notify.error("Something went wrong while logging out.");
-      console.error("Something went wrong while doing logout:", error);
     }
   };
 
 
   return (
     <>
-    <EmptyNavBar />
-      <Box className="items-center justify-center p-10">
+      <EmptyNavBar />
+      <Box className="p-10">
         <Card className="flex flex-col gap-5 items-center p-8">
           <Box className="font-semibold text-xl">No Access</Box>
             <Text className="text-center w-[55rem]">
@@ -51,7 +51,6 @@ const NoProjects = () => {
           <Button
             onClick={logout}
             isSubmitting={isLoading}
-            className="flex flex-col gap-1"
           >
             Logout
           </Button>
