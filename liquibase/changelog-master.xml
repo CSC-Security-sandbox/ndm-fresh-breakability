@@ -62,4 +62,12 @@
       <sqlFile path="liquibase/20250401_01_discovery_proc.sql" splitStatements="false"/>
    </changeSet>
 
+   <changeSet id="9014" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250408_01_file_server_name_fix_for_jobs_report_prod.sql" splitStatements="false"/>
+   </changeSet>
+
+   <changeSet id="9015" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250408_02_discovery_report_proc_cover_invalid_case.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>
