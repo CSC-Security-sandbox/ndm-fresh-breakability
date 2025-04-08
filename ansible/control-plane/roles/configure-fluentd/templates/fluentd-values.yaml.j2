@@ -21,8 +21,17 @@ volumeMounts:
 plugins:
   - fluent-plugin-grafana-loki
 
-securityContext:
-  runAsGroup: 999
+# Unable to install plugins with non-root user
+# securityContext:
+#   runAsUser: {{ vm_uid }}
+#   runAsNonRoot: true
+#   capabilities:
+#     drop:
+#     - ALL
+#   readOnlyRootFilesystem: true
+
+# podSecurityContext:
+#   fsGroup: {{ vm_gid }}
 
 fileConfigs:
   01_sources.conf: |-
@@ -76,9 +85,10 @@ fileConfigs:
       </storage>
     </source>
 
-    <match>
-      @type stdout
-    </match>
+    # <match>
+    #   @type stdout
+    # </match>
+
     # expose metrics in prometheus format
     <source>
       @type prometheus
@@ -133,7 +143,7 @@ fileConfigs:
         @label @OUTPUT
       </match>
     </label>
-  04_outputs.conf: |-
+  04_outputs.conf: |- 
     <label @OUTPUT>
       <match **>
         @type copy
