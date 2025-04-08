@@ -531,9 +531,8 @@ export class ConfigurationService {
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
-                const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host.trim())
-                const workers = await this.WorkerEntity.find({where: {workerId : In(update?.workers)}});
-
+                const update = updateConfig.fileServers.find(it=> it.id == fileServer.id)
+                const workers = Array.isArray(update?.workers) ? await this.WorkerEntity.find({ where: { workerId: In(update.workers) } }) : [];
                 credentials.push({
                     details: {
                         hostname: update.host,
@@ -546,7 +545,7 @@ export class ConfigurationService {
                 
                 return this.fileServerEntity.create({
                     id: fileServer.id,
-                    host: fileServer.host.trim(),
+                    host: update.host.trim(),
                     serverType: fileServer.serverType,
                     workers: workers,
                     createdBy: fileServer.createdBy,
@@ -580,7 +579,7 @@ export class ConfigurationService {
             const existingWorkers = config.fileServers.flatMap(fileServer => fileServer.workers);
             console.log('existingWorkers', existingWorkers);
             config.fileServers = await Promise.all(fileServerPromises);
-            const newWorkers = updateConfig.fileServers.flatMap(fileServer => fileServer.workers);
+            const newWorkers = updateConfig.fileServers.flatMap(fileServer => Array.isArray(fileServer.workers) ? fileServer.workers : []);
             console.log('newWorkers', newWorkers);
             const removedWorkers = existingWorkers.filter(worker => !newWorkers.includes(worker.workerId));
             console.log('removed', removedWorkers);
