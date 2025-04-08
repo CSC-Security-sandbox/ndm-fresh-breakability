@@ -99,6 +99,10 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         .unwrap()
         .then((response) => {
           localStorage.setItem("account_id", response?.[0]?.id);
+        })
+        .catch((error) => {
+          notify.error("Unable to fetch accounts. Please try again later.");
+          console.error("Failed to fetch accounts:", error);
         });
     }
   };
