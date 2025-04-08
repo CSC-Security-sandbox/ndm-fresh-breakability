@@ -20,8 +20,8 @@
   import_playbook: configure-prometheus.yaml
   when: local_cluster is not defined
 
-- name: Configure fluentbit
-  import_playbook: configure-fluentbit.yaml
+- name: Configure fluentd
+  import_playbook: configure-fluentd.yaml
   when: local_cluster is not defined
 
 - name: Configure grafana

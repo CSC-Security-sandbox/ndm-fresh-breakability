@@ -133,3 +133,6 @@ prometheus_data_volume_size: 10Gi
 
 fluentbit_version: 0.48.8
 fluentbit_data_volume_size: 10Gi
+
+fluentd_version: 0.5.2
+fluentd_data_volume_size: 10Gi
