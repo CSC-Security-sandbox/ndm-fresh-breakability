@@ -2,10 +2,10 @@ kind: DaemonSet
 
 resources:
   limits:
-    cpu: 200m
+    cpu: 500m
     memory: 512Mi
   requests:
-    cpu: 100m
+    cpu: 400m
     memory: 128Mi
 
 volumes:
@@ -20,18 +20,6 @@ volumeMounts:
 
 plugins:
   - fluent-plugin-grafana-loki
-
-# Unable to install plugins with non-root user
-# securityContext:
-#   runAsUser: {{ vm_uid }}
-#   runAsNonRoot: true
-#   capabilities:
-#     drop:
-#     - ALL
-#   readOnlyRootFilesystem: true
-
-# podSecurityContext:
-#   fsGroup: {{ vm_gid }}
 
 fileConfigs:
   01_sources.conf: |-
@@ -63,32 +51,6 @@ fileConfigs:
       emit_unmatched_lines true
     </source>
 
-    <source>
-      @type systemd
-      tag host.microk8s
-      path /var/log/journal
-      matches [ 
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-apiserver-kicker.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-cluster-agent.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-etcd.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-k8s-dqlite.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-apiserver-proxy.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-containerd.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-flanneld.service"},
-        {"_SYSTEMD_UNIT": "snap.microk8s.daemon-kubelite.service"}
-      ]
-      read_from_head true 
-      <storage>
-        @type local
-        persistent true
-        path /var/log/fluentd-journald-cursor.json
-      </storage>
-    </source>
-
-    # <match>
-    #   @type stdout
-    # </match>
-
     # expose metrics in prometheus format
     <source>
       @type prometheus
@@ -102,11 +64,6 @@ fileConfigs:
         @type relabel
         @label @FLUENT_LOG
       </match>
-
-      # <match kubernetes.var.log.containers.**_kube-system_**>
-      #   @type null
-      #   @id ignore_kube_system_logs
-      # </match>
 
       <filter kubernetes.**>
         @type kubernetes_metadata
