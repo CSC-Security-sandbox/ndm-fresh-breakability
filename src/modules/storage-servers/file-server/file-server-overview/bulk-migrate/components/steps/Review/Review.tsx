@@ -7,7 +7,7 @@ import {
   createSelectedMountPathsObject,
   structureDataForReviewList,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
-import PreCheckErrors from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/PrecheckErrors";
+import PreCheckErrors from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/PreCheckErrors";
 
 const Review = () => {
   const {

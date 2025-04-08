@@ -1,4 +1,4 @@
-import StatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
+import StatusCellRenderer from "@/components/custom-cell-renderer/StatusCellRenderer";
 import { BlueXpTableRowType } from "@/types/app.type";
 import React from "react";
 
