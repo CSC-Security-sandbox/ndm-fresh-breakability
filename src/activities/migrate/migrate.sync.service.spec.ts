@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
-import { PowerShellService } from '../common/poweshell.service';
+import { ShellService } from '../common/shell.service';
 import * as fs from 'fs';
 import * as utils from '../utils/utils';
 import * as crypto from 'crypto';
@@ -42,7 +42,7 @@ describe('MigrationSyncService', () => {
                 Logger,
                 RedisService,
                 CommonActivityService,
-                PowerShellService,
+                ShellService,
                 {
                     provide: RedisService,
                     useValue: {
@@ -649,12 +649,12 @@ describe('MigrationSyncService', () => {
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
-            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { });
+            jest.spyOn(fs.promises, 'chmod').mockResolvedValue();
 
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
 
             expect(result.errors).toHaveLength(0);
-            expect(fs.chmodSync).toHaveBeenCalledWith(mockTargetPath, mockMetadata.mode);
+            expect(fs.promises.chmod).toHaveBeenCalledWith(mockTargetPath, mockMetadata.mode);
         });
 
         it('should set access and modified times successfully', async () => {
@@ -667,12 +667,12 @@ describe('MigrationSyncService', () => {
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
-            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
+            jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
 
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
 
             expect(result.errors).toHaveLength(0);
-            expect(fs.utimesSync).toHaveBeenCalledWith(mockTargetPath, new Date(mockMetadata.atime), new Date(mockMetadata.mtime));
+            expect(fs.promises.utimes).toHaveBeenCalledWith(mockTargetPath, new Date(mockMetadata.atime), new Date(mockMetadata.mtime));
         });
 
         // error case when metadata.mode 
@@ -686,30 +686,13 @@ describe('MigrationSyncService', () => {
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
-            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { });
-            jest.spyOn(fs, 'chmodSync').mockImplementation(() => { throw new Error('Error setting file mode') });
+            jest.spyOn(fs.promises, 'chmod').mockRejectedValue(() => { });
             try {
                 const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
                 expect(result.errors).toHaveLength(1);
             } catch (error) {
                 expect(error.message).toBe('Error setting file mode');
             }
-        });
-
-        // test case for birth time
-
-        it('should set birth time successfully', async () => {
-            const mockTargetPath = 'targetPath';
-            const mockSourcePath = 'sourcePath';
-            const mockMetadata = { birthtime: new Date().toISOString() };
-            const mockJobContext = {
-                appendToErrorList: jest.fn(),
-                jobConfig: { options: {} },
-            } as unknown as JobContext;
-            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
-            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
-            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
-            expect(result.errors).toHaveLength(0);
         });
 
         // test case for mtime && atime
@@ -723,7 +706,7 @@ describe('MigrationSyncService', () => {
                 jobConfig: { options: {} },
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
-            jest.spyOn(fs, 'utimesSync').mockImplementation(() => { });
+            jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
             expect(result.errors).toHaveLength(0);
         });

@@ -53,11 +53,7 @@ export async function smartCopy(source, target) {
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
-        const startTime = Date.now();
         const result = await smartCopy(task.data.sourcePath, task.data.destinationPath);
-        const  endTime = Date.now();
-        // log the time taken for the operation
-        console.log(`Time taken for ${task.data.sourcePath} operation: ${endTime - startTime} ms`);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
         return {  isRejected: true, id: task.id, data: error, Operation: task.Operation };

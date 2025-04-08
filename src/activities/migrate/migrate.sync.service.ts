@@ -1,18 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_STATUS, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { Command, OPS_STATUS, FileInfo, JobContext, CommandStatus, TaskStatus, MetaData, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
-import { RedisService } from 'src/redis/redis.service';
-import { basePrefix, dmError, formatDate, getFileInfo, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
-import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
-import { execSync } from 'child_process';
-import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
-import { CommonActivityService } from '../common/common.service';
-import { PowerShellService } from '../common/poweshell.service';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
+import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
+import { CommonActivityService } from '../common/common.service';
+import { ShellService } from '../common/shell.service';
+import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
+import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
+import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 
 
 @Injectable()
@@ -23,13 +22,15 @@ export class MigrationSyncService {
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number = 3;
   readonly maxConcurrency: number = 10;
+
+  
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
     private readonly commonService: CommonActivityService,
-    private readonly powershellService: PowerShellService,
+    private readonly shellService: ShellService,
     private readonly workerThreadService: WorkerThreadService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -107,14 +108,14 @@ export class MigrationSyncService {
     const stampMetaDataOutput : StampMetaDataOutput = {errors: [], errorType : command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR}
     if(metadata?.mode) {
       try {
-        fs.chmodSync(targetPath, metadata.mode);
+        await fs.promises.chmod(targetPath, metadata.mode);
       } catch(error) {
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META,stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         await jobContext.appendToErrorList(dmErr);
         stampMetaDataOutput.errors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
       }
-    }
+     }
     if(metadata?.birthtime){
       try {
         if(process.platform == 'win32') {
@@ -124,12 +125,11 @@ export class MigrationSyncService {
           );
           var birth_time = dateString.toISOString().replace("T", " ").substr(0, 19);
           const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss', $null)`;
-          this.logger.debug(`Setting birthtime for ${targetPath} to ${birth_time} using command : ${birthtimeCommand} and {metadata.birthtime} is ${metadata.birthtime}`)
-          const output = await this.powershellService.runCommand(birthtimeCommand);
+          const output = await this.shellService.runCommand(birthtimeCommand);
           this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birth_time} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
           const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
-          execSync(birthtimeCommand);
+          const output = await this.shellService.runCommand(birthtimeCommand);
         }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
@@ -139,14 +139,14 @@ export class MigrationSyncService {
       }
     }
     if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-      if(metadata.gid && metadata.uid && process.platform !== 'win32') {
+      if(metadata.gid && metadata.uid && process.platform  !== 'win32') {
           try {
             const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
             const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
             this.logger.debug(`UID : ${metadata.uid} -> ${uid}`)
             this.logger.debug(`GID : ${metadata.gid} -> ${gid}`)
             if(gid && uid)
-              fs.chownSync(targetPath, parseInt(uid), parseInt(gid));
+              await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
           } catch(error) {
             this.logger.error(`Error setting ownership: ${error.message}`);
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
@@ -171,7 +171,7 @@ export class MigrationSyncService {
             if(sid) {
               const setSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.SET_SID_FOR_OBJECT)?.replaceAll('${PATH}', targetPath)?.replaceAll('${SID}', sid);
               this.logger.debug(`sid command : ${setSIDCommand}`)
-              await this.powershellService.runCommand(setSIDCommand);
+              await this.shellService.runCommand(setSIDCommand);
              this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
            } else {
              this.logger.debug(`SID not found for the file ${sourcePath}`)
@@ -183,22 +183,30 @@ export class MigrationSyncService {
            await jobContext.appendToErrorList(dmErr);
          }
        }
-    }
+     }
     
     if(metadata.mtime && metadata.atime) {
       try {
-        fs.utimesSync(targetPath, new Date(metadata.atime), new Date(metadata.mtime));
+        await fs.promises.utimes(
+          targetPath,
+          new Date(metadata.atime),
+          new Date(metadata.mtime)
+        );
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.errors.push(error.code)
         await jobContext.appendToErrorList(dmErr);
       }
-    }
+     }
 
     if(metadata.mtime && metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
       try {
-        fs.utimesSync(sourcePath, new Date(metadata.atime), new Date(metadata.mtime));
+        await fs.promises.utimes(
+          sourcePath,
+          new Date(metadata.atime),
+          new Date(metadata.mtime)
+        );
       } catch(error) {
         this.logger.error(`Error preserving file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
@@ -253,13 +261,12 @@ export class MigrationSyncService {
   async syncTask({ jobRunId }: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false };
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
-       
     const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
     if(!task) {
       syncTask.noTaskFound = true;
       return syncTask;
     }
-
+  
     this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
     task.status = TaskStatus.RUNNING
@@ -388,7 +395,7 @@ export class MigrationSyncService {
   }
   getSID = async (filePath: string) => {
     const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
-    return await this.powershellService.runCommand(getSIDCommand);
+    return await this.shellService.runCommand(getSIDCommand);
   }
   
 }

@@ -13,7 +13,7 @@ import { ValidateConnectionActivity } from './validate-connection/validate-conne
 import { ValidateWorkingDirectoryActivity } from './working-directory/working-directory.service';
 import { PrecheckActivity } from './precheck/precheck-activity';
 import { CommonActivityService } from './common/common.service';
-import { PowerShellService } from './common/poweshell.service';
+import { ShellService } from './common/shell.service';
 import { WorkerThreadModule } from 'src/thread/worker.thread.module';
 import { SpeedTestActivity } from './speed-test/speed-test.activities';
 import { SpeedTestReadActivity } from './speed-test/speed-test-read-activities';
@@ -21,7 +21,7 @@ import { SpeedTestReadActivity } from './speed-test/speed-test-read-activities';
 @Module({
   imports: [HttpModule, ConfigModule, WorkerThreadModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService, SpeedTestActivity, SpeedTestReadActivity,],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, PowerShellService, SpeedTestActivity,SpeedTestReadActivity,],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, SpeedTestActivity, SpeedTestReadActivity,],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, SpeedTestActivity,SpeedTestReadActivity,],
 })
 export class ActivitiesModule {}
