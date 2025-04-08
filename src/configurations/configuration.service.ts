@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
-import { ConfigStatus, WorkFlows } from 'src/constants/enums';
+import { ConfigStatus, ProtocolVersionError, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
@@ -20,6 +20,7 @@ import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { SendMailService } from 'src/util/send-email';
 
 @Injectable()
 export class ConfigurationService {
@@ -38,7 +39,8 @@ export class ConfigurationService {
         @InjectRepository(ProjectEntity)
         private readonly projectEntity: Repository<ProjectEntity>,
         private loggerFactory: LoggerFactory,
-        private readonly workFlowService: WorkflowService
+        private readonly workFlowService: WorkflowService,
+        private readonly sendMailService: SendMailService
     ) {
         this.logger = this.loggerFactory.create(ConfigurationService.name)
     }
@@ -137,62 +139,73 @@ export class ConfigurationService {
 
     async getConfigById(id: string) {
         try {
-        if(!isUUID(id)) 
-            throw new BadRequestException('Invalid configId')
-        const config =  await this.configEntity.findOne({
-            select: {
-                id: true,
-                configName: true,
-                configType: true,
-                projectId: true,
-                scannedDate: true,
-                status: true,
-                workingDirectory: {
-                    pathName: true,
-                    workingDirectory: true,
-                    pathId: true
-                },
-                fileServers:{
+            if (!isUUID(id))
+                throw new BadRequestException('Invalid configId');
+
+            const config = await this.configEntity.findOne({
+                select: {
                     id: true,
-                    host: true,
-                    serverType: true,
-                    protocol: true,
-                    userName: true,
-                    password: true,
-                    isRefreshed: true,
-                    protocolVersion: true,
-                    volumes:{
+                    configName: true,
+                    configType: true,
+                    projectId: true,
+                    scannedDate: true,
+                    status: true,
+                    errorMessage: true,
+                    workingDirectory: {
+                        pathName: true,
+                        workingDirectory: true,
+                        pathId: true
+                    },
+                    fileServers: {
                         id: true,
-                        volumePath: true,
-                        jobConfig: {
+                        host: true,
+                        serverType: true,
+                        protocol: true,
+                        userName: true,
+                        password: true,
+                        isRefreshed: true,
+                        protocolVersion: true,
+                        volumes: {
                             id: true,
-                            jobType: true,
-                            jobRunDetails: {
+                            volumePath: true,
+                            jobConfig: {
                                 id: true,
-                                status: true
+                                jobType: true,
+                                jobRunDetails: {
+                                    id: true,
+                                    status: true
+                                }
                             }
                         }
                     }
-                }
-            },
-            where: { id },
-            relations: {
-                project: true,
-                fileServers: {
-                    workers: true,
-                    volumes: {
-                        jobConfig: {
-                              jobRunDetails: true  
-                        }    
-                    }
-                        
                 },
-                workingDirectory: true 
+                where: { id },
+                relations: {
+                    project: true,
+                    fileServers: {
+                        workers: true,
+                        volumes: {
+                            jobConfig: {
+                                jobRunDetails: true
+                            }
+                        }
+                    },
+                    workingDirectory: true
+                }
+            });
+
+            if (!config) throw new NotFoundException(`Config for id ${id} not found.`);
+
+            if (config.errorMessage && config.errorMessage.includes(ProtocolVersionError.PROTOCOL_VERSION_ERROR)) {
+                if (config.fileServers) {
+                    config.fileServers = config.fileServers.map(server => ({
+                        ...server,
+                        volumes: []
+                    }));
+                }
             }
-        });
-     
-        if(!config) throw new NotFoundException(`Config for id ${id} not found.`)
-        return config;
+
+            return config;
         } catch (error) {
             this.logger.error(`Error fetching config by ID: ${error.message}`);
             if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -409,7 +422,7 @@ export class ConfigurationService {
                 const workers = await this.WorkerEntity.find({where: {workerId: In(fileServer.workers)}});
                 credentials.push({
                     details: {
-                        hostname: fileServer.host,
+                        hostname: fileServer.host.trim(),
                         username: fileServer.userName,
                         password: fileServer?.password
                     },
@@ -417,7 +430,7 @@ export class ConfigurationService {
                     workers: workers.map(it=>it.workerId)
                 })
                 return this.fileServerEntity.create({
-                    host: fileServer.host,
+                    host: fileServer.host.trim(),
                     serverType: fileServer.serverType,
                     workers: workers,
                     createdBy: userId,
@@ -437,7 +450,7 @@ export class ConfigurationService {
                 configName: createConfig.configName,
                 configType: createConfig.configType,
                 projectId: createConfig.projectId,
-                status: hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT,
+                status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
@@ -445,7 +458,28 @@ export class ConfigurationService {
             const update = await this.configEntity.save(config);
 
             await this.startValidateWorkingDirectoryWorkflow(createConfig, update.id, traceId);
-         
+
+            const workerNames = config.fileServers.flatMap((fileServer) => { 
+                return fileServer.workers.map((worker) => {
+                    return worker?.workerName;
+                });
+            });
+                  
+            const htmlContent = `
+            <p>Hello</p>
+            <p>Config ${update.configName} has been created successfully</p>
+            <p>with below server details:</p>
+            ${createConfig.fileServers.map(fileServer => `
+                <p>Server Name: ${fileServer.host.trim()}</p>
+                <p>Server Type: ${fileServer.serverType}</p>
+                <p>Protocol: ${fileServer.protocol}</p>
+                <p>Workers: ${workerNames.length>0?workerNames.join(', '):'Workers are not associated with the file server'}</p>
+            `).join('')}
+        `;
+        
+            const payload = { body: htmlContent };
+            this.logger.log(`Sending email for config creation ${update.id} with payload ${JSON.stringify(payload)}`);        
+            await this.sendMailService.sendMail(payload);
             const workingDirectory = this.fileServerWorkingDirectoryMappingEntity.create({
                 pathName: createConfig?.workingDirectory?.pathName,
                 pathId: createConfig?.workingDirectory?.pathId,
@@ -497,9 +531,8 @@ export class ConfigurationService {
 
         try {
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
-                const update = updateConfig.fileServers.find(it=> it.protocol == fileServer.protocol && it.host == fileServer.host)
-                const workers = await this.WorkerEntity.find({where: {workerId : In(update?.workers)}});
-
+                const update = updateConfig.fileServers.find(it=> it.id == fileServer.id)
+                const workers = Array.isArray(update?.workers) ? await this.WorkerEntity.find({ where: { workerId: In(update.workers) } }) : [];
                 credentials.push({
                     details: {
                         hostname: update.host,
@@ -512,7 +545,7 @@ export class ConfigurationService {
                 
                 return this.fileServerEntity.create({
                     id: fileServer.id,
-                    host: fileServer.host,
+                    host: update.host.trim(),
                     serverType: fileServer.serverType,
                     workers: workers,
                     createdBy: fileServer.createdBy,
@@ -543,8 +576,31 @@ export class ConfigurationService {
 
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
+            const existingWorkers = config.fileServers.flatMap(fileServer => fileServer.workers);
+            console.log('existingWorkers', existingWorkers);
             config.fileServers = await Promise.all(fileServerPromises);
+            const newWorkers = updateConfig.fileServers.flatMap(fileServer => Array.isArray(fileServer.workers) ? fileServer.workers : []);
+            console.log('newWorkers', newWorkers);
+            const removedWorkers = existingWorkers.filter(worker => !newWorkers.includes(worker.workerId));
+            console.log('removed', removedWorkers);
+            
             const update = await this.configEntity.save(config);
+            const htmlContent = `
+            <p>Hello</p>
+            <p>Config ${update.configName} has been updated successfully</p>
+            ${
+                removedWorkers.length > 0
+                  ? `
+                  <p>Below is the list of deassociated workers:</p>
+                  ${removedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
+              `
+                  : ''
+              }
+           `;
+        
+            const payload = { body: htmlContent };
+            this.logger.log(`Sending email for config updation ${update.id} with payload ${JSON.stringify(payload)}`);        
+            await this.sendMailService.sendMail(payload);
 
             await this.startValidateWorkingDirectoryWorkflow(updateConfig, update.id, traceId);
 
@@ -564,7 +620,7 @@ export class ConfigurationService {
             const payload: ListPathDTO = {
                 type: fileServer?.protocol,
                 protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
-                host: fileServer?.host,
+                host: fileServer?.host.trim(),
                 username: fileServer?.userName,
                 password: fileServer?.password
             }
@@ -587,7 +643,7 @@ export class ConfigurationService {
             })
         });
 
-        if(payload?.workerIds?.length > 0 && createConfig?.workingDirectory?.pathName?.length > 0) {                
+        if(payload?.workerIds?.length > 0) {
             this.logger.debug('started ValidateWorkingDirectoryWorkflow');            
             const startWorkFlowPayload: StartWorkFlowPayload = {
                 workflowId: WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY + '-' + traceId,
