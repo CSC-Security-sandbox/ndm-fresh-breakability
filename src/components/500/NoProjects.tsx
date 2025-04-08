@@ -14,9 +14,16 @@ import EmptyNavBar from "@modules/create-first-project/components/EmptyNavBar";
 const NoProjects = () => {
   const auth = useAuth();
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const sessionData = JSON.parse(
-    sessionStorage.getItem(window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "") || "{}"
-  );
+  let sessionData;
+  try {
+    sessionData = JSON.parse(
+      sessionStorage.getItem(window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "") || "{}"
+    );
+  } catch (error) {
+    console.error("Failed to parse session data:", error);
+    sessionData = {};
+  }
+
   const username = sessionData?.profile?.name ? sessionData?.profile?.name : '';
 
   const logout = async () => {
@@ -29,6 +36,7 @@ const NoProjects = () => {
     } catch (error) {
       setIsLoading(false);
       notify.error("Something went wrong while logging out.");
+      console.error("Something went wrong while doing logout:", error);
     }
   };
 
