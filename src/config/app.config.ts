@@ -28,6 +28,7 @@ export default registerAs(
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
     speedTestFileSize: process.env.SPEED_TEST_FILE_Size_GB || 1,
     speedTestTimeout: process.env.SPEED_TEST_TIMEOUT || 120000,
+    healthCheckInterval: process.env.HEALTH_CHECK_INTERVAL || 5000,
   }),
 );
 

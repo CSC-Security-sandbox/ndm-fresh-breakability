@@ -1,0 +1,188 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { HealthcheckService } from './healthcheck.service';
+import { Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { of, throwError } from 'rxjs';
+import { getAccessToken } from 'src/activities/common/token.util';
+
+jest.mock('src/activities/common/token.util', () => ({
+  getAccessToken: jest.fn(),
+}));
+
+describe('HealthcheckService', () => {
+  let service: HealthcheckService;
+  let httpService: HttpService;
+  let configService: ConfigService;
+  let logger: Logger;
+  const workerId = 'test-worker';
+  const healthCheckInterval = 2000;
+  const mockedHttpService = { post: jest.fn() };
+  const mockedConfigService = {
+    get: jest.fn((key: string) => {
+      if (key === 'worker.healthCheckInterval') return healthCheckInterval;
+      if (key === 'worker.workerId') return workerId;
+      if (key === 'worker.workerJobServiceUrl') return 'https://localhost:4000';
+      return null;
+    }),
+  };
+  const mockedLogger = { error: jest.fn(), debug: jest.fn(), log: jest.fn() };
+  const mockedTotalMem = jest.fn((): number => 8 * 1024 * 1024 * 1024);
+  const mockedFreeMem = jest.fn((): number => 4 * 1024 * 1024 * 1024);
+  const mockedCpu = {
+    usage: jest.fn(() => Promise.resolve(50)),
+  };
+  const mockedDrive = {
+    info: jest.fn(() => Promise.resolve({ totalGb: '500', freeGb: '300' })),
+  };
+
+  const mockedGetAccessToken = getAccessToken as jest.Mock;
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        HealthcheckService,
+        { provide: HttpService, useValue: mockedHttpService },
+        { provide: ConfigService, useValue: mockedConfigService },
+        { provide: Logger, useValue: mockedLogger },
+        { provide: 'totalmem', useValue: mockedTotalMem },
+        { provide: 'freemem', useValue: mockedFreeMem },
+        { provide: 'cpu', useValue: mockedCpu },
+        { provide: 'drive', useValue: mockedDrive },
+      ],
+    }).compile();
+    service = module.get<HealthcheckService>(HealthcheckService);
+    httpService = module.get<HttpService>(HttpService);
+    configService = module.get<ConfigService>(ConfigService);
+    logger = module.get<Logger>(Logger);
+    jest.clearAllMocks();
+    mockedGetAccessToken.mockResolvedValue('mocked-token');
+    await Promise.resolve();
+  });
+
+  describe('getSystemStats - positive path', () => {
+    it('should return proper system stats as strings', async () => {
+      const stats = await service.getSystemStats();
+      expect(stats).toEqual({
+        cpuUsage: '50.00%',
+        memoryUsage: '50.00%',
+        memoryLimit: '8.00GB',
+        diskUsage: '40.00%',
+        diskLimit: '500.00GB',
+      });
+    });
+  });
+
+  describe('getSystemStats - negative cases', () => {
+    it('should return "-1" for disk stats when drive.info fails', async () => {
+      mockedDrive.info.mockRejectedValueOnce(new Error('Disk error'));
+      mockedCpu.usage.mockResolvedValue(25);
+      const stats = await service.getSystemStats();
+      expect(stats).toEqual({
+        cpuUsage: '25.00%',
+        memoryUsage: '50.00%',
+        memoryLimit: '8.00GB',
+        diskUsage: '-1',
+        diskLimit: '-1',
+      });
+    });
+    it('should return "-1" for memory stats when totalmem/freemem throw an error', async () => {
+      const brokenTotalMem = jest.fn(() => {
+        throw new Error('Memory error');
+      });
+      const brokenFreeMem = jest.fn(() => {
+        throw new Error('Memory error');
+      });
+      const customDrive = {
+        info: jest.fn(() => Promise.resolve({ totalGb: '256', freeGb: '200' })),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          HealthcheckService,
+          { provide: HttpService, useValue: mockedHttpService },
+          { provide: ConfigService, useValue: mockedConfigService },
+          { provide: Logger, useValue: mockedLogger },
+          { provide: 'totalmem', useValue: brokenTotalMem },
+          { provide: 'freemem', useValue: brokenFreeMem },
+          { provide: 'cpu', useValue: mockedCpu },
+          { provide: 'drive', useValue: customDrive },
+        ],
+      }).compile();
+      const newService = module.get<HealthcheckService>(HealthcheckService);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      mockedCpu.usage.mockResolvedValue(10);
+      const stats = await newService.getSystemStats();
+      expect(stats).toEqual({
+        cpuUsage: '10.00%',
+        memoryUsage: '-1',
+        memoryLimit: '-1',
+        diskUsage: '21.88%',
+        diskLimit: '256.00GB',
+      });
+    });
+  });
+
+  describe('getHealthcheckPayload', () => {
+    it('should return a valid healthcheck payload with capital "HEALTHY" status', async () => {
+      const fakeSystemStats = {
+        cpuUsage: '30.00%',
+        memoryUsage: '20.00%',
+        memoryLimit: '4.00GB',
+        diskUsage: '10.00%',
+        diskLimit: '20.00GB',
+      };
+      jest.spyOn(service, 'getSystemStats').mockResolvedValue(fakeSystemStats);
+      const payload = await service.getHealthcheckPayload();
+      expect(payload).toEqual({
+        workerId,
+        healthStatus: 'HEALTHY',
+        systemStats: fakeSystemStats,
+      });
+    });
+  });
+
+  describe('postHealthcheckResults', () => {
+    it('should call httpService.post with correct URL, payload and headers using capital "HEALTHY" status', async () => {
+      const payloadData = {
+        workerId,
+        healthStatus: 'HEALTHY',
+        systemStats: {
+          cpuUsage: '30.00%',
+          memoryUsage: '20.00%',
+          memoryLimit: '4.00GB',
+          diskUsage: '10.00%',
+          diskLimit: '20.00GB',
+        },
+      };
+      jest
+        .spyOn(service, 'getHealthcheckPayload')
+        .mockResolvedValue(payloadData);
+      mockedHttpService.post.mockReturnValue(of({}));
+      await service.postHealthcheckResults();
+      expect(getAccessToken).toHaveBeenCalledWith(httpService, configService);
+      expect(mockedHttpService.post).toHaveBeenCalledWith(
+        'https://localhost:4000/api/v1/statscheck',
+        payloadData,
+        { headers: { Authorization: 'Bearer mocked-token' } },
+      );
+    });
+    it('should log error if httpService.post fails', async () => {
+      const error = new Error('HTTP error');
+      jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
+        workerId,
+        healthStatus: 'HEALTHY',
+        systemStats: {
+          cpuUsage: '0.00%',
+          memoryUsage: '0.00%',
+          memoryLimit: '0.00%',
+          diskUsage: '0.00%',
+          diskLimit: '0.00%',
+        },
+      });
+      mockedHttpService.post.mockReturnValue(throwError(() => error));
+      await service.postHealthcheckResults();
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+        'Error in postHealthcheckResults: HTTP error',
+      );
+    });
+  });
+});
