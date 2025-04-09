@@ -12,8 +12,10 @@ import { HealthcheckStats } from "./dto/healthcheck.dto";
 import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
+import { ApiTags } from "@nestjs/swagger";
 
-@Controller("healthcheck")
+@ApiTags('jobs')
+@Controller("statscheck")
 export class HealthcheckController {
   constructor(
     private healthcheckService: HealthcheckService,
