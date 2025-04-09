@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Button,
   WizardFooter,
@@ -17,16 +17,16 @@ const NoProjects = () => {
 
   const getSessionData = () => {
     try {
+      const sessionKey = window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "";
       return JSON.parse(
-        sessionStorage.getItem(window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "") || "{}"
+        sessionStorage.getItem(sessionKey) || "{}"
       );
     } catch (error) {
       console.error("Failed to parse session data:", error);
       return {};
     }
   }
-
-  const sessionData = getSessionData();
+  const sessionData = useMemo(() => getSessionData(), []);
   const username = sessionData?.profile?.name || '';
 
   const logout = async () => {
