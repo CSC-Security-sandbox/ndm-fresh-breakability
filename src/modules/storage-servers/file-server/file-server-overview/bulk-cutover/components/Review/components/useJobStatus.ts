@@ -29,16 +29,31 @@ export const useJobRunStatus = (
   const [selectedId, SetSelectedId] = useState<string[]>([]);
   const dispatch = useDispatch();
 
+  const getSelectedRows = (
+    rows: rowMenuPropsType[],
+    selectedJobRunIds: string[]
+  ) => {
+    return selectedJobRunIds
+      .map((selectedId: string) => {
+        // Find the row by ID or use indexed access
+        const row =
+          rows.find((row) => row?.id === selectedId) || rows[selectedId];
+
+        if (!row) {
+          return null;
+        }
+        return { jobRunId: row.jobRunId, status: row.status as StatusType };
+      })
+      .filter(Boolean);
+  };
+
   useEffect(() => {
-    const selectedRows = selectedJobRunIds.map((selectedId: any) => ({
-      jobRunId: rows[selectedId]?.jobRunId,
-      status: rows[selectedId]?.status as StatusType,
-    }));
+    const selectedRows = getSelectedRows(rows, selectedJobRunIds);
     const jobRunIds = selectedRows.map((row) => row.jobRunId);
+
     SetSelectedId(jobRunIds);
-    const result = hasUniqueStatus(selectedRows);
-    setIsButtonDisabled(result);
-  }, [selectedJobRunIds]);
+    setIsButtonDisabled(hasUniqueStatus(selectedRows));
+  }, [rows, selectedJobRunIds]);
 
   const updateStatusApi = useCallback(
     async (status: JOB_ACTION_STATUS_ENUM) => {
