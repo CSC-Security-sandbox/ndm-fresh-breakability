@@ -8,6 +8,8 @@ import {
   Card,
   Heading,
   WizardFooter,
+  Tooltip,
+  Text,
 } from "@netapp/bxp-design-system-react";
 import Box from "@/components/container/Box";
 import AssociateUsers from "@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers";
@@ -31,6 +33,7 @@ import withCreateProject from "@/hoc/withCreateProject";
 import React from "react";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 import { notify } from "@components/notification/NotificationWrapper";
+import { Show } from "@components/show/Show";
 
 const CreateProjectForm = ({
   closeAction,
@@ -48,6 +51,7 @@ const CreateProjectForm = ({
   const [associatedUsers, setAssociatedUsers] = useState<
     AssociatedUsersOptionsType[]
   >([]);
+  const [failedToFetchAssociateUsers, setFailedToFetchAssociateUsers] = useState<boolean>(false);
 
   useEffect(() => {
     createProjectForm.resetForm({
@@ -56,9 +60,9 @@ const CreateProjectForm = ({
       project_description: editSelectedProject?.project_description || "",
     });
     if (editMode) {
-      getAllAssociatedUser({ project_id: editSelectedProject?.id })
-        .unwrap()
-        .then((res) => {
+      (async () => {
+        try {
+          const res = await getAllAssociatedUser({ project_id: editSelectedProject?.id }).unwrap();
           const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
             (userRoles: any) => ({
               user: {
@@ -72,13 +76,14 @@ const CreateProjectForm = ({
             })
           );
           setAssociatedUsers(tempAssociatedUsers);
-        })
-        .catch((error) => {
+        } catch (error) {
+          setFailedToFetchAssociateUsers(true);
           notify.error(
             "Failed to get list of associated users for this project."
           );
           console.error({ error, level: "Get Associate user list" });
-        });
+        }
+      })();
     }
   }, [editSelectedProject]);
 
@@ -273,10 +278,18 @@ const CreateProjectForm = ({
             onClick={createProjectForm.handleFormSubmit(
               editMode ? handleSubmitUpdateProject : handleSubmitCreateProject
             )}
-            disabled={!(createProjectForm.isValid && createProjectForm.dirty)}
+            disabled={!(createProjectForm.isValid && createProjectForm.dirty) || failedToFetchAssociateUsers}
             isSubmitting={isLoading}
           >
             Submit
+            <Show.When isTrue={failedToFetchAssociateUsers}>
+              <Tooltip>
+                <Text>
+                  Please note: There was an issue while fetching the list of associated users for this project.
+                  As a result, you won't be able to update the project at this time.
+                </Text>
+              </Tooltip>
+            </Show.When>
           </Button>
         </Box>
       </WizardFooter>
