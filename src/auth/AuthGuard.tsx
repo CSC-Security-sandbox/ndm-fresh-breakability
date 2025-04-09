@@ -95,15 +95,13 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       localStorage.getItem("account_id") === null ||
       localStorage.getItem("account_id") === undefined
     ) {
-      await getAllAccounts("")
-        .unwrap()
-        .then((response) => {
-          localStorage.setItem("account_id", response?.[0]?.id);
-        })
-        .catch((error) => {
-          notify.error("Unable to fetch accounts. Please try again later.");
-          console.error("Failed to fetch accounts:", error);
-        });
+      try {
+        const allAccounts = await getAllAccounts("").unwrap();
+        localStorage.setItem("account_id", allAccounts?.[0]?.id);
+      } catch (error) {
+        notify.error("Unable to fetch accounts. Please try again later.");
+        console.error("Failed to fetch accounts:", error);
+      }
     }
   };
 
