@@ -1,0 +1,64 @@
+---
+- name: Create Fluentd directory
+  become: yes
+  file:
+    path: $HOME/fluentd
+    state: directory
+
+- name: Create Fluentd namespace
+  become: yes
+  template:
+    src: ./templates/fluentd-namespace.yaml.j2
+    dest: $HOME/fluentd/fluentd-namespace.yaml
+
+- name: Create Fluentd values file for Helm
+  become: yes
+  template:
+    src: ./templates/fluentd-values.yaml.j2
+    dest: $HOME/fluentd/fluentd-values.yaml
+
+- name: Remove Fluentd installation
+  become: yes
+  shell: |
+    helm uninstall fluentd --namespace fluentd
+    kubectl delete -f $HOME/fluentd/fluentd-namespace.yaml
+  when: fluentd_uninstall is defined
+
+- name: Apply Fluentd configurations
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/fluentd/fluentd-namespace.yaml
+  register: SHELL_STDOUT
+
+- name: Deploy Fluentd using Helm
+  become: yes
+  shell: |
+    helm repo add fluent https://fluent.github.io/helm-charts
+    helm repo update
+    helm upgrade --install fluentd fluent/fluentd -f $HOME/fluentd/fluentd-values.yaml --namespace fluentd --version {{ fluentd_version }}
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug:
+    msg: "Helm Install (fluentd): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for Fluentd pods to be ready
+  become: yes
+  shell: kubectl wait --namespace="fluentd" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
+
+- name: Check Fluentd pod status
+  shell: kubectl get pods -n fluentd
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
+
+- name: Delete Fluentd directory
+  become: yes
+  file:
+    path: $HOME/fluentd
+    state: absent
