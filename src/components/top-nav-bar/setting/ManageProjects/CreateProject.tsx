@@ -33,6 +33,7 @@ import withCreateProject from "@/hoc/withCreateProject";
 import React from "react";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 import { notify } from "@components/notification/NotificationWrapper";
+import { Show } from "@components/show/Show";
 
 const CreateProjectForm = ({
   closeAction,
@@ -281,14 +282,14 @@ const CreateProjectForm = ({
             isSubmitting={isLoading}
           >
             Submit
-            {failedToFetchAssociateUsers &&
+            <Show.When isTrue={failedToFetchAssociateUsers}>
               <Tooltip>
                 <Text>
                   Please note: There was an issue while fetching the list of associated users for this project.
                   As a result, you won't be able to update the project at this time.
                 </Text>
               </Tooltip>
-            }
+            </Show.When>
           </Button>
         </Box>
       </WizardFooter>
