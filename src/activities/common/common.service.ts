@@ -7,8 +7,8 @@ import axios from 'axios';
 import { JobRunStatus } from "../discovery/enums";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import { JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
-import { getAccessToken } from "./token.util";
 import { HttpService } from "@nestjs/axios";
+import { AuthService } from "src/auth/auth.service";
 
 @Injectable()
 export class CommonActivityService{
@@ -21,6 +21,7 @@ export class CommonActivityService{
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly httpService: HttpService,
+    private readonly authService: AuthService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
   ) {
@@ -65,10 +66,7 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
       this.logger.log(`[${jobRunId}] Updating status to ${status}`);
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
@@ -87,15 +85,10 @@ export class CommonActivityService{
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Triggering generateJobsReport for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
       
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-
-      
       await axios.post(
         `${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`,
         { jobRunId },

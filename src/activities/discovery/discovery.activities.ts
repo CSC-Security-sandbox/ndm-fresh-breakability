@@ -1,66 +1,31 @@
+import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, FileInfo, JobStatus, OPS_CMD, OPS_STATUS, Task, TaskStats, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
+import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
-import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import { CommonActivityService } from '../common/common.service';
-import { KeycloakConfig } from 'src/config/keycloak.config';
-import { HttpService } from '@nestjs/axios';
-import { lastValueFrom } from 'rxjs';
-import { getAccessToken } from '../common/token.util';
+import { buildTask, generateDummyFileEntry } from '../utils/utils';
 
 @Injectable()
 export class DiscoveryActivity {
   readonly workerId: string;
   readonly reportServiceUrl: string;
-    private accessToken: string | null = null;
-  private expiresAt: number = 0; 
-  readonly keycloakConfig: KeycloakConfig;
+
   readonly tokenRequest: string
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    @Inject(HttpService) private readonly httpService: HttpService,
+    @Inject(AuthService) private readonly authService: AuthService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
     private readonly commonService: CommonActivityService
-    
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
-    this.keycloakConfig = this.configService.get<KeycloakConfig>('keycloak');
-    const tokenData = new URLSearchParams();
-    tokenData.append('client_id', this.workerId);
-    tokenData.append('client_secret', this.keycloakConfig.workerSecret);
-    tokenData.append('grant_type', 'client_credentials');
-    this.tokenRequest = tokenData.toString();
   }
-
-  async getAccessToken(): Promise<string | null> {
-          const now = Math.floor(Date.now() / 1000); 
-          if (this.accessToken && now < this.expiresAt) 
-              return this.accessToken;
-          try {
-              const response = await lastValueFrom(
-                  this.httpService.post(
-                      `${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`,
-                      this.tokenRequest,
-                      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-                  )
-              );
-
-              this.accessToken = response.data.access_token;
-              this.expiresAt = now + response.data.expires_in - 10; 
-              this.logger.log(`Fetched new access token, expires at: ${this.expiresAt}`);
-              return this.accessToken;
-          } catch (error) {
-              this.logger.error(`Failed to obtain access token: ${error.message}`);
-              return null;
-          }
-      }
   
   async getWorkerId(): Promise<string> {
     return await this.workerId;
@@ -136,7 +101,7 @@ export class DiscoveryActivity {
 
   async discoveryStatusUpdate(traceId: string, status: string): Promise<any> {
     try {
-      const accessToken = await this.getAccessToken();
+      const accessToken = await this.authService.getAccessToken();
       const workerJobServiceUrl = WorkersConfig.get('workerJobServiceUrl');
       this.logger.log(`[${traceId}] Updating discovery status to ${status}`);
       if (!accessToken) throw new Error('Access token is null');
@@ -173,10 +138,7 @@ export class DiscoveryActivity {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
       const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }

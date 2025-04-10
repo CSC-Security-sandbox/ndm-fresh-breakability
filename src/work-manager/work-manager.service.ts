@@ -9,11 +9,11 @@ import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
+import { AuthService } from 'src/auth/auth.service';
 
 
 @Injectable()
 export class WorkManagerService {
-
     readonly workerConfigUrl: string
     private loadingConfigs = false;
     readonly workerId: string;
@@ -30,6 +30,7 @@ export class WorkManagerService {
         @Inject(HttpService) private readonly httpService: HttpService,
         @Inject(Logger) private readonly logger: Logger,
         @Inject(WorkerOptionsService) private readonly workerOptions: WorkerOptionsService,
+        @Inject(AuthService) private readonly authService: AuthService,
     ) {
 
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}`;
@@ -51,36 +52,13 @@ export class WorkManagerService {
             throw err;
         }
     }
-    async getAccessToken(): Promise<string | null> {
-        const now = Math.floor(Date.now() / 1000); 
-        if (this.accessToken && now < this.expiresAt) 
-            return this.accessToken;
-        try {
-            // this.logger.log(`${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`)
-            const response = await lastValueFrom(
-                this.httpService.post(
-                    `${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`,
-                    this.tokenRequest,
-                    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-                )
-            );
-
-            this.accessToken = response.data.access_token;
-            this.expiresAt = now + response.data.expires_in - 10; 
-            this.logger.log(`Fetched new access token, expires at: ${this.expiresAt}`);
-            return this.accessToken;
-        } catch (error) {
-            this.logger.error(`Failed to obtain access token: ${error.message}`);
-            return null;
-        }
-    }
     
     @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
         if (this.loadingConfigs) return;
         this.loadingConfigs = true;
         try {
-           const accessToken = await this.getAccessToken();
+           const accessToken = await this.authService.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
                 this.httpService.get(`${this.workerConfigUrl}/api/v1/work-manager/config`, {

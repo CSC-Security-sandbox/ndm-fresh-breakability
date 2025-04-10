@@ -7,6 +7,7 @@ import { WorkManagerModule } from './work-manager/work-manager.module';
 import { LoggerModule } from './logger/logger.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     LoggerModule,
     ActivitiesModule,
     HealthcheckModule,
+    AuthModule,
   ],
   providers: [WorkersConfig, CommandConfig],
 })

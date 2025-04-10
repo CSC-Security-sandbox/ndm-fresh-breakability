@@ -2,12 +2,12 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable, OnModuleInit, Logger, Inject } from '@nestjs/common';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
-import { getAccessToken } from '../activities/common/token.util';
 import {
   SystemStats,
   HealthcheckPayload,
   HealthStatus,
 } from './healthcheck.types';
+import { AuthService } from 'src/auth/auth.service';
 
 @Injectable()
 export class HealthcheckService implements OnModuleInit {
@@ -26,6 +26,7 @@ export class HealthcheckService implements OnModuleInit {
     @Inject('freemem') private readonly freemem: () => number,
     @Inject('cpu') private readonly cpu: any,
     @Inject('drive') private readonly drive: any,
+    @Inject(AuthService) private readonly authService: AuthService,
   ) {
     this.healthCheckInterval = this.configService.get<number>(
       'worker.healthCheckInterval',
@@ -72,10 +73,8 @@ export class HealthcheckService implements OnModuleInit {
   async postHealthcheckResults(): Promise<void> {
     try {
       const payload: HealthcheckPayload = await this.getHealthcheckPayload();
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
+      this.logger.debug(payload)
       if (!accessToken) throw new Error('Failed to get access token');
       const url = `${this.workerJobServiceUrl}/api/v1/statscheck`;
       await firstValueFrom(

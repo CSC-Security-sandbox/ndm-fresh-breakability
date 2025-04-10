@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 let accessToken: string | null = null;
 let expiresAt: number = 0;
 
-export async function getAccessToken(
+export async function getAccessTokens(
   httpService: HttpService,
   configService: ConfigService,
 ): Promise<string | null> {

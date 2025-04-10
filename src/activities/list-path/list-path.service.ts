@@ -1,8 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-
-import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from 'src/protocols/protocol/protocol';
-
+import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()

@@ -5,16 +5,15 @@ import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import * as fs from 'fs';
-import { lastValueFrom } from 'rxjs';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
-import { Protocol as pc } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import * as util from 'util';
 
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
+import { AuthService } from 'src/auth/auth.service';
 @Injectable()
 export class SetupActivityService {
   private accessToken: string | null = null;
@@ -26,45 +25,14 @@ export class SetupActivityService {
   readonly baseWorkingPath: string;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    @Inject(HttpService) private readonly httpService: HttpService,
+    @Inject(AuthService) private readonly authService: AuthService,
     private readonly redisService: RedisService,
     private readonly logger: Logger,
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
-    this.keycloakConfig = this.configService.get<KeycloakConfig>('keycloak');
-    const tokenData = new URLSearchParams();
-    tokenData.append('client_id', this.workerId);
-    tokenData.append('client_secret', this.keycloakConfig.workerSecret);
-    tokenData.append('grant_type', 'client_credentials');
-    this.tokenRequest = tokenData.toString();
   }
 
-  async getAccessToken(): Promise<string | null> {
-    console.log('this got called getAccessToken');
-    const now = Math.floor(Date.now() / 1000);
-    if (this.accessToken && now < this.expiresAt) return this.accessToken;
-    try {
-      const response = await lastValueFrom(
-        this.httpService.post(
-          `${this.keycloakConfig.baseUrl}/realms/${this.keycloakConfig.realm}/protocol/openid-connect/token`,
-          this.tokenRequest,
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-        ),
-      );
-
-      this.accessToken = response.data.access_token;
-      this.expiresAt = now + response.data.expires_in - 10;
-      this.logger.log(
-        `Fetched new access token, expires at: ${this.expiresAt}`,
-      );
-      return this.accessToken;
-    } catch (error) {
-      this.logger.error(`Failed to obtain access token: ${error.message}`);
-      return null;
-    }
-  }
   
   async mountPath(
     server: FileServerDetails,
@@ -197,7 +165,7 @@ export class SetupActivityService {
           jobRunId,
         );
        
-      const accessToken = await this.getAccessToken();
+      const accessToken = await this.authService.getAccessToken();
       if(!accessToken) {
         throw new Error('Failed to get access token');
       }

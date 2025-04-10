@@ -6,8 +6,8 @@ import { RedisService } from 'src/redis/redis.service';
 import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import axios from 'axios';
-import { getAccessToken } from '../common/token.util';
 import { HttpService } from '@nestjs/axios';
+import { AuthService } from 'src/auth/auth.service';
 
 @Injectable()
 export class MigrationTaskService{
@@ -23,6 +23,7 @@ export class MigrationTaskService{
       private readonly logger: Logger,
       private readonly redisService: RedisService,
       private readonly httpService: HttpService,
+      private readonly authService: AuthService,
   ) {
       this.workerId = this.configService.get('worker.workerId');
       this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
@@ -95,10 +96,7 @@ export class MigrationTaskService{
     try {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
       this.logger.log(`[${jobRunId}] Triggering generateCOCReport for url : ${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
@@ -115,10 +113,7 @@ export class MigrationTaskService{
     try {
       this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
       this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
-      const accessToken = await getAccessToken(
-        this.httpService,
-        this.configService,
-      );
+      const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
