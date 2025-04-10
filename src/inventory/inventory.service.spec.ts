@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Logger } from "@nestjs/common";
-import { InsertResult, Repository } from "typeorm";
+import { DataSource, InsertResult, Repository } from "typeorm";
 import { InventoryService } from "./inventory.service";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { TaskEntity } from "../entities/task.entity";
@@ -16,6 +16,8 @@ import {
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
+import { SpeedLogEntity } from "../entities/speed-test.entity";
+import { SpeedLogEntryEntity } from "../entities/speed-test.entity";
 
 describe("InventoryService", () => {
   let service: InventoryService;
@@ -24,8 +26,26 @@ describe("InventoryService", () => {
   let operationRepo: Repository<OperationsEntity>;
   let operationErrorRepo: Repository<OperationErrorEntity>;
   let taskErrorRepo: Repository<TaskErrorEntity>;
+  let speedLogEntityRepo: Repository<SpeedLogEntity>;
+  let speedLogEntryEntityRepo: Repository<SpeedLogEntryEntity>;
+  let dataSourceMock: Partial<DataSource>;
+
 
   beforeEach(async () => {
+   
+    dataSourceMock = {
+      createQueryRunner: jest.fn().mockReturnValue({
+        connect: jest.fn(),
+        startTransaction: jest.fn(),
+        manager: {
+          findOne: jest.fn(),
+          upsert: jest.fn(),
+        },
+        commitTransaction: jest.fn(),
+        rollbackTransaction: jest.fn(),
+        release: jest.fn(),
+      }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryService,
@@ -36,6 +56,32 @@ describe("InventoryService", () => {
         {
           provide: getRepositoryToken(TaskEntity),
           useClass: Repository,
+        },        
+        {
+          provide: getRepositoryToken(SpeedLogEntity),
+          useClass: Repository,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SpeedLogEntryEntity),
+          useClass: Repository,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(OperationsEntity),
@@ -50,6 +96,7 @@ describe("InventoryService", () => {
           useClass: Repository,
         },
         Logger,
+        { provide: DataSource, useValue: dataSourceMock }
       ],
     }).compile();
 

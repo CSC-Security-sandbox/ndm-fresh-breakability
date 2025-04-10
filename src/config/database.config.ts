@@ -5,6 +5,7 @@ import { TaskEntity } from '../entities/task.entity';
 import { OperationsEntity } from '../entities/operation.entity';
 import { TaskErrorEntity } from '../entities/task-error.entity';
 import { OperationErrorEntity } from '../entities/operation-error.entity';
+import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 
 export default registerAs(
   'typeorm',
@@ -25,7 +26,9 @@ export default registerAs(
       TaskEntity,
       OperationsEntity,
       TaskErrorEntity,
-      OperationErrorEntity
+      OperationErrorEntity,
+      SpeedLogEntryEntity,
+      SpeedLogEntity,
     ],
     migrations: [],
   }),

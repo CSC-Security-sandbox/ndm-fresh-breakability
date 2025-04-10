@@ -6,6 +6,7 @@ import { OperationsEntity } from "../entities/operation.entity";
 import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
 import { InventoryService } from "./inventory.service";
+import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 
 @Module({
   imports: [
@@ -15,6 +16,8 @@ import { InventoryService } from "./inventory.service";
       OperationsEntity,
       TaskErrorEntity,
       OperationErrorEntity,
+      SpeedLogEntity,
+      SpeedLogEntryEntity,
     ]),
   ],
 
