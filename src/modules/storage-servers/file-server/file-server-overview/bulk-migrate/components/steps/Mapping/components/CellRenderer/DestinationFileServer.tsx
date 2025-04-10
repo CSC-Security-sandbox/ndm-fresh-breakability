@@ -1,4 +1,4 @@
-import { BlueXpTableRowType, ConfigListTypeApiType } from "@/types/app.type";
+import { BlueXpTableRowType, ConfigListTypeApiType, FILE_SERVER_STATUS } from "@/types/app.type";
 import { Autocomplete, TextField } from "@mui/material";
 import { useContext, useMemo } from "react";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
@@ -50,6 +50,7 @@ const DestinationFileServer = ({
     return allFileServers.filter(
       (row) =>
         row.id !== sourceFileServerDetails.id &&
+        row.status === FILE_SERVER_STATUS.ACTIVE &&
         row.fileServers.find(
           (r) => r.protocol === protocolForm.formState.protocol.value
         )
