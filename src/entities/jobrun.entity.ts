@@ -3,7 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGene
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
-import { JobRunStatus } from 'src/constants/enums';
+import { JobRunStatus, PausedReason } from 'src/constants/enums';
 import { InventoryEntity } from './inventory.entity';
 import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
@@ -83,4 +83,7 @@ export class JobRunEntity extends Base {
 
   @Column({ type: 'json', nullable: true, name: 'job_stats' }) 
   jobStats: JobRunStats
+
+  @Column({ type: 'text', nullable: true, name: 'paused_reason' })
+  pausedReason: PausedReason;
 }
