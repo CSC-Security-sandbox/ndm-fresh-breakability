@@ -93,6 +93,8 @@ env:
     value: "datamigrator"
   - name: SEND_EMAIL
     value: "http://admin-service-service:3000"
+  - name: HEALTHCHECK_STATUS_TIMEOUT_SEC
+    value: "60"
 
 service:
   type: ClusterIP
@@ -101,7 +103,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(workers|jobs|job-run|bulk-discovery|tasks|bulk-migrate|bulk-cutover|jobs-docs)/*"
+  trailingPath: "(workers|jobs|job-run|bulk-discovery|tasks|bulk-migrate|bulk-cutover|jobs-docs|statscheck)/*"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
