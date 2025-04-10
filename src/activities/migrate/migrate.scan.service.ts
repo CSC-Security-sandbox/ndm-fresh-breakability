@@ -14,7 +14,6 @@ import { CommonActivityService } from "../common/common.service";
 @Injectable()
 export class MigrationScanService {
     readonly workerId: string;
-    readonly workerJobServiceUrl: string;
     readonly maxRetryCount: number = 3;
     readonly maxMigrationCommand : number = 1000;
     readonly maxConcurrency: number = 10;

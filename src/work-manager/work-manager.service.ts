@@ -22,8 +22,6 @@ export class WorkManagerService {
     private connection: NativeConnection = null;
     private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
-    private accessToken: string | null = null;
-    private expiresAt: number = 0; 
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -36,12 +34,6 @@ export class WorkManagerService {
         this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}`;
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout');
-        this.keycloakConfig = this.configService.get<KeycloakConfig>('keycloak');
-        const tokenData = new URLSearchParams();
-        tokenData.append('client_id', this.workerId);
-        tokenData.append('client_secret', this.keycloakConfig.workerSecret);
-        tokenData.append('grant_type', 'client_credentials')
-        this.tokenRequest = tokenData.toString()
     }
     async onApplicationBootstrap() {
         this.logger.info('[onApplicationBootstrap] - Starting Worker Service');

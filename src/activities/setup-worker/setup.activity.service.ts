@@ -16,8 +16,7 @@ import { SetupWorkerParams } from '../types/tasks';
 import { AuthService } from 'src/auth/auth.service';
 @Injectable()
 export class SetupActivityService {
-  private accessToken: string | null = null;
-  private expiresAt: number = 0;
+
   readonly keycloakConfig: KeycloakConfig;
   readonly tokenRequest: string;
   readonly workerId: string;
@@ -31,6 +30,7 @@ export class SetupActivityService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
+    this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
   }
 
   

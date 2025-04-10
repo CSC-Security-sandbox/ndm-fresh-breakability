@@ -25,6 +25,7 @@ export class DiscoveryActivity {
     private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
   }
   
   async getWorkerId(): Promise<string> {
