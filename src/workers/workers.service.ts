@@ -21,7 +21,6 @@ export class WorkersService {
     const timeout = this.configService.get(
       "app.worker.healthCheckStatusTimout",
     );
-    console.log("timeout config", timeout);
     return workers.map((worker) => {
       if (!worker.stats || !worker.stats?.healthStatus) {
         worker.status = WorkerStatus.Offline;
