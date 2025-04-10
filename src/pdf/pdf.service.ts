@@ -42,7 +42,7 @@ export class PdfService {
        
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
-          console.log("if executed2....", fs.readFileSync(filePath));
+          // console.log("if executed2....", fs.readFileSync(filePath));
           return fs.readFileSync(filePath);
       } else {
         throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
