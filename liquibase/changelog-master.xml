@@ -59,4 +59,8 @@
       <sqlFile path="liquibase/20250401_01_create_worker_stats_table.sql"/>
    </changeSet>
 
+    <changeSet id="5026" author="anarvekar">
+      <sqlFile path="liquibase/20250410_01_alter_jobrun_add_column_paused_reason.sql"/>
+   </changeSet>
+   
 </databaseChangeLog>

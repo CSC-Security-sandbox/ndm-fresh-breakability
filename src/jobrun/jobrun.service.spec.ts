@@ -9,8 +9,10 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
+  PausedReason,
   Protocol,
   WorkFlows,
+  WorkerStatus,
 } from "src/constants/enums";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { Any, In, Repository, UpdateResult } from "typeorm";
@@ -69,6 +71,7 @@ import e from "express";
 import { SendMailService } from "src/utils/send-email";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
 import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
+import { WorkersService } from "src/workers/workers.service";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -88,6 +91,7 @@ describe("JobRunService", () => {
   let redisService: RedisService;
   let sendMailService: SendMailService;
   let errorRemedyService: ErrorRemedyService;
+  let workerService:WorkersService;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -107,6 +111,7 @@ describe("JobRunService", () => {
         RedisService,
         SendMailService,
         ErrorRemedyService,
+        WorkersService,
         {
           provide: getRepositoryToken(JobRunEntity),
           useValue: {
@@ -433,6 +438,7 @@ describe("JobRunService", () => {
       getRepositoryToken(InventoryEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
+    workerService= module.get<WorkersService>(WorkersService);
   });
 
   it("should update job config and job run status when cutover is rejected", async () => {
@@ -2395,7 +2401,7 @@ describe("JobRunService", () => {
       );
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: expect.anything(), status: JobRunStatus.Paused },
-        { status: JobRunStatus.Running }
+        { status: JobRunStatus.Running, pausedReason: null }
       );
       expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
@@ -2555,4 +2561,32 @@ describe("JobRunService", () => {
       expect(sendMailService.sendMail).not.toHaveBeenCalled();
     });
   })
+
+  describe('checkWorkerHealth', () => {  
+    it('should pause the job if all workers are offline', async () => {
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([
+        {
+          id: 'job1',
+          status: JobRunStatus.Running,
+          pausedReason: null,
+          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
+        },
+        {
+          id: 'job1',
+          status: JobRunStatus.Paused,
+          pausedReason: PausedReason.SYSTEM_PAUSED,
+          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
+        }
+      ] as any)
+      const updateWorkerStatusMock = jest.fn((workers: WorkerEntity[]) => workers);
+      jest.spyOn(workerService, 'updateWorkerStatus').mockImplementationOnce(updateWorkerStatusMock);
+      jest.spyOn(redisService, 'getJobContext').mockResolvedValue({
+        jobState: {
+          status: JobStatus.Active,
+          tasks_total: 5,
+        },
+      } as any);
+      await service.checkWorkerHealth();
+    });
+  });
 });

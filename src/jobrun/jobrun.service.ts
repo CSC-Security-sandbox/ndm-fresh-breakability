@@ -13,7 +13,9 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
+  PausedReason,
   WorkFlows,
+  WorkerStatus,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -44,6 +46,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { JobRunStats } from "./dto/jobstats";
 import { SendMailService } from "src/utils/send-email";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
+import { WorkersService } from "src/workers/workers.service";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -67,7 +70,8 @@ export class JobRunService {
     private readonly redisService: RedisService,
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
-    private errorRemedyService: ErrorRemedyService
+    private errorRemedyService: ErrorRemedyService,
+    private readonly workerService: WorkersService
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -159,7 +163,10 @@ export class JobRunService {
   async actions(jobRunActions: JobRunActionsReq) {
     switch (jobRunActions.action) {
       case JobRunActions.PAUSE:
-        return await this.pauseJobRuns(jobRunActions.jobRuns);
+        return await this.pauseJobRuns(
+          jobRunActions.jobRuns,
+          PausedReason.USER_PAUSED
+        );
       case JobRunActions.STOP:
         return await this.stopJobRuns(jobRunActions.jobRuns);
       case JobRunActions.RESUME:
@@ -170,14 +177,14 @@ export class JobRunService {
   }
 
   //  ------------------- JobRun actions PAUSE ------------------ //
-  async pauseJobRuns(jobRuns: string[]) {
+  async pauseJobRuns(jobRuns: string[], reason?: PausedReason) {
     await this.workerJobRunMapRepo.update(
       { jobRunId: In(jobRuns) },
       { isActive: false }
     );
     await this.jobRunRepo.update(
       { id: In(jobRuns) },
-      { status: JobRunStatus.Paused }
+      { status: JobRunStatus.Paused, pausedReason: reason }
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
@@ -281,7 +288,7 @@ export class JobRunService {
     );
     await this.jobRunRepo.update(
       { id: In(jobRuns), status: JobRunStatus.Paused },
-      { status: JobRunStatus.Running }
+      { status: JobRunStatus.Running, pausedReason: null }
     );
     this.logger.debug(mappings);
 
@@ -838,5 +845,55 @@ export class JobRunService {
     const errorRemediesPayload = { body: errorRemediesMailBody };
     this.logger.log("Sending Mail for job completion with errorRemediesPayload", JSON.stringify(errorRemediesPayload));
     await this.sendMailService.sendMail(errorRemediesPayload);
+  }
+
+  async checkWorkerHealth() {
+    this.logger.log(`Checking the health of workers`);
+    try {
+      const runningJobRuns = await this.jobRunRepo.find({
+        where: {
+          status: In([JobRunStatus.Running, JobRunStatus.Paused]),
+          pausedReason: PausedReason.SYSTEM_PAUSED,
+        },
+        relations: ["workerMap"],
+      });
+      for (const jobRun of runningJobRuns) {
+        const jobRunId = jobRun.id;
+        const workerMap = jobRun.workerMap;
+        const workers = workerMap.map((worker) => worker.worker);
+        if (workers.length === 0) {
+          this.logger.warn(`No workers found for jobRunId: ${jobRunId}`);
+          continue;
+        }
+        const mappedWorkersCount = workers.length;
+        const currentWorkerStatus =
+          this.workerService.updateWorkerStatus(workers);
+        const inactiveCount = currentWorkerStatus.filter(
+          (worker) => worker.status === WorkerStatus.Offline
+        ).length;
+        if (inactiveCount === mappedWorkersCount) {
+          this.logger.warn(
+            `All workers are offline for jobRunId: ${jobRunId}, thus pausing the job run`
+          );
+          await this.pauseJobRuns([jobRunId], PausedReason.SYSTEM_PAUSED);
+        } else {
+          if (jobRun.status === JobRunStatus.Paused) {
+            this.logger.log(
+              `Resuming job run ${jobRunId} as some workers are online`
+            );
+            await this.resumeJobRuns([jobRunId]);
+          } else {
+            this.logger.log(
+              `Job run ${jobRunId} is running and some workers are online`
+            );
+          }
+        }
+      }
+      this.logger.log(`Worker health check completed`);
+    } catch (error) {
+      this.logger.error(
+        `Error occurred while checking worker health: ${error}`
+      );
+    }
   }
 }

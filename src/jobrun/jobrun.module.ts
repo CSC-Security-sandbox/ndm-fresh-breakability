@@ -29,6 +29,7 @@ import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { SendMailService } from 'src/utils/send-email';
 import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
 import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
+import { WorkersService } from 'src/workers/workers.service';
 
 
 @Module({
@@ -39,7 +40,7 @@ import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
         WorkerModule,
         RedisModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

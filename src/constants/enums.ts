@@ -153,3 +153,8 @@ export enum CutOverStatus {
     APPROVED = 'APPROVED',
     REJECTED = 'REJECTED'
 }
+
+export enum PausedReason {
+    USER_PAUSED = 'USER_PAUSED',
+    SYSTEM_PAUSED = 'SYSTEM_PAUSED'
+}
