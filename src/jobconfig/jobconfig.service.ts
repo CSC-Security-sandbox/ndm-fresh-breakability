@@ -1157,6 +1157,7 @@ export class JobConfigService {
         configs: {
           id: true,
           configName: true,
+          status: true,
           fileServers: {
             id: true,
             protocol: true,
