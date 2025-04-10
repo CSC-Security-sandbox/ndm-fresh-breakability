@@ -26,13 +26,23 @@ export class PdfService {
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
+
+     
   
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, fileName);
       
-      if (reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
+      if (reportType === ReportType.JOBS_RREPORT)
+        {
+          let response =  await this.generateJobsReportPdf(jobRunId);
+          console.log("if executed.... lalit ", response);
+
+          return response;
+        }
+       
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
+          console.log("if executed2....", fs.readFileSync(filePath));
           return fs.readFileSync(filePath);
       } else {
         throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
@@ -40,7 +50,9 @@ export class PdfService {
     }
 
     async generateJobsReportPdf(jobRunId: string): Promise<Buffer> {
+      console.log("report data is1 : " );
       try {
+        console.log("report data is1 : " );
         const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
         const reportContent = fs.readFileSync(reportPath, 'utf8');
         const report = hbs.compile(reportContent);
@@ -65,6 +77,7 @@ export class PdfService {
           `,
           [jobRunId, 'JOBS_REPORT']
         );
+        console.log("report data is2 : " , data);
 
         if(!data.length) {
           // if report data is not found, should call report generation again and return error
@@ -76,6 +89,10 @@ export class PdfService {
         }
 
         const reportData = JSON.parse(data[0].report_data);
+
+
+        
+       
         reportData.last_iteration = reportData.last_iteration || {};
         reportData.last_errors = reportData.last_errors || {};
         if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
@@ -83,13 +100,21 @@ export class PdfService {
         reportData.last_errors.summary = reportData.summary[0];
         reportData.cutovers = reportData.summary.filter((item) => item.source.job_type === 'CUT_OVER') ?? [];
 
+        console.log("report data : " , reportData)
+        console.log("report data last_iteration : " , reportData.last_iteration)
+        console.log("report data reportData.last_iteration.summary : " , reportData.last_iteration.summary)
+        console.log("report data reportData.cutovers : " , reportData.cutovers)
         // add customerInfo and report generation date
         reportData.customerInfo = {
           projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
           reportDate: new Date().toLocaleDateString(),
         }
 
+        console.log("report data reportData.cutovers : " , reportData.cutovers)
         const html = report(reportData);
+
+
+        console.log("report data reportData.customerInfo is : " , reportData.customerInfo);
         let browser;
         try {
           browser = await puppeteer.launch({
@@ -112,6 +137,7 @@ export class PdfService {
           if (browser) await browser.close();
         }
       } catch (error) {
+        console.log("catch executed... " , error );
         this.logger.error(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
         throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);
       }

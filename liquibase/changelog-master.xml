@@ -70,4 +70,8 @@
       <sqlFile path="liquibase/20250408_02_discovery_report_proc_cover_invalid_case.sql" splitStatements="false"/>
    </changeSet>
 
+   <changeSet id="9016" author="singhlalit">
+      <sqlFile path="liquibase/20250410_proc_updated_for_capacity_job_report.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>
