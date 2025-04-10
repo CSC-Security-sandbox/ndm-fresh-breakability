@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { useGetAllFileServersOfProjectQuery } from "@api/configApi";
 import { hasPermission } from "@auth/auth.utils";
@@ -10,12 +11,17 @@ import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server.constant";
+import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const FileServer = () => {
+  const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
   const navigate = useNavigate();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
   );
+
+  const [ isFrequentInterval, setIsFrequentInterval ] = useState<boolean>(false);
+  
   const {
     data: configByProject,
     isLoading,
@@ -23,7 +29,17 @@ const FileServer = () => {
     refetch,
   } = useGetAllFileServersOfProjectQuery({
     projectId,
-  });
+  }, { pollingInterval: isFrequentInterval ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS : Number(
+    window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+  ) });
+
+  useEffect(() => {
+    if(configByProject?.serverConfig?.find(row => row.status === FILE_SERVER_STATUS.IN_PROGRESS)) {
+      setIsFrequentInterval(true);
+    } else {
+      setIsFrequentInterval(false);
+    }
+  }, [configByProject])
 
   const canManageConfig: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageConfig
