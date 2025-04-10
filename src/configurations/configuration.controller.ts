@@ -71,7 +71,7 @@ export class ConfigurationController{
     @ApiResponse({ status: 404, description: 'Project ID not found' })
     @ApiBearerAuth()
     @Auth(Permission.ManageConfig)
-    @Get('check-unique')
+    @Get('/check-unique')
     async isConfigNameUnique(
         @Query('projectId') projectId: string,
         @Query('configName') configName: string,
