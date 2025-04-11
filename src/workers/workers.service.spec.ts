@@ -58,6 +58,7 @@ describe("WorkersService", () => {
         ipAddress: "121.12.12.2",
         projectId: "234",
         status: WorkerStatus.Online,
+        fileServerId: "fs-123",
       };
       const workers = [
         { id: "1", name: "Worker1" },
@@ -80,9 +81,10 @@ describe("WorkersService", () => {
           ipAddress: "121.12.12.2",
           projectId: "234",
           status: WorkerStatus.Online,
+          fileServers: { id: "fs-123" },
         },
         order: { name: "asc" },
-        relations: ["stats"],
+        relations: ["stats", "fileServers"],
         skip: 0,
         take: 10,
       });

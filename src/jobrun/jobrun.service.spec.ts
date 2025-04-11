@@ -2751,4 +2751,35 @@ describe("JobRunService", () => {
       expect(sendMailService.sendMail).not.toHaveBeenCalled();
     });
   });
+
+  describe('checkWorkerHealth', () => {  
+    it('should pause the job if all workers are offline', async () => {
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([
+        {
+          id: 'job1',
+          status: JobRunStatus.Running,
+          pausedReason: null,
+          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
+        },
+        {
+          id: 'job1',
+          status: JobRunStatus.Paused,
+          pausedReason: PausedReason.SYSTEM_PAUSED,
+          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
+        }
+      ] as any)
+      const updateWorkerStatusMock = jest.fn((workers: WorkerEntity[]) => workers);
+      jest.spyOn(workerService, 'updateWorkerStatus').mockImplementationOnce(updateWorkerStatusMock);
+      jest.spyOn(redisService, 'getJobContext').mockResolvedValue({
+        jobState: {
+          status: JobStatus.Active,
+          tasks_total: 5,
+        },
+      } as any);
+      await service.checkWorkerHealth();
+    });
+  });
+
+  
+
 });

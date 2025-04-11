@@ -49,8 +49,11 @@ export class WorkersService {
       sort = "createdAt",
       order = "ASC",
       jobRunId,
+      fileServerId,
       ...filter
     } = workerStatusPageDto;
+
+    let relations = ["stats"];
 
     const whereCondition: any = { ...filter };
     const updateFilter: any = { ...filter };
@@ -62,8 +65,17 @@ export class WorkersService {
     const findOptions: FindManyOptions<WorkerEntity> = {
       where: whereCondition,
       order: { [sort]: order },
-      relations: ["stats"],
+      relations: relations,
     };
+
+    if (fileServerId) {
+      relations = [...relations, "fileServers"];
+      findOptions.relations = relations;
+      findOptions.where = {
+        ...findOptions.where,
+        fileServers: { id: fileServerId },
+      };
+    }
 
     let data = [],
       total = 0;
