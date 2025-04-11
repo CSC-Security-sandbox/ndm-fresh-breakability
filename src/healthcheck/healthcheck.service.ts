@@ -8,6 +8,8 @@ import {
   HealthStatus,
 } from './healthcheck.types';
 import { AuthService } from 'src/auth/auth.service';
+import { CronJob } from 'cron';
+import { SchedulerRegistry } from '@nestjs/schedule';
 
 @Injectable()
 export class HealthcheckService implements OnModuleInit {
@@ -16,11 +18,11 @@ export class HealthcheckService implements OnModuleInit {
   private readonly workerJobServiceUrl: string;
   private readonly memoryLimitGb: number;
   private diskLimitGb: number = -1;
-  private busy = false;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly logger: Logger,
+    private readonly schedulerRegistry: SchedulerRegistry,
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject('totalmem') private readonly totalmem: () => number,
     @Inject('freemem') private readonly freemem: () => number,
@@ -59,34 +61,50 @@ export class HealthcheckService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    setInterval(async (): Promise<void> => {
-      if (this.busy) return;
-      this.busy = true;
-      try {
-        await this.postHealthcheckResults();
-      } finally {
-        this.busy = false;
-      }
-    }, this.healthCheckInterval);
+    const cronExpression = `*/${this.healthCheckInterval} * * * * *`;
+    const job = new CronJob(cronExpression, () => {
+      this.getPayloadAndToken().then(({ payload, accessToken }) => {
+        this.postHealthcheckResults(payload, accessToken);
+      });
+    });
+    this.schedulerRegistry.addCronJob('healthcheck', job);
+    job.start();
   }
 
-  async postHealthcheckResults(): Promise<void> {
+  async getPayloadAndToken(): Promise<{
+    payload: HealthcheckPayload;
+    accessToken: string;
+  }> {
     try {
       const payload: HealthcheckPayload = await this.getHealthcheckPayload();
       const accessToken = await this.authService.getAccessToken();
-      this.logger.debug(payload)
-      if (!accessToken) throw new Error('Failed to get access token');
-      const url = `${this.workerJobServiceUrl}/api/v1/statscheck`;
-      await firstValueFrom(
-        this.httpService.post(url, payload, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }),
+      this.logger.debug(
+        `Posting healthcheck payload: ${JSON.stringify(payload)}`,
       );
+      if (!accessToken) throw new Error('Failed to get access token');
+      return { payload, accessToken };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error in postHealthcheckResults: ${errorMessage}`);
+      this.logger.error(`Error in getPayloadAndToken: ${errorMessage}`);
+      throw error;
     }
+  }
+
+  private postHealthcheckResults(
+    payload: HealthcheckPayload,
+    accessToken: string,
+  ): void {
+    const url = `${this.workerJobServiceUrl}/api/v1/statscheck`;
+    firstValueFrom(
+      this.httpService.post(url, payload, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+    ).catch((error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
+    });
   }
 
   private async getCpuUsageAsync(): Promise<number> {

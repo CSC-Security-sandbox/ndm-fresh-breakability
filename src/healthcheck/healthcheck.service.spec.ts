@@ -3,8 +3,9 @@ import { HealthcheckService } from './healthcheck.service';
 import { Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { of, throwError } from 'rxjs';
-import { getAccessToken } from 'src/activities/common/token.util';
+import { AuthService } from 'src/auth/auth.service';
 
 jest.mock('src/activities/common/token.util', () => ({
   getAccessToken: jest.fn(),
@@ -15,8 +16,9 @@ describe('HealthcheckService', () => {
   let httpService: HttpService;
   let configService: ConfigService;
   let logger: Logger;
+  let schedulerRegistry: SchedulerRegistry;
   const workerId = 'test-worker';
-  const healthCheckInterval = 2000;
+  const healthCheckInterval = 5;
   const mockedHttpService = { post: jest.fn() };
   const mockedConfigService = {
     get: jest.fn((key: string) => {
@@ -35,8 +37,13 @@ describe('HealthcheckService', () => {
   const mockedDrive = {
     info: jest.fn(() => Promise.resolve({ totalGb: '500', freeGb: '300' })),
   };
+  const mockedSchedulerRegistry = {
+    addCronJob: jest.fn(),
+  };
+  const mockedAuthService = {
+    getAccessToken: jest.fn().mockResolvedValue('mocked-token'),
+  };
 
-  const mockedGetAccessToken = getAccessToken as jest.Mock;
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -48,15 +55,27 @@ describe('HealthcheckService', () => {
         { provide: 'freemem', useValue: mockedFreeMem },
         { provide: 'cpu', useValue: mockedCpu },
         { provide: 'drive', useValue: mockedDrive },
+        { provide: SchedulerRegistry, useValue: mockedSchedulerRegistry },
+        { provide: AuthService, useValue: mockedAuthService },
       ],
     }).compile();
     service = module.get<HealthcheckService>(HealthcheckService);
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<ConfigService>(ConfigService);
     logger = module.get<Logger>(Logger);
+    schedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
     jest.clearAllMocks();
-    mockedGetAccessToken.mockResolvedValue('mocked-token');
     await Promise.resolve();
+  });
+
+  describe('onModuleInit (Cron Registration)', () => {
+    it('should register a cron job with the correct cron expression', async () => {
+      await service.onModuleInit();
+      const expectedCronExpr = `*/${healthCheckInterval} * * * * *`;
+      expect(mockedSchedulerRegistry.addCronJob).toHaveBeenCalled();
+      const callArgs = mockedSchedulerRegistry.addCronJob.mock.calls[0];
+      expect(callArgs[0]).toBe('healthcheck');
+    });
   });
 
   describe('getSystemStats - positive path', () => {
@@ -105,6 +124,8 @@ describe('HealthcheckService', () => {
           { provide: 'freemem', useValue: brokenFreeMem },
           { provide: 'cpu', useValue: mockedCpu },
           { provide: 'drive', useValue: customDrive },
+          { provide: SchedulerRegistry, useValue: mockedSchedulerRegistry },
+          { provide: AuthService, useValue: mockedAuthService },
         ],
       }).compile();
       const newService = module.get<HealthcheckService>(HealthcheckService);
@@ -158,7 +179,7 @@ describe('HealthcheckService', () => {
         .mockResolvedValue(payloadData);
       mockedHttpService.post.mockReturnValue(of({}));
       await service.postHealthcheckResults();
-      expect(getAccessToken).toHaveBeenCalledWith(httpService, configService);
+      expect(mockedAuthService.getAccessToken).toHaveBeenCalled();
       expect(mockedHttpService.post).toHaveBeenCalledWith(
         'https://localhost:4000/api/v1/statscheck',
         payloadData,
