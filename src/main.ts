@@ -44,6 +44,6 @@ async function bootstrap() {
   Logger.log('Service Queue Microservice is listening...');
   app.enableCors();
 
-  await app.listen(6000);
+  await app.listen(3006);
 }
 bootstrap();
