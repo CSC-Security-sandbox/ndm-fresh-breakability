@@ -71,13 +71,17 @@ export class WorkManagerService {
           mergedConfigs.push({ ...workerMetaConfig.metaConfig });
         }
         jobRunConfig.forEach((data) => {
-          const workerMetaConfig = data.workerMap.metaConfig;
-          if (workerMetaConfig) {
-            mergedConfigs.push({
-            ...workerMetaConfig
+          if (Array.isArray(data.workerMap)) {
+            data.workerMap.forEach((wm) => {
+              if (wm.metaConfig) {
+                this.logger.debug(
+                  `JobRunId: ${data.id}, WorkerId: ${wm.workerId}, MetaConfig: ${JSON.stringify(wm.metaConfig)}`
+                );
+                mergedConfigs.push({ ...wm.metaConfig });
+              }
             });
           }
-        })
+        });
         // let mergedConfigs = [ ...workerMetaConfig.workerMap.metaConfig];
         // jobRunConfig.forEach((data) => mergedConfigs = [...mergedConfigs, ...data.workerMap.metaConfig])
         return mergedConfigs;
