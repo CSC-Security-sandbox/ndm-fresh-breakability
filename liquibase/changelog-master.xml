@@ -19,4 +19,7 @@
       <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
    </changeSet>
    
+     <changeSet id="3005" author="vbikkad">
+      <sqlFile path="liquibase/20250414_01_add_meta_config_column_for_worker_jobrun_mapping.sql"/>
+   </changeSet>
 </databaseChangeLog>
