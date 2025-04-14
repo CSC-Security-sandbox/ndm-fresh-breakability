@@ -26,11 +26,11 @@ master:
 {% else %}
   resources:
     requests:
-      cpu: "0.5"
-      memory: "786Mi"
+      cpu: "750m"
+      memory: "3Gi"
     limits:
-      cpu: "1.2"
-      memory: "1.5Gi"
+      cpu: "2500m"
+      memory: "7Gi"
 {% endif %}
   podSecurityContext:
     enabled: true
