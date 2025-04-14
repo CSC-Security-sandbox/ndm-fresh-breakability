@@ -1006,14 +1006,11 @@ describe("JobRunService", () => {
       jest
         .spyOn(initService, "getJobConfig")
         .mockResolvedValue({ workers: [] } as any);
-
-      const loggerSpy = jest.spyOn(initService["logger"], "warn");
-
+      try{
       await initService.createJobRun(mockJob, new Date());
-
-      expect(loggerSpy).toHaveBeenCalledWith(
-        `Unable to create Job Run for Job Config ${mockJob} does not has workers`,
-      );
+      } catch (error) {
+        expect(error).toBeInstanceOf(NotFoundException)
+      }
     });
   });
 

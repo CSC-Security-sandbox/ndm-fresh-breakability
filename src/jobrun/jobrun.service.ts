@@ -855,7 +855,11 @@ export class JobRunService {
           status: In([JobRunStatus.Running, JobRunStatus.Paused]),
           pausedReason: PausedReason.SYSTEM_PAUSED,
         },
-        relations: ["workerMap"],
+        relations: {
+          workerMap: {
+            worker: { stats: true },
+          },
+        },
       });
       for (const jobRun of runningJobRuns) {
         const jobRunId = jobRun.id;

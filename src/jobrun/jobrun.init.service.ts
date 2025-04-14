@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
@@ -112,7 +112,7 @@ export class JobRunInitService {
       this.logger.warn(
         `Unable to create Job Run for Job Config ${jobConfigId} does not has workers`,
       );
-      return;
+      throw new NotFoundException(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`);;
     }
     const workerMap = details.workers.map((worker) =>
       this.workerJobRunMapRepo.create({
