@@ -1,0 +1,53 @@
+create-account :
+  url: /api/v1/accounts
+  method: post
+  service_name : admin_service
+  data:
+    account_name: account1
+  response:
+    - account_name: account1
+    - status_code: 201
+  parse:
+    id: account_id  
+
+get-list-of-accounts :
+  url: /api/v1/accounts
+  method: get
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  parse: {}
+
+get-account-by-account_id :
+  url: /api/v1/accounts/{id}
+  method: get
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  params :
+    id : account_id
+
+update-account :
+  url: /api/v1/accounts/{id}
+  method: patch
+  service_name : admin_service
+  data:
+    account_name: account2
+  response:
+    - account_name: "account2"
+    - status_code: 200
+  params :
+    id : account_id
+
+delete-account :
+  url: /api/v1/accounts/{id}
+  method: delete
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  params :
+    id : account_id
+

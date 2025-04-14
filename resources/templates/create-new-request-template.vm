@@ -1,0 +1,21 @@
+{
+    "fileServer": {
+      "hostname": "$hostname",
+      "protocols": [
+        {
+          "type": "$type",
+          "username": "$username",
+          "password": "$password"
+        }
+      ]
+    },
+    "workerIds": [
+      "$workerIds"
+    ],
+    "options": {
+      "workflowExecutionTimeout": "$workflowExecutionTimeout",
+      "workflowTaskTimeout": "$workflowTaskTimeout",
+      "workflowRunTimeout": "$workflowRunTimeout",
+      "startDelay": "$startDelay"
+    }
+  }

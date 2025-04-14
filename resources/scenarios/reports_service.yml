@@ -1,0 +1,122 @@
+Get-JobRunId-by-job-config-id:
+  url: /api/v1/job-run?page=1&limit=10&sort=createdAt&order=asc&jobConfigId={MigrationJobConfigId}&projectId={projectId}
+  method: GET
+  service_name: job_service
+  data: {}
+  params:
+    projectId: projectId
+    MigrationJobConfigId: MigrationJobConfigId
+  response:
+   - status_code: 200
+  parse: 
+    jobRunId : MigrationJobRunId
+
+
+ 
+download-report-by-jobrunid-and-report-type-discovery :
+  url: /api/v1/report/inventory/download
+  method : post
+  service_name : reports_service
+  data :
+    jobRunId:
+      - "$SourceDiscoveryJobRunId"
+      - "$DestinationDiscoveryJobRunId"
+    report-type: "DISCOVER"
+
+  response :
+    - text : text
+    - status_code: 201
+  parse : {}
+
+
+Get-Report-by-job-Run-Id-Migration:
+  url: /api/v1/report/job-run/{id}
+  method: GET
+  service_name: reports_service
+  data: {}
+  params:
+    id: MigrationJobRunId
+  response:
+   - status_code: 200
+  parse: {}
+
+
+
+  
+# download-pdf-reports :
+#   url: /api/v1/pdf/generate
+# method : post
+# service_name : reports_service
+# data :
+#   jobRunId: jobRunId,
+#   report-type : DISCOVER | COC | MIGRATE | CUT_OVER |  JOBS_REPORT
+# response :
+#   - text : text
+#   - status_code: 200
+# parse :
+ 
+ 
+# get-job-run-details :
+#    url :  /api/v1/job-run/{jobRunId}
+# method : get
+# service_name : reports_service
+# data : {}
+# params :
+#   jobRunId : jobRunId
+# response :
+#   - status_code: 200
+# parse :
+ 
+ 
+# Get-report-data :
+#    url :  /api/v1/job-run/job-report?jobRunId={obRunId}&reportType={reportType}
+# method : get
+# service_name : reports_service
+# data : {}
+# params :
+#   jobRunId : jobRunId
+# reportType : reportType
+# response :
+#   - status_code: 200
+# parse :
+
+
+
+
+# get-job-overview :
+#   url: /api/v1/overview?jobConfigId={jobId}
+# method : get
+# service_name : reports_service
+# data : {}
+# params :
+#   jobConfigId : jobId
+# response :
+#   - status_code: 200
+# parse :
+ 
+ 
+# get-project-overview :
+#   url: /api/v1/overview?projectId={projectId}
+# method : get
+# service_name : reports_service
+# data : {}
+# params :
+#   projectId : projectId
+# response :
+#   - status_code: 200
+# parse :
+ 
+ 
+# get-file-overview :
+#   url: /api/v1/overview?fileServerId={fileServerId}
+# method : get
+# service_name : reports_service
+# data : {}
+# params :
+#   fileServerId : fileServerId
+# response :
+#   - status_code: 200
+# parse :
+ 
+ 
+ 

@@ -1,0 +1,70 @@
+# api/v1/jobs/project/{project_id}
+
+# MIGRATION STEP 1
+get-config-and-volume-by-project-id:
+  url: /api/v1/jobs/project/{project_id}
+  method: get
+  service_name: job_service
+  params:
+    project_id: projectId
+  response:
+    - status_code: 200
+  parse: {}
+
+
+pre-check-migration:
+  url: /api/v1/jobs/precheck
+  method: post
+  service_name: job_service
+  data:
+    migrateConfigs:
+      sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+      destinationPathId:
+        - "UUID_PLACEHOLDER"
+    preserveAccessTime: true
+  response:
+    - status_code: 201
+  parse:
+    workflowId: workflowId
+
+create-migration-now:
+  url: /api/v1/jobs/bulk-migrate
+  method: post
+  service_name: job_service
+  data:
+    firstRunAt: "2025-03-20T09:51:01.230Z"
+    futureRunSchedule: ""
+    migrateConfigs:
+      - sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+        destinationPathId: "$destinationPathId"
+    sid_mapping: false
+    options:
+      excludeFilePatterns: "*/snapshots/*,*/logs/*,*/tmp/*"
+      preserveAccessTime: true
+      skipFile: "15-M"
+  response:
+    - status_code: 201
+  parse:
+    id: MigrationJobConfigId
+
+
+
+
+#     create yaml for it  : {
+#     "firstRunAt": "2025-03-22T09:55:02.824Z",
+#     "futureRunSchedule": "",
+#     "migrateConfigs": [
+#         {
+#             "sourcePathId": "42c82a32-4b0a-4be2-a25d-d71ada7fa24b",
+#             "destinationPathId": [
+#                 "8dcb3c69-ef3f-4943-b1a3-19978b31f807"
+#             ]
+#         }
+#     ],
+#     "sid_mapping": false,
+#     "options": {
+#         "excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
+#         "preserveAccessTime": true,
+#         "skipFile": "15-M"
+#     }
+# }

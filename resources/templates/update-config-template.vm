@@ -1,0 +1,25 @@
+{
+    "projectId": "$projectId",
+    "configName": "$configName",
+    "workingDirectory": {
+      "pathName": "$pathName",
+      "workingDirectory": "$workingDirectory",
+      "pathId": "$pathId"
+    },
+    "configType": "$configType",
+    "fileServers": [
+      {
+        "id": "$id",
+        "serverType": "$serverType",
+        "protocol": "$protocol",
+        "protocolVersion": "$protocolVersion",
+        "userName": "$userName",
+        "host": "$host",
+        "password": "$password",
+        "workers": ["$workers"],
+        "createdBy": "$createdBy"
+      }
+    ],
+    "createdBy": "$createdBy"
+  }
+  

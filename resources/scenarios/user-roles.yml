@@ -1,0 +1,80 @@
+get-user-role-list:
+  url: /api/v1/user-roles
+  method: get
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  parse: {}
+
+# create-new-user-role-batch:
+#   url: /api/v1/user-roles/batch
+#   method: post
+#   service_name : admin_service
+#   data:
+#     project_id: $project_id
+#     account_id: $account_id
+#     users:
+#       - user_id: $user_id
+#       - role_id: $role_id
+#   response:
+#     - status_code: 201
+#   parse:
+#     id: user_role_id
+
+# update-user-role-patch:
+#   url: /api/v1/user-roles/{id}
+#   method: patch
+#   service_name : admin_service
+#   data:
+#     user_id: $user_id
+#     role_id: $role_id
+#     project_id: $project_id
+#     account_id: $account_id
+#   response:
+#     - status_code: 200
+#   params :
+#     id : user_role_id
+
+get-user-role-by-role_id:
+  url: /api/v1/user-roles/{id}
+  method: get
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  params :
+    id : user_role_id
+
+update-user-role-patch:
+  url: /api/v1/user-roles/{id}
+  method: delete
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  params :
+    id : user_role_id
+
+create-new-user-role-post:
+  url: /api/v1/user-roles
+  method: post
+  service_name : admin_service
+  data:
+    user_id: $user_id
+    role_id: $role_id
+    project_id: $project_id
+    account_id: $account_id
+  response:
+    - status_code: 201
+  parse:
+    id: user_role_id
+
+get-all-user-role:
+  url: /api/v1/user-roles/grouping
+  method: get
+  service_name : admin_service
+  data: {}
+  response:
+    - status_code: 200
+  params : {}

@@ -1,0 +1,6 @@
+{
+    "role_id": "$role_id",
+    "user_id": "$user_id",
+    "project_id": "$project_id",
+    "account_id": "$account_id"
+  }

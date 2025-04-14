@@ -1,0 +1,47 @@
+scenarios:
+  - name: create-user
+    url: /api/v1/create-user
+    method: post
+    service_name: admin_service
+    data:
+      username: "lalitsdinsdsgh8s1s200ss0@email.com"
+      firstName: "Lasisst"
+      lastName: "Sinsgs"
+    response:
+      - status_code: 201
+      - user.first_name: "Lassit"
+    parse:
+      id: user.id
+      user.email: user.email
+
+  - name: reset-password-user
+    url: /api/v1/reset-password
+    method: post
+    service_name: admin_service
+    data:
+      email: "$user.email"
+    response:
+      - status_code: 201
+      - email: "lalitsingh8122000@email.com"
+    parse: {}
+
+  - name: change-user-status
+    url: /api/v1/user-status
+    method: post
+    service_name: admin_service
+    data:
+      email: "$user.email"
+      enable: false
+    response:
+      - status_code: 201
+    parse: {}
+
+  - name: worker-registration
+    url: /api/v1/worker-registration
+    method: post
+    service_name: admin_service
+    data:
+      projectId: "$project_id"
+    response:
+      - status_code: 201
+    parse: {}

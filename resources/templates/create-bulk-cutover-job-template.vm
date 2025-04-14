@@ -1,0 +1,8 @@
+{
+    "cutoverConfig": [
+      {
+        "sourcePathId": "$sourcePathId",
+        "destinationPathId": [#foreach($id in $destinationPathId) "$id"#if($foreach.hasNext),#end#end]
+       }
+      ]
+  }

@@ -1,0 +1,23 @@
+{
+    "projectId": "$projectId",
+    "configName": "$configName",
+    "configType": "$configType",
+    "fileServers": [
+      {
+        "serverType": "$serverType",
+        "protocol": "$protocol",
+        "protocolVersion": "$protocolVersion",
+        "userName": "$userName",
+        "host": "$host",
+        "volumes" : [],
+        "password": "$password",
+        "workers": [#foreach($worker in $workers) "$worker"#if($foreach.hasNext),#end #end]
+      }
+    ],
+    "workingDirectory": {
+      "pathName": "$pathName",
+      "workingDirectory": "$workingDirectory",
+      "pathId": null
+    }
+  }
+  

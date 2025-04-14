@@ -1,0 +1,8 @@
+new-login:
+  method: post
+  data:
+    username: admin@datamigrator.local
+    password: welcome
+  response:
+    - status_code: 201
+  parse: {}
