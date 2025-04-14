@@ -11,12 +11,13 @@ import { ConfigEntity } from 'src/entities/config.entity';
 import { WorkManagerController } from './work-manager.controller';
 import { WorkManagerService } from './work-manager.service';
 import { SendMailService } from 'src/util/send-email';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 
 @Module({
   imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [appConfig] }),
-    TypeOrmModule.forFeature([WorkerEntity,JobRunEntity, ConfigEntity]),
+    TypeOrmModule.forFeature([WorkerEntity,JobRunEntity, ConfigEntity, WorkerJobRunMap]),
     WorkflowModule,
     AuthKeycloakModule
   ],
