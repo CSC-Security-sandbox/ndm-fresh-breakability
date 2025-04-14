@@ -31,26 +31,37 @@ import {
   getActionMenu,
   getReportActions,
 } from "@modules/jobs/job-run-list/run.utils";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import useAdhocRun from "@hooks/useAdhocRun";
 
 const JobDetails = () => {
+  const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
+  const [ isFrequentInterval, setIsFrequentInterval ] = useState<boolean>(false);
 
   const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
-      pollingInterval: Number(
+      pollingInterval: isFrequentInterval ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS : Number(
         window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
       ),
       skipPollingIfUnfocused: true,
     }
   );
+
+  useEffect(() => {
+    if(jobConfigDetails?.jobRuns?.length === 0) {
+      setIsFrequentInterval(true);
+    } else {
+      setIsFrequentInterval(false);
+    }
+  }, [jobConfigDetails?.jobRuns?.length]);
+  
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
