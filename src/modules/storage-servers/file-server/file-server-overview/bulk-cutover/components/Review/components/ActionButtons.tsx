@@ -3,6 +3,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { ActionButtonsPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons.types";
 import { JOB_ACTION_STATUS_ENUM } from "@/types/app.type";
 import { useJobRunStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/useJobStatus";
+import { memo } from "react";
 
 const ActionButtons = ({
   selectedRowIds,
@@ -28,6 +29,7 @@ const ActionButtons = ({
   );
 
   const {
+    loadingState,
     isButtonDisabled,
     isUpdating,
     handleUpdateStatus,
@@ -48,7 +50,7 @@ const ActionButtons = ({
           disabled={isButtonDisabled.RUNNING}
           onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.RESUME)}
           className="w-[152px]"
-          isSubmitting={isUpdating}
+          isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.RESUME]}
         >
           Resume
         </Button>
@@ -57,7 +59,7 @@ const ActionButtons = ({
         disabled={isButtonDisabled.PAUSED}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.PAUSE)}
         className="w-[152px]"
-        isSubmitting={isUpdating}
+        isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.PAUSE]}
       >
         Pause
       </Button>
@@ -65,7 +67,7 @@ const ActionButtons = ({
         disabled={isButtonDisabled.STOPPED}
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.STOP)}
         className="w-[152px]"
-        isSubmitting={isUpdating}
+        isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.STOP]}
       >
         Stop
       </Button>
@@ -73,4 +75,4 @@ const ActionButtons = ({
   );
 };
 
-export default ActionButtons;
+export default memo(ActionButtons);

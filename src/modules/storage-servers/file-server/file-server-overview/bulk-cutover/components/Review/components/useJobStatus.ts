@@ -28,6 +28,8 @@ export const useJobRunStatus = (
   const [isButtonDisabled, setIsButtonDisabled] = useState(STATUS_TYPE);
   const [selectedId, SetSelectedId] = useState<string[]>([]);
   const dispatch = useDispatch();
+  const [selectedAction, setSelectedAction] = useState<string>("");
+  const [loadingState, setLoadingState] = useState<Record<string, boolean>>({});
 
   const getSelectedRows = (
     rows: rowMenuPropsType[],
@@ -55,8 +57,15 @@ export const useJobRunStatus = (
     setIsButtonDisabled(hasUniqueStatus(selectedRows));
   }, [rows, selectedJobRunIds]);
 
+  useEffect(() => {
+    if (selectedAction) {
+      setLoadingState({ [selectedAction]: isUpdating });
+    }
+  }, [isUpdating, selectedAction]);
+
   const updateStatusApi = useCallback(
     async (status: JOB_ACTION_STATUS_ENUM) => {
+      setSelectedAction(status);
       try {
         await updateStatus({ ids: selectedId, status }).unwrap();
         notify.success("Successfully updated the status of Job.");
@@ -101,5 +110,6 @@ export const useJobRunStatus = (
     submitAction,
     dispatch,
     setModalClose,
+    loadingState,
   };
 };

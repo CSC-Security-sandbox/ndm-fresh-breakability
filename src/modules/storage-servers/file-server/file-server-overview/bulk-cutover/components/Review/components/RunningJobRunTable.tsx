@@ -1,6 +1,6 @@
 import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
 import { Box } from "@mui/material";
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/context/BulkCutOverContextProvider";
 import { REVIEW_WARNING_MESSAGE } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
 import UserWarning from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/UserWarning";
@@ -40,4 +40,4 @@ const RunningJobRunTable = () => {
   );
 };
 
-export default RunningJobRunTable;
+export default memo(RunningJobRunTable);
