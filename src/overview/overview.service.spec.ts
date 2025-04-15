@@ -1,68 +1,68 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { OverviewService } from './overview.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { InventoryEntity } from '../entities/inventory.entity';
-import { ProjectEntity } from '../entities/project.entity';
-import { JobRunStatus, JobType } from '../constants/enums';
+import { Test, TestingModule } from "@nestjs/testing";
+import { OverviewService } from "./overview.service";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { ProjectEntity } from "../entities/project.entity";
+import { JobRunStatus, JobType } from "../constants/enums";
 
-describe('OverviewService', () => {
+describe("OverviewService", () => {
   let service: OverviewService;
   let mockInventoryRepository;
   let mockProjectRepository;
 
   const mockProjectData = {
-    id: 'project1',
+    id: "project1",
     configs: [
       {
         fileServers: [
           {
-            id: 'server1',
+            id: "server1",
             volumes: [
               {
                 sourceConfig: [
                   {
-                    id: 'job1',
+                    id: "job1",
                     jobType: JobType.Discover,
                     jobRuns: [
                       {
-                        id: 'run1',
+                        id: "run1",
                         status: JobRunStatus.Completed,
-                        jobConfigId: 'job1',
-                        createdAt: new Date('2024-01-01')
-                      }
-                    ]
+                        jobConfigId: "job1",
+                        createdAt: new Date("2024-01-01"),
+                      },
+                    ],
                   },
                   {
-                    id: 'job2',
+                    id: "job2",
                     jobType: JobType.Migrate,
                     jobRuns: [
                       {
-                        id: 'run2',
+                        id: "run2",
                         status: JobRunStatus.Completed,
-                        jobConfigId: 'job2',
-                        createdAt: new Date('2024-01-02')
-                      }
-                    ]
+                        jobConfigId: "job2",
+                        createdAt: new Date("2024-01-02"),
+                      },
+                    ],
                   },
                   {
-                    id: 'job3',
+                    id: "job3",
                     jobType: JobType.CutOver,
                     jobRuns: [
                       {
-                        id: 'run3',
+                        id: "run3",
                         status: JobRunStatus.Completed,
-                        jobConfigId: 'job3',
-                        createdAt: new Date('2024-01-03')
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
+                        jobConfigId: "job3",
+                        createdAt: new Date("2024-01-03"),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 
   beforeEach(async () => {
@@ -81,7 +81,7 @@ describe('OverviewService', () => {
     };
 
     mockProjectRepository = {
-      find: jest.fn()
+      find: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -93,31 +93,34 @@ describe('OverviewService', () => {
             createQueryBuilder: jest.fn(() => mockInventoryRepository),
             query: jest.fn(),
           },
-
         },
         {
           provide: getRepositoryToken(ProjectEntity),
-          useValue: mockProjectRepository
-        }
+          useValue: mockProjectRepository,
+        },
       ],
     }).compile();
 
     service = module.get<OverviewService>(OverviewService);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(service).toBeDefined();
   });
 
-  describe('getStorageAndJobsOverview', () => {
-    it('should return overview data with all parameters', async () => {
+  describe("getStorageAndJobsOverview", () => {
+    it("should return overview data with all parameters", async () => {
       mockProjectRepository.find.mockResolvedValue([mockProjectData]);
 
-      const result = await service.getStorageAndJobsOverview('project1', 'server1', 'job1');
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        "server1",
+        "job1"
+      );
 
       expect(result).toEqual({
         storageDetails: {
-          totalDiscoveredSize: "0 B",
+          totalDiscoveredSize: "0 Bytes",
           totalMigratedSize: expect.any(String),
           totalFileServers: 1,
           totalPendingSize: expect.any(String),
@@ -133,176 +136,205 @@ describe('OverviewService', () => {
       });
     });
 
-    it('should handle empty project data', async () => {
+    it("should handle empty project data", async () => {
       mockProjectRepository.find.mockResolvedValue([]);
       mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }])
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }]),
       }));
-      const mockData ={
-        "storageDetails": {
-          "totalDiscoveredSize": "0 B",
-          "totalMigratedSize": "0 B",
-          "totalFileServers": 3,
-          "totalPendingSize": "0 B"
+      const mockData = {
+        storageDetails: {
+          totalDiscoveredSize: "0 B",
+          totalMigratedSize: "0 B",
+          totalFileServers: 3,
+          totalPendingSize: "0 B",
         },
-        "jobDetails": {
-          "totalDiscoverJobs": 0,
-          "totalMigrateJobs": {
-            "baseLineJob": 1,
-            "incrementalJob": 1
+        jobDetails: {
+          totalDiscoverJobs: 0,
+          totalMigrateJobs: {
+            baseLineJob: 1,
+            incrementalJob: 1,
           },
-          "totalCutoverJobs": 0
-        }
-      }
-      jest.spyOn(service, 'getStorageAndJobsOverview').mockResolvedValue(mockData);
+          totalCutoverJobs: 0,
+        },
+      };
+      jest
+        .spyOn(service, "getStorageAndJobsOverview")
+        .mockResolvedValue(mockData);
 
-      const result = await service.getStorageAndJobsOverview('project1', null, null);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        null
+      );
 
       expect(result).toEqual(mockData);
     });
 
-    it('should handle multiple migrate jobs', async () => {
+    it("should handle multiple migrate jobs", async () => {
       const projectWithMultipleMigrations = {
         ...mockProjectData,
-        configs: [{
-          ...mockProjectData.configs[0],
-          fileServers: [{
-            ...mockProjectData.configs[0].fileServers[0],
-            volumes: [{
-              sourceConfig: [
-                {
-                  id: 'job2',
-                  jobType: JobType.Migrate,
-                  jobRuns: [
-                    { id: 'run2', status: JobRunStatus.Completed },
-                    { id: 'run3', status: JobRunStatus.Completed }
-                  ]
-                }
-              ]
-            }]
-          }]
-        }]
+        configs: [
+          {
+            ...mockProjectData.configs[0],
+            fileServers: [
+              {
+                ...mockProjectData.configs[0].fileServers[0],
+                volumes: [
+                  {
+                    sourceConfig: [
+                      {
+                        id: "job2",
+                        jobType: JobType.Migrate,
+                        jobRuns: [
+                          { id: "run2", status: JobRunStatus.Completed },
+                          { id: "run3", status: JobRunStatus.Completed },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
 
-      mockProjectRepository.find.mockResolvedValue([projectWithMultipleMigrations]);
+      mockProjectRepository.find.mockResolvedValue([
+        projectWithMultipleMigrations,
+      ]);
 
-      const result = await service.getStorageAndJobsOverview('project1', null, null);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        null
+      );
 
       expect(result.jobDetails.totalMigrateJobs).toEqual({
         baseLineJob: 1,
-        incrementalJob: 1
+        incrementalJob: 1,
       });
     });
   });
 
-
-  describe('where clause construction', () => {
+  describe("where clause construction", () => {
     beforeEach(() => {
       mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }])
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }]),
       }));
     });
 
-    it('should build correct where clause with configId only', async () => {
-      mockProjectRepository.find.mockResolvedValue([{
-        configs: [],
-      }]);
+    it("should build correct where clause with configId only", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [],
+        },
+      ]);
 
-      await service.getStorageAndJobsOverview(null, 'config1', null);
-      
+      await service.getStorageAndJobsOverview(null, "config1", null);
+
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           configs: {
-            id: 'config1'
-          }
+            id: "config1",
+          },
         },
         relations: [
-          'configs',
-          'configs.fileServers',
-          'configs.fileServers.volumes',
-          'configs.fileServers.volumes.sourceConfig',
-          'configs.fileServers.volumes.sourceConfig.jobRuns'
-        ]
+          "configs",
+          "configs.fileServers",
+          "configs.fileServers.volumes",
+          "configs.fileServers.volumes.sourceConfig",
+          "configs.fileServers.volumes.sourceConfig.jobRuns",
+        ],
       });
     });
 
-    it('should build correct where clause with jobConfigId only', async () => {
-      mockProjectRepository.find.mockResolvedValue([{
-        configs: [],
-      }]);
-    
-      await service.getStorageAndJobsOverview(null, null, 'job1');
-      
+    it("should build correct where clause with jobConfigId only", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [],
+        },
+      ]);
+
+      await service.getStorageAndJobsOverview(null, null, "job1");
+
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           configs: {
             fileServers: {
               volumes: {
                 sourceConfig: {
-                  id: 'job1',
+                  id: "job1",
                   jobRuns: {
-                    status: JobRunStatus.Completed
-                  }
-                }
-              }
-            }
-          }
+                    status: JobRunStatus.Completed,
+                  },
+                },
+              },
+            },
+          },
         },
         relations: [
-          'configs',
-          'configs.fileServers',
-          'configs.fileServers.volumes',
-          'configs.fileServers.volumes.sourceConfig',
-          'configs.fileServers.volumes.sourceConfig.jobRuns'
-        ]
+          "configs",
+          "configs.fileServers",
+          "configs.fileServers.volumes",
+          "configs.fileServers.volumes.sourceConfig",
+          "configs.fileServers.volumes.sourceConfig.jobRuns",
+        ],
       });
     });
 
-    it('should build correct where clause with only projectId', async () => {
-      mockProjectRepository.find.mockResolvedValue([{
-        configs: [],
-      }]);
+    it("should build correct where clause with only projectId", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [],
+        },
+      ]);
 
-      await service.getStorageAndJobsOverview('project1', null, null);
-      
+      await service.getStorageAndJobsOverview("project1", null, null);
+
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
-          id: 'project1'
+          id: "project1",
         },
         relations: [
-          'configs',
-          'configs.fileServers',
-          'configs.fileServers.volumes',
-          'configs.fileServers.volumes.sourceConfig',
-          'configs.fileServers.volumes.sourceConfig.jobRuns'
-        ]
+          "configs",
+          "configs.fileServers",
+          "configs.fileServers.volumes",
+          "configs.fileServers.volumes.sourceConfig",
+          "configs.fileServers.volumes.sourceConfig.jobRuns",
+        ],
       });
     });
 
-    it('should handle null parameters', async () => {
-      mockProjectRepository.find.mockResolvedValue([{
-        configs: [],
-      }]);
+    it("should handle null parameters", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [],
+        },
+      ]);
 
       await service.getStorageAndJobsOverview(null, null, null);
-      
+
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {},
         relations: [
-          'configs',
-          'configs.fileServers',
-          'configs.fileServers.volumes',
-          'configs.fileServers.volumes.sourceConfig',
-          'configs.fileServers.volumes.sourceConfig.jobRuns'
-        ]
+          "configs",
+          "configs.fileServers",
+          "configs.fileServers.volumes",
+          "configs.fileServers.volumes.sourceConfig",
+          "configs.fileServers.volumes.sourceConfig.jobRuns",
+        ],
       });
     });
   });
