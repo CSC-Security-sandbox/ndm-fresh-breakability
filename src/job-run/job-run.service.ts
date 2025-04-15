@@ -82,7 +82,7 @@ export class JobRunService {
         isReportReady: true,
         status: true,
         endTime: true,
-        worker: { workerId: true },
+        // worker: {workerId: true},
         jobConfig: {
           id: true,
           jobType: true,
