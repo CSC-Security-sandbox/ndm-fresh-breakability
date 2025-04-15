@@ -5,7 +5,7 @@ import { InventoryEntity } from "src/entities/inventory.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
-import { covertBytes } from "src/utils/mapper";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class OverviewService {
@@ -23,7 +23,7 @@ export class OverviewService {
     jobConfigId: string
   ) {
     const getStorageAndJobsOverviewStart = Date.now();
-    const schema = process.env.SCHEMA || 'datamigrator';
+    const schema = process.env.SCHEMA || "datamigrator";
     const whereClause = {};
     if (projectId) {
       whereClause["id"] = projectId;
@@ -71,7 +71,7 @@ export class OverviewService {
     this.logger.log(
       `projectDetails query took ${projectQueryEnd - projectQueryStart} ms`
     );
-   
+
     let totalDiscoveredSize = 0;
     let totalMigratedSize = 0;
     let totalFileServers = projectDetails?.flatMap(
@@ -168,7 +168,7 @@ export class OverviewService {
         ) as latest_inventory
         `,
         jobRunIds
-      )
+      );
 
       const discoverySizeQueryBuilderEnd = Date.now();
 
@@ -193,9 +193,9 @@ export class OverviewService {
         return;
       }
       const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
-      const migratedSize  =  await this.inventoryRepository.query(
+      const migratedSize = await this.inventoryRepository.query(
         `
-        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalDiscoveredSize"
+        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalMigratedSize"
         FROM (
           SELECT DISTINCT ON (i.path) i.file_size
           FROM  ${schema}.inventory i
@@ -204,15 +204,15 @@ export class OverviewService {
         ) as latest_inventory
         `,
         jobRunIds
-      )
-        totalMigratedSize = migratedSize?.[0]?.totalMigratedSize ?? 0;
+      );
+      totalMigratedSize = migratedSize?.[0]?.totalMigratedSize ?? 0;
     }
 
     let totalPending = totalDiscoveredSize - totalMigratedSize;
-    let totalPendingSize = covertBytes(Number(totalPending));
+    let totalPendingSize = formatBytes(Number(totalPending));
 
-    let updateTotalMigratedSize = covertBytes(Number(totalMigratedSize));
-    let updateTotalDiscoveredSize = covertBytes(Number(totalDiscoveredSize));
+    let updateTotalMigratedSize = formatBytes(Number(totalMigratedSize));
+    let updateTotalDiscoveredSize = formatBytes(Number(totalDiscoveredSize));
 
     this.logger.log(`totalDiscoveredSize - ${totalDiscoveredSize}`);
     this.logger.log(`totalMigratedSize - ${totalMigratedSize}`);
