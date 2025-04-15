@@ -12,15 +12,17 @@ import { OperationsEntity } from "../entities/operation.entity";
 import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
 import { OperationStatus } from "../enum/queues.enum";
-import { Repository, UpdateResult } from "typeorm";
+import { DataSource, Repository, UpdateResult } from "typeorm";
 import { CreateInventory } from "./inventory.types";
 import { randomUUID } from "crypto";
+import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(TaskEntity)
@@ -33,7 +35,13 @@ export class InventoryService {
     private readonly operationErrorRepo: Repository<OperationErrorEntity>,
 
     @InjectRepository(TaskErrorEntity)
-    private readonly taskErrorRepo: Repository<TaskErrorEntity>
+    private readonly taskErrorRepo: Repository<TaskErrorEntity>,
+
+    @InjectRepository(SpeedLogEntity)
+    private speedLogRepo: Repository<SpeedLogEntity>,
+
+    @InjectRepository(SpeedLogEntryEntity)
+    private SpeedLogEntryRepo: Repository<SpeedLogEntryEntity>,
   ) {
 
   }
@@ -61,6 +69,21 @@ export class InventoryService {
       birthTime: file?.birthTime ?? null,
       pathId: pathId,
     };
+  }
+
+  async saveSpeedLogsEntries(data: any) {
+    try {
+      // Create and save the new record
+      const writeLogEntry = this.SpeedLogEntryRepo.create({
+        speedLogId: data.testType,
+        timeStamp: data.timeStamp,
+        speed: Number(data.speed),
+      });
+      await this.SpeedLogEntryRepo.save(writeLogEntry);
+    } catch (err) {
+      this.logger.error('Error while saving Speed Log records to the database:', err);
+      throw new Error('Error while saving Speed Log records to the database');
+    }
   }
 
 
@@ -146,33 +169,44 @@ export class InventoryService {
 
 
   async saveTasks(data: any) {
+    if (!data || !data.jobRunId || !data.taskType || !data.status) {
+
+      throw new Error("Invalid task data");
+    }
     try {
-      if (!data || !data.jobRunId || !data.taskType || !data.status) {
-
-        throw new Error("Invalid task data");
-      }
-
+     
       const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
-
       const taskId = id
       if (!taskId) {
         this.logger.error("Task ID not found");
         return;
       }
-      let task = await this.taskRepo.findOne({ where: { id } });
-      if (task) {
-        task.status = task.status != 'COMPLETED' ? status : task.status;
-        task.workerId = workerId;
-      } else {
-        task = this.taskRepo.create({
-          id,
-          jobRunId,
-          status,
-          taskType,
-          workerId,
+      const queryRunner = this.dataSource.createQueryRunner(); // Create query runner
+
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        const task = await queryRunner.manager.findOne(TaskEntity, {
+          where: { id },
+          lock: { mode: "pessimistic_write" }, // Lock for concurrency
         });
+  
+        if (!task || task.status !== 'COMPLETED') {
+          await queryRunner.manager.upsert(
+            TaskEntity,
+            { id, jobRunId, status, taskType, workerId },
+            ['id']
+          );
+        }
+  
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction(); 
+        this.logger.error("Failed to save task records:", error);
+      } finally {
+        await queryRunner.release(); 
       }
-      await this.taskRepo.upsert(task, ['id']);
+    
 
       const batchSize = 100;
       const operationBatches: OperationsEntity[][] = [];
@@ -198,7 +232,7 @@ export class InventoryService {
       // Save the task
       // Save all operation batches concurrently
       if (operationBatches.length > 0) {
-        await Promise.all(operationBatches.map(batch => this.operationRepo.save(batch)));
+        await Promise.all(operationBatches.map(batch => this.operationRepo.upsert(batch,["id"])));
       }
       this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {

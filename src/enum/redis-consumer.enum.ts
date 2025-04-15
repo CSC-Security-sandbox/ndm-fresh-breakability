@@ -21,5 +21,6 @@ export enum ConsumerType {
     tasks = "tasks",
     updatedTask = "updatedTask",
     errors = 'errors',
-    migrationTask = "migrationTask"
+    migrationTask = "migrationTask",
+    speedtestTask = 'speedtestTask',
 }

@@ -5,6 +5,7 @@ import { TaskEntity } from "../entities/task.entity";
 import { OperationsEntity } from "../entities/operation.entity";
 import { TaskErrorEntity } from "../entities/task-error.entity";
 import { OperationErrorEntity } from "../entities/operation-error.entity";
+import { SpeedLogEntity, SpeedLogEntryEntity } from "../entities/speed-test.entity";
 
 describe("DatabaseConfig", () => {
   let config;
@@ -70,6 +71,8 @@ describe("DatabaseConfig", () => {
       OperationsEntity,
       TaskErrorEntity,
       OperationErrorEntity,
+      SpeedLogEntryEntity,
+      SpeedLogEntity,
     ]);
   });
 
