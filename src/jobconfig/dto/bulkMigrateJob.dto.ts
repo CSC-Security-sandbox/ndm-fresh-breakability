@@ -96,6 +96,7 @@ export class BulkMigrateJobConfig {
   @ApiProperty({ description: 'Timestamp for 1st migrate run', example: new Date().toISOString() })
   @Type(() => Date)
   @IsDate()
+  @IsOptional()
   firstRunAt: Date;
 
   @ApiProperty({ description: 'Future run schedule (incremental sync config)', required: false })
