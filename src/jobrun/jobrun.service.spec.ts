@@ -93,7 +93,7 @@ describe("JobRunService", () => {
   let redisService: RedisService;
   let sendMailService: SendMailService;
   let errorRemedyService: ErrorRemedyService;
-  let workerService:WorkersService;
+  let workerService: WorkersService;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -417,10 +417,10 @@ describe("JobRunService", () => {
     jobConfigService = module.get<JobConfigService>(JobConfigService);
     errorRemedyService = module.get<ErrorRemedyService>(ErrorRemedyService);
     operationErrorRepo = module.get<Repository<OperationErrorEntity>>(
-      getRepositoryToken(OperationErrorEntity),
+      getRepositoryToken(OperationErrorEntity)
     );
     identityMappingRepo = module.get<Repository<IdentityMappingEntity>>(
-      getRepositoryToken(IdentityMappingEntity),
+      getRepositoryToken(IdentityMappingEntity)
     );
     identityCrossMappingRepo = module.get<
       Repository<IdentityConfigCrossMappingEntity>
@@ -428,19 +428,19 @@ describe("JobRunService", () => {
     redisService = module.get<RedisService>(RedisService);
 
     jobRunRepo = module.get<Repository<JobRunEntity>>(
-      getRepositoryToken(JobRunEntity),
+      getRepositoryToken(JobRunEntity)
     );
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(
-      getRepositoryToken(JobConfigEntity),
+      getRepositoryToken(JobConfigEntity)
     );
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
-      getRepositoryToken(WorkerJobRunMap),
+      getRepositoryToken(WorkerJobRunMap)
     );
     inventoryRepo = module.get<Repository<InventoryEntity>>(
-      getRepositoryToken(InventoryEntity),
+      getRepositoryToken(InventoryEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
-    workerService= module.get<WorkersService>(WorkersService);
+    workerService = module.get<WorkersService>(WorkersService);
   });
 
   it("should update job config and job run status when cutover is rejected", async () => {
@@ -471,11 +471,11 @@ describe("JobRunService", () => {
         targetPathId: mockJobRun.jobConfig.targetPathId,
         jobType: JobType.MIGRATE,
       },
-      { status: JobStatus.Active },
+      { status: JobStatus.Active }
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed, subStatus: CutOverStatus.REJECTED },
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.REJECTED }
     );
   });
 
@@ -511,11 +511,11 @@ describe("JobRunService", () => {
         status: JobStatus.InActive,
         futureScheduleAt: null,
         scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
-      },
+      }
     );
     expect(jobRunRepo.update).toHaveBeenCalledWith(
       { id: mockJobRunId },
-      { status: JobRunStatus.Completed, subStatus: CutOverStatus.APPROVED },
+      { status: JobRunStatus.Completed, subStatus: CutOverStatus.APPROVED }
     );
   });
 
@@ -524,7 +524,7 @@ describe("JobRunService", () => {
     const mockJobRunId = "jobRunId";
     jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
     await expect(
-      service.cutOverApproval(mockJobRunId, CutOverStatus.APPROVED),
+      service.cutOverApproval(mockJobRunId, CutOverStatus.APPROVED)
     ).rejects.toThrowError(NotFoundException);
   });
 
@@ -552,7 +552,7 @@ describe("JobRunService", () => {
       });
       expect(jobRunInitService.createJobRun).toHaveBeenCalledWith(
         mockJobConfig.id,
-        expect.any(Date),
+        expect.any(Date)
       );
     });
 
@@ -562,7 +562,7 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(null);
 
       await expect(service.addHocRun(mockJobConfigId)).rejects.toThrow(
-        NotFoundException,
+        NotFoundException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -582,7 +582,7 @@ describe("JobRunService", () => {
         .mockResolvedValue(mockJobConfig as any);
 
       await expect(service.addHocRun(mockJobConfigId)).rejects.toThrow(
-        BadRequestException,
+        BadRequestException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -602,7 +602,7 @@ describe("JobRunService", () => {
         .mockResolvedValue(mockJobConfig as any);
 
       await expect(service.addHocRun(mockJobConfigId)).rejects.toThrow(
-        BadRequestException,
+        BadRequestException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -626,7 +626,7 @@ describe("JobRunService", () => {
       expect(result).toEqual(mockJobs);
       expect(createJobRunSpy).toHaveBeenCalledWith(
         mockJobs[0].id,
-        expect.any(Date),
+        expect.any(Date)
       );
     });
 
@@ -695,23 +695,23 @@ describe("JobRunService", () => {
       });
 
       expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "inventory",
+        "inventory"
       );
       expect(inventoryQueryBuilder.select).toHaveBeenCalled();
       expect(inventoryQueryBuilder.where).toHaveBeenCalledWith(
         "inventory.jobRunId = :jobRunId",
-        { jobRunId },
+        { jobRunId }
       );
       expect(inventoryQueryBuilder.getRawOne).toHaveBeenCalled();
 
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(operationErrorQueryBuilder.innerJoin).toHaveBeenCalledWith(
         "oe.operation",
-        "o",
+        "o"
       );
       expect(operationErrorQueryBuilder.where).toHaveBeenCalledWith(
         "o.jobRunId = :jobRunId",
-        { jobRunId },
+        { jobRunId }
       );
       expect(operationErrorQueryBuilder.getRawMany).toHaveBeenCalled();
 
@@ -721,7 +721,7 @@ describe("JobRunService", () => {
           status: JobRunStatus.Completed,
           endTime: expect.any(Date),
           jobStats: expect.anything(),
-        },
+        }
       );
     });
   });
@@ -1012,7 +1012,7 @@ describe("JobRunService", () => {
       await initService.createJobRun(mockJob, new Date());
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Unable to create Job Run for Job Config ${mockJob} does not has workers`,
+        `Unable to create Job Run for Job Config ${mockJob} does not has workers`
       );
     });
   });
@@ -1125,7 +1125,7 @@ describe("JobRunService", () => {
         .mockRejectedValueOnce(new Error("Database error"));
 
       await expect(service.findAllJobRuns(jobRunPageDto)).rejects.toThrow(
-        "Database error",
+        "Database error"
       );
       expect(jobRunRepo.find).toHaveBeenCalled();
     });
@@ -1166,7 +1166,7 @@ describe("JobRunService", () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
 
       await expect(
-        service.updateJobRun(jobRunId, updateData as any),
+        service.updateJobRun(jobRunId, updateData as any)
       ).rejects.toThrowError(`Job run with id ${jobRunId} not found`);
 
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
@@ -1240,7 +1240,7 @@ describe("JobRunService", () => {
         },
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
-        totalScannedSize: "2.00 KB",
+        totalScannedSize: "2 KB",
         totalMigratedSize: "0 B",
         errors: [{ errorType: "FileNotFound", count: 5 }],
       },
@@ -1249,7 +1249,7 @@ describe("JobRunService", () => {
     expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledWith("jobRun");
     expect(service.calculateJobRunStats).toHaveBeenCalled();
     expect(service.getErrorCounts).toHaveBeenCalledWith(
-      mockJobRuns[0].jobrunid,
+      mockJobRuns[0].jobrunid
     );
   });
 
@@ -1503,7 +1503,7 @@ describe("JobRunService", () => {
         timeElapsed: endTime.getTime() - startTime.getTime(),
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
-        totalScannedSize: "0 B",
+        totalScannedSize: "0 Bytes",
         totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
@@ -1631,7 +1631,7 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
-        totalMigratedSize: "0 B",
+        totalMigratedSize: "0 Bytes",
         errors: [],
         tasks: [],
       });
@@ -1869,7 +1869,7 @@ describe("JobRunService", () => {
 
       expect(result).toEqual(mockJobConfigs);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "jobConfig",
+        "jobConfig"
       );
     });
 
@@ -1923,11 +1923,11 @@ describe("JobRunService", () => {
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
         "oe.operation",
-        "o",
+        "o"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         "o.jobRunId = :jobRunId",
-        { jobRunId: mockJobRunId },
+        { jobRunId: mockJobRunId }
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
@@ -1959,11 +1959,11 @@ describe("JobRunService", () => {
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
         "oe.operation",
-        "o",
+        "o"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         "o.jobRunId = :jobRunId",
-        { jobRunId: mockJobRunId },
+        { jobRunId: mockJobRunId }
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
@@ -1973,7 +1973,7 @@ describe("JobRunService", () => {
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
       expect(loggerSpy).toHaveBeenCalledWith(
         "Error occurred while fetching error type counts:",
-        mockError,
+        mockError
       );
     });
   });
@@ -2024,19 +2024,19 @@ describe("JobRunService", () => {
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
         "oe.operation",
-        "o",
+        "o"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         "o.jobRunId = :jobRunId",
-        { jobRunId: mockTaskQuery.jobRunId },
+        { jobRunId: mockTaskQuery.jobRunId }
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         "oe.errorType = :errorType",
-        { errorType: mockTaskQuery.errorType },
+        { errorType: mockTaskQuery.errorType }
       );
       expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith(
         "oe.createdAt",
-        "DESC",
+        "DESC"
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.id",
@@ -2051,10 +2051,10 @@ describe("JobRunService", () => {
         "COALESCE(o.retryCount, 0) AS retryCount",
       ]);
       expect(mockQueryBuilder.limit).toHaveBeenCalledWith(
-        parseInt(mockTaskQuery.limit),
+        parseInt(mockTaskQuery.limit)
       );
       expect(mockQueryBuilder.offset).toHaveBeenCalledWith(
-        (parseInt(mockTaskQuery.page) - 1) * parseInt(mockTaskQuery.limit),
+        (parseInt(mockTaskQuery.page) - 1) * parseInt(mockTaskQuery.limit)
       );
       expect(mockQueryBuilder.getManyAndCount).toHaveBeenCalled();
     });
@@ -2101,19 +2101,19 @@ describe("JobRunService", () => {
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
         "oe.operation",
-        "o",
+        "o"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         "o.jobRunId = :jobRunId",
-        { jobRunId: mockTaskQuery.jobRunId },
+        { jobRunId: mockTaskQuery.jobRunId }
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         "oe.errorType = :errorType",
-        { errorType: mockTaskQuery.errorType },
+        { errorType: mockTaskQuery.errorType }
       );
       expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith(
         "oe.createdAt",
-        "DESC",
+        "DESC"
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.id",
@@ -2221,7 +2221,7 @@ describe("JobRunService", () => {
         jobRuns: ["jobRun1", "jobRun2"],
       };
       await expect(service.actions(jobRunActions)).rejects.toThrow(
-        BadRequestException,
+        BadRequestException
       );
     });
   });
@@ -2243,11 +2243,11 @@ describe("JobRunService", () => {
 
       expect(workerJobRunMapUpdateSpy).toHaveBeenCalledWith(
         { jobRunId: In(jobRuns) },
-        { isActive: false },
+        { isActive: false }
       );
       expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
         { id: In(jobRuns) },
-        { status: JobRunStatus.Paused },
+        { status: JobRunStatus.Paused }
       );
     });
 
@@ -2324,7 +2324,7 @@ describe("JobRunService", () => {
 
       expect(jobConfigRepo.update).toHaveBeenCalledWith(
         { id: jobConfigDetails.id },
-        { firstRunAt: mockDate, scheduler: ScheduleStatus.SCHEDULING },
+        { firstRunAt: mockDate, scheduler: ScheduleStatus.SCHEDULING }
       );
 
       expect(service.calculateJobRunStats).toHaveBeenCalledWith(jobRunId);
@@ -2334,7 +2334,7 @@ describe("JobRunService", () => {
           status: JobRunStatus.Completed,
           endTime: expect.any(Date),
           jobStats: mockJobRunStats,
-        },
+        }
       );
     });
 
@@ -2353,7 +2353,7 @@ describe("JobRunService", () => {
       });
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },
-        { status },
+        { status }
       );
     });
 
@@ -2381,9 +2381,9 @@ describe("JobRunService", () => {
         .mockResolvedValue([] as any);
 
       await expect(
-        service.updateJobRunStatus(jobRunId, status),
+        service.updateJobRunStatus(jobRunId, status)
       ).rejects.toThrow(
-        "Invalid cron expression in futureScheduleAt: Invalid cron expression",
+        "Invalid cron expression in futureScheduleAt: Invalid cron expression"
       );
 
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
@@ -2408,7 +2408,7 @@ describe("JobRunService", () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
 
       await expect(
-        service.updateJobRunStatus(jobRunId, status),
+        service.updateJobRunStatus(jobRunId, status)
       ).rejects.toThrow(Error);
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
         where: { id: jobRunId },
@@ -2472,21 +2472,21 @@ describe("JobRunService", () => {
             JobRunStatus.Ready,
           ]),
         },
-        { status: JobRunStatus.Stopped, endTime: expect.any(Date) },
+        { status: JobRunStatus.Stopped, endTime: expect.any(Date) }
       );
 
       expect(jobConfigRepo.update).toHaveBeenCalledWith(
         { id: In(jobRunConfigs.map((jobRun) => jobRun.jobConfigId)) },
-        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
       );
 
       expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(workFlowService.terminateWorkflow).toHaveBeenCalledTimes(
-        jobRuns.length,
+        jobRuns.length
       );
       expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(jobContextMock.appendToFileList).toHaveBeenCalledTimes(
-        jobRuns.length,
+        jobRuns.length
       );
       expect(jobContextMock.cleanup).toHaveBeenCalledTimes(jobRuns.length);
 
@@ -2529,7 +2529,7 @@ describe("JobRunService", () => {
       });
       expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
         { jobRunId: expect.anything() },
-        { isActive: true },
+        { isActive: true }
       );
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: expect.anything(), status: JobRunStatus.Paused },
@@ -2559,7 +2559,7 @@ describe("JobRunService", () => {
       workFlowService.sendSignal = jest.fn().mockResolvedValue(expectedSignal);
 
       const result = await service.approveCutoverRequest(
-        approvalRequest as any,
+        approvalRequest as any
       );
       expect(workFlowService.sendSignal).toHaveBeenCalledWith(expectedSignal);
       expect(result).toEqual(expectedSignal);
@@ -2630,10 +2630,10 @@ describe("JobRunService", () => {
 
       expect(jobRunInitService.initiateWorkflow).toHaveBeenCalledWith(
         jobRunId,
-        jobDetails,
+        jobDetails
       );
       expect(workFlowService.terminateWorkflow).toHaveBeenCalledWith(
-        workflowId,
+        workflowId
       );
     });
 
@@ -2645,7 +2645,7 @@ describe("JobRunService", () => {
 
       try {
         await expect(service.resumeJobRun(jobRunId)).rejects.toThrow(
-          "Failed to resume Job Run 1234 Error: DB error",
+          "Failed to resume Job Run 1234 Error: DB error"
         );
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
@@ -2731,7 +2731,7 @@ describe("JobRunService", () => {
           targetHost: "",
           targetPath: "",
           jobType: "",
-        }),
+        })
       ).rejects.toThrow("Email sending failed");
     });
 
@@ -2752,25 +2752,33 @@ describe("JobRunService", () => {
     });
   });
 
-  describe('checkWorkerHealth', () => {  
-    it('should pause the job if all workers are offline', async () => {
-      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([
+  describe("checkWorkerHealth", () => {
+    it("should pause the job if all workers are offline", async () => {
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue([
         {
-          id: 'job1',
+          id: "job1",
           status: JobRunStatus.Running,
           pausedReason: null,
-          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
+          workerMap: [
+            { worker: { status: WorkerStatus.Online, workerName: "w1" } },
+          ],
         },
         {
-          id: 'job1',
+          id: "job1",
           status: JobRunStatus.Paused,
           pausedReason: PausedReason.SYSTEM_PAUSED,
-          workerMap: [{ worker: { status: WorkerStatus.Online, workerName: 'w1' } }],
-        }
-      ] as any)
-      const updateWorkerStatusMock = jest.fn((workers: WorkerEntity[]) => workers);
-      jest.spyOn(workerService, 'updateWorkerStatus').mockImplementationOnce(updateWorkerStatusMock);
-      jest.spyOn(redisService, 'getJobContext').mockResolvedValue({
+          workerMap: [
+            { worker: { status: WorkerStatus.Online, workerName: "w1" } },
+          ],
+        },
+      ] as any);
+      const updateWorkerStatusMock = jest.fn(
+        (workers: WorkerEntity[]) => workers
+      );
+      jest
+        .spyOn(workerService, "updateWorkerStatus")
+        .mockImplementationOnce(updateWorkerStatusMock);
+      jest.spyOn(redisService, "getJobContext").mockResolvedValue({
         jobState: {
           status: JobStatus.Active,
           tasks_total: 5,
@@ -2779,7 +2787,4 @@ describe("JobRunService", () => {
       await service.checkWorkerHealth();
     });
   });
-
-  
-
 });
