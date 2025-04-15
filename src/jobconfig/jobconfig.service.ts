@@ -77,6 +77,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { filter } from "rxjs";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class JobConfigService {
@@ -1190,9 +1191,7 @@ export class JobConfigService {
             scannedDirectoriesCount: BigInt(
               jobRunStats.directories || "0"
             )?.toString(),
-            totalScannedSize: this.covertBytes(
-              Number(jobRunStats?.totalSize || 0)
-            ),
+            totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
             errors: jobRunStats.errors,
           };
         }
@@ -1248,7 +1247,7 @@ export class JobConfigService {
           .map((r) => BigInt(r.scannedDirectoriesCount))
           ?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)
           ?.toString(),
-        totalScannedSize: this.covertBytes(
+        totalScannedSize: formatBytes(
           runStats
             .map((r) => this.parseSize(r.totalScannedSize))
             .reduce((a, b) => (a ?? 0) + (b ?? 0), 0)
