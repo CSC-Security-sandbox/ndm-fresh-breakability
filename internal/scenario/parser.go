@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
@@ -8,6 +9,7 @@ import (
 
 // Scenario defines a single test scenario.
 type Scenario struct {
+	Name        string                 `yaml:"name"`
 	URL         string                 `yaml:"url"`
 	Method      string                 `yaml:"method"`
 	ServiceName string                 `yaml:"service_name"`
@@ -18,19 +20,19 @@ type Scenario struct {
 	Params      map[string]string      `yaml:"params"`
 }
 
-// Scenarios is a map with a scenario name as key.
-type Scenarios map[string]Scenario
+// ScenarioDefinition represents the top-level YAML file structure.
+type ScenarioDefinition struct {
+	Scenarios []Scenario `yaml:"scenarios"`
+}
 
-// ParseScenarios loads the YAML file and unmarshals the content into a Scenarios map.
-func ParseScenarios(filePath string) (Scenarios, error) {
-	data, err := ioutil.ReadFile(filePath)
+func ParseScenarioDefinition(fp string) (ScenarioDefinition, error) {
+	var sd ScenarioDefinition
+	data, err := ioutil.ReadFile(fp)
 	if err != nil {
-		return nil, err
+		return sd, fmt.Errorf("could not read file %s: %w", fp, err)
 	}
-
-	var scenarios Scenarios
-	if err := yaml.Unmarshal(data, &scenarios); err != nil {
-		return nil, err
+	if err = yaml.Unmarshal(data, &sd); err != nil {
+		return sd, fmt.Errorf("error unmarshaling YAML from %s: %w", fp, err)
 	}
-	return scenarios, nil
+	return sd, nil
 }

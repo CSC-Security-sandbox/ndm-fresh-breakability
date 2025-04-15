@@ -36,6 +36,7 @@ var (
 		filepath.Join(scenarioPath, "accounts.yml"),
 		// filepath.Join(scenarioPath, "auth.yml"),
 		// filepath.Join(scenarioPath, "config-service-destination.yml"),
+		// filepath.Join(scenarioPath, "config-service.yml"),
 	}
 
 	// Default baseURL and authToken for all API calls.
@@ -342,15 +343,15 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 				"workerId":   "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad",
 			}
 
-			scenarios, err := scenario.ParseScenarios(fp)
+			scenarios, err := scenario.ParseScenarioDefinition(fp)
 			Expect(err).To(BeNil(), "Failed to parse scenario file: %s", fp)
 
-			for callKey, scData := range scenarios {
-				By(fmt.Sprintf("Executing API call: %s", callKey))
+			for _, scData := range scenarios.Scenarios {
+				By(fmt.Sprintf("Executing API call: %s", scData.Name))
 				delayStr := scData.Delay
 				if delayStr != "" {
 					delay, err := strconv.Atoi(delayStr)
-					Expect(err).To(BeNil(), "Error converting delay to integer for '%s'", callKey)
+					Expect(err).To(BeNil(), "Error converting delay to integer for '%s'", scData.Name)
 					delayBetweenCalls(delay)
 				}
 
@@ -359,17 +360,17 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 
 				var reqBody []byte
 				if strings.ToLower(scData.Method) == "post" || strings.ToLower(scData.Method) == "put" || strings.ToLower(scData.Method) == "patch" {
-					reqBody, err = processTemplate(callKey, scData, sharedVars)
-					Expect(err).To(BeNil(), "Error processing template for '%s'", callKey)
+					reqBody, err = processTemplate(scData.Name, scData, sharedVars)
+					Expect(err).To(BeNil(), "Error processing template for '%s'", scData.Name)
 					logDebug(fmt.Sprintf("Constructed Request Body: %s\n", string(reqBody)))
 				} else {
 					logDebug("No request body for this HTTP method\n")
 				}
 
 				resp, err := sendAPIRequest(scData.Method, fullURL, reqBody)
-				Expect(err).To(BeNil(), "Error sending API request for '%s'", callKey)
-				err = handleResponse(resp, scData, callKey)
-				Expect(err).To(BeNil(), "Error handling response for '%s'", callKey)
+				Expect(err).To(BeNil(), "Error sending API request for '%s'", scData.Name)
+				err = handleResponse(resp, scData, scData.Name)
+				Expect(err).To(BeNil(), "Error handling response for '%s'", scData.Name)
 
 			}
 		})
