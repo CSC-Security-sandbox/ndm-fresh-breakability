@@ -1,11 +1,16 @@
 import { ConfigService } from '@nestjs/config';
 import cmdConfig, { CommandConfig } from './command.config';
 
+const mockConfigService = {
+  get: jest.fn()
+} as unknown as jest.Mocked<ConfigService>;
+
 describe('Command Config', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -27,6 +32,8 @@ describe('Command Config', () => {
     delete process.env.SMB_UNIX_LIST_PATH_CMD;
     delete process.env.SMB_LINUX_MOUNT_PATH_CMD;
     delete process.env.SMB_UNIX_MOUNT_PATH_CMD;
+
+    delete process.env.WIN_MOUNTED_FOLDER_SIZE_CMD;
   };
 
   it('should return default values when no environment variables are set', () => {
@@ -63,6 +70,7 @@ describe('Command Config', () => {
           disconnectSession: undefined,
           getSIDforObject: undefined,
           linkPath: undefined,
+          mountedFolderSize: undefined, 
         },
         linux: {
           listPath: undefined,
@@ -83,6 +91,7 @@ describe('Command Config', () => {
     process.env.NFS_LINUX_MOUNT_PATH_CMD = 'mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}';
     process.env.SMB_WIN_VALIDATE_CRED_CMD = 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}';
     process.env.SMB_LINUX_LIST_PATH_CMD = 'smbclient -L ${HOST} -U ${USERNAME}%${PASSWORD}';
+    process.env.WIN_MOUNTED_FOLDER_SIZE_CMD = 'dir /s /b "${MOUNT_PATH}"';
 
     const config = cmdConfig();
     expect(config).toEqual({
@@ -116,6 +125,7 @@ describe('Command Config', () => {
           unmountPath: undefined,
           validateCred: 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}',
           versionDetails: undefined,
+          mountedFolderSize: 'dir /s /b "${MOUNT_PATH}"',
         },
         linux: {
           listPath: 'smbclient -L ${HOST} -U ${USERNAME}%${PASSWORD}',
@@ -223,3 +233,25 @@ it('should return undefined for unset optional commands', () => {
     const result = CommandConfig.getNFSCommand('darwin', 'unmountPath');
     expect(result).toBeUndefined();
 });
+
+
+describe('Static Methods', () => {
+  beforeEach(() => {
+    new CommandConfig(mockConfigService);
+  });
+
+  it('should return mounted folder size command for win32 platform', () => {
+    mockConfigService.get.mockReturnValue('dir /s /b "${MOUNT_PATH}"');
+    
+    const result = CommandConfig.getSMBCommand('win32', 'mountedFolderSize');
+    expect(result).toBe('dir /s /b "${MOUNT_PATH}"');
+    expect(mockConfigService.get).toHaveBeenCalledWith('cmd.smb.win32.mountedFolderSize');
+  });
+
+  it('should return undefined for unset mounted folder size command', () => {
+    mockConfigService.get.mockReturnValue(undefined);
+    const result = CommandConfig.getSMBCommand('win32', 'mountedFolderSize');
+    expect(result).toBeUndefined();
+  });
+});
+

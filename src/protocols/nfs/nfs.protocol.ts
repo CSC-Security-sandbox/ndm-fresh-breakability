@@ -1,13 +1,13 @@
-
-
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
+import * as ffs from 'fast-folder-size';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
-// import { WorkersConfig } from 'src/config/app.config';
+
+const fastFolderSize = ffs as unknown as (path: string, callback: (err: Error | null, bytes: number | null) => void) => void;
 
 export class NFSProtocol extends Protocol {
  
@@ -83,7 +83,48 @@ export class NFSProtocol extends Protocol {
     });
   }
 
-   
+    // --------------------------- Available Disc Space -------------------------- //
+  async getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<{ size: number }> {
+    try {
+      this.logger.log(`[${traceId}] Checking available disk space at path: ${payload?.path}`);
+      return this.executeCommand(
+        traceId,
+        ProtocolTypes.NFS,
+        payload,
+        this.getCommandPattern(CommandPattern.AVAILABLE_DISK_SPACE),
+        'NFS path Available Disk Space',
+      ).then((response) => {
+        this.logger.log(`response of getAvailableDiskSpace in nfs.protocol ${JSON.stringify(response)}`);
+        this.logger.info(`[${traceId}] ${response.message}`);
+        const availableBytes = parseInt(response.message.trim(), 10);
+        this.logger.log(`[${traceId}] Available space at ${payload?.path}: ${availableBytes} bytes`);
+        return { size: availableBytes };
+      });
+     
+    } catch (error) {
+      this.logger.error(`[${traceId}] Error checking disk space for path ${payload?.path}: ${error.message}`);
+      throw new Error(`Failed to get available disk space at ${payload?.path}`);
+    }
+  }
+
+  async getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<number> {
+    this.logger.log("inside getTotalSizeLinux method in NFS file");
+    
+    try {
+      const size = await new Promise<number>((resolve, reject) => {
+        fastFolderSize(payload.path, (err, bytes) => {
+          if (err) reject(err);
+          else resolve(bytes || 0);
+        });
+      });
+      this.logger.log(`[${traceId}] Calculated data size for ${payload.path}: ${size} bytes`);
+      return size;
+    } catch (error) {
+      this.logger.error(`Error calculating size for ${payload.path} - ${error.stack}`);
+      throw new Error(`Size calculation failed: ${error.message}`);
+    }
+  }
+
   async unmountPath(traceId: string, payload: any): Promise<any> {
     this.logger.info(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,

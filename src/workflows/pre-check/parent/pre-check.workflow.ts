@@ -103,6 +103,14 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 response[i].destination[j].status = PreCheckStatus.FAILED;
                 response[i].destination[j].errors.push(destinationFailed.errorCode);
             }
+
+            const sourceRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId);
+            const destinationRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].destination[j].destinationPathId);
+
+            if (destinationRes.destinationAvailableSpace < sourceRes.sourceDataSize) {
+                response[i].destination[j].status = PreCheckStatus.FAILED;
+                response[i].destination[j].errors.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
+            }
         }
     }
 

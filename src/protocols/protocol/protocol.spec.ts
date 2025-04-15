@@ -28,6 +28,12 @@ jest.mock('src/config/app.config', () => ({
 jest.mock('src/logger/logger.service');
 
 class TestProtocol extends Protocol {
+  getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
     throw new Error('Method not implemented.');
   }

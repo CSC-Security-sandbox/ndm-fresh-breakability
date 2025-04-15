@@ -14,7 +14,8 @@ export enum CommandPattern{
     DISCONNECT_SESSION='disconnectSession',
     GET_SID_FOR_OBJECT='getSIDforObject',
     SET_SID_FOR_OBJECT='serSIDforObject',
-
+    MOUNTED_FOLDER_SIZE='mountedFolderSize',
+    AVAILABLE_DISK_SPACE='availableDiskSpace'
 }
 
 // @types 
@@ -41,6 +42,8 @@ export interface BaseCommands {
     disconnectSession?: string | undefined
     getSIDforObject? : string | undefined
     serSIDforObject? : string | undefined
+    mountedFolderSize? : string | undefined
+    availableDiskSpace? : string | undefined
 }
 
 export default registerAs(
@@ -52,6 +55,7 @@ export default registerAs(
                 versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
                 mountPath:  process.env.NFS_WIN_MOUNT_PATH_CMD,
                 unmountPath:  process.env.NFS_WIN_UNMOUNT_PATH_CMD,
+                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
             },
             linux: {
                 listPath: process.env.NFS_LINUX_LIST_PATH_CMD,
@@ -59,6 +63,7 @@ export default registerAs(
                 checkMountPath: process.env.NFS_LINUX_CHECK_MOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_LINUX_UNMOUNT_PATH_CMD,
+                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD
             },
             darwin: {
                 listPath: process.env.NFS_UNIX_LIST_PATH_CMD,
@@ -66,6 +71,7 @@ export default registerAs(
                 checkMountPath: process.env.NFS_UNIX_CHECK_MOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_UNIX_UNMOUNT_PATH_CMD,
+                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD
             },
         },
         smb: {
@@ -80,18 +86,22 @@ export default registerAs(
                 disconnectSession: process.env.SMB_WIN_DISCONNECT_SESSION_CMD,
                 getSIDforObject: process.env.SMB_WIN_GET_SID_FOR_OBJECT_CMD,
                 serSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
+                mountedFolderSize: process.env.WIN_MOUNTED_FOLDER_SIZE_CMD,
+                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
                 versionDetails: process.env.SMB_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
+                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD
             },
             darwin: {
                 listPath: process.env.SMB_UNIX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_UNIX_MOUNT_PATH_CMD,
                 unmountPath:  process.env.SMB_UNIX_UNMOUNT_PATH_CMD,
-                versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD
+                versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
+                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD
             },
         }
     })
