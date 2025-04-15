@@ -2029,6 +2029,12 @@ describe("JobConfigService", () => {
           { sourcePathId: "src1", destinationPathId: ["dest1"] },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3671,6 +3677,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
@@ -3689,6 +3701,12 @@ describe("JobConfigService", () => {
         migrateConfigs: [
           { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
@@ -3719,6 +3737,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest
@@ -3743,6 +3767,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
@@ -3768,6 +3798,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3807,6 +3843,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3840,6 +3882,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
       jest
@@ -3901,6 +3949,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3957,6 +4011,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3995,6 +4055,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
@@ -4016,6 +4082,12 @@ describe("JobConfigService", () => {
           { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
