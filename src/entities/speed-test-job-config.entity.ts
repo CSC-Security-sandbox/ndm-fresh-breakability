@@ -57,14 +57,14 @@ export class SpeedTestConfigWorkerEntity {
   id: string;
 
   @ApiProperty({ description: 'Job UUID of the speedtestconfig' })
-  @Column({ type: 'uuid', nullable: false , name: 'job_id'})
-  jobId: string;
+  @Column({ type: 'uuid', nullable: false, name: 'speed_test_config_id' })
+  speedTestConfigId: string;
 
   @ApiProperty({ description: 'Worker uuid for speedtestconfig' })
-  @Column({ type: 'uuid', nullable: false , name: 'workers_id'})
+  @Column({ type: 'uuid', nullable: false, name: 'workers_id' })
   workersId: string;
 
   @ManyToOne(() => SpeedTestConfigEntity, speedTestConfig => speedTestConfig.workerEntities, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'job_id' })
+  @JoinColumn({ name: 'speed_test_config_id' })
   speedTestConfig: SpeedTestConfigEntity;
 }

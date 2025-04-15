@@ -1,6 +1,7 @@
 import {
   BadRequestException,
-  HttpException, HttpStatus,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -22,7 +23,7 @@ import {
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
 import { InventoryEntity } from "src/entities/inventory.entity";
-import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { JobRunEntity } from "src/entities/jobrun.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
@@ -31,18 +32,27 @@ import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
-import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/speed-test-job-config.entity"
+import {
+  SpeedTestConfigEntity,
+  SpeedTestConfigWorkerEntity,
+} from "src/entities/speed-test-job-config.entity";
 
-import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
+import {
+  SpeedLogEntity,
+  NetworkPerformanceResultEntity,
+  SpeedTestResultEntity,
+  SpeedLogEntryEntity,
+} from "../entities/speed-test-result.entity";
 
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import { JobConfigDto } from "./dto/jobconfig.dto";
 import {
   JobConfigCutoverBulk,
   JobConfigDiscoverBulk,
-  JobConfigPrecheck, MigrateConfig
+  JobConfigPrecheck,
+  MigrateConfig,
 } from "./dto/jobdicoverybulk.dto";
-import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
+import { JobConfigSpeedTest, SpeedTestResult } from "./dto/jobspeedTest.dto";
 
 import { JobListingDTO } from "./dto/joblisting.dto";
 import {
@@ -52,7 +62,7 @@ import {
   PreChecks,
   PreCheckWorkflowOPayload,
   SpeedTestEntry,
-  SpeedTestJobRun
+  SpeedTestJobRun,
 } from "./jobconfig.types";
 import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
@@ -64,10 +74,13 @@ import { RedisService } from "src/redis/redis.service";
 import { JobRunService } from "src/jobrun/jobrun.service";
 import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { SendMailService } from "src/utils/send-email";
+import { filterUnhealthyWorkers } from "../utils/worker-filter";
+import { filter } from "rxjs";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class JobConfigService {
- 
   private readonly logger = new Logger(JobConfigService.name);
   constructor(
     @InjectRepository(FileServerEntity)
@@ -107,6 +120,7 @@ export class JobConfigService {
     private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
+    private sendMailService: SendMailService
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -119,10 +133,9 @@ export class JobConfigService {
         jobType: JobType.DISCOVER,
         sourcePath: In(bulkDiscovery.sourcePathIds ?? []),
       },
-      select: { sourcePathId: true, scheduler: true, status: true, id:true },
+      select: { sourcePathId: true, scheduler: true, status: true, id: true },
     });
 
-    
     await this.jobConfigRepo.update(
       {
         jobType: JobType.DISCOVER,
@@ -137,7 +150,7 @@ export class JobConfigService {
         preserveAccessTime: bulkDiscovery.preserveAccessTime,
         excludeOlderThan: bulkDiscovery.excludeOlderThan,
         firstRunAt: firstRunAt,
-        status:JobStatus.Active,
+        status: JobStatus.Active,
         scheduler: ScheduleStatus.SCHEDULING,
       }
     );
@@ -170,14 +183,21 @@ export class JobConfigService {
     try {
       const jobConfigs = await this.jobConfigRepo.find({
         where: { jobType: JobType.SPEED_TEST },
-        relations: ['jobRuns', 'speedTestConfigs', 'speedTestConfigs.workerEntities'],
+        relations: [
+          "jobRuns",
+          "speedTestConfigs",
+          "speedTestConfigs.workerEntities",
+        ],
       });
 
-      const result = jobConfigs.flatMap(jobConfig => {
-        return jobConfig.jobRuns.map(jobRun => {
+      const result = jobConfigs.flatMap((jobConfig) => {
+        return jobConfig.jobRuns.map((jobRun) => {
           const fileServerCount = jobConfig.speedTestConfigs.length;
-          const workers = jobConfig.speedTestConfigs.flatMap(config => config.workerEntities);
-          const workerCount = new Set(workers.map(worker => worker.workersId)).size;
+          const workers = jobConfig.speedTestConfigs.flatMap(
+            (config) => config.workerEntities
+          );
+          const workerCount = new Set(workers.map((worker) => worker.workersId))
+            .size;
           const jobRunResponse: SpeedTestJobRun = {
             jobRunId: jobRun.id,
             jobConfigId: jobConfig.id,
@@ -192,100 +212,108 @@ export class JobConfigService {
         });
       });
 
-      this.logger.log('Fetched all speed test job runs successfully');
+      this.logger.log("Fetched all speed test job runs successfully");
       return result;
     } catch (error) {
-      this.logger.error('Failed to fetch speed test job runs', error.stack);
+      this.logger.error("Failed to fetch speed test job runs", error.stack);
       throw new HttpException(
         {
           status: "failed",
-          message:
-            error.message ||
-            "Failed to fetch speed test job runs",
+          message: error.message || "Failed to fetch speed test job runs",
         },
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
-  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<void> {
+  async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<{
+    writeResultId?: number;
+    readResultId?: number;
+    networkResultId?: number;
+  }> {
     try {
-      this.logger.log('Storing speed test result', JSON.stringify(speedTest));
-  
-      let writeResult, readResult, networkResult;
-  
-      // Store writeResult if present
-      if (speedTest.writeResult) {
-        const writeLog = Object.assign(new SpeedLogEntity(), {
-          totalTimeTaken: speedTest.writeResult.totalTimeTaken,
-          fileSize: speedTest.writeResult.fileSize,
-          error: speedTest.writeResult.error,
-        });
-        writeResult = await this.speedLogRepo.save(writeLog);
-  
-        for (const log of speedTest.writeResult.speedLogs) {
-          const writeLogEntry = Object.assign(new SpeedLogEntryEntity(), {
-            speedLogId: writeResult.id,
-            timeStamp: log.timeStamp,
-            speed: Number(log.speed),
-          });
-          await this.SpeedLogEntryRepo.save(writeLogEntry);
-        }
-      }
-  
-      // Store readResult if present
-      if (speedTest.readResult) {
-        const readLog = Object.assign(new SpeedLogEntity(), {
-          totalTimeTaken: speedTest.readResult.totalTimeTaken,
-          fileSize: speedTest.readResult.fileSize,
-          error: speedTest.readResult.error,
-        });
-        readResult = await this.speedLogRepo.save(readLog);
-  
-        for (const log of speedTest.readResult.speedLogs) {
-          const readLogEntry = Object.assign(new SpeedLogEntryEntity(), {
-            speedLogId: readResult.id,
-            timeStamp: log.timeStamp,
-            speed: Number(log.speed),
-          });
-          await this.SpeedLogEntryRepo.save(readLogEntry);
-        }
-      }
-  
-      // Store networkPerformanceResult if present
-      if (speedTest.networkPerformanceResult) {
-        const networkPerformanceResult = Object.assign(new NetworkPerformanceResultEntity(), {
-          packetLoss: speedTest.networkPerformanceResult.packetLoss,
-          roundTripDelayMin: speedTest.networkPerformanceResult.roundTripDelay.min,
-          roundTripDelayAvg: speedTest.networkPerformanceResult.roundTripDelay.avg,
-          roundTripDelayMax: speedTest.networkPerformanceResult.roundTripDelay.max,
-          roundTripDelayMdev: speedTest.networkPerformanceResult.roundTripDelay.mdev,
-          error: speedTest.networkPerformanceResult.error,
-        });
-        networkResult = await this.networkPerformanceResultRepo.save(networkPerformanceResult);
-      }
-  
-      // Store speedTestResult
-      const speedTestResult = Object.assign(new SpeedTestResultEntity(), {
+      this.logger.log("Storing speed test result", JSON.stringify(speedTest));
+
+      // Find existing SpeedTestResultEntity by traceId, workerId, and fileServerId
+      const existingResult = await this.speedTestResultRepo.findOne({
+        where: {
+          traceId: speedTest.traceId,
+          workerId: speedTest.workerId,
+          fileServerId: speedTest.fileServerID,
+        },
+        relations: ["writeResult", "readResult", "networkPerformanceResult"],
+      });
+
+      let writeLog, readLog, networkPerformanceResult;
+
+      // Update or create writeResult
+      writeLog = existingResult?.writeResult || new SpeedLogEntity();
+      Object.assign(writeLog, {
+        totalTimeTaken: speedTest.writeResult?.totalTimeTaken ?? -1,
+        fileSize: speedTest.writeResult?.fileSize ?? -1,
+        error: speedTest.writeResult?.error ?? "",
+      });
+      writeLog = await this.speedLogRepo.save(writeLog);
+
+      // Update or create readResult
+      readLog = existingResult?.readResult || new SpeedLogEntity();
+      Object.assign(readLog, {
+        totalTimeTaken: speedTest.readResult?.totalTimeTaken ?? -1,
+        fileSize: speedTest.readResult?.fileSize ?? -1,
+        error: speedTest.readResult?.error ?? "",
+      });
+      readLog = await this.speedLogRepo.save(readLog);
+
+      // Update or create networkPerformanceResult
+      networkPerformanceResult = {
+        ...existingResult?.networkPerformanceResult, // Use existing data if available
+        packetLoss: speedTest.networkPerformanceResult?.packetLoss ?? -1,
+        roundTripDelayMin:
+          speedTest.networkPerformanceResult?.roundTripDelay?.min ?? -1,
+        roundTripDelayAvg:
+          speedTest.networkPerformanceResult?.roundTripDelay?.avg ?? -1,
+        roundTripDelayMax:
+          speedTest.networkPerformanceResult?.roundTripDelay?.max ?? -1,
+        roundTripDelayMdev:
+          speedTest.networkPerformanceResult?.roundTripDelay?.mdev ?? -1,
+        error: speedTest.networkPerformanceResult?.error ?? "",
+      };
+
+      // Save the updated or new networkPerformanceResult
+      networkPerformanceResult = await this.networkPerformanceResultRepo.save(
+        networkPerformanceResult
+      );
+
+      // Update or create SpeedTestResultEntity
+      const speedTestResult = {
+        ...existingResult, // Use existing data if available
         traceId: speedTest.traceId,
         workerId: speedTest.workerId,
         fileServerId: speedTest.fileServerID,
-        writeResult: writeResult,
-        readResult: readResult,
-        networkPerformanceResult: networkResult,
-      });
-  
-      await this.speedTestResultRepo.save(speedTestResult);
-  
-      this.logger.log('Speed test result stored successfully');
+        writeResult: writeLog,
+        readResult: readLog,
+        networkPerformanceResult: networkPerformanceResult,
+      };
+
+      // Save the updated or new speedTestResult
+      const savedResult = await this.speedTestResultRepo.save(speedTestResult);
+
+      this.logger.log("Speed test result stored successfully");
+
+      // Return the IDs of the saved entities
+      return {
+        writeResultId: writeLog?.id,
+        readResultId: readLog?.id,
+        networkResultId: networkPerformanceResult?.id,
+      };
     } catch (error) {
-      this.logger.error('Failed to store speed test result', error.stack);
+      this.logger.error("Failed to store speed test result", error.stack);
       throw new HttpException(
         {
-          status: 'failed',
-          message: error.message || 'Failed to store speed test result',
+          status: "failed",
+          message: error.message || "Failed to store speed test result",
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -293,30 +321,34 @@ export class JobConfigService {
   async getSpeedTestDetails(jobRunId: string): Promise<any> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
-      relations: ['jobConfig'],
+      relations: ["jobConfig"],
     });
     if (!jobRun) {
       throw new Error(`JobRun with id ${jobRunId} not found`);
     }
     const jobConfigId = jobRun.jobConfigId;
-  
+
     const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
       where: { jobId: jobConfigId },
-      relations: ['workerEntities', 'jobConfig'],
+      relations: ["workerEntities", "jobConfig"],
     });
-  
+
     const fileServers = await this.fileServerRepo.find({
-      relations: ['config', 'volumes', 'workingDirectory', 'workers']
+      relations: ["config", "volumes", "workingDirectory", "workers"],
     });
-  
-    const workerIds = speedTestJobConfig.flatMap(config => config.workerEntities.map(worker => worker.workersId));
+
+    const workerIds = speedTestJobConfig.flatMap((config) =>
+      config.workerEntities.map((worker) => worker.workersId)
+    );
     const workers = await this.workeRepo.findByIds(workerIds);
-  
+
     const fileServersMap = new Map();
-  
-    speedTestJobConfig.forEach(config => {
-      const fileServer = fileServers.find(server => server.id === config.fileServer);
-  
+
+    speedTestJobConfig.forEach((config) => {
+      const fileServer = fileServers.find(
+        (server) => server.id === config.fileServer
+      );
+
       if (fileServer) {
         if (!fileServersMap.has(fileServer.id)) {
           fileServersMap.set(fileServer.id, {
@@ -326,9 +358,11 @@ export class JobConfigService {
             workers: [],
           });
         }
-  
-        config.workerEntities.forEach(workerEntity => {
-          const worker = workers.find(w => w.workerId === workerEntity.workersId);
+
+        config.workerEntities.forEach((workerEntity) => {
+          const worker = workers.find(
+            (w) => w.workerId === workerEntity.workersId
+          );
           fileServersMap.get(fileServer.id).workers.push({
             workerName: worker?.workerName || "unknown",
             workerId: workerEntity.workersId,
@@ -336,18 +370,21 @@ export class JobConfigService {
         });
       }
     });
-  
+
     const fileServersArray = Array.from(fileServersMap.values());
-  
+
     const response = {
       jobRunId: jobRunId,
       startTime: jobRun.startTime,
       endTime: jobRun.endTime,
       status: jobRun.status,
-      totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+      totalWorkers: fileServersArray.reduce(
+        (acc, server) => acc + server.workers.length,
+        0
+      ),
       fileServers: fileServersArray,
     };
-  
+
     return response;
   }
 
@@ -355,27 +392,37 @@ export class JobConfigService {
     try {
       const speedTestResults = await this.speedTestResultRepo.find({
         where: { traceId: id },
-        relations: ['writeResult', 'readResult', 'networkPerformanceResult', 'writeResult.speedLogEntries', 'readResult.speedLogEntries'],
+        relations: [
+          "writeResult",
+          "readResult",
+          "networkPerformanceResult",
+          "writeResult.speedLogEntries",
+          "readResult.speedLogEntries",
+        ],
       });
-      
-      if(speedTestResults.length === 0){
+
+      if (speedTestResults.length === 0) {
         return this.getSpeedTestDetails(id);
       }
 
       const fileServersMap = new Map();
-  
-      const fileServerIds = speedTestResults.map(result => result.fileServerId);
+
+      const fileServerIds = speedTestResults.map(
+        (result) => result.fileServerId
+      );
       const fileServers = await this.fileServerEntityRepo.find({
         where: { id: In(fileServerIds) },
-        relations: ['config'],
+        relations: ["config"],
       });
-  
-      const workerIds = speedTestResults.map(result => result.workerId);
+
+      const workerIds = speedTestResults.map((result) => result.workerId);
       const workers = await this.workeRepo.findByIds(workerIds);
-  
+
       for (const result of speedTestResults) {
-        const fileServer = fileServers.find(fs => fs.id === result.fileServerId);
-  
+        const fileServer = fileServers.find(
+          (fs) => fs.id === result.fileServerId
+        );
+
         if (!fileServersMap.has(result.fileServerId)) {
           fileServersMap.set(result.fileServerId, {
             fileServerId: fileServer.id,
@@ -387,33 +434,37 @@ export class JobConfigService {
         const readError = result.readResult?.error;
         const writeError = result.writeResult?.error;
         const networkPerformanceError = result.networkPerformanceResult?.error;
-        const writeSpeed = (result.writeResult?.speedLogEntries || []).map(entry => ({
-          timeStamp: entry.timeStamp,
-          speed: entry.speed,
-        }));
-  
-        const readSpeed = (result.readResult?.speedLogEntries || []).map(entry => ({
-          timeStamp: entry.timeStamp,
-          speed: entry.speed,
-        }));
-  
-        const worker = workers.find(w => w.workerId === result.workerId);
+        const writeSpeed = (result.writeResult?.speedLogEntries || []).map(
+          (entry) => ({
+            timeStamp: entry.timeStamp,
+            speed: entry.speed,
+          })
+        );
+
+        const readSpeed = (result.readResult?.speedLogEntries || []).map(
+          (entry) => ({
+            timeStamp: entry.timeStamp,
+            speed: entry.speed,
+          })
+        );
+
+        const worker = workers.find((w) => w.workerId === result.workerId);
         fileServersMap.get(result.fileServerId).workers.push({
           workerName: worker?.workerName || "unknown",
           workerId: result.workerId,
-          readSpeed: readSpeed.length ? readSpeed : null,
-          writeSpeed: writeSpeed.length ? writeSpeed : null,
+          readSpeed: readSpeed.length ? readSpeed : [],
+          writeSpeed: writeSpeed.length ? writeSpeed : [],
           rtd: result.networkPerformanceResult?.roundTripDelayAvg ?? null,
           packetLoss: result.networkPerformanceResult?.packetLoss ?? null,
           readError,
           writeError,
-          networkPerformanceError
+          networkPerformanceError,
         });
       }
-  
+
       const fileServersArray = Array.from(fileServersMap.values());
       const jobRunDetails = await this.jobRunRepo.findOne({ where: { id } });
-  
+
       if (!jobRunDetails) {
         throw new HttpException(
           {
@@ -423,20 +474,22 @@ export class JobConfigService {
           HttpStatus.NOT_FOUND
         );
       }
-  
-      const response : SpeedTestEntry = {
+
+      const response: SpeedTestEntry = {
         jobRunId: id,
         startTime: jobRunDetails.startTime,
         endTime: jobRunDetails.endTime,
         status: jobRunDetails.status,
-        totalWorkers: fileServersArray.reduce((acc, server) => acc + server.workers.length, 0),
+        totalWorkers: fileServersArray.reduce(
+          (acc, server) => acc + server.workers.length,
+          0
+        ),
         fileServers: fileServersArray,
       };
-  
-  
+
       return response;
     } catch (error) {
-      this.logger.error('Failed to fetch speed test results', error.stack);
+      this.logger.error("Failed to fetch speed test results", error.stack);
       throw new HttpException(
         {
           status: "failed",
@@ -447,7 +500,9 @@ export class JobConfigService {
     }
   }
 
-  async createSpeedTest(speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
+  async createSpeedTest(
+    speedTest: JobConfigSpeedTest
+  ): Promise<SpeedTestConfigEntity[]> {
     try {
       const firstRunAt = speedTest?.firstRunAt ?? new Date();
       const jobConfig = this.jobConfigRepo.create({
@@ -466,37 +521,37 @@ export class JobConfigService {
       const entries: SpeedTestConfigEntity[] = [];
       const workersEntity: SpeedTestConfigWorkerEntity[] = [];
       for (const fileServerConfig of speedTest.speedTests) {
-
         const speedTestConfig = this.SpeedTestConfigRepo.create({
           jobId: speedTestJobID,
           fileServer: fileServerConfig.fileServer,
           protocol: fileServerConfig.protocol,
-          readTest:fileServerConfig.test.readTest,
-          writeTest:fileServerConfig.test.writeTest,
-          packetLossTest:fileServerConfig.test.packetLossTest,
+          readTest: fileServerConfig.test.readTest,
+          writeTest: fileServerConfig.test.writeTest,
+          packetLossTest: fileServerConfig.test.networkPerformance,
         });
         entries.push(speedTestConfig);
-        const savedSpeedTestConfig = await this.SpeedTestConfigRepo.save(speedTestConfig);
+        const savedSpeedTestConfig =
+          await this.SpeedTestConfigRepo.save(speedTestConfig);
 
         for (const worker of fileServerConfig.workers) {
           const workerEntity = this.SpeedTestConfigWorkerRepo.create({
             workersId: worker,
-            jobId: savedSpeedTestConfig.id,
+            speedTestConfigId: savedSpeedTestConfig.id,
           });
           workersEntity.push(workerEntity);
         }
       }
       await this.SpeedTestConfigWorkerRepo.save(workersEntity);
-      this.logger.log('Speed Test job created successfully');
+      this.logger.log("Speed Test job created successfully");
       return entries;
     } catch (error) {
-      this.logger.error('Failed to create Speed Test job', error.stack);
+      this.logger.error("Failed to create Speed Test job", error.stack);
       throw new HttpException(
         {
-          status: 'failed',
-          message: error.message || 'Failed to create Speed Test job',
+          status: "failed",
+          message: error.message || "Failed to create Speed Test job",
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -507,7 +562,7 @@ export class JobConfigService {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
     let parsedMappings: ParsedMapping[] = [];
-    let templateType ;
+    let templateType;
     const identityMap = uuidv4();
     const jobConfigIdsToUpdate: any[] = [];
 
@@ -519,14 +574,12 @@ export class JobConfigService {
       const sidMapping = await this.decodeBase64(bulkMigrate.sidMapping);
       parsedMappings = await this.parseBlobData(sidMapping, templateType);
     }
- 
+
     if (typeof bulkMigrate?.gidMapping === "string") {
       templateType = TemplateType.GID;
       const gidMapping = await this.decodeBase64(bulkMigrate.gidMapping);
       parsedMappings = await this.parseBlobData(gidMapping, templateType);
     }
- 
- 
 
     for (const config of bulkMigrate.migrateConfigs) {
       if (!config?.destinationPathId) {
@@ -540,7 +593,13 @@ export class JobConfigService {
             sourcePathId: config?.sourcePathId,
             targetPathId: destinationPath,
           },
-          select: { sourcePathId: true, targetPathId: true, scheduler: true,id:true, status:true },
+          select: {
+            sourcePathId: true,
+            targetPathId: true,
+            scheduler: true,
+            id: true,
+            status: true,
+          },
         });
 
         const existingSet = new Set(
@@ -583,32 +642,39 @@ export class JobConfigService {
                   jobConfigId: jobConfigId,
                 },
               });
-
+              /* istanbul ignore next */
               if (entryExists) {
                 await this.identityCrossMappingRepo.update(
                   { jobConfigId: jobConfigId },
                   { isOrphan: true }
                 );
-               this.logger.log(
+                this.logger.log(
                   `Marked is_orphan as true for job_config_id: ${jobConfigId}`
                 );
 
-                const jobRunIdsToDeleteKey = await this.jobRunRepo.find({where : {jobConfigId: jobConfigId, status:JobRunStatus.Completed}, select:{id:true}})
-                
+                const jobRunIdsToDeleteKey = await this.jobRunRepo.find({
+                  where: {
+                    jobConfigId: jobConfigId,
+                    status: JobRunStatus.Completed,
+                  },
+                  select: { id: true },
+                });
+
                 const redisClient = await this.redisService.getClient();
                 for (const jobRun of jobRunIdsToDeleteKey) {
                   const redisKey = `${jobRun.id}:mapping`;
                   if (!redisClient.isOpen) await redisClient.connect();
 
-                  const redisKeyExists = await redisClient.exists(redisKey)
-                  if(redisKeyExists) {
+                  const redisKeyExists = await redisClient.exists(redisKey);
+                  if (redisKeyExists) {
                     await redisClient.del(redisKey);
-                   this.logger.log(`Deleted redis key: ${redisKey}`);
+                    this.logger.log(`Deleted redis key: ${redisKey}`);
                   }
                 }
-
               } else {
-               this.logger.log(`No entry found for job_config_id: ${jobConfigId}`);
+                this.logger.log(
+                  `No entry found for job_config_id: ${jobConfigId}`
+                );
               }
             }
           }
@@ -640,9 +706,32 @@ export class JobConfigService {
       const savedJobConfigs = await this.jobConfigRepo.save(jobConfigs);
       const jobConfigIds = savedJobConfigs.map((jobConfig) => jobConfig.id);
       if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
-        await this.saveIdentityMappingsWithMap(jobConfigIds, parsedMappings, identityMap, templateType);
+        await this.saveIdentityMappingsWithMap(
+          jobConfigIds,
+          parsedMappings,
+          identityMap,
+          templateType
+        );
       }
-      return (await this.jobConfigRepo.save(jobConfigs)).map(
+
+      const mailBody =
+        `Hello,<br/>
+      The following Migrate jobs has been created:<br/><br/>
+      ` +
+        savedJobConfigs
+          .map(
+            (jobConfig) => `
+                <p>Job ID: ${jobConfig.id}</p>
+                <p>Source Path: ${jobConfig.sourcePath?.volumePath}</p>
+                <p>Target Path: ${jobConfig.targetPath?.volumePath}</p>
+                <p>Job Type: ${jobConfig.jobType}</p>
+                <br/>
+              `
+          )
+          .join("");
+      const payload = { body: mailBody };
+      await this.sendMailService.sendMail(payload);
+      return savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,
@@ -651,10 +740,14 @@ export class JobConfigService {
           targetPathId,
         })
       );
-      
     } else {
       if (jobConfigIdsToUpdate.length > 0) {
-        await this.updateMappingsWithMap(jobConfigIdsToUpdate, parsedMappings, identityMap, templateType);
+        await this.updateMappingsWithMap(
+          jobConfigIdsToUpdate,
+          parsedMappings,
+          identityMap,
+          templateType
+        );
       }
       return [];
     }
@@ -669,8 +762,11 @@ export class JobConfigService {
       );
       const jobConfigs = await this.findJobConfigs(allCutoverConfigs);
       const jobRunStatuses = await this.jobRunRepo.find({
-        where: { jobConfigId: In(jobConfigs.map((j) => j.id)), status: In([JobRunStatus.Completed, JobRunStatus.Stopped]) },
-        order: { endTime: "DESC" }, 
+        where: {
+          jobConfigId: In(jobConfigs.map((j) => j.id)),
+          status: In([JobRunStatus.Completed, JobRunStatus.Stopped]),
+        },
+        order: { endTime: "DESC" },
       });
 
       const latestJobStatusMap = new Map<
@@ -679,7 +775,7 @@ export class JobConfigService {
       >();
 
       jobRunStatuses.forEach((jobRun) => {
-        if ((!latestJobStatusMap.has(jobRun.jobConfigId))) {
+        if (!latestJobStatusMap.has(jobRun.jobConfigId)) {
           latestJobStatusMap.set(jobRun.jobConfigId, {
             status: jobRun.status,
             endTime: jobRun.endTime,
@@ -730,26 +826,29 @@ export class JobConfigService {
                   firstRunAt: config.firstRunAt,
                 })
               );
-            }else{
-              if(existingCutover && existingCutover.status === JobStatus.Active){
-                await this.jobConfigRepo.update(existingCutover.id,
-                  {
-                    jobType: JobType.CUT_OVER,
-                    excludeFilePatterns: config.excludeFilePatterns,
-                    scheduler: ScheduleStatus.SCHEDULING,
-                    futureScheduleAt: config.futureScheduleAt,
-                    status: config.status === JobStatus.InActive ? JobStatus.Active : config.status,
-                    preserveAccessTime: config.preserveAccessTime,
-                    firstRunAt: config.firstRunAt,
-                  })
-                  updatedCutoverJobs.push({ ...existingCutover, ...config });
-              }
-              else{
+            } else {
+              if (
+                existingCutover &&
+                existingCutover.status === JobStatus.Active
+              ) {
+                await this.jobConfigRepo.update(existingCutover.id, {
+                  jobType: JobType.CUT_OVER,
+                  excludeFilePatterns: config.excludeFilePatterns,
+                  scheduler: ScheduleStatus.SCHEDULING,
+                  futureScheduleAt: config.futureScheduleAt,
+                  status:
+                    config.status === JobStatus.InActive
+                      ? JobStatus.Active
+                      : config.status,
+                  preserveAccessTime: config.preserveAccessTime,
+                  firstRunAt: config.firstRunAt,
+                });
+                updatedCutoverJobs.push({ ...existingCutover, ...config });
+              } else {
                 throw new HttpException(
                   {
                     status: "failed",
-                    message:
-                      `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`,
+                    message: `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`,
                   },
                   HttpStatus.BAD_REQUEST
                 );
@@ -792,75 +891,96 @@ export class JobConfigService {
   }
 
   async initiatePreCheck(data: JobConfigPrecheck): Promise<any> {
+    const helathCheckTimout = parseInt(
+      this.configService.get("app.worker.healthCheckStatusTimout")
+    );
     const traceId: string = uuidv4();
     try {
-      const preCheckPayload:PreCheckWorkflowOPayload = {
+      const preCheckPayload: PreCheckWorkflowOPayload = {
         preChecks: [],
         settings: {
           preserveAccessTime: data.preserveAccessTime,
         },
-        serverCredentials: []
-      }
+        serverCredentials: [],
+      };
       const pathIds: string[] = [];
       data.migrateConfigs.forEach((config) => {
         pathIds.push(config.sourcePathId);
         pathIds.push(...config.destinationPathId);
-      })
+      });
 
-      const pathToWorkerMapping:VolumeEntity[] = await this.volumeRepo.find({
+      const pathToWorkerMapping: VolumeEntity[] = await this.volumeRepo.find({
         where: { id: In([...pathIds]) },
         relations: {
-          fileServer: { workers: true},
+          fileServer: { workers: { stats: true } },
         },
       });
 
       pathToWorkerMapping.forEach((volume) => {
-        if(!preCheckPayload.serverCredentials.some((server) => server.id === volume.fileServer.id)){
+        if (
+          !preCheckPayload.serverCredentials.some(
+            (server) => server.id === volume.fileServer.id
+          )
+        ) {
           preCheckPayload.serverCredentials.push({
             id: volume.fileServer.id,
             host: volume.fileServer.host,
             userName: volume.fileServer.userName,
             password: volume.fileServer.password,
             protocol: volume.fileServer.protocol,
-            protocolVersion: volume.fileServer.protocolVersion.replace(/^v/, ''),
+            protocolVersion: volume.fileServer.protocolVersion?.replace(
+              /^v/,
+              ""
+            ),
             serverType: volume.fileServer.serverType,
-        })}
-      })
-      
-      data.migrateConfigs.forEach((config) => {
+          });
+        }
+      });
+
+      data?.migrateConfigs?.forEach((config) => {
         const sourceVolume = pathToWorkerMapping.find(
           (p) => p.id === config.sourcePathId
         );
-        if(sourceVolume) {
+        if (sourceVolume) {
           const preChecks: PreChecks = {
             pathId: config.sourcePathId,
             serverId: sourceVolume.fileServer.id,
             pathName: sourceVolume.volumePath,
             destinations: [],
-          }
-          const workerIds = new Set<string>(sourceVolume.fileServer.workers.map((worker) => worker.workerId));
+          };
+          const workerIds = new Set<string>(
+            sourceVolume.fileServer.workers
+              .filter((worker) =>
+                filterUnhealthyWorkers(worker, helathCheckTimout)
+              )
+              .map((worker) => worker.workerId)
+          );
           config.destinationPathId.forEach((destinationPathId) => {
             const destinationVolume = pathToWorkerMapping.find(
               (p) => p.id === destinationPathId
             );
-            if(destinationVolume){
+            if (destinationVolume) {
               const workers: string[] = [];
-              destinationVolume.fileServer.workers.forEach((worker) => {
-                if(workerIds.has(worker.workerId)){
-                  workers.push(worker.workerId);
-                }
-              })
+              destinationVolume.fileServer.workers
+                .filter((worker) =>
+                  filterUnhealthyWorkers(worker, helathCheckTimout)
+                )
+                .forEach((worker) => {
+                  if (workerIds.has(worker.workerId)) {
+                    workers.push(worker.workerId);
+                  }
+                });
               preChecks.destinations.push({
                 pathId: destinationPathId,
                 serverId: destinationVolume.fileServer.id,
                 pathName: destinationVolume.volumePath,
-                workers: workers
-              })
+                workers: workers,
+              });
             }
-          })
+          });
           preCheckPayload.preChecks.push(preChecks);
         }
-      })
+      });
 
       const preCheckWorkPayload: StartWorkFlowPayload = {
         workflowId: WorkFlows.PRECHECK + "-" + traceId,
@@ -869,13 +989,16 @@ export class JobConfigService {
           {
             traceId: traceId,
             payload: preCheckPayload,
-            options: new Options()
+            options: new Options(),
           },
         ],
-      }
-      const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK,preCheckWorkPayload );
+      };
+      const workflow = await this.workFlowService.startWorkflow(
+        WorkFlows.PRECHECK,
+        preCheckWorkPayload
+      );
       return { workflowId: workflow.workflowId };
-    }catch (error) {
+    } catch (error) {
       this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
       return {
         status: "error",
@@ -897,7 +1020,7 @@ export class JobConfigService {
         const pathToWorkerMapping = await this.volumeRepo.find({
           where: { id: In([...pathIds]) },
           relations: {
-            fileServer: { workers: true},
+            fileServer: { workers: true },
           },
         });
         const sourceVolume = pathToWorkerMapping.find(
@@ -915,7 +1038,10 @@ export class JobConfigService {
               userName: sourceFileServer.userName,
               password: sourceFileServer.password,
               protocol: sourceFileServer.protocol,
-              protocolVersion: sourceFileServer.protocolVersion.replace(/^v/, ''),
+              protocolVersion: sourceFileServer.protocolVersion.replace(
+                /^v/,
+                ""
+              ),
               serverType: sourceFileServer.serverType,
             },
             sourcePaths: [],
@@ -926,7 +1052,9 @@ export class JobConfigService {
         const sourcePathEntry = {
           pathId: config.sourcePathId,
           preserveAccessTime: data.preserveAccessTime,
-          mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
+          mountBasePath: this.configService.get<string>(
+            "app.paths.mountBasePath"
+          ),
           exportPathName: sourceVolume.volumePath,
           destinations: [],
           commonWorkers: [],
@@ -950,11 +1078,16 @@ export class JobConfigService {
               id: destinationFileServer.id,
               host: destinationFileServer.host,
               userName: destinationFileServer.userName,
-              password:destinationFileServer.password,
+              password: destinationFileServer.password,
               protocol: destinationFileServer.protocol,
-              protocolVersion: destinationFileServer.protocolVersion.replace(/^v/, ''),
+              protocolVersion: destinationFileServer.protocolVersion.replace(
+                /^v/,
+                ""
+              ),
               serverType: destinationFileServer.serverType,
-              mountBasePath: this.configService.get<string>("app.paths.mountBasePath"),
+              mountBasePath: this.configService.get<string>(
+                "app.paths.mountBasePath"
+              ),
               exportPathName: destinationVolume.volumePath,
             },
           });
@@ -974,19 +1107,22 @@ export class JobConfigService {
           {
             traceId: traceId,
             payload: finalResult,
-            options: new Options()
+            options: new Options(),
           },
         ],
-      }
-         const workflow = await this.workFlowService.startWorkflow(WorkFlows.PRECHECK, startPrecheckWorkPayload);
-         return { workflowId: workflow.workflowId };
+      };
+      const workflow = await this.workFlowService.startWorkflow(
+        WorkFlows.PRECHECK,
+        startPrecheckWorkPayload
+      );
+      return { workflowId: workflow.workflowId };
     } catch (error) {
-        this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
-        return {
-          status: "error",
-          erros: ["PRECHECK_FAILED"],
-          message: `Failed to perform the precheck: ${error}`,
-        };
+      this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
+      return {
+        status: "error",
+        erros: ["PRECHECK_FAILED"],
+        message: `Failed to perform the precheck: ${error}`,
+      };
     }
   }
 
@@ -1032,7 +1168,7 @@ export class JobConfigService {
 
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
-        const partialPayload={
+        const partialPayload = {
           jobRunId: jobRun.id,
           isReportReady: jobRun.isReportReady,
           status: jobRun.subStatus || jobRun.status,
@@ -1042,24 +1178,26 @@ export class JobConfigService {
           timeElapsed: jobRun.endTime
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
-        }
+        };
         const jobRunStats = jobRun.jobStats;
-        if(jobRun.status===JobRunStatus.Completed){
-          this.logger.log(`Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats`);
+        if (jobRun.status === JobRunStatus.Completed) {
+          this.logger.log(
+            `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
+          );
           return {
             ...partialPayload,
-            scannedFilesCount: BigInt(
-              jobRunStats.fileCount || "0"
-            )?.toString(),
+            scannedFilesCount: BigInt(jobRunStats.fileCount || "0")?.toString(),
             scannedDirectoriesCount: BigInt(
               jobRunStats.directories || "0"
             )?.toString(),
-            totalScannedSize: jobRunStats.totalSize || "0",
+            totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
             errors: jobRunStats.errors,
+          };
         }
-      }
-      this.logger.log(`Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`);
-      const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        this.logger.log(
+          `Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`
+        );
+        const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
         return {
           ...partialPayload,
           scannedFilesCount: BigInt(
@@ -1097,15 +1235,48 @@ export class JobConfigService {
       createdAt: jobConfig.createdAt,
       jobRuns: runStats,
       aggregateData: {
-        timeElapsed: runStats.map((r) => r.timeElapsed)?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
-        scannedFilesCount: runStats.map((r) => BigInt(r.scannedFilesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
-        scannedDirectoriesCount: runStats.map((r) => BigInt(r.scannedDirectoriesCount))?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)?.toString(),
-        totalScannedSize: this.covertBytes(runStats.map((r) => parseInt(r.totalScannedSize))?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)),
+        timeElapsed: runStats
+          .map((r) => r.timeElapsed)
+          ?.reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
+        scannedFilesCount: runStats
+          .map((r) => BigInt(r.scannedFilesCount))
+          ?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)
+          ?.toString(),
+        scannedDirectoriesCount: runStats
+          .map((r) => BigInt(r.scannedDirectoriesCount))
+          ?.reduce((a, b) => (a ?? 0n) + (b ?? 0n), 0n)
+          ?.toString(),
+        totalScannedSize: formatBytes(
+          runStats
+            .map((r) => this.parseSize(r.totalScannedSize))
+            .reduce((a, b) => (a ?? 0) + (b ?? 0), 0)
+        ),
       },
       errors: [],
     };
 
     return payload;
+  }
+
+  parseSize(size: string): number {
+    if (!size) return 0;
+
+    const units = {
+      B: 1,
+      KB: 1024,
+      MB: 1024 ** 2,
+      GB: 1024 ** 3,
+      TB: 1024 ** 4,
+      PB: 1024 ** 5,
+    };
+    const match = size.match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
+
+    if (!match) return 0;
+
+    const value = parseFloat(match[1]);
+    const unit = match[2] as keyof typeof units;
+
+    return value * units[unit];
   }
 
   async getConfigsByProjectId(projectId: string) {
@@ -1118,6 +1289,7 @@ export class JobConfigService {
         configs: {
           id: true,
           configName: true,
+          status: true,
           fileServers: {
             id: true,
             protocol: true,
@@ -1144,54 +1316,59 @@ export class JobConfigService {
   }
 
   async getNoticeBoardDetailsByProjectId(projectId: string) {
-    const countErroredJobRuns =
-      await this.jobRunRepo
-        .createQueryBuilder('jr')
-        .innerJoin('jr.jobConfig', 'jc')
-        .innerJoin('jc.sourcePath', 'sp')
-        .innerJoin('sp.fileServer', 'fs')
-        .innerJoin('fs.config', 'c')
-        .where('c.projectId = :projectId', { projectId })
-        .andWhere('jr.status IN (:...statuses)', { statuses: [JobRunStatus.Failed, JobRunStatus.Errored] })
-        .getCount();
+    const countErroredJobRuns = await this.jobRunRepo
+      .createQueryBuilder("jr")
+      .innerJoin("jr.jobConfig", "jc")
+      .innerJoin("jc.sourcePath", "sp")
+      .innerJoin("sp.fileServer", "fs")
+      .innerJoin("fs.config", "c")
+      .where("c.projectId = :projectId", { projectId })
+      .andWhere("jr.status IN (:...statuses)", {
+        statuses: [JobRunStatus.Failed, JobRunStatus.Errored],
+      })
+      .getCount();
 
-    const countBlockedCutoverJobRuns =
-      await this.jobRunRepo
-        .createQueryBuilder('jr')
-        .innerJoin('jr.jobConfig', 'jc')
-        .innerJoin('jc.sourcePath', 'sp')
-        .innerJoin('sp.fileServer', 'fs')
-        .innerJoin('fs.config', 'c')
-        .where('c.projectId = :projectId', { projectId })
-        .andWhere('jr.status = :status', { status: JobRunStatus.Blocked })
-        .andWhere('jc.jobType = :jobType', { jobType: JobType.CUT_OVER })
-        .getCount();
+    const countBlockedCutoverJobRuns = await this.jobRunRepo
+      .createQueryBuilder("jr")
+      .innerJoin("jr.jobConfig", "jc")
+      .innerJoin("jc.sourcePath", "sp")
+      .innerJoin("sp.fileServer", "fs")
+      .innerJoin("fs.config", "c")
+      .where("c.projectId = :projectId", { projectId })
+      .andWhere("jr.status = :status", { status: JobRunStatus.Blocked })
+      .andWhere("jc.jobType = :jobType", { jobType: JobType.CUT_OVER })
+      .getCount();
 
-    const countRecentJobConfigs =
-      await this.jobConfigRepo
-        .createQueryBuilder('jc')
-        .innerJoin('jc.sourcePath', 'sp')
-        .innerJoin('sp.fileServer', 'fs')
-        .innerJoin('fs.config', 'c')
-        .where('c.projectId = :projectId', { projectId })
-        .andWhere("jc.createdAt >= NOW() - INTERVAL '1 DAY'")
-        .getCount();
+    const countRecentJobConfigs = await this.jobConfigRepo
+      .createQueryBuilder("jc")
+      .innerJoin("jc.sourcePath", "sp")
+      .innerJoin("sp.fileServer", "fs")
+      .innerJoin("fs.config", "c")
+      .where("c.projectId = :projectId", { projectId })
+      .andWhere("jc.createdAt >= NOW() - INTERVAL '1 DAY'")
+      .getCount();
 
-    const countCompletedJobRuns =
-      await this.jobRunRepo
-        .createQueryBuilder('jr')
-        .innerJoin('jr.jobConfig', 'jc')
-        .innerJoin('jc.sourcePath', 'sp')
-        .innerJoin('sp.fileServer', 'fs')
-        .innerJoin('fs.config', 'c')
-        .where('c.projectId = :projectId', { projectId })
-        .andWhere('jr.status = :status', { status: JobRunStatus.Completed })
-        .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
-        .getCount();
+    const countCompletedJobRuns = await this.jobRunRepo
+      .createQueryBuilder("jr")
+      .innerJoin("jr.jobConfig", "jc")
+      .innerJoin("jc.sourcePath", "sp")
+      .innerJoin("sp.fileServer", "fs")
+      .innerJoin("fs.config", "c")
+      .where("c.projectId = :projectId", { projectId })
+      .andWhere("jr.status = :status", { status: JobRunStatus.Completed })
+      .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
+      .getCount();
 
-   this.logger.log(`countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`);
+    this.logger.log(
+      `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
+    );
 
-    return { countErroredJobRuns, countBlockedCutoverJobRuns, countRecentJobConfigs, countCompletedJobRuns };
+    return {
+      countErroredJobRuns,
+      countBlockedCutoverJobRuns,
+      countRecentJobConfigs,
+      countCompletedJobRuns,
+    };
   }
 
   // ------------ Job Config All ---------------- //
@@ -1220,6 +1397,7 @@ export class JobConfigService {
         "sourceConfig.configName AS sourceServerName",
         "targetConfig.configName AS targetServerName",
         'jobconfig.createdAt AS "createdAt"',
+        'jobconfig.updated_at AS "updated_at"',
       ])
       .addSelect("COUNT(jobRun.id)", "totalRuns")
       .where("sourceConfig.projectId = :projectId", { projectId })
@@ -1245,11 +1423,10 @@ export class JobConfigService {
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate: nextDate(
-          job.jobtype,
-          job.firstrunat,
-          job.futureschedule
-        ),
+        nextScheduleDate:
+          job.jobconfigstatus === JobStatus.Active
+            ? nextDate(job.jobtype, job.firstrunat, job.futureschedule)
+            : null,
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
@@ -1266,6 +1443,7 @@ export class JobConfigService {
         totalRuns: job.totalRuns,
         configName: job.configname,
         createdAt: job.createdAt,
+        updatedAt: job.updated_at,
       });
     });
     return payload;
@@ -1280,20 +1458,22 @@ export class JobConfigService {
   getTemplateFilename(type: TemplateType) {
     return this.templates[type];
   }
-
+  /* istanbul ignore next */
   sendCsvFile(filename: string, res: Response) {
     const filePath = join(process.cwd(), process.env.TEMPLATES_PATH, filename);
     this.logger.log(`filePath ${filePath}`);
-    
+
     if (!existsSync(filePath)) {
-      throw new NotFoundException(`CSV file ${filename} not found at ${filePath}`);
+      throw new NotFoundException(
+        `CSV file ${filename} not found at ${filePath}`
+      );
     }
 
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+    res.setHeader("Content-Type", "text/csv");
 
     const fileStream = createReadStream(filePath);
-    
+
     fileStream.pipe(res);
   }
 
@@ -1317,7 +1497,7 @@ export class JobConfigService {
     } else {
       return `${(bytes / bytesInPB).toFixed(2)} PB`;
     }
-    }
+  }
   hasCommonWorkers(data: any): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {
@@ -1334,8 +1514,10 @@ export class JobConfigService {
       }
     }
     return false;
-  }  
-  async findJobConfigs(conditions: { sourcePathId: string; destinationPathId: string }[]) {
+  }
+  async findJobConfigs(
+    conditions: { sourcePathId: string; destinationPathId: string }[]
+  ) {
     if (conditions.length === 0) return [];
     const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
     conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
@@ -1357,15 +1539,15 @@ export class JobConfigService {
   }
 
   async precheckValidation(precheckData: MigrateConfig[]) {
-   this.logger.log("precheckData",JSON.stringify(precheckData));
-    const results = new Map<string,any>();
+    this.logger.log("precheckData", JSON.stringify(precheckData));
+    const results = new Map<string, any>();
     for (const config of precheckData) {
-      if(!results.has(config.sourcePathId)){
+      if (!results.has(config.sourcePathId)) {
         const payload = {
           sourcePathId: config.sourcePathId,
-          destinations:[]
+          destinations: [],
         };
-        results.set(config.sourcePathId,payload);
+        results.set(config.sourcePathId, payload);
       }
       const pathIds = new Set<string>();
       const destinationPathIds = config.destinationPathId;
@@ -1374,19 +1556,22 @@ export class JobConfigService {
       const pathToWorkerMapping = await this.volumeRepo.find({
         where: { id: In([...pathIds]) },
         relations: {
-          fileServer: { workers: true},
+          fileServer: { workers: true },
         },
       });
-     this.logger.log("pathToWorkerMapping",JSON.stringify(pathToWorkerMapping));
+      this.logger.log(
+        "pathToWorkerMapping",
+        JSON.stringify(pathToWorkerMapping)
+      );
       const sourceVolume = pathToWorkerMapping.find(
         (p) => p.id === config.sourcePathId
       );
-      if (!sourceVolume){
+      if (!sourceVolume) {
         const data = results.get(config.sourcePathId);
         data.status = "failed";
         data.error = ["SOURCE_PATH_NOT_FOUND"];
         data.message = `Source path ${config.sourcePathId} not found`;
-        results.set(config.sourcePathId,data);
+        results.set(config.sourcePathId, data);
         continue;
       }
 
@@ -1398,295 +1583,354 @@ export class JobConfigService {
         const destinationVolume = pathToWorkerMapping.find(
           (p) => p.id === destinationPathId
         );
-        if (!destinationVolume){
+        if (!destinationVolume) {
           const data = results.get(config.sourcePathId);
-              data.status = "failed";
-              const destinationPayload ={
-                status: "failed",
-                errors: ["DESTINATION_PATH_NOT_FOUND"],
-                message: `Destination path ${destinationPathId} not found`,
-                destinationPathId: destinationPathId
-              };
-              data.destinations.push(destinationPayload);
-              results.set(config.sourcePathId,data);
-              continue;
-          }
+          data.status = "failed";
+          const destinationPayload = {
+            status: "failed",
+            errors: ["DESTINATION_PATH_NOT_FOUND"],
+            message: `Destination path ${destinationPathId} not found`,
+            destinationPathId: destinationPathId,
+          };
+          data.destinations.push(destinationPayload);
+          results.set(config.sourcePathId, data);
+          continue;
+        }
         const destinationFileServer = destinationVolume.fileServer;
         const destinationWorkers =
           destinationFileServer?.workers?.filter(
             (w) => w.status === "Online"
           ) || [];
 
-        if(sourceFileServer.protocolVersion !== destinationFileServer.protocolVersion){
+        if (
+          sourceFileServer.protocolVersion !==
+          destinationFileServer.protocolVersion
+        ) {
           const data = results.get(config.sourcePathId);
-          const destinationPayload ={
+          const destinationPayload = {
             status: "failed",
             errors: ["PROTOCOL_VERSION_MISMATCH"],
             message: `Protocol version mismatch between source path ${config.sourcePathId} and destination path ${destinationPathId}`,
-            destinationPathId: destinationPathId
+            destinationPathId: destinationPathId,
           };
           data.destinations.push(destinationPayload);
-          results.set(config.sourcePathId,data);
+          results.set(config.sourcePathId, data);
           continue;
         }
-        this.logger.log('protocolVersion',sourceFileServer.protocolVersion);
-        this.logger.log('protocolVersion',destinationFileServer.protocolVersion);
+        this.logger.log("protocolVersion", sourceFileServer.protocolVersion);
+        this.logger.log(
+          "protocolVersion",
+          destinationFileServer.protocolVersion
+        );
         const commonWorkers = sourceWorkers.filter((sw) =>
           destinationWorkers.some((dw) => dw.workerId === sw.workerId)
         );
-       this.logger.log("commonWorkers",JSON.stringify(commonWorkers)); 
-        if (commonWorkers.length === 0)
-          {
-            const data = results.get(config.sourcePathId);
-            const destinationPayload ={
-              status: "failed",
-              errors: ["NO_COMMON_WORKERS"],
-              message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
-              destinationPathId: destinationPathId
-            };
-            data.destinations.push(destinationPayload);
-            results.set(config.sourcePathId,data);
-          }else{
-            const data = results.get(config.sourcePathId);
-            data.destinations.push({
-              destinationPathId: destinationPathId,
-              status: "success",
-              commonWorkers: commonWorkers.map((w) => ({workerId: w.workerId})),
-            });
-            results.set(config.sourcePathId,data);
-          }
-        }
-        const data = results.get(config.sourcePathId);
-        data.status = "success";
-        results.set(config.sourcePathId,data);
-      }
-      this.logger.log("results",JSON.stringify(results));
-      return Array.from(results.values()).flatMap((it) => it);
-    }
-  
-    async decodeBase64(base64String: string): Promise<string> {
-      try {
-        const base64Data = base64String.split(",")[1];
-        if (!base64Data) {
-          throw new Error("Invalid Base64 format");
-        }
-        return Buffer.from(base64Data, "base64").toString("utf-8");
-      } catch (error) {
-        console.error("Error decoding Base64:", error);
-        throw error;
-      }
-    }
-  
-    async parseBlobData(
-      blobData: string,
-      templateType: TemplateType
-    ): Promise<ParsedMapping[]> {
-      const parsedData = blobData
-        ?.trim()
-        ?.split("\n")
-        ?.map((line) => line.split(","))
-        ?.map((columns) => {
-          if (templateType === TemplateType.SID) {
-            if (columns.length !== 2) {
-              throw new Error("Invalid SID mapping data: Expected 2 columns.");
-            }
-            const [sourceMapping, targetMapping] = columns;
-            return { sourceMapping, targetMapping };
-          } else if (templateType === TemplateType.GID) {
-            if (columns.length !== 4) {
-              throw new Error("Invalid GID mapping data: Expected 4 columns.");
-            }
-            const [sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid] = columns;
-            return { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid };
-          }
-        });
-        return parsedData;
-    }
-  
-    async saveIdentityMappingsWithMap(
-      jobConfigIds: string[],
-      parsedData: ParsedMapping[],
-      identityMap: string,
-      templateType: TemplateType
-    ) {
-     this.logger.log("reached for saving mappings");
-  
-      for (const mapping of parsedData) {
-        if (templateType === TemplateType.SID) {
-          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
-          const identityMappingEntity = this.identityMappingRepo.create({
-            identityType: templateType,
-            identityMap: identityMap,
-            sourceMapping: sourceMapping,
-            targetMapping: targetMapping,
-          });
-          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
-        } else if (templateType === TemplateType.GID) {
-          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
-  
-          const gidMappingEntity = this.identityMappingRepo.create({
-            identityType: TemplateType.GID,
-            identityMap: identityMap,
-            sourceMapping: sourceMappingGid,
-            targetMapping: targetMappingGid,
-          });
-          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
-  
-          const uidMappingEntity = this.identityMappingRepo.create({
-            identityType: TemplateType.UID,
-            identityMap: identityMap,
-            sourceMapping: sourceMappingUid,
-            targetMapping: targetMappingUid,
-          });
-          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
-        }
-      }
-  
-      for (const jobConfigId of jobConfigIds) {
-        const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
-          identityMappingId: identityMap,
-          jobConfigId: jobConfigId,
-        });
-  
-        await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
-      }
-    }
-  
-    async updateMappingsWithMap(
-      jobConfigIds: any[],
-      parsedData: ParsedMapping[],
-      identityMap: string,
-      templateType: TemplateType
-    ) {
-      this.logger.log("reached for updating mappings");
-      this.logger.log("jobCIDs", jobConfigIds);
-      this.logger.log("parsedData", parsedData);
-  
-      for (const mapping of parsedData) {
-        if (templateType === TemplateType.SID) {
-          const { sourceMapping, targetMapping } = mapping as { sourceMapping: string; targetMapping: string };
-          const identityMappingEntity = this.identityMappingRepo.create({
-            identityType: templateType,
-            identityMap: identityMap,
-            sourceMapping: sourceMapping,
-            targetMapping: targetMapping,
-          });
-          const savedIdentityMapping = await this.identityMappingRepo.save(identityMappingEntity);
-         this.logger.log(`Identity mapping inserted with ID: ${savedIdentityMapping.id}`);
-        } else if (templateType === TemplateType.GID) {
-          const { sourceMappingGid, targetMappingGid, sourceMappingUid, targetMappingUid } = mapping as { sourceMappingGid: string; targetMappingGid: string; sourceMappingUid: string; targetMappingUid: string };
-  
-          const gidMappingEntity = this.identityMappingRepo.create({
-            identityType: TemplateType.GID,
-            identityMap: identityMap,
-            sourceMapping: sourceMappingGid,
-            targetMapping: targetMappingGid,
-          });
-          const savedGidMapping = await this.identityMappingRepo.save(gidMappingEntity);
-         this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
-  
-          const uidMappingEntity = this.identityMappingRepo.create({
-            identityType: TemplateType.UID,
-            identityMap: identityMap,
-            sourceMapping: sourceMappingUid,
-            targetMapping: targetMappingUid,
-          });
-          const savedUidMapping = await this.identityMappingRepo.save(uidMappingEntity);
-         this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
-        }
-      }
-  
-      for (const jobConfigId of jobConfigIds) {
-        const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
-          where: {
-            jobConfigId: jobConfigId,
-            isOrphan:false
-          },
-        });
-  
-        if (existingCrossMapping) {
-          existingCrossMapping.identityMappingId = identityMap;
-          await this.identityCrossMappingRepo.save(existingCrossMapping);
-         this.logger.log(`Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`);
+        this.logger.log("commonWorkers", JSON.stringify(commonWorkers));
+        if (commonWorkers.length === 0) {
+          const data = results.get(config.sourcePathId);
+          const destinationPayload = {
+            status: "failed",
+            errors: ["NO_COMMON_WORKERS"],
+            message: `No common workers found for source path ${config.sourcePathId} and destination path ${destinationPathId}`,
+            destinationPathId: destinationPathId,
+          };
+          data.destinations.push(destinationPayload);
+          results.set(config.sourcePathId, data);
         } else {
-          const identityConfigCrossMappingEntity = await this.identityCrossMappingRepo.create({
-            identityMappingId: identityMap,
-            jobConfigId: jobConfigId,
+          const data = results.get(config.sourcePathId);
+          data.destinations.push({
+            destinationPathId: destinationPathId,
+            status: "success",
+            commonWorkers: commonWorkers.map((w) => ({ workerId: w.workerId })),
           });
-  
-          await this.identityCrossMappingRepo.save(identityConfigCrossMappingEntity);
+          results.set(config.sourcePathId, data);
         }
+      }
+      const data = results.get(config.sourcePathId);
+      data.status = "success";
+      results.set(config.sourcePathId, data);
+    }
+    this.logger.log("results", JSON.stringify(results));
+    return Array.from(results.values()).flatMap((it) => it);
+  }
+
+  async decodeBase64(base64String: string): Promise<string> {
+    try {
+      const base64Data = base64String.split(",")[1];
+      if (!base64Data) {
+        throw new Error("Invalid Base64 format");
+      }
+      return Buffer.from(base64Data, "base64").toString("utf-8");
+    } catch (error) {
+      this.logger.error("Error decoding Base64:", error);
+      throw error;
+    }
+  }
+  /* istanbul ignore next */
+  async parseBlobData(
+    blobData: string,
+    templateType: TemplateType
+  ): Promise<ParsedMapping[]> {
+    const parsedData = blobData
+      ?.trim()
+      ?.split("\n")
+      ?.slice(1)
+      ?.map((line) => line.split(","))
+      ?.map((columns) => {
+        if (templateType === TemplateType.SID) {
+          if (columns.length !== 2) {
+            throw new Error("Invalid SID mapping data: Expected 2 columns.");
+          }
+          const [sourceMapping, targetMapping] = columns;
+          return { sourceMapping, targetMapping };
+        } else if (templateType === TemplateType.GID) {
+          if (columns.length !== 4) {
+            throw new Error("Invalid GID mapping data: Expected 4 columns.");
+          }
+          const [
+            sourceMappingGid,
+            targetMappingGid,
+            sourceMappingUid,
+            targetMappingUid,
+          ] = columns;
+          return {
+            sourceMappingGid,
+            targetMappingGid,
+            sourceMappingUid,
+            targetMappingUid,
+          };
+        }
+      });
+    return parsedData;
+  }
+
+  async saveIdentityMappingsWithMap(
+    jobConfigIds: string[],
+    parsedData: ParsedMapping[],
+    identityMap: string,
+    templateType: TemplateType
+  ) {
+    this.logger.log("reached for saving mappings");
+
+    for (const mapping of parsedData) {
+      if (templateType === TemplateType.SID) {
+        const { sourceMapping, targetMapping } = mapping as {
+          sourceMapping: string;
+          targetMapping: string;
+        };
+        const identityMappingEntity = this.identityMappingRepo.create({
+          identityType: templateType,
+          identityMap: identityMap,
+          sourceMapping: sourceMapping,
+          targetMapping: targetMapping,
+        });
+        const savedIdentityMapping = await this.identityMappingRepo.save(
+          identityMappingEntity
+        );
+        this.logger.log(
+          `Identity mapping inserted with ID: ${savedIdentityMapping.id}`
+        );
+      } else if (templateType === TemplateType.GID) {
+        const {
+          sourceMappingGid,
+          targetMappingGid,
+          sourceMappingUid,
+          targetMappingUid,
+        } = mapping as {
+          sourceMappingGid: string;
+          targetMappingGid: string;
+          sourceMappingUid: string;
+          targetMappingUid: string;
+        };
+
+        const gidMappingEntity = this.identityMappingRepo.create({
+          identityType: TemplateType.GID,
+          identityMap: identityMap,
+          sourceMapping: sourceMappingGid,
+          targetMapping: targetMappingGid,
+        });
+        const savedGidMapping =
+          await this.identityMappingRepo.save(gidMappingEntity);
+        this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+
+        const uidMappingEntity = this.identityMappingRepo.create({
+          identityType: TemplateType.UID,
+          identityMap: identityMap,
+          sourceMapping: sourceMappingUid,
+          targetMapping: targetMappingUid,
+        });
+        const savedUidMapping =
+          await this.identityMappingRepo.save(uidMappingEntity);
+        this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
       }
     }
 
-    async getCutoverDetailsByFileServerId(fileServerId: string) {
-      return [
-        {
-          protocol: Protocol.NFS,
-          sourcePath: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            sourcePathName: "/source/test",
-          },
-          destinationFileServer: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            destinationFileServerName: "fileServer1",
-          },
-          destinationPath: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            destinationPathName: "/destination/test",
-          },
-          jobConfig: [
-            {
-              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-              jobType: JobType.MIGRATE,
-              jobRunDetails: {
-                id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-                status: JobRunStatus.Completed,
-              },
-            },
-          ],
-        },
-      ];
+    for (const jobConfigId of jobConfigIds) {
+      const identityConfigCrossMappingEntity =
+        await this.identityCrossMappingRepo.create({
+          identityMappingId: identityMap,
+          jobConfigId: jobConfigId,
+        });
+
+      await this.identityCrossMappingRepo.save(
+        identityConfigCrossMappingEntity
+      );
     }
-    async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
-      const jobRun = await this.jobRunRepo.findOne({
-        where: { id: jobRunId },
-        relations: ["jobConfig"],
-      });
-      if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
-      const inventorySummary = await this.inventoryRepo
-        .createQueryBuilder("inventory")
-        .select([
-          "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-          "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-          "SUM(inventory.fileSize) AS totalFileSize",
-        ])
-        .where("inventory.jobRunId = :jobRunId", { jobRunId })
-        .groupBy("inventory.isDirectory")
-        .getRawMany();
-      const jobRunStatus = {
-        fileCount: "0",
-        directories: "0",
-        totalSize: "0",
-      };
-     
-     this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
-      for (let i = 0; i < inventorySummary.length; i++) {
-        jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
-        jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
-        jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
+  }
+
+  async updateMappingsWithMap(
+    jobConfigIds: any[],
+    parsedData: ParsedMapping[],
+    identityMap: string,
+    templateType: TemplateType
+  ) {
+    this.logger.log("reached for updating mappings");
+    this.logger.log("jobCIDs", jobConfigIds);
+    this.logger.log("parsedData", parsedData);
+
+    for (const mapping of parsedData) {
+      if (templateType === TemplateType.SID) {
+        const { sourceMapping, targetMapping } = mapping as {
+          sourceMapping: string;
+          targetMapping: string;
+        };
+        const identityMappingEntity = this.identityMappingRepo.create({
+          identityType: templateType,
+          identityMap: identityMap,
+          sourceMapping: sourceMapping,
+          targetMapping: targetMapping,
+        });
+        const savedIdentityMapping = await this.identityMappingRepo.save(
+          identityMappingEntity
+        );
+        this.logger.log(
+          `Identity mapping inserted with ID: ${savedIdentityMapping.id}`
+        );
+      } else if (templateType === TemplateType.GID) {
+        const {
+          sourceMappingGid,
+          targetMappingGid,
+          sourceMappingUid,
+          targetMappingUid,
+        } = mapping as {
+          sourceMappingGid: string;
+          targetMappingGid: string;
+          sourceMappingUid: string;
+          targetMappingUid: string;
+        };
+
+        const gidMappingEntity = this.identityMappingRepo.create({
+          identityType: TemplateType.GID,
+          identityMap: identityMap,
+          sourceMapping: sourceMappingGid,
+          targetMapping: targetMappingGid,
+        });
+        const savedGidMapping =
+          await this.identityMappingRepo.save(gidMappingEntity);
+        this.logger.log(`GID mapping inserted with ID: ${savedGidMapping.id}`);
+
+        const uidMappingEntity = this.identityMappingRepo.create({
+          identityType: TemplateType.UID,
+          identityMap: identityMap,
+          sourceMapping: sourceMappingUid,
+          targetMapping: targetMappingUid,
+        });
+        const savedUidMapping =
+          await this.identityMappingRepo.save(uidMappingEntity);
+        this.logger.log(`UID mapping inserted with ID: ${savedUidMapping.id}`);
       }
-      const response = {
-        ...jobRunStatus,
-        errors: await this.getErrorCounts(jobRunId),
-      };
-      return response;
     }
-    async getErrorCounts(jobRunId: string){
-      const countQuery = this.operationErrorRepo
+
+    for (const jobConfigId of jobConfigIds) {
+      const existingCrossMapping = await this.identityCrossMappingRepo.findOne({
+        where: {
+          jobConfigId: jobConfigId,
+          isOrphan: false,
+        },
+      });
+
+      if (existingCrossMapping) {
+        existingCrossMapping.identityMappingId = identityMap;
+        await this.identityCrossMappingRepo.save(existingCrossMapping);
+        this.logger.log(
+          `Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`
+        );
+      } else {
+        const identityConfigCrossMappingEntity =
+          await this.identityCrossMappingRepo.create({
+            identityMappingId: identityMap,
+            jobConfigId: jobConfigId,
+          });
+
+        await this.identityCrossMappingRepo.save(
+          identityConfigCrossMappingEntity
+        );
+      }
+    }
+  }
+
+  async getCutoverDetailsByFileServerId(fileServerId: string) {
+    return [
+      {
+        protocol: Protocol.NFS,
+        sourcePath: {
+          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+          sourcePathName: "/source/test",
+        },
+        destinationFileServer: {
+          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+          destinationFileServerName: "fileServer1",
+        },
+        destinationPath: {
+          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+          destinationPathName: "/destination/test",
+        },
+        jobConfig: [
+          {
+            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+            jobType: JobType.MIGRATE,
+            jobRunDetails: {
+              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
+              status: JobRunStatus.Completed,
+            },
+          },
+        ],
+      },
+    ];
+  }
+  async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ["jobConfig"],
+    });
+    if (!jobRun)
+      throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+    const inventorySummary = await this.inventoryRepo
+      .createQueryBuilder("inventory")
+      .select([
+        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
+        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
+        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
+      ])
+      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
+      .getRawOne();
+    const jobRunStatus = {
+      fileCount: inventorySummary.filecount || "0",
+      directories: inventorySummary.directorycount || "0",
+      totalSize: inventorySummary.totalfilesize || "0",
+    };
+
+    this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
+    const response = {
+      ...jobRunStatus,
+      errors: await this.getErrorCounts(jobRunId),
+    };
+    this.logger.log("formatted response", JSON.stringify(response));
+    return response;
+  }
+
+  async getErrorCounts(jobRunId: string) {
+    const countQuery = this.operationErrorRepo
       .createQueryBuilder("oe")
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
@@ -1703,5 +1947,5 @@ export class JobConfigService {
       errorTypeCounts = [];
     }
     return errorTypeCounts;
-    }
+  }
 }

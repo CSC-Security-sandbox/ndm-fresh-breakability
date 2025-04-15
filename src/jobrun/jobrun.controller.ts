@@ -151,4 +151,9 @@ export class JobRunController {
   async getErrorOverview(@Param("jobRunId") jobRunId: string) {
     return this.jobRunService.getErrorOverview(jobRunId);
   }
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async checkWorkerHealthCron() {
+    await this.jobRunService.checkWorkerHealth();
+  }
 }

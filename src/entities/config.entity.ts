@@ -15,6 +15,10 @@ export class ConfigEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'config_name' })
     configName: string;
 
+    @ApiProperty({ description: 'status' })
+    @Column({ type: 'text', nullable: true,  name:'status' })
+    status: string;
+
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_type' })
     configType: string;

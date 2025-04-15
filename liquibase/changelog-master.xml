@@ -42,4 +42,25 @@
    <changeSet id="5021" author="anarvekar">
       <sqlFile path="liquibase/20250324_03_alter_jobrun_table_add_column_jobstats.sql"/>
    </changeSet>
+
+   <changeSet id="5022" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_01_create_error_remedies_table.sql"/>
+   </changeSet>
+
+   <changeSet id="5023" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_2_seed_error_remedies.sql"/>
+   </changeSet>
+  
+   <changeSet id="5024" author="adityav2">
+      <sqlFile path="liquibase/20250404_01_alter_speed_test_tables.sql"/>
+   </changeSet>
+
+   <changeSet id="5025" author="abhishek">
+      <sqlFile path="liquibase/20250401_01_create_worker_stats_table.sql"/>
+   </changeSet>
+
+    <changeSet id="5026" author="anarvekar">
+      <sqlFile path="liquibase/20250410_01_alter_jobrun_add_column_paused_reason.sql"/>
+   </changeSet>
+   
 </databaseChangeLog>

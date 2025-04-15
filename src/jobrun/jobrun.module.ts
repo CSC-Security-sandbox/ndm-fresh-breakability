@@ -26,17 +26,21 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { SendMailService } from 'src/utils/send-email';
+import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
+import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
+import { WorkersService } from 'src/workers/workers.service';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity]),
         WorkerModule,
         RedisModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

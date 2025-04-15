@@ -42,6 +42,7 @@ export class JobConfigController {
     return jobConfig;
   }
 
+
   @ApiOperation({ summary: 'Get all Speed test jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all Speed jobs Runs.' })
   @Get('/speed-test')
@@ -50,10 +51,10 @@ export class JobConfigController {
   }
 
   @ApiOperation({ summary: 'Store Speed test Result' })
-  @ApiResponse({ status: 201, description: 'Speed test Result has been successfully Stored.' })
-  @Post('/store-speed-test-result')
-  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult){
-    this.jobConfigService.storeSpeedTestResult(speedTestResult);
+  @ApiResponse({ status: 200, description: 'Speed test Result has been successfully Stored.' })
+  @Post('/speed-test/store-result')
+  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult): Promise<any>{
+    return this.jobConfigService.storeSpeedTestResult(speedTestResult);
   }
 
   @ApiOperation({ summary: 'Get speedtest by ID' })

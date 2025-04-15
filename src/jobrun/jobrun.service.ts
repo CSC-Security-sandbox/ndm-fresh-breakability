@@ -13,7 +13,9 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
+  PausedReason,
   WorkFlows,
+  WorkerStatus,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -22,14 +24,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import {
-  FindManyOptions,
-  FindOptionsWhere,
-  In,
-  IsNull,
-  Not,
-  Repository,
-} from "typeorm";
+import { FindManyOptions, In, Repository } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
 import {
@@ -44,8 +39,11 @@ import { FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import path from "node:path";
 import { JobRunStats } from "./dto/jobstats";
+import { SendMailService } from "src/utils/send-email";
+import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
+import { WorkersService } from "src/workers/workers.service";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -67,7 +65,10 @@ export class JobRunService {
     private readonly configService: ConfigService,
     private readonly jobRunInitService: JobRunInitService,
     private readonly redisService: RedisService,
-    private workFlowService: WorkflowService
+    private workFlowService: WorkflowService,
+    private sendMailService: SendMailService,
+    private errorRemedyService: ErrorRemedyService,
+    private readonly workerService: WorkersService
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -79,28 +80,28 @@ export class JobRunService {
       where: { id: jobRunId },
       relations: { jobConfig: true },
     });
-    if(!jobRun) throw new NotFoundException(`Job Run ${jobRunId} not found`);
+    if (!jobRun) throw new NotFoundException(`Job Run ${jobRunId} not found`);
     if (status === CutOverStatus.REJECTED) {
-        await this.jobConfigRepo.update(
-          {
-            sourcePathId: jobRun.jobConfig.sourcePathId,
-            targetPathId: jobRun.jobConfig.targetPathId,
-            jobType: JobType.MIGRATE,
-          },
-          { status: JobStatus.Active }
-        );
+      await this.jobConfigRepo.update(
+        {
+          sourcePathId: jobRun.jobConfig.sourcePathId,
+          targetPathId: jobRun.jobConfig.targetPathId,
+          jobType: JobType.MIGRATE,
+        },
+        { status: JobStatus.Active }
+      );
 
-        await this.jobConfigRepo.update(
-          {
-            sourcePathId: jobRun.jobConfig.sourcePathId,
-            targetPathId: jobRun.jobConfig.targetPathId,
-            jobType: JobType.CUT_OVER,
-          },
-          {
-            scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
-            futureScheduleAt: null,
-          }
-        );
+      await this.jobConfigRepo.update(
+        {
+          sourcePathId: jobRun.jobConfig.sourcePathId,
+          targetPathId: jobRun.jobConfig.targetPathId,
+          jobType: JobType.CUT_OVER,
+        },
+        {
+          scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+          futureScheduleAt: null,
+        }
+      );
     } else {
       await this.jobConfigRepo.update(
         {
@@ -119,6 +120,11 @@ export class JobRunService {
       { id: jobRunId },
       { status: JobRunStatus.Completed, subStatus: status }
     );
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    if (jobContext) {
+      jobContext.cleanup();
+      this.logger.log(`Job Context for ${jobRunId} cleaned up`);
+    }
   }
 
   async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
@@ -154,7 +160,10 @@ export class JobRunService {
   async actions(jobRunActions: JobRunActionsReq) {
     switch (jobRunActions.action) {
       case JobRunActions.PAUSE:
-        return await this.pauseJobRuns(jobRunActions.jobRuns);
+        return await this.pauseJobRuns(
+          jobRunActions.jobRuns,
+          PausedReason.USER_PAUSED
+        );
       case JobRunActions.STOP:
         return await this.stopJobRuns(jobRunActions.jobRuns);
       case JobRunActions.RESUME:
@@ -165,14 +174,14 @@ export class JobRunService {
   }
 
   //  ------------------- JobRun actions PAUSE ------------------ //
-  async pauseJobRuns(jobRuns: string[]) {
+  async pauseJobRuns(jobRuns: string[], reason?: PausedReason) {
     await this.workerJobRunMapRepo.update(
       { jobRunId: In(jobRuns) },
       { isActive: false }
     );
     await this.jobRunRepo.update(
       { id: In(jobRuns) },
-      { status: JobRunStatus.Paused }
+      { status: JobRunStatus.Paused, pausedReason: reason }
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
@@ -276,7 +285,7 @@ export class JobRunService {
     );
     await this.jobRunRepo.update(
       { id: In(jobRuns), status: JobRunStatus.Paused },
-      { status: JobRunStatus.Running }
+      { status: JobRunStatus.Running, pausedReason: null }
     );
     this.logger.debug(mappings);
 
@@ -335,10 +344,10 @@ export class JobRunService {
 
   //  ------------------- get JobRun Details ------------------ //
   /**
-   * 
+   *
    * @param id @todo: Deprecate this, not being used
-   * @param data 
-   * @returns 
+   * @param data
+   * @returns
    */
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
     const jobRun = await this.jobRunRepo.findOne({ where: { id } });
@@ -357,6 +366,11 @@ export class JobRunService {
         startTime: true,
         endTime: true,
         jobConfigId: true,
+        jobStats: {
+          fileCount: true,
+          directories: true,
+          totalSize: true,
+        },
         tasks: {
           id: true,
           status: true,
@@ -386,7 +400,7 @@ export class JobRunService {
       ],
     });
 
-    const partialPayload ={
+    const partialPayload = {
       jobRunId: jobRun.id,
       jobConfigId: jobRun.jobConfigId,
       status: jobRun.subStatus || jobRun.status,
@@ -408,42 +422,48 @@ export class JobRunService {
         : undefined,
       timeElapsed: jobRun.endTime
         ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
-        : Date.now() - jobRun.startTime.getTime()
-    }
-    if(jobRun.status===JobRunStatus.Completed){
-       this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
-        const inventoryStats:JobRunStats = jobRun.jobStats;
-        const payload = {
-          scannedFilesCount: BigInt(
-            inventoryStats?.fileCount || "0"
-          )?.toString(),
-          scannedDirectoriesCount: BigInt(
-            inventoryStats?.directories || "0"
-          )?.toString(),
-          totalScannedSize:
+        : Date.now() - jobRun.startTime.getTime(),
+    };
+    if (jobRun.status === JobRunStatus.Completed) {
+      this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
+      const inventoryStats: JobRunStats = jobRun.jobStats;
+      this.logger.log(
+        `Job Run ${jobRun.id} inventory stats ${JSON.stringify(inventoryStats)}`
+      );
+      const payload = {
+        scannedFilesCount: BigInt(inventoryStats?.fileCount || "0")?.toString(),
+        scannedDirectoriesCount: BigInt(
+          inventoryStats?.directories || "0"
+        )?.toString(),
+        totalScannedSize:
           jobConfigDetails.jobType === JobType.DISCOVER
-              ? this.covertBytes(Number(inventoryStats?.totalSize || "0"))
-              : "",
-          totalMigratedSize: jobConfigDetails.jobType === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0",
-          errors: await this.getErrorCounts(jobRun.id),
-          tasks: jobRun.tasks.map((task) => ({
-            taskId: task.id,
-            taskType: task.taskType,
-            status: task.status,
-            startTime: task.createdAt,
-            endTime: task.updatedAt,
-            worker: task.worker.workerName,
-            errors: [],
-          }))
-        }
-       const response: JobRunDetailsDTO = {
+            ? formatBytes(Number(inventoryStats?.totalSize || "0"))
+            : "0 B",
+        totalMigratedSize:
+          jobConfigDetails.jobType === JobType.MIGRATE
+            ? formatBytes(Number(inventoryStats?.totalSize || "0"))
+            : "0 B",
+        errors: await this.getErrorCounts(jobRun.id),
+        tasks: jobRun.tasks.map((task) => ({
+          taskId: task.id,
+          taskType: task.taskType,
+          status: task.status,
+          startTime: task.createdAt,
+          endTime: task.updatedAt,
+          worker: task.worker.workerName,
+          errors: [],
+        })),
+      };
+      const response: JobRunDetailsDTO = {
         ...partialPayload,
-        ...payload
-       }
-       return response;
+        ...payload,
+      };
+      return response;
     }
     this.logger.log(`Calculating job stats for ${jobRun.id}`);
-    const inventoryCounts:JobRunStats  = await this.calculateJobRunStats(jobRun.id);
+    const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
+      jobRun.id
+    );
 
     const jobRunDetails: JobRunDetailsDTO = {
       ...partialPayload,
@@ -453,10 +473,12 @@ export class JobRunService {
       )?.toString(),
       totalScannedSize:
         jobConfigDetails.jobType === JobType.DISCOVER
-          ? this.covertBytes(Number(inventoryCounts?.totalSize || "0"))
-          : "0",
+          ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+          : "0 B",
       totalMigratedSize:
-        jobConfigDetails.jobType === JobType.MIGRATE ? "" : "0",
+        jobConfigDetails.jobType === JobType.MIGRATE
+          ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+          : "0 B",
       errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -531,12 +553,16 @@ export class JobRunService {
         "jobRun.status AS status",
         "jobRun.startTime AS startTime",
         "jobRun.endTime AS endTime",
+        "jobRun.jobStats AS jobStats",
       ])
       .getRawMany();
 
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
-        const partialJobRunStats= {
+        this.logger.debug(
+          `jobRun for id ${jobRun.jobrunid} - with jobjobstats ${JSON.stringify(jobRun.jobjobstats)}`
+        );
+        const partialJobRunStats = {
           jobRunId: jobRun.jobrunid,
           status: jobRun.substatus || jobRun.status,
           startTime: jobRun.starttime,
@@ -560,9 +586,13 @@ export class JobRunService {
           timeElapsed: jobRun.endtime
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
-        }
-        if(jobRun.satus===JobRunStatus.Completed){
-          const inventoryStats:JobRunStats = jobRun.jobstats;
+        };
+        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+        if (String(jobRun.status).trim() == JobRunStatus.Completed) {
+          const inventoryStats: JobRunStats = jobRun.jobstats;
+          this.logger.log(
+            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(inventoryStats)}`
+          );
           const payload = {
             scannedFilesCount: BigInt(
               inventoryStats?.fileCount || "0"
@@ -572,34 +602,42 @@ export class JobRunService {
             )?.toString(),
             totalScannedSize:
               jobRun.jobtype === JobType.DISCOVER
-                ? this.covertBytes(Number(inventoryStats?.totalSize || "0"))
-                : "",
-            totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryStats?.totalSize || "0")) : "0",
+                ? formatBytes(Number(inventoryStats?.totalSize || 0))
+                : "0 B",
+            totalMigratedSize:
+              jobRun.jobtype === JobType.MIGRATE
+                ? formatBytes(Number(inventoryStats?.totalSize || 0))
+                : "0 B",
             errors: await this.getErrorCounts(jobRun.jobrunid),
-          }
-         const response: JobRunsDTO = {
-          ...partialJobRunStats,
-          ...payload
-         }
-         return response;
-        }else{
-          const inventoryCounts:JobRunStats = await this.calculateJobRunStats(jobRun.jobrunid);
-        const response: JobRunsDTO = {
-          ...partialJobRunStats,
-          scannedFilesCount: BigInt(
-            inventoryCounts?.fileCount || "0"
-          )?.toString(),
-          scannedDirectoriesCount: BigInt(
-            inventoryCounts?.directories || "0"
-          )?.toString(),
-          totalScannedSize:
-            jobRun.jobtype === JobType.DISCOVER
-              ? this.covertBytes(Number(inventoryCounts?.totalSize || "0"))
-              : "",
-          totalMigratedSize: jobRun.jobtype === JobType.MIGRATE ? this.covertBytes(Number(inventoryCounts?.totalSize || "0")) : "0",
-          errors: await this.getErrorCounts(jobRun.jobrunid),
-        };
-        return response;
+          };
+          const response: JobRunsDTO = {
+            ...partialJobRunStats,
+            ...payload,
+          };
+          return response;
+        } else {
+          const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
+            jobRun.jobrunid
+          );
+          const response: JobRunsDTO = {
+            ...partialJobRunStats,
+            scannedFilesCount: BigInt(
+              inventoryCounts?.fileCount || "0"
+            )?.toString(),
+            scannedDirectoriesCount: BigInt(
+              inventoryCounts?.directories || "0"
+            )?.toString(),
+            totalScannedSize:
+              jobRun.jobtype === JobType.DISCOVER
+                ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+                : "0 B",
+            totalMigratedSize:
+              jobRun.jobtype === JobType.MIGRATE
+                ? formatBytes(Number(inventoryCounts?.totalSize || 0))
+                : "0 B",
+            errors: await this.getErrorCounts(jobRun.jobrunid),
+          };
+          return response;
         }
       })
     );
@@ -634,10 +672,14 @@ export class JobRunService {
     });
     if (!jobRunDetails)
       throw new Error(`Job run with id ${jobRunId} not found`);
-    if (status !== JobRunStatus.Running) {
-      const jobConfig = await this.jobConfigRepo.findOne({
-        where: { id: jobRunDetails.jobConfigId },
-      });
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where: { id: jobRunDetails.jobConfigId },
+      relations: {
+        sourcePath: { fileServer: true },
+        targetPath: { fileServer: true },
+      },
+    });
+    if (status !== JobRunStatus.Running && status !== JobRunStatus.Pending) {
       if (
         jobConfig &&
         jobConfig.futureScheduleAt &&
@@ -663,13 +705,70 @@ export class JobRunService {
           { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
         );
       }
-      const jobRunStats:JobRunStats = await this.calculateJobRunStats(jobRunId);
-     this.logger.log("jobRunStats",JSON.stringify(jobRunStats));
+      const jobRunStats: JobRunStats =
+        await this.calculateJobRunStats(jobRunId);
+      if (
+        jobConfig &&
+        (jobConfig.jobType === JobType.MIGRATE ||
+          jobConfig.jobType === JobType.CUT_OVER)
+      ) {
+        const errorCodes =
+          await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
+        if (!!errorCodes.length) {
+          await this.sendErrorRemedyEmail({
+            jobRunId,
+            sourcePath: jobConfig.sourcePath?.volumePath,
+            targetPath: jobConfig.targetPath?.volumePath,
+            sourceHost: jobConfig.sourcePath?.fileServer?.host,
+            targetHost: jobConfig.targetPath?.fileServer?.host,
+            jobType: jobConfig.jobType,
+            errorCodes,
+          });
+        } else {
+          this.logger.log(
+            `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
+          );
+          const mailBody = `Hello, <br/>
+          The following ${jobConfig.jobType} job has been completed for below Paths:
+          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+          `;
+          const payload = { body: mailBody };
+          this.logger.log(
+            "Sending Mail for job completion with payload",
+            JSON.stringify(payload)
+          );
+          await this.sendMailService.sendMail(payload);
+        }
+      }
+      this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
         { id: jobRunId },
-        { status: status, endTime: new Date(),jobStats: jobRunStats}
+        { status: status, endTime: new Date(), jobStats: jobRunStats }
       );
     } else {
+      if (
+        jobConfig &&
+        (jobConfig.jobType === JobType.MIGRATE ||
+          jobConfig.jobType === JobType.CUT_OVER)
+      ) {
+        const mailBody = `Hello,
+          The following ${jobConfig.jobType} job has been started for below Paths:
+          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
+          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
+          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
+          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
+        `;
+        const payload = { body: mailBody };
+        this.logger.log(
+          "Sending Mail for job start with payload",
+          JSON.stringify(payload)
+        );
+        await this.sendMailService.sendMail(payload);
+      }
+      this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
     }
   }
@@ -737,33 +836,126 @@ export class JobRunService {
       where: { id: jobRunId },
       relations: ["jobConfig"],
     });
-    if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+    if (!jobRun)
+      throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
     const inventorySummary = await this.inventoryRepo
       .createQueryBuilder("inventory")
       .select([
-        "SUM(CASE WHEN inventory.isDirectory = false THEN 1 ELSE 0 END) AS fileCount",
-        "SUM(CASE WHEN inventory.isDirectory = true THEN 1 ELSE 0 END) AS directoryCount",
-        "SUM(inventory.fileSize) AS totalFileSize",
+        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
+        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
+        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
       ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId })
-      .groupBy("inventory.isDirectory")
-      .getRawMany();
+      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
+      .getRawOne();
+
+    this.logger.debug(
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`
+    );
+
     const jobRunStatus = {
-      fileCount: "0",
-      directories: "0",
-      totalSize: "0",
+      fileCount: inventorySummary.filecount || "0",
+      directories: inventorySummary.directorycount || "0",
+      totalSize: inventorySummary.totalfilesize || "0",
     };
-   
-    this.logger.debug(`[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`);
-    for (let i = 0; i < inventorySummary.length; i++) {
-      jobRunStatus.directories = inventorySummary[i].directorycount ? inventorySummary[i].directorycount.toString() : "0";
-      jobRunStatus.fileCount = inventorySummary[i].filecount ? inventorySummary[i].filecount.toString() : "0";
-      jobRunStatus.totalSize = inventorySummary[i].totalfilesize ? this.covertBytes(Number(inventorySummary[i].totalfilesize)).toString() : "0";
-    }
+
     const response = {
       ...jobRunStatus,
       errors: await this.getErrorCounts(jobRunId),
     };
     return response;
+  }
+
+  async sendErrorRemedyEmail({
+    jobRunId,
+    sourcePath,
+    targetPath,
+    sourceHost,
+    targetHost,
+    jobType,
+    errorCodes,
+  }): Promise<void> {
+    if (!errorCodes || errorCodes.length === 0) {
+      this.logger.log(`No error codes found for job run ${jobRunId}`);
+      return;
+    }
+    const errorRemedies = await this.errorRemedyService.findByErrorCodes(
+      errorCodes.map((error) => error.errorCode)
+    );
+    this.logger.log("Error Remedies ", JSON.stringify(errorRemedies));
+    const errorRemediesMailBody = `Hello, <br/>
+      The following ${jobType} job (${jobRunId}) has errored for below Paths: <br/>
+      <p>Source: ${sourceHost}</p>
+      <p>Source Path: ${sourcePath}</p>
+      <p>Target: ${targetHost}</p>
+      <p>Target Path: ${targetPath}</p>
+      <br/>
+      <p> Error Details: </p>
+      ${errorRemedies
+        .map(
+          (error) => `
+      <p>Error Code: ${error.errorCode}</p>
+      <p>Description: ${error.description}</p>
+      <p>Resolution Steps: ${error.resolutionSteps}</p>
+      <p>Reference Commands: <code>${!!error.referenceCommands ? error.referenceCommands : ""}</code> </p>
+      <br/>`
+        )
+        .join("")}`;
+    const errorRemediesPayload = { body: errorRemediesMailBody };
+    this.logger.log(
+      "Sending Mail for job completion with errorRemediesPayload",
+      JSON.stringify(errorRemediesPayload)
+    );
+    await this.sendMailService.sendMail(errorRemediesPayload);
+  }
+
+  async checkWorkerHealth() {
+    this.logger.log(`Checking the health of workers`);
+    try {
+      const runningJobRuns = await this.jobRunRepo.find({
+        where: {
+          status: In([JobRunStatus.Running, JobRunStatus.Paused]),
+          pausedReason: PausedReason.SYSTEM_PAUSED,
+        },
+        relations: ["workerMap"],
+      });
+      for (const jobRun of runningJobRuns) {
+        const jobRunId = jobRun.id;
+        const workerMap = jobRun.workerMap;
+        const workers = workerMap.map((worker) => worker.worker);
+        if (workers.length === 0) {
+          this.logger.warn(`No workers found for jobRunId: ${jobRunId}`);
+          continue;
+        }
+        const mappedWorkersCount = workers.length;
+        const currentWorkerStatus =
+          this.workerService.updateWorkerStatus(workers);
+        const inactiveCount = currentWorkerStatus.filter(
+          (worker) => worker.status === WorkerStatus.Offline
+        ).length;
+        if (inactiveCount === mappedWorkersCount) {
+          this.logger.warn(
+            `All workers are offline for jobRunId: ${jobRunId}, thus pausing the job run`
+          );
+          await this.pauseJobRuns([jobRunId], PausedReason.SYSTEM_PAUSED);
+        } else {
+          if (jobRun.status === JobRunStatus.Paused) {
+            this.logger.log(
+              `Resuming job run ${jobRunId} as some workers are online`
+            );
+            await this.resumeJobRuns([jobRunId]);
+          } else {
+            this.logger.log(
+              `Job run ${jobRunId} is running and some workers are online`
+            );
+          }
+        }
+      }
+      this.logger.log(`Worker health check completed`);
+    } catch (error) {
+      this.logger.error(
+        `Error occurred while checking worker health: ${error}`
+      );
+    }
   }
 }

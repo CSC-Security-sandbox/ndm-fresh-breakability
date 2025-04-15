@@ -1,1 +1,2 @@
-gid = 456
+gid_source,gid_target,uid_source,uid_target
+example_source_gid,example_target_gid,example_source_uid,example_target_uid

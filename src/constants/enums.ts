@@ -131,7 +131,8 @@ export enum ConsumerType{
     tasks='tasks',
     updatedTask = "updatedTask",
     errors = 'errors',
-    migrationTask='migrationTask'
+    migrationTask='migrationTask',
+    speedtestTask = 'speedtestTask',
 }
 
 export enum CutoverErrors {
@@ -151,4 +152,9 @@ export enum ProtocolVersion {
 export enum CutOverStatus {
     APPROVED = 'APPROVED',
     REJECTED = 'REJECTED'
+}
+
+export enum PausedReason {
+    USER_PAUSED = 'USER_PAUSED',
+    SYSTEM_PAUSED = 'SYSTEM_PAUSED'
 }
