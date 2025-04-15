@@ -311,8 +311,12 @@ export function withBulkMigrateCreateForm(
                 `Seems like pre-check got terminated, please try again.`
               );
               showErrorOnFailure(error);
+            } else if (data?.status === ValidateConnectionStatus.TIMED_OUT) {
+              const error = new Error(
+                `Precheck timed out. This may be due to an unhealthy worker. Please check the worker's status and try again.`
+              );
+              showErrorOnFailure(error);
             }
-
             if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
               const error = new Error(
                 `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
