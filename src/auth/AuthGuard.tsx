@@ -168,9 +168,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     Cookies.set("refresh_token", auth.user?.refresh_token || "");
     return (
       <div className="h-screen flex justify-center items-center">
-        Authenticated, checking permissions..isAuthenticated-
-        {String(auth.isAuthenticated).toUpperCase()}.. isPageReady-
-        {String(isPageReady).toUpperCase()}
+        Authenticated, checking permissions, kindly wait...
       </div>
     );
   } else if (auth.isAuthenticated && isPageReady) {

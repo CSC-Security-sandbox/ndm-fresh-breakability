@@ -339,7 +339,7 @@ export function withBulkMigrateCreateForm(
       const body: bulkMigrateCreateApiType = {
         firstRunAt:
           mappingStepForm.values.scheduleTime === "start_now"
-            ? new Date().toISOString()
+            ? undefined
             : mappingStepForm.values.scheduledDateTime,
         futureRunSchedule: getFutureRun(),
         migrateConfigs: createPathMapping(

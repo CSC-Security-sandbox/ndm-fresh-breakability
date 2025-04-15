@@ -13,7 +13,7 @@ export const generateBulkDiscoveryPayload = (
     firstRunAt:
       scheduleTime === "schedule_date"
         ? firstRunAt?.toISOString()
-        : new Date().toISOString(),
+        : undefined,
     sourcePathIds,
     preserveAccessTime: true,
   };
