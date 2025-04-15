@@ -1207,7 +1207,7 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: inventoryCounts.totalSize || "0",
+          totalScannedSize: this.covertBytes(Number(inventoryCounts.totalSize  || 0)),
           errors: inventoryCounts.errors,
         };
       })

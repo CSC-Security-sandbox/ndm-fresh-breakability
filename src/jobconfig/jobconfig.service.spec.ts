@@ -1821,7 +1821,7 @@ describe("JobConfigService", () => {
 
       expect(result.jobRuns[0].scannedFilesCount).toBe("0");
       expect(result.jobRuns[0].scannedDirectoriesCount).toBe("0");
-      expect(result.jobRuns[0].totalScannedSize).toBe("0");
+      expect(result.jobRuns[0].totalScannedSize).toBe("0 B");
     });
 
     it("should throw an error if job config is not found", async () => {
