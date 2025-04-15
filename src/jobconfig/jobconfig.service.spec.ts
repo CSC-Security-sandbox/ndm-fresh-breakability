@@ -305,55 +305,55 @@ describe("JobConfigService", () => {
     service = module.get<JobConfigService>(JobConfigService);
     workFlowService = module.get<WorkflowService>(WorkflowService);
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(
-      getRepositoryToken(JobConfigEntity),
+      getRepositoryToken(JobConfigEntity)
     );
     speedTestConfigRepo = module.get<Repository<SpeedTestConfigEntity>>(
-      getRepositoryToken(SpeedTestConfigEntity),
+      getRepositoryToken(SpeedTestConfigEntity)
     );
     speedTestConfigWorkerRepo = module.get<
       Repository<SpeedTestConfigWorkerEntity>
     >(getRepositoryToken(SpeedTestConfigWorkerEntity));
     speedLogRepo = module.get<Repository<SpeedLogEntity>>(
-      getRepositoryToken(SpeedLogEntity),
+      getRepositoryToken(SpeedLogEntity)
     );
     speedLogEntryRepo = module.get<Repository<SpeedLogEntryEntity>>(
-      getRepositoryToken(SpeedLogEntryEntity),
+      getRepositoryToken(SpeedLogEntryEntity)
     );
     networkPerformanceResultRepo = module.get<
       Repository<NetworkPerformanceResultEntity>
     >(getRepositoryToken(NetworkPerformanceResultEntity));
     speedTestResultRepo = module.get<Repository<SpeedTestResultEntity>>(
-      getRepositoryToken(SpeedTestResultEntity),
+      getRepositoryToken(SpeedTestResultEntity)
     );
     fileServerEntityRepo = module.get<Repository<FileServerEntity>>(
-      getRepositoryToken(FileServerEntity),
+      getRepositoryToken(FileServerEntity)
     );
     fileServerRepo = module.get<Repository<FileServerEntity>>(
-      getRepositoryToken(FileServerEntity),
+      getRepositoryToken(FileServerEntity)
     );
     workerRepo = module.get<Repository<WorkerEntity>>(
-      getRepositoryToken(WorkerEntity),
+      getRepositoryToken(WorkerEntity)
     );
     jobRunRepo = module.get<Repository<JobRunEntity>>(
-      getRepositoryToken(JobRunEntity),
+      getRepositoryToken(JobRunEntity)
     );
     inventoryRepo = module.get<Repository<InventoryEntity>>(
-      getRepositoryToken(InventoryEntity),
+      getRepositoryToken(InventoryEntity)
     );
     volumeRepo = module.get<Repository<VolumeEntity>>(
-      getRepositoryToken(VolumeEntity),
+      getRepositoryToken(VolumeEntity)
     );
     projectRepo = module.get<Repository<ProjectEntity>>(
-      getRepositoryToken(ProjectEntity),
+      getRepositoryToken(ProjectEntity)
     );
     identityMappingRepo = module.get<Repository<IdentityMappingEntity>>(
-      getRepositoryToken(IdentityMappingEntity),
+      getRepositoryToken(IdentityMappingEntity)
     );
     identityCrossMappingRepo = module.get<
       Repository<IdentityConfigCrossMappingEntity>
     >(getRepositoryToken(IdentityConfigCrossMappingEntity));
     operationErrorRepo = module.get<Repository<OperationErrorEntity>>(
-      getRepositoryToken(OperationErrorEntity),
+      getRepositoryToken(OperationErrorEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
   });
@@ -409,7 +409,7 @@ describe("JobConfigService", () => {
     expect(result).toEqual([mockSpeedTestConfig]);
 
     expect(loggerSpy).toHaveBeenCalledWith(
-      `Speed Test job created successfully`,
+      `Speed Test job created successfully`
     );
   });
 
@@ -636,7 +636,7 @@ describe("JobConfigService", () => {
     jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
 
     await expect(service.getSpeedTestDetails(mockJobRunId)).rejects.toThrow(
-      `JobRun with id ${mockJobRunId} not found`,
+      `JobRun with id ${mockJobRunId} not found`
     );
   });
 
@@ -677,10 +677,10 @@ describe("JobConfigService", () => {
     await service.storeSpeedTestResult(mockSpeedTest as any);
     expect(loggerSpy).toHaveBeenCalledWith(
       "Storing speed test result",
-      expect.any(String),
+      expect.any(String)
     );
     expect(loggerSpy).toHaveBeenCalledWith(
-      "Speed test result stored successfully",
+      "Speed test result stored successfully"
     );
   });
 
@@ -711,11 +711,11 @@ describe("JobConfigService", () => {
     });
 
     await expect(
-      service.storeSpeedTestResult(mockSpeedTest as any),
+      service.storeSpeedTestResult(mockSpeedTest as any)
     ).rejects.toThrow(HttpException);
     expect(loggerSpy).toHaveBeenCalledWith(
       "Failed to store speed test result",
-      expect.any(String),
+      expect.any(String)
     );
   });
 
@@ -759,7 +759,7 @@ describe("JobConfigService", () => {
       },
     ]);
     expect(loggerSpy).toHaveBeenCalledWith(
-      "Fetched all speed test job runs successfully",
+      "Fetched all speed test job runs successfully"
     );
   });
 
@@ -770,11 +770,11 @@ describe("JobConfigService", () => {
     const loggerSpy = jest.spyOn(service["logger"], "error");
 
     await expect(service.getAllSpeedTestJobRuns()).rejects.toThrow(
-      HttpException,
+      HttpException
     );
     expect(loggerSpy).toHaveBeenCalledWith(
       "Failed to fetch speed test job runs",
-      expect.any(String),
+      expect.any(String)
     );
   });
 
@@ -845,7 +845,7 @@ describe("JobConfigService", () => {
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
-      },
+      }
     );
     expect(jobConfigRepo.create).toHaveBeenCalledWith({
       status: JobStatus.Active,
@@ -906,7 +906,7 @@ describe("JobConfigService", () => {
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
-      },
+      }
     );
     expect(jobConfigRepo.create).not.toHaveBeenCalled();
     expect(jobConfigRepo.save).toHaveBeenCalledWith([]);
@@ -1004,7 +1004,7 @@ describe("JobConfigService", () => {
         firstRunAt: mockBulkMigrate.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
-      },
+      }
     );
     expect(jobConfigRepo.create).toHaveBeenCalledWith({
       status: JobStatus.Active,
@@ -1112,11 +1112,11 @@ describe("JobConfigService", () => {
     await service.createBulkMigrate(mockBulkMigrate as any);
 
     expect(service.decodeBase64).toHaveBeenCalledWith(
-      mockBulkMigrate.sidMapping,
+      mockBulkMigrate.sidMapping
     );
     expect(service.parseBlobData).toHaveBeenCalledWith(
       mockDecodedSidMapping,
-      TemplateType.SID,
+      TemplateType.SID
     );
     expect(identityMappingRepo.save).toHaveBeenCalled();
   });
@@ -1235,11 +1235,11 @@ describe("JobConfigService", () => {
     await service.createBulkMigrate(mockBulkMigrate as any);
 
     expect(service.decodeBase64).toHaveBeenCalledWith(
-      mockBulkMigrate.gidMapping,
+      mockBulkMigrate.gidMapping
     );
     expect(service.parseBlobData).toHaveBeenCalledWith(
       mockDecodedGidMapping,
-      TemplateType.GID,
+      TemplateType.GID
     );
     expect(identityMappingRepo.save).toHaveBeenCalled();
   });
@@ -1274,7 +1274,7 @@ describe("JobConfigService", () => {
     expect(mockRedisClient.del).toHaveBeenCalledTimes(mockJobRunIds.length);
     mockJobRunIds.forEach((jobRun) => {
       expect(mockRedisClient.exists).toHaveBeenCalledWith(
-        `${jobRun.id}:mapping`,
+        `${jobRun.id}:mapping`
       );
       expect(mockRedisClient.del).toHaveBeenCalledWith(`${jobRun.id}:mapping`);
     });
@@ -1408,7 +1408,7 @@ describe("JobConfigService", () => {
       },
     ]);
     expect(service.flattenCutoverConfig).toHaveBeenCalledWith(
-      mockBulkCutover.cutoverConfig,
+      mockBulkCutover.cutoverConfig
     );
     expect(service.findJobConfigs).toHaveBeenCalledWith([
       { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
@@ -1527,10 +1527,10 @@ describe("JobConfigService", () => {
       .mockResolvedValue(mockExistingCutover as any);
 
     await expect(
-      service.createBulkCutover(mockBulkCutover as any),
+      service.createBulkCutover(mockBulkCutover as any)
     ).rejects.toThrow(HttpException);
     expect(service.flattenCutoverConfig).toHaveBeenCalledWith(
-      mockBulkCutover.cutoverConfig,
+      mockBulkCutover.cutoverConfig
     );
     expect(service.findJobConfigs).toHaveBeenCalledWith([
       { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
@@ -1554,7 +1554,7 @@ describe("JobConfigService", () => {
   it("should throw an error if cutover already exists", async () => {
     try {
       await expect(service.createBulkCutover({} as any)).rejects.toThrow(
-        HttpException,
+        HttpException
       );
     } catch (error) {
       expect(error).toBeInstanceOf(HttpException);
@@ -1596,7 +1596,7 @@ describe("JobConfigService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(null);
 
       await expect(
-        service.updateJobConfig(mockJobConfigId, mockData),
+        service.updateJobConfig(mockJobConfigId, mockData)
       ).rejects.toThrow(`Job with id ${mockJobConfigId} not found`);
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -1633,7 +1633,7 @@ describe("JobConfigService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(null);
 
       await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
-        `Job with id ${mockJobConfigId} not found`,
+        `Job with id ${mockJobConfigId} not found`
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -1830,7 +1830,7 @@ describe("JobConfigService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(null);
 
       await expect(service.getJobConfigById(mockJobConfigId)).rejects.toThrow(
-        `Job with id ${mockJobConfigId} not found`,
+        `Job with id ${mockJobConfigId} not found`
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
@@ -1896,7 +1896,7 @@ describe("JobConfigService", () => {
         timeElapsed: 2000,
         scannedFilesCount: "30",
         scannedDirectoriesCount: "15",
-        totalScannedSize: "0 B",
+        totalScannedSize: "0 Bytes",
       });
     });
   });
@@ -2029,6 +2029,12 @@ describe("JobConfigService", () => {
           { sourcePathId: "src1", destinationPathId: ["dest1"] },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -2383,21 +2389,21 @@ describe("JobConfigService", () => {
 
       expect(result).toEqual(mockJobConfigs);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "jobConfig",
+        "jobConfig"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         `(jobConfig.sourcePathId = :sourcePathId_0 AND jobConfig.targetPathId = :destinationPathId_0) AND jobConfig.jobType = 'MIGRATE'`,
         {
           sourcePathId_0: "sourcePath1",
           destinationPathId_0: "destinationPath1",
-        },
+        }
       );
       expect(mockQueryBuilder.orWhere).toHaveBeenCalledWith(
         `(jobConfig.sourcePathId = :sourcePathId_1 AND jobConfig.targetPathId = :destinationPathId_1)`,
         {
           sourcePathId_1: "sourcePath2",
           destinationPathId_1: "destinationPath2",
-        },
+        }
       );
       expect(mockQueryBuilder.getMany).toHaveBeenCalled();
     });
@@ -2425,10 +2431,10 @@ describe("JobConfigService", () => {
       expect(service.covertBytes(1024 * 1024 - 1)).toBe("1024.00 KB");
       expect(service.covertBytes(1024 * 1024 * 1024 - 1)).toBe("1024.00 MB");
       expect(service.covertBytes(1024 * 1024 * 1024 * 1024 - 1)).toBe(
-        "1024.00 GB",
+        "1024.00 GB"
       );
       expect(service.covertBytes(1024 * 1024 * 1024 * 1024 * 1024 - 1)).toBe(
-        "1024.00 TB",
+        "1024.00 TB"
       );
     });
   });
@@ -2441,10 +2447,10 @@ describe("JobConfigService", () => {
       };
 
       expect(service.getTemplateFilename(TemplateType.GID)).toBe(
-        "template1.csv",
+        "template1.csv"
       );
       expect(service.getTemplateFilename(TemplateType.SID)).toBe(
-        "template2.csv",
+        "template2.csv"
       );
     });
     it("should return undefined if an invalid TemplateType is passed", () => {
@@ -2455,7 +2461,7 @@ describe("JobConfigService", () => {
       };
 
       expect(
-        service.getTemplateFilename("INVALID_TYPE" as TemplateType),
+        service.getTemplateFilename("INVALID_TYPE" as TemplateType)
       ).toBeUndefined();
     });
   });
@@ -2523,7 +2529,7 @@ describe("JobConfigService", () => {
         },
       ]);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "jobconfig",
+        "jobconfig"
       );
     });
 
@@ -2546,7 +2552,7 @@ describe("JobConfigService", () => {
 
       expect(result).toEqual([]);
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
-        "jobconfig",
+        "jobconfig"
       );
     });
   });
@@ -2559,7 +2565,7 @@ describe("JobConfigService", () => {
     }));
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      BadRequestException,
+      BadRequestException
     );
   });
 
@@ -2569,10 +2575,10 @@ describe("JobConfigService", () => {
     jest.spyOn(projectRepo, "findOne").mockResolvedValue(null);
     const getConfigsByProjectIdSpy = jest.spyOn(
       service,
-      "getConfigsByProjectId",
+      "getConfigsByProjectId"
     );
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      NotFoundException,
+      NotFoundException
     );
     expect(getConfigsByProjectIdSpy).toHaveBeenCalledWith(mockProjectId);
   });
@@ -2585,10 +2591,10 @@ describe("JobConfigService", () => {
     jest.spyOn(projectRepo, "findOne").mockResolvedValue(null);
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      NotFoundException,
+      NotFoundException
     );
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      `Project for id ${mockProjectId} not found.`,
+      `Project for id ${mockProjectId} not found.`
     );
   });
 
@@ -2599,7 +2605,7 @@ describe("JobConfigService", () => {
     jest.spyOn(projectRepo, "findOne").mockResolvedValue(null);
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      BadRequestException,
+      BadRequestException
     );
   });
 
@@ -2704,7 +2710,7 @@ describe("JobConfigService", () => {
     const mockProjectId = "invalid-uuid";
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      BadRequestException,
+      BadRequestException
     );
   });
 
@@ -2714,11 +2720,11 @@ describe("JobConfigService", () => {
     jest.spyOn(projectRepo, "findOne").mockResolvedValue(null);
     const getConfigsByProjectIdSpy = jest.spyOn(
       service,
-      "getConfigsByProjectId",
+      "getConfigsByProjectId"
     );
 
     await expect(service.getConfigsByProjectId(mockProjectId)).rejects.toThrow(
-      BadRequestException,
+      BadRequestException
     );
     expect(getConfigsByProjectIdSpy).toHaveBeenCalledWith(mockProjectId);
   });
@@ -2734,7 +2740,7 @@ describe("JobConfigService", () => {
         const base64String = "InvalidBase64String";
 
         await expect(service.decodeBase64(base64String)).rejects.toThrowError(
-          "Invalid Base64 format",
+          "Invalid Base64 format"
         );
       });
     });
@@ -2771,7 +2777,7 @@ describe("JobConfigService", () => {
         jobConfigIds,
         parsedData,
         identityMap,
-        TemplateType.SID,
+        TemplateType.SID
       );
 
       // expect(identityMappingRepo.create).toHaveBeenCalledWith({
@@ -2787,7 +2793,7 @@ describe("JobConfigService", () => {
       //   targetMapping: 'target2',
       // });
       expect(identityMappingRepo.save).toHaveBeenCalledWith(
-        savedIdentityMapping,
+        savedIdentityMapping
       );
 
       expect(identityMappingRepo.create).toHaveBeenCalledTimes(2);
@@ -2883,7 +2889,7 @@ describe("JobConfigService", () => {
         const findOneSpy = jest.spyOn(identityCrossMappingRepo, "findOne");
         const createCrossMappingSpy = jest.spyOn(
           identityCrossMappingRepo,
-          "create",
+          "create"
         );
         const saveCrossMappingSpy = jest
           .spyOn(identityCrossMappingRepo, "save")
@@ -2892,7 +2898,7 @@ describe("JobConfigService", () => {
           jobConfigIds,
           parsedData,
           identityMap,
-          templateType,
+          templateType
         );
 
         expect(createSpy).toHaveBeenCalledWith({
@@ -2942,7 +2948,7 @@ describe("JobConfigService", () => {
           .mockResolvedValue({} as any);
         const createCrossMappingSpy = jest.spyOn(
           identityCrossMappingRepo,
-          "create",
+          "create"
         );
         const saveCrossMappingSpy = jest
           .spyOn(identityCrossMappingRepo, "save")
@@ -2952,7 +2958,7 @@ describe("JobConfigService", () => {
           jobConfigIds,
           parsedData,
           identityMap,
-          templateType,
+          templateType
         );
 
         expect(createSpy).toHaveBeenCalledWith({
@@ -3002,7 +3008,7 @@ describe("JobConfigService", () => {
         jobConfigIds,
         parsedData,
         identityMap,
-        TemplateType.GID,
+        TemplateType.GID
       );
 
       expect(identityMappingRepo.create).toHaveBeenCalledWith({
@@ -3014,7 +3020,7 @@ describe("JobConfigService", () => {
         identityMap: identityMap,
       });
       expect(identityMappingRepo.save).toHaveBeenCalledWith(
-        identityMappingEntity,
+        identityMappingEntity
       );
     });
     describe("updateMappingsWithMap", () => {
@@ -3036,7 +3042,7 @@ describe("JobConfigService", () => {
           jobConfigIds,
           parsedData,
           identityMap,
-          TemplateType.GID,
+          TemplateType.GID
         );
 
         expect(identityMappingRepo.create).toHaveBeenCalledWith({
@@ -3099,7 +3105,7 @@ describe("JobConfigService", () => {
           jobConfigIds,
           parsedData,
           identityMap,
-          templateType,
+          templateType
         );
 
         expect(createIdentityMappingSpy).toHaveBeenCalledWith({
@@ -3219,16 +3225,14 @@ describe("JobConfigService", () => {
         },
       } as any;
 
-      jobConfigRepo.find = jest
-        .fn()
-        .mockResolvedValue([
-          {
-            id: "job1",
-            sourcePathId: "src1",
-            targetPathId: "dest1",
-            scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
-          },
-        ]);
+      jobConfigRepo.find = jest.fn().mockResolvedValue([
+        {
+          id: "job1",
+          sourcePathId: "src1",
+          targetPathId: "dest1",
+          scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        },
+      ]);
 
       jobConfigRepo.update = jest.fn();
 
@@ -3241,7 +3245,7 @@ describe("JobConfigService", () => {
           targetPathId: "dest1",
           scheduler: expect.anything(),
         },
-        expect.objectContaining({ status: JobStatus.Active }),
+        expect.objectContaining({ status: JobStatus.Active })
       );
     });
 
@@ -3255,16 +3259,14 @@ describe("JobConfigService", () => {
 
       jobConfigRepo.find = jest.fn().mockResolvedValue([]);
       jobConfigRepo.create = jest.fn().mockImplementation((config) => config);
-      jobConfigRepo.save = jest
-        .fn()
-        .mockResolvedValue([
-          {
-            id: "new_job1",
-            jobType: JobType.MIGRATE,
-            sourcePathId: "src1",
-            targetPathId: "dest1",
-          },
-        ]);
+      jobConfigRepo.save = jest.fn().mockResolvedValue([
+        {
+          id: "new_job1",
+          jobType: JobType.MIGRATE,
+          sourcePathId: "src1",
+          targetPathId: "dest1",
+        },
+      ]);
 
       const result = await service.createBulkMigrate(bulkMigrate);
 
@@ -3392,7 +3394,7 @@ describe("JobConfigService", () => {
 
       expect(result[0].jobConfig[0].jobType).toBe(JobType.MIGRATE);
       expect(result[0].jobConfig[0].jobRunDetails.status).toBe(
-        JobRunStatus.Completed,
+        JobRunStatus.Completed
       );
     });
   });
@@ -3401,14 +3403,14 @@ describe("JobConfigService", () => {
     it("should throw NotFoundException if jobRunId does not exist", async () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
       await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
-        new NotFoundException("Job Run with id invalid-id not found"),
+        new NotFoundException("Job Run with id invalid-id not found")
       );
     });
 
     it("should throw NotFoundException if jobRunId does not exist", async () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
       await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
-        new NotFoundException("Job Run with id invalid-id not found"),
+        new NotFoundException("Job Run with id invalid-id not found")
       );
     });
 
@@ -3637,7 +3639,7 @@ describe("JobConfigService", () => {
               }),
             }),
           ]),
-        }),
+        })
       );
       expect(volumeRepo.find).toHaveBeenCalledWith({
         where: { id: In(["path1", "path2"]) },
@@ -3675,6 +3677,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
@@ -3693,6 +3701,12 @@ describe("JobConfigService", () => {
         migrateConfigs: [
           { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
@@ -3723,6 +3737,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest
@@ -3747,6 +3767,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
@@ -3772,6 +3798,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3811,6 +3843,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3844,6 +3882,12 @@ describe("JobConfigService", () => {
             destinationPathId: ["dest-1"],
           },
         ],
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
       jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
       jest
@@ -3905,6 +3949,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3961,6 +4011,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       const mockVolumes = [
@@ -3999,6 +4055,12 @@ describe("JobConfigService", () => {
           },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
@@ -4020,6 +4082,12 @@ describe("JobConfigService", () => {
           { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
         ],
         preserveAccessTime: true,
+        options: {
+          workflowExecutionTimeout: "300",
+          workflowTaskTimeout: "60",
+          workflowRunTimeout: "600",
+          startDelay: "10",
+        },
       };
 
       jest.spyOn(volumeRepo, "find").mockResolvedValue([
