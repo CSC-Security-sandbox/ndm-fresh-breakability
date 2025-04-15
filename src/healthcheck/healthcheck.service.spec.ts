@@ -4,12 +4,23 @@ import { Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { of, throwError } from 'rxjs';
+import { CronJob } from 'cron';
+import { throwError } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
 
-jest.mock('src/activities/common/token.util', () => ({
-  getAccessToken: jest.fn(),
-}));
+let cronJobStore: CronJob | undefined;
+
+const mockedSchedulerRegistry = {
+  addCronJob: jest.fn((name: string, job: CronJob) => {
+    cronJobStore = job;
+  }),
+};
+
+const triggerCronJob = async (): Promise<void> => {
+  if (cronJobStore && typeof cronJobStore.fireOnTick === 'function') {
+    await cronJobStore.fireOnTick();
+  }
+};
 
 describe('HealthcheckService', () => {
   let service: HealthcheckService;
@@ -31,14 +42,9 @@ describe('HealthcheckService', () => {
   const mockedLogger = { error: jest.fn(), debug: jest.fn(), log: jest.fn() };
   const mockedTotalMem = jest.fn((): number => 8 * 1024 * 1024 * 1024);
   const mockedFreeMem = jest.fn((): number => 4 * 1024 * 1024 * 1024);
-  const mockedCpu = {
-    usage: jest.fn(() => Promise.resolve(50)),
-  };
+  const mockedCpu = { usage: jest.fn(() => Promise.resolve(50)) };
   const mockedDrive = {
     info: jest.fn(() => Promise.resolve({ totalGb: '500', freeGb: '300' })),
-  };
-  const mockedSchedulerRegistry = {
-    addCronJob: jest.fn(),
   };
   const mockedAuthService = {
     getAccessToken: jest.fn().mockResolvedValue('mocked-token'),
@@ -65,16 +71,24 @@ describe('HealthcheckService', () => {
     logger = module.get<Logger>(Logger);
     schedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
     jest.clearAllMocks();
-    await Promise.resolve();
+    cronJobStore = undefined;
+  });
+
+  afterEach(() => {
+    if (cronJobStore) {
+      cronJobStore.stop();
+      cronJobStore = undefined;
+    }
   });
 
   describe('onModuleInit (Cron Registration)', () => {
-    it('should register a cron job with the correct cron expression', async () => {
+    it('should register a cron job with correct expression', async () => {
       await service.onModuleInit();
       const expectedCronExpr = `*/${healthCheckInterval} * * * * *`;
       expect(mockedSchedulerRegistry.addCronJob).toHaveBeenCalled();
       const callArgs = mockedSchedulerRegistry.addCronJob.mock.calls[0];
       expect(callArgs[0]).toBe('healthcheck');
+      expect(cronJobStore?.cronTime?.source).toBe(expectedCronExpr);
     });
   });
 
@@ -104,6 +118,7 @@ describe('HealthcheckService', () => {
         diskLimit: '-1',
       });
     });
+
     it('should return "-1" for memory stats when totalmem/freemem throw an error', async () => {
       const brokenTotalMem = jest.fn(() => {
         throw new Error('Memory error');
@@ -143,7 +158,7 @@ describe('HealthcheckService', () => {
   });
 
   describe('getHealthcheckPayload', () => {
-    it('should return a valid healthcheck payload with capital "HEALTHY" status', async () => {
+    it('should return a valid payload with "HEALTHY" status', async () => {
       const fakeSystemStats = {
         cpuUsage: '30.00%',
         memoryUsage: '20.00%',
@@ -161,8 +176,8 @@ describe('HealthcheckService', () => {
     });
   });
 
-  describe('postHealthcheckResults', () => {
-    it('should call httpService.post with correct URL, payload and headers using capital "HEALTHY" status', async () => {
+  describe('Cron Job Chain (Full Functionality)', () => {
+    it('should successfully post healthcheck results when cron job is triggered', async () => {
       const payloadData = {
         workerId,
         healthStatus: 'HEALTHY',
@@ -177,16 +192,18 @@ describe('HealthcheckService', () => {
       jest
         .spyOn(service, 'getHealthcheckPayload')
         .mockResolvedValue(payloadData);
-      mockedHttpService.post.mockReturnValue(of({}));
-      await service.postHealthcheckResults();
+      await service.onModuleInit();
+      await triggerCronJob();
       expect(mockedAuthService.getAccessToken).toHaveBeenCalled();
+      await new Promise((resolve) => process.nextTick(resolve));
       expect(mockedHttpService.post).toHaveBeenCalledWith(
         'https://localhost:4000/api/v1/statscheck',
         payloadData,
         { headers: { Authorization: 'Bearer mocked-token' } },
       );
     });
-    it('should log error if httpService.post fails', async () => {
+
+    it('should log error when httpService.post fails via cron job chain', async () => {
       const error = new Error('HTTP error');
       jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
         workerId,
@@ -200,9 +217,11 @@ describe('HealthcheckService', () => {
         },
       });
       mockedHttpService.post.mockReturnValue(throwError(() => error));
-      await service.postHealthcheckResults();
+      await service.onModuleInit();
+      await triggerCronJob();
+      await new Promise((resolve) => process.nextTick(resolve));
       expect(mockedLogger.error).toHaveBeenCalledWith(
-        'Error in postHealthcheckResults: HTTP error',
+        'Error in making statscheck API call: HTTP error',
       );
     });
   });
