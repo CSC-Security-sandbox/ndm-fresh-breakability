@@ -992,6 +992,7 @@ export class JobConfigService {
             options: new Options(),
           },
         ],
+        ...data.options,
       };
       const workflow = await this.workFlowService.startWorkflow(
         WorkFlows.PRECHECK,
