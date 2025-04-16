@@ -172,7 +172,28 @@ describe('JobRunInitService', () => {
       const currentTime = new Date();
       const details = {} as any;
       details.jobType = JobType.DISCOVER;
-      details.workers = [];
+      details.workers = [
+        { workersId: 'worker1' },
+        { workersId: 'worker2' },
+      ];
+      details.connection = {
+        sourceCredential: {
+          pathId: 'sourcePathId',
+          protocol: Protocol.NFS,
+          username: 'username',
+          password: 'password',
+          host: 'localhost',
+          workingDirectory: '/mount/base/path',
+        },
+        targetCredential: {
+          pathId: 'targetPathId',
+          protocol: Protocol.NFS,
+          username: 'username',
+          password: 'password',
+          host: 'localhost',
+          workingDirectory: '/mount/base/path',
+        },
+      };
       const jobRunRecord = {};
       const jobRun = {};
 
@@ -182,10 +203,11 @@ describe('JobRunInitService', () => {
       jest.spyOn(jobRunRepo, 'create').mockReturnValue(jobRunRecord as any);
       jest.spyOn(jobRunRepo, 'save').mockResolvedValue(jobRun as any);
       jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({} as any);
-
+      jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn(),
+        xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
+        set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
+      jest.spyOn(service,'initiateWorkflow').mockResolvedValue(undefined);
       const result = await service.createJobRun(jobConfigId, currentTime);
-
-     
       expect(service.getJobConfig).toHaveBeenCalledWith(jobConfigId);
     });
   });
