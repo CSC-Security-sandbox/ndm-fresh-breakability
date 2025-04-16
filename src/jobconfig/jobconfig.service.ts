@@ -628,6 +628,7 @@ export class JobConfigService {
               status: JobStatus.Active,
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
+              futureScheduleAt: bulkMigrate?.futureRunSchedule,
             }
           );
           const jobConfigIds = existingJobConfigs.map(
@@ -1419,6 +1420,7 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
+    console.log('payload ' + payload)
     allJobsDetails.forEach((job) => {
       payload.push({
         jobConfigId: job.jobconfigid,
