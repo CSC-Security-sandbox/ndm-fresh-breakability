@@ -1,4 +1,0 @@
-{
-    "jobRunId": [#foreach($id in $jobRunId) "$id"#if($foreach.hasNext),#end#end],
-    "report-type": "DISCOVER"
-  }

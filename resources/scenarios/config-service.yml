@@ -1,211 +1,105 @@
-#  for source
-create-new-request:
-  url: /api/v1/work-manager/validate-connection
-  method: post
-  service_name : config_service
-  data:
-    fileServer:
-      hostname: "192.168.64.6"
-      protocols:
-        - type: "NFS"
-          username: "root"
+scenarios:
+  - name: create-new-request
+    url: /api/v1/work-manager/validate-connection
+    method: post
+    service_name: config_service
+    data:
+      fileServer:
+        hostname: "192.168.64.6"
+        protocols:
+          - type: "NFS"
+            username: "root"
+            password: ""
+      workerIds: "$workerId"
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse: {}
+    params: {}
+
+  - name: get-workflow-result
+    url: "/api/v1/work-manager/workflow/details/{id}"
+    method: GET
+    service_name: config_service
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: workflowId
+
+  - name: create-config
+    url: /api/v1/servers
+    method: post
+    service_name: config_service
+    data:
+      configName: "Lalit-Test-Source"
+      configType: "FILE"
+      projectId: "15bcd258-23c7-4773-a8e3-92694fe50729"
+      fileServers:
+        - serverType: "OtherNAS"
+          userName: "root"
           password: ""
+          protocol: "NFS"
+          protocolVersion: "v3"
+          host: "192.168.64.6"
+          volumes: []
+          workers:
+            - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+      workingDirectory:
+        workingDirectory: ""
+        pathId: "null"
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
-    workerIds: "$workerId"
-    options :
-      workflowExecutionTimeout: "60s"
-      workflowTaskTimeout: "30s"
-      workflowRunTimeout: "30s"
-      startDelay: "10s"
+  - name: get-config-by-id
+    url: /api/v1/servers/{id}
+    method: get
+    service_name: config_service
+    delay: "5"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: configId
 
-  response:
-    - status_code: 201
-  parse: {}
-  params: {}
+  - name: create-new-discovery-job
+    url: /api/v1/jobs/bulk-discovery
+    method: post
+    service_name: job_service
+    data:
+      excludeOlderThan: "2025-03-20T06:55:32.491Z"
+      excludeFilePatterns: "string"
+      preserveAccessTime: false
+      firstRunAt: "2025-03-19T17:33:44.590Z"
+      sourcePathIds: "$sourcePathIds"
+      createdBy: null
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse:
+      id: jobConfigId
 
-
-get-workflow-result:
-  url: "/api/v1/work-manager/workflow/details/{id}"
-  method: GET
-  service_name: config_service
-  data: {}
-  response:
-    - status_code: 200
-  params:
-    id : workflowId
-
-
-create-config:
-  url: /api/v1/servers
-  method: post
-  service_name: config_service
-  data:
-    configName: "Lalit-Test-Source"
-    configType: "FILE"
-    projectId: "15bcd258-23c7-4773-a8e3-92694fe50729"
-    fileServers:
-      - serverType: "OtherNAS"
-        userName: "root"
-        password: ""
-        protocol: "NFS"
-        protocolVersion: "v3"
-        host: "192.168.64.6"
-        volumes: []
-        workers:
-          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
-    workingDirectory:
-      workingDirectory: ""
-      pathId: "null"
-      pathName: ""
-
-  response:
-    - status_code: 201
-  parse:
-    id: configId
-
-
-# #  run after 5 seconds .......
-
-get-config-by-id:
-  url: /api/v1/servers/{id}
-  method: get
-  service_name : config_service
-  delay : "5"
-  data: {}
-  response:
-    - status_code : 200
-  params :
-    id: configId
-
-
-
-
-create-new-discovery-job:
-  url: /api/v1/jobs/bulk-discovery
-  method: post
-  service_name: job_service
-  data:
-    excludeOlderThan: "2025-03-20T06:55:32.491Z"
-    excludeFilePatterns: "string"
-    preserveAccessTime: false
-    firstRunAt: "2025-03-19T17:33:44.590Z"
-    sourcePathIds: $sourcePathIds
-    createdBy: null
-    options:
-      workflowExecutionTimeout: "60s"
-      workflowTaskTimeout: "30s"
-      workflowRunTimeout: "30s"
-      startDelay: "10s"
-
-  response:
-    - status_code: 201
-  parse:
-    id: jobConfigId
-
-
-
-
-
-
-
-
-
-
-  # sourcePathId = fileServers[0].volumes[0].id
-
-
-get-jobs-by-job-config-id:
-  url: /api/v1/jobs/{id}
-  method: get
-  service_name : job_service
-  delay : "30"
-  data: {}
-  response:
-    - status_code : 200
-    - jobRuns[0].status: COMPLETED
-  params :
-    id: jobConfigId
-  parse :
-    jobRuns[0].jobRunId: SourceDiscoveryJobRunId
-
-
-# https://localhost:6443/api/v1/servers/a1f6d22d-1650-49fb-a28d-c961d5d948b3
-
-
-
-
-
-
-
-# get-paginated-config:
-#   url: /api/v1/servers
-#   method: get
-#   service_name : config_service
-#   data: {}
-#   response:
-#     - status_code: 200
-#   parse: {}
-
-# get-config-by-id:
-#   url: /api/v1/servers/{id}
-#   method: get
-#   service_name : config_service
-#   data: {}
-#   response:
-#     - status_code: 200
-#   parse: {}
-#   params:
-#     id : configId
-
-# update-config:
-#   url: /api/v1/servers/{id}
-#   method: put
-#   service_name : config_service
-#   data:
-#     projectId: d35d2eb6-890c-41d5-b824-d6b4d2039c0e
-#     configName: "Config 2"
-#     workingDirectory:
-#       pathName: "/temp"
-#       workingDirectory: "/working-directory"
-#       pathId: 36bfd77f-1d7c-47a3-8c62-3c8739e2f88f
-#     configType: "FILE"
-#     fileServers:
-#       - id: d35d2eb6-890c-41d5-b824-d6b4d2039c0e
-#         serverType: "OtherNAS"
-#         protocol: "NFS"
-#         protocolVersion: "v4.0"
-#         userName: "admin"
-#         host: "10.0.0.67"
-#         password: "***"
-#         workers:
-#           - "63bbc5d6-51d1-451f-98eb-cd37bfc262f0"
-#         createdBy: 36bfd77f-1d7c-47a3-8c62-3c8739e2f88f
-#     createdBy: 36bfd77f-1d7c-47a3-8c62-3c8739e2f88f
-#   response:
-#     - status_code: 201
-#   params:
-#     id : configId
-#   parse:
-#     id: configId
-
-# # delete-config-by-id:
-# #   url: /api/v1/servers/{id}
-# #   method: delete
-# #   service_name : config_service
-# #   data: {}
-# #   response:
-# #     - status_code: 200
-# #   parse: {}
-# #   params:
-# #     id : configId
-
-# refresh-config-by-id:
-#   url: /api/v1/servers/refresh/{id}
-#   method: get
-#   service_name : config_service
-#   data: {}
-#   response:
-#     - status_code: 200
-#   parse: {}
-#   params:
-#     id : configId
+  - name: get-jobs-by-job-config-id
+    url: /api/v1/jobs/{id}
+    method: get
+    service_name: job_service
+    delay: "30"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: COMPLETED
+    params:
+      id: jobConfigId
+    parse:
+      jobRuns[0].jobRunId: SourceDiscoveryJobRunId

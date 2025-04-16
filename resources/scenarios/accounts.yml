@@ -9,7 +9,7 @@ scenarios:
       - account_name: account1
       - status_code: 201
     parse:
-      id: account_id
+      account_id: id
 
   - name: get-list-of-accounts
     url: /api/v1/accounts

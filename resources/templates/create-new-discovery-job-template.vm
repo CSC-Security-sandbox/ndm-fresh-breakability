@@ -1,7 +1,0 @@
-{
-    
-    "preserveAccessTime": $preserveAccessTime,
-    "sourcePathIds": [#foreach($sourcePathId in $sourcePathIds) "$sourcePathId"#if($foreach.hasNext),#end #end],
-    "preserveAccessTime": true
-}
-  

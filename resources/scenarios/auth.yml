@@ -4,15 +4,16 @@ scenarios:
     method: post
     service_name: admin_service
     data:
-      username: "lalitsdinsdsgh8s1s200ss0@email.com"
-      firstName: "Lasisst"
-      lastName: "Sinsgs"
+      username: "lasslssissstsdinsdsghsssss8ss1sssssss2ss00sss0@email.com"
+      firstName: "Lalit"
+      lastName: "Singh"
     response:
       - status_code: 201
-      - user.first_name: "Lassit"
+      - user.first_name: "Lalit"
     parse:
       id: user.id
-      user.email: user.email
+      user: user
+
 
   - name: reset-password-user
     url: /api/v1/reset-password
@@ -22,7 +23,7 @@ scenarios:
       email: "$user.email"
     response:
       - status_code: 201
-      - email: "lalitsingh8122000@email.com"
+      - email: "lasslssissstsdinsdsghsssss8ss1sssssss2ss00sss0@email.com"
     parse: {}
 
   - name: change-user-status

@@ -1,289 +1,240 @@
-create-new-discovery-job:
-  url: /api/v1/jobs/bulk-discovery
-  method: post
-  service_name : job_service
-  data:
-    excludeOlderThan: "2025-03-15T07:30:43.364Z"
-    excludeFilePatterns: "string"
-    preserveAccessTime: false
-    firstRunAt: "2025-03-14T05:00:13.468Z"
-    sourcePathIds:
-    - "string"
-    createdBy: "string"
-    options:
-      workflowExecutionTimeout: "60s"
-      workflowTaskTimeout: "30s"
-      workflowRunTimeout: "30s"
-      startDelay: "10s"
-    
-  response:
-    - status_code: 201
-  parse:
-    id: configId
-
-
-
-
-create-new-migration-job:
-  url: /api/v1/jobs/bulk-migrate
-  method: post
-  service_name : job_service
-  data:
-    firstRunAt: "2025-03-14T05:00:13.470Z"
-    futureRunSchedule: "string"
-    migrateConfigs:
-      - sourcePathId: "string"
-        destinationPathId:
-          - "string"
-    sidMapping: "string"
-    gidMapping: "string"
-    options:
-      excludeOlderThan: "2025-03-15T07:35:04.604Z"
+scenarios:
+  - name: create-new-discovery-job
+    url: /api/v1/jobs/bulk-discovery
+    method: post
+    service_name: job_service
+    data:
+      excludeOlderThan: "2025-03-15T07:30:43.364Z"
       excludeFilePatterns: "string"
       preserveAccessTime: false
-      skipFile: "1h"
-
-  response:
-    - status_code: 201
-  parse:
-    id: configId
-
-
-create-new-cutover-job:
-  url: /api/v1/jobs/bulk-cutover
-  method: post
-  service_name : job_service
-  data:
-    cutoverConfig:
-      - sourcePathId: "string"
-        destinationPathId:
-          - "string"
-
-  response:
-    - status_code: 201
-  parse:
-    id: configId
-
-
-precheck-for-migration-job:
-  url: /api/v1/jobs/precheck
-  method: post
-  service_name : job_service
-  data:
-    migrateConfigs:
-    - sourcePathId: "string"
-      destinationPathId:
+      firstRunAt: "2025-03-14T05:00:13.468Z"
+      sourcePathIds:
         - "string"
-    preserveAccessTime: false
+      createdBy: "string"
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
-  response:
-    - status_code: 200
-  parse:
-    id: configId
+  - name: create-new-migration-job
+    url: /api/v1/jobs/bulk-migrate
+    method: post
+    service_name: job_service
+    data:
+      firstRunAt: "2025-03-14T05:00:13.470Z"
+      futureRunSchedule: "string"
+      migrateConfigs:
+        - sourcePathId: "string"
+          destinationPathId:
+            - "string"
+      sidMapping: "string"
+      gidMapping: "string"
+      options:
+        excludeOlderThan: "2025-03-15T07:35:04.604Z"
+        excludeFilePatterns: "string"
+        preserveAccessTime: false
+        skipFile: "1h"
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
+  - name: create-new-cutover-job
+    url: /api/v1/jobs/bulk-cutover
+    method: post
+    service_name: job_service
+    data:
+      cutoverConfig:
+        - sourcePathId: "string"
+          destinationPathId:
+            - "string"
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
-get-all-jobs:
-  url: /api/v1/jobs
-  method: get
-  service_name : job_service
-  data:
-    
-  response:
-    - status_code: 201
-  parse:
-    id: configId
+  - name: precheck-for-migration-job
+    url: /api/v1/jobs/precheck
+    method: post
+    service_name: job_service
+    data:
+      migrateConfigs:
+        - sourcePathId: "string"
+          destinationPathId:
+            - "string"
+      preserveAccessTime: false
+    response:
+      - status_code: 200
+    parse:
+      id: configId
 
-find-all-config-page-dto-by-id:
-  url: /api/v1/jobs/{id}
-  method: get
-  service_name : job_service
-  data:
-    
-  response:
-    - status_code: 201
-  parse:
-    id: configId
+  - name: get-all-jobs
+    url: /api/v1/jobs
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
+  - name: find-all-config-page-dto-by-id
+    url: /api/v1/jobs/{id}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
+  - name: update-job-by-id
+    url: /api/v1/jobs/{id}
+    method: patch
+    service_name: job_service
+    data:
+      status: "ACTIVE"
+      excludeOlderThan: "2025-03-15T07:49:06.687Z"
+      excludeFilePatterns: "string"
+      preserveAccessTime: false
+      firstRunAt: "2025-03-14T05:00:13.219Z"
+      futureSchedule: "string"
+    response:
+      - status_code: 201
+    parse:
+      id: configId
 
+  - name: delet-job-by-id
+    url: /api/v1/jobs/{id}
+    method: delete
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      id: jobID
 
+  - name: get-cutover-details
+    url: /api/v1/jobs/download-template/{type}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      fileServerId: fileServerId
 
-update-job-by-id:
-  url: /api/v1/jobs/{id}
-  method: patch
-  service_name : job_service
-  data:
-    status: "ACTIVE"
-    excludeOlderThan: "2025-03-15T07:49:06.687Z"
-    excludeFilePatterns: "string"
-    preserveAccessTime: false
-    firstRunAt: "2025-03-14T05:00:13.219Z"
-    futureSchedule: "string"
+  - name: download-template
+    url: /api/v1/jobs/download-template/{type}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      fileServerId: fileServerId
 
-  response:
-    - status_code: 201
-  parse:
-    id: configId
+  - name: get-config-volumes-by-project_id
+    url: /api/v1/jobs/project/{projectId}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      projectId: project_id
 
+  - name: get-notice-board-details-by-project_id
+    url: /api/v1/jobs/notice-board/{projectId}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse:
+      projectId: project_id
 
-delet-job-by-id:
-  url: /api/v1/jobs/{id}
-  method: delete
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse:
-    id: jobID
+  - name: precheck-validation
+    url: /api/v1/jobs/precheck/validate
+    method: post
+    service_name: job_service
+    data:
+      - "string"
+    response:
+      - status_code: 201
+    parse: {}
 
+  # Workers
+  - name: get-paginated-list-worker
+    url: /api/v1/workers
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse: {}
 
+  - name: get-paginated-list-of-job-run
+    url: /api/v1/job-run
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse: {}
 
+  - name: get-job-run-errors
+    url: /api/v1/job-run/errors
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse: {}
 
-get-cutover-details:
-  url:   /api/v1/jobs/download-template/{type}
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse:
-    fileServerId: fileServerId
+  - name: get-job-run-by-id
+    url: /api/v1/job-run/{id}
+    method: get
+    service_name: job_service
+    data: {}
+    response:
+      - status_code: 201
+    parse: {}
 
+  - name: job-run-action-pause-resume-stop
+    url: /api/v1/job-run/action
+    method: patch
+    service_name: job_service
+    data:
+      action: "PAUSE"
+      jobRuns:
+        - "550e8400-e29b-41d4-a716-446655440000"
+    response:
+      - status_code: 201
+    parse: {}
 
-download-template:
-  url: /api/v1/jobs/download-template/{type}
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse:
-    fileServerId: fileServerId
+  - name: approve-cutover-by-join-run-id
+    url: /api/v1/job-run/cutover/approve
+    method: patch
+    service_name: job_service
+    data:
+      jobRunId: "550e8400-e29b-41d4-a716-446655440000"
+      action: "APPROVED"
+    response:
+      - status_code: 201
+    parse: {}
 
-get-config-volumes-by-project_id:
-  url: /api/v1/jobs/project/{projectId}
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse:
-    projectId: project_id
-
-
-
-get-notice-board-details-by-project_id:
-  url: /api/v1/jobs/notice-board/{projectId}
-  method: get
-  service_name : job_service
-  data:
-  response:
-    - status_code: 201
-  parse:
-    projectId: project_id
-
-
-precheck-validation:
-  url: /api/v1/jobs/precheck/validate
-  method: post
-  service_name : job_service
-  data: 
-  - string
-  response:
-    - status_code: 201
-  parse: {}
-
-
-
-  # workers 
-
-  get-paginated-list-worker:
-  url: /api/v1/workers
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse: {}
-
-
-
-  get-paginated-list-of-job-run:
-  url: /api/v1/job-run
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse: {}
-
-  get-job-run-errors:
-  url: /api/v1/job-run/errors
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse: {}
-
-
-get-job-run-by-id:
-  url: /api/v1/job-run/{id}
-  method: get
-  service_name : job_service
-  data: {}
-  response:
-    - status_code: 201
-  parse: {}
-
-
-  job-run-action-pause-resume-stop:
-  url: /api/v1/job-run/action
-  method: patch
-  service_name : job_service
-  data:
-    action: "PAUSE"
-    jobRuns:
-      - "550e8400-e29b-41d4-a716-446655440000"
-
-  response:
-    - status_code: 201
-  parse: {}
-  
-
-  approve-cutover-by-join-run-id:
-  url: /api/v1/job-run/cutover/approve
-  method: patch
-  service_name : job_service
-  data:
-    jobRunId: "550e8400-e29b-41d4-a716-446655440000",
-    action: "APPROVED"
-
-  response:
-    - status_code: 201
-  parse: {}
-
-
-
-  create-excesive-job-run-based-on-jobconfg:
-  url: /api/v1/job-run/cutover/approve
-  method: post
-  service_name : job_service
-  data:
-    jobConfigId: "string"
-
-  response:
-    - status_code: 201
-  parse: {}
-
-
-
-
-
-
-
-
-  
-
-
-    
+  - name: create-excesive-job-run-based-on-jobconfg
+    url: /api/v1/job-run/cutover/approve
+    method: post
+    service_name: job_service
+    data:
+      jobConfigId: "string"
+    response:
+      - status_code: 201
+    parse: {}
