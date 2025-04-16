@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
-import { ConfigStatus, ProtocolVersionError, WorkFlows } from 'src/constants/enums';
+import { ConfigErrorMsg, ConfigStatus, ProtocolVersionError, WorkFlows } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
@@ -21,10 +21,11 @@ import { StartWorkFlowPayload, WorkflowExecutionStatus } from 'src/workflow/work
 import { Credentials, ListPathWorkflowStatus, PathsMap } from './configuration.types';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { SendMailService } from 'src/util/send-email';
-
+import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class ConfigurationService {
-    private logger : LoggerService
+    private logger : LoggerService;
+    private timeout : number;
     constructor(
         @InjectRepository(ConfigEntity)
         private readonly configEntity: Repository<ConfigEntity>,
@@ -40,9 +41,11 @@ export class ConfigurationService {
         private readonly projectEntity: Repository<ProjectEntity>,
         private loggerFactory: LoggerFactory,
         private readonly workFlowService: WorkflowService,
-        private readonly sendMailService: SendMailService
+        private readonly sendMailService: SendMailService,
+        private readonly configService: ConfigService 
     ) {
-        this.logger = this.loggerFactory.create(ConfigurationService.name)
+        this.logger = this.loggerFactory.create(ConfigurationService.name);
+        this.timeout = this.configService.get<number>("app.worker.healthCheckStatusTimout");
     }
     
     async getAllFileServers(): Promise<any[]>  {
@@ -411,10 +414,22 @@ export class ConfigurationService {
         throw new InternalServerErrorException('Failed to construct response.');
        }
     }
+
+    async IsAllUnHealthyWorkers(workers: WorkerEntity[]): Promise<boolean> {
+        const currentTime = new Date();
+       return  workers.every((worker)=>{
+            const diffInSeconds = Math.floor(
+                Math.abs(currentTime.getTime() - new Date(worker?.stats?.updatedAt).getTime()) / 1000
+              );
+            return  diffInSeconds >= this.timeout;
+        })
+    }
     
     async createConfiguration(createConfig: ConfigDTO, userId: string, traceId: string) {
         this.logger.debug("Config creation started");        
+
         const credentials:Credentials[] = []
+        let allUnHealthy = false;
         try {
            await this.isConfigNameUnique(createConfig.projectId, createConfig.configName);
 
@@ -442,10 +457,9 @@ export class ConfigurationService {
                     volumes: [],
                 });
             });
-
+            const workers:WorkerEntity[] = await this.WorkerEntity.find({where: {workerId: In(createConfig?.fileServers[0].workers)},relations: {stats:true}});
             const hasPathName = createConfig?.workingDirectory?.pathName?.length > 0;
             const hasWorkers = createConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
-
             const config = this.configEntity.create({
                 configName: createConfig.configName,
                 configType: createConfig.configType,
@@ -454,11 +468,15 @@ export class ConfigurationService {
                 fileServers:  await Promise.all(fileServerPromises),
                 createdBy: userId,
             });
-        
-            const update = await this.configEntity.save(config);
 
+            if(workers?.length>0 && await this.IsAllUnHealthyWorkers(workers)) allUnHealthy  = true;
+            if(allUnHealthy){
+                config.status = ConfigStatus.ERRORED;
+                config.errorMessage=ConfigErrorMsg.ERRORED;
+            }
+                const update = await this.configEntity.save(config);
+                if(!allUnHealthy){
             await this.startValidateWorkingDirectoryWorkflow(createConfig, update.id, traceId);
-
             const workerNames = config.fileServers.flatMap((fileServer) => { 
                 return fileServer.workers.map((worker) => {
                     return worker?.workerName;
@@ -489,14 +507,14 @@ export class ConfigurationService {
             });
             await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
             this.refreshConfig(update.id, traceId);
-            return update;
+        }
+
+        return update;
         } catch(error) {
             this.logger.error(`Error Occurred during creating Config ${error} for request ${traceId}`);
-            
             if (error instanceof NotFoundException || error instanceof BadRequestException) {
                 throw error;
             }
-            
             throw new InternalServerErrorException('Error Occurred during creating Config');
         }
     }
@@ -519,7 +537,7 @@ export class ConfigurationService {
             throw new NotFoundException(`Config for id ${id} not found.`);
 
         const credentials:Credentials[] = [];
-
+        let allUnHealthy = false;
         const hasPathName = updateConfig?.workingDirectory?.pathName?.length > 0;
         const hasWorkers = updateConfig?.fileServers?.some(fs => fs?.workers?.length > 0);
 
@@ -528,11 +546,15 @@ export class ConfigurationService {
         config.createdBy = updateConfig.createdBy || userId;
         config.updatedBy = userId;
         config.status = hasWorkers ? (hasPathName ? ConfigStatus.IN_PROGRESS : ConfigStatus.ACTIVE) : ConfigStatus.DRAFT;
+        let workersWithStats : WorkerEntity[];
+       
 
         try {
+            
             const fileServerPromises = config.fileServers.map(async (fileServer)=> {
                 const update = updateConfig.fileServers.find(it=> it.id == fileServer.id)
                 const workers = Array.isArray(update?.workers) ? await this.WorkerEntity.find({ where: { workerId: In(update.workers) } }) : [];
+                workersWithStats = Array.isArray(update?.workers) ? await this.WorkerEntity.find({ where: { workerId: In(update.workers) }, relations:{stats:true} }) : [];
                 credentials.push({
                     details: {
                         hostname: update.host,
@@ -558,11 +580,10 @@ export class ConfigurationService {
                     isRefreshed: false
                 });
             });
+            if(workersWithStats?.length>0 && await this.IsAllUnHealthyWorkers(workersWithStats)) allUnHealthy  = true;
 
             const { workingDirectory } = updateConfig;
-
             const mapping = await this.fileServerWorkingDirectoryMappingEntity.findOne({ where: {configId: id} });
-
             if (!mapping) {
                 this.logger.error(`Mapping for configId ${id} not found for request ${traceId}`);
                 throw new NotFoundException(`Mapping for configId ${id} not found`);
@@ -577,19 +598,21 @@ export class ConfigurationService {
             await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
             const existingWorkers = config.fileServers.flatMap(fileServer => fileServer.workers);
-            console.log('existingWorkers', existingWorkers);
             config.fileServers = await Promise.all(fileServerPromises);
             const newWorkers = updateConfig.fileServers.flatMap(fileServer => Array.isArray(fileServer.workers) ? fileServer.workers : []);
-            console.log('newWorkers', newWorkers);
             const removedWorkers = existingWorkers.filter(worker => !newWorkers.includes(worker.workerId));
-            console.log('removed', removedWorkers);
+            if(allUnHealthy){
+                config.status = ConfigStatus.ERRORED;
+                config.errorMessage=ConfigErrorMsg.ERRORED;
+            }
             
             const update = await this.configEntity.save(config);
+            if(!allUnHealthy){
             const htmlContent = `
             <p>Hello</p>
             <p>Config ${update.configName} has been updated successfully</p>
             ${
-                removedWorkers.length > 0
+                removedWorkers?.length > 0
                   ? `
                   <p>Below is the list of deassociated workers:</p>
                   ${removedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
@@ -605,11 +628,21 @@ export class ConfigurationService {
             await this.startValidateWorkingDirectoryWorkflow(updateConfig, update.id, traceId);
 
             this.refreshConfig(update.id, traceId)
+
+            }
             return update
-        }catch(error) {
-            this.logger.error(`Error Occurred during updating Config ${error} for traceId ${traceId}`)
-            throw new InternalServerErrorException('Error Occurred during updating Config')
+        }catch (error) {
+            this.logger.error(`Error Occurred during updating Config ${error.message} for traceId ${traceId}`);
+        
+            // If the error is a NotFoundException, re-throw it
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+        
+            // Otherwise, throw an InternalServerErrorException for any other errors
+            throw new InternalServerErrorException('Error Occurred during updating Config');
         }
+        
     }
 
     async startValidateWorkingDirectoryWorkflow(createConfig: ConfigDTO, configId: string, traceId: string) {

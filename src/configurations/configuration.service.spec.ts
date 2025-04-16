@@ -631,14 +631,19 @@ describe('ConfigurationService', () => {
       const existingConfig = {
         id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
         configName: 'Test Config',
+        configType: ConfigurationType.file,
+        createdBy: 'user1',
         fileServers: [{
           id: mockFileServer.id,
           protocol: Protocol.NFS,
           host: 'localhost',
-          workers: []
+          workers: [],
+          createdBy: 'user1',
+          serverType: 'type1',
+          volumes: []
         }]
       };
-
+    
       const updateConfigDTO: ConfigDTO = {
         projectId: "123456",
         configName: 'Updated Config',
@@ -657,19 +662,17 @@ describe('ConfigurationService', () => {
           userName: "TEST"
         }]
       };
-
+    
       mockConfigRepository.findOne.mockResolvedValue(existingConfig);
-      mockMappingRepository.findOne.mockResolvedValue(null);
-      mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)
-      try {
-        await service.updateConfiguration('36bfd77f-1d7c-47a3-8c62-3c8739e2f88f', updateConfigDTO, uuidv4(), uuidv4());
-        fail('Should have thrown InternalServerErrorException');
-      } catch (error) {
-        expect(error).toBeInstanceOf(InternalServerErrorException);
-        expect(error.message).toBe('Error Occurred during updating Config');
-      }
-
+      mockMappingRepository.findOne.mockResolvedValue(null); // mapping not found
+      mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id, stats: [] }]);
+    
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+    
+      await expect(
+        service.updateConfiguration('36bfd77f-1d7c-47a3-8c62-3c8739e2f88f', updateConfigDTO, uuidv4(), uuidv4())
+    ).rejects.toThrowError(new NotFoundException('Mapping for configId 36bfd77f-1d7c-47a3-8c62-3c8739e2f88f not found'));
+    
       expect(mockMappingRepository.findOne).toHaveBeenCalledWith({ 
         where: { configId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' } 
       });
@@ -727,6 +730,7 @@ describe('ConfigurationService', () => {
     });
 
     it('should handle fileServer update with missing optional fields', async () => {
+      // Mock existing config with an optional userName
       const existingConfig = {
         id: uuidv4(),
         configName: 'Old Config',
@@ -734,11 +738,12 @@ describe('ConfigurationService', () => {
           id: mockFileServer.id,
           host: 'localhost',
           protocol: Protocol.NFS,
-          userName: 'oldUser',
+          userName: 'oldUser', // userName is present here
           workers: []
         }]
       };
-
+    
+      // Updated configuration with userName
       const updateConfigDTO: ConfigDTO = {
         projectId: "123456",
         configName: 'Updated Config',
@@ -753,26 +758,31 @@ describe('ConfigurationService', () => {
           host: 'localhost',
           protocol: Protocol.NFS,
           protocolVersion: ProtocolVersion.NFSv3,
-          userName: 'test',
+          userName: 'test', // userName provided in update
           workers: [mockWorker.id]
         }]
       };
-
+    
+      // Mock repository behavior
       mockConfigRepository.findOne.mockResolvedValue(existingConfig);
       mockConfigRepository.save.mockImplementation(data => data);
       mockWorkerRepository.find.mockResolvedValue([{ workerId: mockWorker.id }]);
       mockMappingRepository.findOne.mockResolvedValue({});
       mockMappingRepository.save.mockImplementation(data => data);
-
-      jest.spyOn(service, 'refreshConfig').mockResolvedValue({}as any)      
-      await service.updateConfiguration(existingConfig.id, updateConfigDTO,uuidv4(), uuidv4());
-
+    
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+    
+      // Call the update configuration service method
+      await service.updateConfiguration(existingConfig.id, updateConfigDTO, uuidv4(), uuidv4());
+    
+      // Check that the repository is called with the correct userName value
       expect(mockFileServerRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          userName: existingConfig.fileServers[0].userName
+          userName: updateConfigDTO.fileServers[0].userName // check the updated value
         })
       );
     });
+    
 
   });
 

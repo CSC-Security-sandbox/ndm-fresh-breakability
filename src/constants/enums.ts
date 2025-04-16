@@ -10,6 +10,11 @@ export enum ConfigStatus {
     IN_PROGRESS = 'IN_PROGRESS'
 }
 
+export enum ConfigErrorMsg {
+    ACTIVE = '',
+    ERRORED = 'worker is down'
+}
+
 export enum Protocol{
     NFS = 'NFS',
     SMB = 'SMB'
