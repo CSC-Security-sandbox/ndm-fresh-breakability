@@ -40,17 +40,21 @@ export class DiscoveryScanActivity {
         this.logger.log(`[${jobRunId}] Starting Discovery Scan Activity`);
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
 
+        const jobState = jobContext.getJobState() 
+        if(jobState?.failedWorkers.includes(this.workerId)) {
+          this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
+          return scanActivityOutput
+        }
+        
         const task = await this.commonService.fetchOneTask(jobContext)
         this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
         if (!task) {
             scanActivityOutput.noTaskFound = true;
             return scanActivityOutput;
         }
-
         scanActivityOutput.taskId = task.id;
 
-        const jobState: JobState = await jobContext.getJobState();
-
+        task.workerId = this.workerId;
         task.status = TaskStatus.RUNNING;
         for (let i = 0; i < task.commands.length; i++)
             if (task.commands[i].status !== CommandStatus.COMPLETED)
@@ -66,9 +70,10 @@ export class DiscoveryScanActivity {
         scanActivityOutput.files = discoverOutput.files;
         scanActivityOutput.folders = discoverOutput.folders;
 
-        const newJobState = { ...jobState, tasks_completed: jobState.tasks_completed + 1 };
-        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed ?? [], newJobState.status, newJobState.failedWorkers ?? []);
+        if(scanActivityOutput.isFatalErrored)
+            await this.commonService.addFailedWorkerToJobState(jobRunId, this.workerId);
 
+        this.logger.debug(`[${jobRunId}] Discovery Scan Activity completed with ${discoverOutput.error} errors and ${discoverOutput.success} success.`);
         if (discoverOutput.errors.size === 0)
             this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
         else

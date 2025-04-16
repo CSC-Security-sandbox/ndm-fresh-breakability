@@ -106,7 +106,7 @@ export class SetupActivityService {
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
-        { jobRunId: args.jobRunId, workerIds: [this.workerId] }
+        { jobRunId: args.jobRunId, workerId: this.workerId }
       );
 
       // Wait for 1 second to ensure the configuration is updated
@@ -139,11 +139,13 @@ export class SetupActivityService {
 
   async setup(jobRunId: string): Promise<SetupOutput> {
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
+    
     try {
       const context = await this.redisService.getJobContext(jobRunId);
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
+     
 
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
       const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
@@ -171,16 +173,25 @@ export class SetupActivityService {
       }
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
-        { jobRunId, workerIds: [this.workerId] },
+        { jobRunId, workerId: this.workerId },
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
+      const jobState: JobState = await this.redisService.getJobState(jobRunId);
+
+      if(!jobState.workers.some((worker) => worker === this.workerId)) 
+        jobState.workers.push(this.workerId);
+      
+      context.jobState = new JobState(jobState.workers, jobState.tasks_completed, jobState.tasks_total, [this.workerId ,...(jobState.workers_agreed ??[]) ] , jobState.status, jobState.failedWorkers ?? [])
+      await this.redisService.setJobContext(jobRunId, context);
       await this.waitFor(1000);
+
       return {
         jobRunId,
         status: 'success',
         protocolType,
         workerId: this.workerId,
         message: `Worker ${this.workerId} successfully set up.`,
+        state: context.jobState
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);

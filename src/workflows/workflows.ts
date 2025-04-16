@@ -7,13 +7,13 @@ export {ListPathsWorkflow} from './list-path/list-path.workflow'
 export {SetupWorkerWorkflow} from '../workflows/setup/setup-worker-workflow'
 export {CleanupWorkerWorkflow} from '../workflows/setup/cleanup-worker-workflow'
 
-export {DiscoveryJobWorkflow} from '../workflows/discovery/discovery-job-workflow'
-export {DiscoveryWorkflow} from '../workflows/discovery/discovery-workflow'
+export {DiscoveryJobWorkflow} from './discovery/core/discovery-job-workflow'
+export {DiscoveryWorkflow} from '../workflows/discovery/parent/discovery-workflow'
 
 export {PreCheckValidationWorkflow} from '../workflows/pre-check/parent/pre-check.workflow'
 export {PreCheckWorkerValidationWorkflow} from './pre-check/core/pre-check.worker.workflow'
 
-export {ValidateWorkingDirectoryWorkflow} from './working-directory/working-directory.workflow';
+export { ValidateWorkingDirectoryWorkflow} from './working-directory/working-directory.workflow';
 export { ValidateWorkingDirectoryWorkerWorkflow } from './working-directory/working-directory-worker.workflow';
 
 export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'

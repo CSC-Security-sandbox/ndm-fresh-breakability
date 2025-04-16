@@ -12,6 +12,7 @@ import { ShellService } from '../common/shell.service';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
 import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 
 @Injectable()
@@ -261,6 +262,13 @@ export class MigrationSyncService {
   async syncTask({ jobRunId }: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false };
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
+
+    const jobState = jobContext.getJobState() 
+    if(jobState?.failedWorkers.includes(this.workerId)) {
+      this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
+      return syncTask
+    }
+    
     const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
     if(!task) {
       syncTask.noTaskFound = true;
@@ -355,11 +363,12 @@ export class MigrationSyncService {
       else if(syncTask.isFatal){
         this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
         task.status = TaskStatus.ERRORED;
+        await this.commonService.addFailedWorkerToJobState(jobRunId, this.workerId);
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
       }
     }else {
       this.logger.debug(`[${jobRunId}] Completed Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
-      jobContext.updatedTaskInfo.lastId= await jobContext.appendToUpdatedTaskList(task);
+      jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
     }
     await this.redisService.setJobContext(task.jobRunId, jobContext);
     return syncTask;

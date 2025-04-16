@@ -4,7 +4,10 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 
-
+interface SyncWorkflowInput {
+    jobRunId: string;
+    isScanCompleted: boolean;
+}
 
 const {
     syncTask: SyncContentActivity
@@ -23,49 +26,66 @@ async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
 }
 
-export const SyncWorkflow = async ({jobRunId, workerId } : {jobRunId: string, workerId: string}) => {
+
+export const isScanCompletedSignal = wf.defineSignal('isScanCompleted');
+
+
+export const SyncWorkflow = async ({jobRunId, isScanCompleted = false } : SyncWorkflowInput) => {
     console.log('Starting SyncWorkflow ', jobRunId)
+    wf.setHandler(isScanCompletedSignal, () => {
+        log(jobRunId, `isScanCompletedSignal called with value: ${isScanCompleted}`);
+        isScanCompleted = true;
+    });
     let iteration = 0;
     try {
         while (true) {
             iteration++;
-            const jobState = await getJobStateActivity(jobRunId);
-            log(jobRunId,`Iteration number ${iteration} for sync jobState = ${JSON.stringify(jobState)}`)
-            if(jobState.status !== JobRunStatus.Running) {
-              return { message: `Job status changed to ${jobState.status}` };
+            const jobState = await getJobStateActivity(jobRunId)
+
+            log(jobRunId,`Iteration number ${iteration} for scan | status: ${jobState.status} | workers_agreed: ${jobState.workers_agreed} | isScanCompleted: ${jobState?.isScanCompleted} `);
+
+            if(jobState.status === JobRunStatus.Stopped) {
+                log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
+                return { message: 'Scan Stopped' };
             }
+        
+            if(jobState.status === JobRunStatus.Paused) {
+                log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
+                return { message: 'Scan Stopped' };
+            }
+        
+            const outputs = await Promise.all(
+                jobState.workers_agreed.map(async() => { return await SyncContentActivity({ jobRunId })})
+            );
 
-            const { isFatal, noTaskFound } = await SyncContentActivity({jobRunId})
+            const noTaskFound = outputs.every((output) => output.noTaskFound);
+            const isFatalErrored = outputs.every((output) => output.isFatal);
+        
 
-            if (noTaskFound) {
-                const jobState = await getJobStateActivity(jobRunId);
-                log(jobRunId,`Iteration number when noTaskFound ${iteration} for sync jobState = ${JSON.stringify(jobState)}`)
-                const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
-                const newJobState = { ...jobState, workers_agreed: uniqueAgreedWorkers };
-                await setJobStateActivity(jobRunId, newJobState);
-                const isJobCompleted = newJobState.workers_agreed.length === newJobState.workers.length;
-                if (!isJobCompleted) continue 
+            if (noTaskFound && isScanCompleted) {
                 log(jobRunId, `No tasks found. sending last entry`);
                 await updateLastEntryActivity(jobRunId)
                 .then(() => log(jobRunId, `status updated to Completed`))
                 .catch((err) => log(jobRunId, `Failed to update status: ${err}`));
-                await setJobStateActivity(jobRunId, { ...newJobState, status:  JobRunStatus.Completed });
+                const currentJobState = await getJobStateActivity(jobRunId);
+                await setJobStateActivity(jobRunId, { ...currentJobState, status:  JobRunStatus.Completed });
                 const finalJobState = await getJobStateActivity(jobRunId);
-                log(jobRunId, `Discovery completed with finalJobState: ${JSON.stringify(finalJobState)}`);
+                log(jobRunId, `Sync completed with finalJobState: ${JSON.stringify(finalJobState)}`);
                 return { message: 'Sync Completed' };
               }
 
 
-            if(isFatal) {
-                log(jobRunId, `Fatal Error Occurred On worker ${workerId}`)
-                const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
+            if(isFatalErrored) {
+                log(jobRunId, `Fatal Error Occurred On jobRunId ${jobRunId}`)
+                const currentJobState = await getJobStateActivity(jobRunId);
+                const updatedJobState = {...currentJobState, status: JobRunStatus.Errored};
                 await setJobStateActivity(jobRunId, updatedJobState);
-                break
+                return { message: 'Sync Errored' };
               }
 
-            if(iteration >= 80) {
+            if(iteration >= 100) {
                 log(jobRunId, `Iteration limit reached. Continuing as new...`);
-                await continueAsNew({ jobRunId });
+                await continueAsNew({ jobRunId , isScanCompleted});
             }
         }
     } catch (error) {

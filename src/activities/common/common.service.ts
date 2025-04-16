@@ -120,7 +120,8 @@ export class CommonActivityService{
       jobState.tasks_total, 
       jobState.workers_agreed ?? [], 
       jobState.status as JobStatus,
-      jobState.failedWorkers ?? []
+      jobState.failedWorkers ?? [],
+      jobState.isScanCompleted ?? false,
     );;
     await this.redisService.setJobContext(traceId, jobContext);
   }
@@ -153,5 +154,14 @@ export class CommonActivityService{
       this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
       return undefined;
     }
+  }
+
+  async addFailedWorkerToJobState(jobRunId: string, workerId: string) {
+    const jobState = await this.redisService.getJobState(jobRunId);
+    const failedWorkers = jobState?.failedWorkers || [];
+    if(!failedWorkers.includes(workerId)) 
+        failedWorkers.push(workerId);
+    const updatedJobState = {...jobState, failedWorkers};
+    await this.redisService.setJobState(jobRunId, updatedJobState);
   }
 }

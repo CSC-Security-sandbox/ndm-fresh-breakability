@@ -1,7 +1,7 @@
-import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
+import { continueAsNew, ContinueAsNew, proxyActivities } from '@temporalio/workflow';
+import { CommonActivityService } from 'src/activities/common/common.service';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
-import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 
 async function log(traceId: string, message: string) {
@@ -29,47 +29,46 @@ const {
  });
 
 export async function DiscoveryJobWorkflow(args: any): Promise<any> {
-  const { traceId, options, workerId } = args;
-  log(traceId, `Starting DiscoveryWorkerWorkflow with args-->: ${JSON.stringify(args)}`);
+  const { traceId, options } = args;
   let iteration = 0;
   try {
     await updateStatusActivity({jobRunId:traceId, status :JobRunStatus.Running})
+    const jobState = await getJobStateActivity(traceId)
+    const updatedJobState = {...jobState, status: JobRunStatus.Running};
+    await setJobStateActivity(traceId, updatedJobState)
     while (true) {
       iteration++;
-      
       const jobState = await getJobStateActivity(traceId);
-      if(jobState.status !== JobRunStatus.Running) {
-        return { message: `Job status changed to ${jobState.status}` };
-      }
+      
+      const outputs = await Promise.all(
+        jobState.workers_agreed.map(async() => { return await scanActivity({ jobRunId: traceId })})
+      );
 
-      const { isFatalErrored, noTaskFound } = await scanActivity({ jobRunId: traceId });
-
-      await publishTaskActivity(traceId);
-
+      const noTaskFound = outputs.every((output) => output.noTaskFound);
+      const isFatalErrored = outputs.every((output) => output.isFatalErrored);
+      
+      await Promise.all(
+        jobState.workers_agreed.map(() => publishTaskActivity(traceId))
+      );
+      
       if (noTaskFound) {
-        const jobState = await getJobStateActivity(traceId);
-        log(traceId, `No tasks found. total -> ${jobState.tasks_total}, completed -> ${jobState.tasks_completed}`);
-        const uniqueAgreedWorkers = jobState.workers_agreed.includes(workerId) ? jobState.workers_agreed : [...jobState.workers_agreed, workerId];
-        log(traceId, `Agreed workers: ${uniqueAgreedWorkers}`);
-        const newJobState = { ...jobState, workers_agreed: uniqueAgreedWorkers };
-        log(traceId, `Updating job state with agreed workers: ${JSON.stringify(newJobState)}`);
-        await setJobStateActivity(traceId, newJobState);
-        const isJobCompleted = newJobState.workers_agreed.length === newJobState.workers.length;
-        if (!isJobCompleted) continue;
         log(traceId, `No tasks found. sending last entry`);
         await updateLastEntry(traceId);
-        await setJobStateActivity(traceId, { ...newJobState, status: JobRunStatus.Completed });
+        const currentJobState = await getJobStateActivity(traceId);
+        await setJobStateActivity(traceId, { ...currentJobState, status: JobRunStatus.Completed });
         return { message: 'Discovery completed' };
       }
 
       if(isFatalErrored) {
-        log(traceId, `Fatal Error Occurred On worker ${workerId}`)
-        const updatedJobState = {...jobState, failedWorkers: [...jobState.failedWorkers, workerId]}
+        log(traceId, `Fatal Error Occurred for all active workers for jobRun Id: ${traceId}`);
+        const currentJobState = await getJobStateActivity(traceId);
+        const updatedJobState = {...currentJobState, status: JobRunStatus.Errored};
         await setJobStateActivity(traceId, updatedJobState);
+        return { message: 'Sync Errored' };
         break
       }
 
-      if(iteration >= 80) {
+      if(iteration >= 100) {
         log(traceId, `Iteration limit reached. Continuing as new...`);
         await continueAsNew({ traceId, options });
       }

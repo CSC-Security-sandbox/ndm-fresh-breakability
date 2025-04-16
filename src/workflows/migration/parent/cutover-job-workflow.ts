@@ -1,14 +1,24 @@
 import * as wf from '@temporalio/workflow';
-import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
+import { ChildWorkflowCancellationType, ParentClosePolicy } from "@temporalio/workflow";
+import { CommonActivityService } from 'src/activities/common/common.service';
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import { CutOverStatus } from "src/activities/migrate/migrate.type";
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
-import { CleanupWorkerWorkflow, SetupWorkerWorkflow, SyncWorkflow } from "src/workflows/workflows";
-import { ScanWorkflow } from "../core/scan.workflow";
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { CleanupWorkerWorkflow } from "src/workflows/workflows";
 
+interface WorkerConfig {
+  ids: string[];
+}  
 
+interface CutOverWorkFlowInput {
+  traceId: string;
+  payload: {
+    workers: string[];
+  };
+  options?: Record<string, any>; 
+}
+
+export const registerNewWorkerSignal = wf.defineSignal<[WorkerConfig]>('registerNewWorker');
 export const unblockSignal =  wf.defineSignal<[string]>('approve');
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');
@@ -22,156 +32,103 @@ const {
 const {
    updateJobErrorStatus: updateJobErrorActivity,
    getJobState: getJobStateActivity,
-   setJobState: setJobStateActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
-
-interface CutOverWorkFlowInput {
-  traceId: string;
-  payload: {
-    workers: string[];
-  };
-  options?: Record<string, any>; 
-}
-
-async function log(traceId: string, message: string): Promise<void> {
-  console.log(`[${traceId}] ${message}`);
-}
 
 export const CutOverWorkFlow = async ({
   traceId,
   payload,
   options = {},
 }: CutOverWorkFlowInput): Promise<any> => {
-  await log(traceId, `MigrationWorkflow: ${JSON.stringify(payload)}`);
+  console.log(`[${traceId}] Parent workflow started for ${traceId}`);
 
-  const activeWorkerIds: string[] = [];
-  const setupResponses = await Promise.all(
-    payload.workers.map(async (workerId) => {
-      try{
-        return await executeChild(SetupWorkerWorkflow, {
-          args: [{ jobRunId: traceId }],
-          workflowId: `SetupWorkerWorkflow-${traceId}-${workerId}`,
-          taskQueue: `${workerId}-TaskQueue`,
-          ...options,
-          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
-        })
-      }catch(error) {
-        log(traceId, `Error in SetupWorkerWorkflow: ${error}`);
+  let setupCompletedWorkers = []
+  let erroredCount = 0, newWorkerCount = 0;
+
+  // setup on new worker signal
+  wf.setHandler(registerNewWorkerSignal, async (workerConfig: WorkerConfig) => {
+    const jobState = await getJobStateActivity(traceId);
+    workerConfig.ids.map(async (id) => {
+      // exclude already setup workers
+      if(jobState.workers_agreed.includes(id)) return;
+      const workerFuture = await wf.startChild('SetupWorkerWorkflow', {
+        args: [ { jobRunId: traceId } ],
+        workflowId: `SetupWorkerWorkflow-${traceId}-${id}`,
+        taskQueue: `${id}-TaskQueue`,
+        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        parentClosePolicy: ParentClosePolicy.TERMINATE,
+        ...options,
+      });
+      newWorkerCount++
+      const result = await workerFuture.result();
+      if (result?.status === 'success') 
+        setupCompletedWorkers.push(id);
+      else {
+        erroredCount++;
+        console.error(`[${traceId}] Failed to setup worker: ${id}`);
       }
-      }
-    )
-  );
-
-  const result = setupResponses.flat();
-
-  result.forEach((r) => {
-    log(traceId, `MigrationWorkflow response in setup workflow: ${JSON.stringify(r)}`);
-    if (r?.status === 'success') {
-      activeWorkerIds.push(r.workerId);
-    }
+    })
   });
 
-  if (activeWorkerIds.length === 0) {
-    await updateJobErrorActivity(traceId)
-    return {
-      traceId,
-      status: 'error',
-      message: `No active workers found for ${traceId}. Migration cannot be initiated.`,
-    };
+  payload.workers.map(async (worker) => {
+    const workerFuture = await wf.startChild('SetupWorkerWorkflow', {
+      args: [ { jobRunId: traceId } ],
+      workflowId: `SetupWorkerWorkflow-${traceId}-${worker}`,
+      taskQueue: `${worker}-TaskQueue`,
+      cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+      parentClosePolicy: ParentClosePolicy.TERMINATE,
+      ...options
+    });
+    try{
+      const result = await workerFuture.result();
+      if (result?.status === 'success') 
+        setupCompletedWorkers.push(worker);
+      else {
+        erroredCount++;
+        console.error(`[${traceId}] Failed to setup worker: ${worker}`);
+      }
+    }catch(error) {
+      erroredCount++;
+      console.error(`[${traceId}] Error in SetupWorkerWorkflow: ${error}`);
+    }
+  })
+
+  if(erroredCount === (payload.workers.length+newWorkerCount)) {
+      console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
+      await updateJobErrorActivity(traceId)
   }
 
-  const scanResponse = await Promise.all(
-    activeWorkerIds.map(async (workerId) => {
-      const jobState = await getJobStateActivity(traceId);
-      const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
-      const newJobState = { ...jobState, workers: uniqueWorkers, status: JobRunStatus.Running } as any;
-      await setJobStateActivity(traceId, newJobState);
-      log(traceId, `Starting ScanWorkflow for workerId: ${workerId}`);
-      while (true) {
-        try {
-          return await executeChild(ScanWorkflow, {
-            args: [{ jobRunId: traceId, workerId }],
-            workflowId: `ScanWorkflow-${traceId}-${workerId}`,
-            taskQueue: `${workerId}-TaskQueue`,
-            cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-            parentClosePolicy: ParentClosePolicy.TERMINATE,
-          });
-        } catch (err: any) {
-          if (err.name === 'ContinueAsNew') {
-            console.log(`Child workflow continued as new: ${err.workflowId}`);
-            continue;
-          }
-          throw err;
-        }
-      }
-    })
-  ).then((response) => {
-      log(traceId, `ScanWorkflow response: ${JSON.stringify(response)}`);
-      return {
-        traceId,
-        status: 'success',
-        message: `ScanWorkflow successfully completed for ${traceId}`,
-      };
-    })
-    .catch((error) => {
-      log(traceId, `ScanWorkflow error: ${error}`);
-      return {
-        traceId,
-        status: 'error',
-        message: `Failed to perform scan for ${traceId}: ${error}`,
-      };
-    });
-  console.log("scanResponse response: " + JSON.stringify(scanResponse));
-  result.push(scanResponse as any);
+  await wf.condition(() => setupCompletedWorkers.length > 0);
+
+  // scan workflow
+  const scanWorkflow = await wf.startChild('ScanWorkflow', {
+    args: [ { jobRunId: traceId } ],
+    workflowId: `ScanWorkflow-${traceId}`,
+    taskQueue: `${traceId}-TaskQueue`,
+    cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+    parentClosePolicy: ParentClosePolicy.TERMINATE,
+  });
+
+  // sync workflow
+  const syncWorkflow = await wf.startChild('SyncWorkflow', {
+    args: [ { jobRunId: traceId } ],
+    workflowId: `SyncWorkflow-${traceId}`,
+    taskQueue: `${traceId}-TaskQueue`,
+    cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+    parentClosePolicy: ParentClosePolicy.TERMINATE,
+  });
+
+  // wait for scan workflow to complete
+  const scanWorkflowResult = await scanWorkflow.result()
+  console.log(`[${traceId}] ScanWorkflow result: ${JSON.stringify(scanWorkflowResult)}`);
+
+  await syncWorkflow.signal('isScanCompleted', {})
+
+  const syncWorkflowResult = await syncWorkflow.result()
+  console.log(`[${traceId}] SyncWorkflow result: ${JSON.stringify(syncWorkflowResult)}`);
 
   let jobState = await getJobStateActivity(traceId);
-  let errored = jobState.failedWorkers.length === activeWorkerIds.length;
-  if(!errored) {
-    const syncResponse = await Promise.all(
-      activeWorkerIds.map(async (workerId) => {
-        while (true) {
-          try {
-            return await executeChild(SyncWorkflow, {
-              args: [{ jobRunId: traceId, workerId }],
-              workflowId: `SyncWorkflow-${traceId}-${workerId}`,
-              taskQueue: `${workerId}-TaskQueue`,
-              cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-              parentClosePolicy: ParentClosePolicy.TERMINATE,
-            });
-          } catch (err: any) {
-            if (err.name === 'ContinueAsNew') {
-              console.log(`Child workflow continued as new: ${err.workflowId}`);
-              continue;
-            }
-            throw err;
-          }
-        }
-      })
-    ).then((response) => {
-        log(traceId, `SyncWorkflow response: ${JSON.stringify(response)}`);
-        return {
-          traceId,
-          status: 'success',
-          message: `SyncWorkflow successfully completed for ${traceId}`,
-        };
-      })
-      .catch((error) => {
-        log(traceId, `SyncWorkflow error: ${error}`);
-        return {
-          traceId,
-          status: 'error',
-          message: `Failed to perform sync for ${traceId}: ${error}`,
-        };
-      });
-    console.log("SyncResponse response: " + JSON.stringify(syncResponse));
-    result.push(syncResponse as any);
-  }
-
-
-  jobState = await getJobStateActivity(traceId);
-  errored = jobState.failedWorkers.length === activeWorkerIds.length;
+  let errored = jobState.failedWorkers.length === setupCompletedWorkers.length;
 
   if(errored) {
     console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
@@ -185,23 +142,26 @@ export const CutOverWorkFlow = async ({
     await WaitingForApproval(traceId, unblockSignal)
   }
 
-  await log(traceId, `Active workers: ${activeWorkerIds.join(', ')}`);
-  if (activeWorkerIds.length > 0) {
-    const cleanupResponses = await Promise.all(
-      activeWorkerIds.map((workerId) =>  executeChild(CleanupWorkerWorkflow, {
-          args: [{ jobRunId: traceId }],
-          workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
-          taskQueue: `${workerId}-TaskQueue`,
-          ...options,
-          cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-          parentClosePolicy: ParentClosePolicy.TERMINATE,
-        })
-      )
-    );
-    cleanupResponses.flat().forEach((r) => result.push(r));
+  if (setupCompletedWorkers.length > 0) {
+    await Promise.all(
+      setupCompletedWorkers.map(async (workerId) => {
+      console.log(`[${traceId}] Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
+      try {
+        return await wf.executeChild(CleanupWorkerWorkflow, {
+        args: [{ jobRunId: traceId }],
+        workflowId: `CleanupWorkerWorkflow-${traceId}`,
+        taskQueue: `${workerId}-TaskQueue`,
+        ...options,
+        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        parentClosePolicy: ParentClosePolicy.TERMINATE,
+        });
+      } catch (error) {
+          console.error(`[${traceId}] Error in CleanupWorkerWorkflow: ${error}`);
+      }
+    }),
+    )
   }
-  await log(traceId, `MigrationWorkflow response: ${JSON.stringify(result)}`);
-  return result;
+  return {status: 'success', message: 'Cutover workflow completed successfully'};
 };
 
 export const WaitingForApproval = async (
@@ -235,6 +195,5 @@ export const WaitingForApproval = async (
     }
     throw err;
   }
-
   return approval_status ?? 'No approval received';
 };
