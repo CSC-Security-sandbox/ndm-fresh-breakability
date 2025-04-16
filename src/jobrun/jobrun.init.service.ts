@@ -112,7 +112,7 @@ export class JobRunInitService {
       this.logger.warn(
         `Unable to create Job Run for Job Config ${jobConfigId} does not has workers`,
       );
-      throw new NotFoundException(`Unable to create Job Run for Job Config ${jobConfigId} does not has workers`);;
+      return;
     }
     const workerMap = details.workers.map((worker) =>
       this.workerJobRunMapRepo.create({
