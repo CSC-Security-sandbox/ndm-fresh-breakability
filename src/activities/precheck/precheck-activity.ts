@@ -136,6 +136,15 @@ export class PrecheckActivity{
           } catch (error) {
             this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error.message}`);
           }
+
+          try {
+            const dirContents = await fs.readdir(mountPath);
+            PreCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
+            this.logger.log(`Destination path empty status: ${PreCheckPathOutput?.destinationIsEmpty}`);
+          } catch (error) {
+            this.logger.error(`Error while checking destination path empty status: ${error.message}`);
+          }
+
         }
 
         try{

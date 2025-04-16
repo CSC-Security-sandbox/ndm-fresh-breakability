@@ -424,5 +424,190 @@ describe('PrecheckActivity', () => {
       });
 
     });
+
+    describe('checkDestinationPathEmpty', () => {
+      let instance;
+      let mockFs;
+      let mockLogger;
+      let PreCheckPathOutput;
+      const mountPath = '/test/mount/path';
+    
+      beforeEach(() => {
+        mockFs = {
+          readdir: jest.fn()
+        };
+        
+        mockLogger = {
+          log: jest.fn(),
+          error: jest.fn()
+        };
+        
+        PreCheckPathOutput = {};
+        
+        instance = {
+          logger: mockLogger
+        };
+        
+        jest.mock('fs/promises', () => mockFs);
+      });
+    
+      afterEach(() => {
+        jest.clearAllMocks();
+      });
+    
+      it('should set destinationIsEmpty to true when directory is empty', async () => {
+        mockFs.readdir.mockResolvedValue([]);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(true);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: true`
+        );
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+    
+      it('should set destinationIsEmpty to false when directory has contents', async () => {
+        mockFs.readdir.mockResolvedValue(['file1.txt', 'file2.txt']);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: false`
+        );
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+    
+      it('should handle errors when reading directory fails', async () => {
+        const error = new Error('Permission denied');
+        mockFs.readdir.mockRejectedValue(error);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBeUndefined();
+        expect(mockLogger.log).not.toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          `Error while checking destination path empty status: Permission denied`
+        );
+      });
+    
+      it('should handle empty directories with hidden files', async () => {
+        mockFs.readdir.mockResolvedValue(['.hidden_file']);
+        
+        await executeCheckDestinationPath();
+        
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: false`
+        );
+      });
+    
+      async function executeCheckDestinationPath() {
+        try {
+          const dirContents = await mockFs.readdir(mountPath);
+          PreCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
+          instance.logger.log(`Destination path empty status: ${PreCheckPathOutput?.destinationIsEmpty}`);
+        } catch (error) {
+          instance.logger.error(`Error while checking destination path empty status: ${error.message}`);
+        }
+      }
+    });
+
+    describe('checkDestinationPathEmpty', () => {
+      let instance;
+      let mockFs;
+      let mockLogger;
+      let PreCheckPathOutput;
+      const mountPath = '/test/mount/path';
+    
+      beforeEach(() => {
+        mockFs = {
+          readdir: jest.fn()
+        };
+        
+        mockLogger = {
+          log: jest.fn(),
+          error: jest.fn()
+        };
+        
+        PreCheckPathOutput = {};
+        
+        instance = {
+          logger: mockLogger
+        };
+        
+        jest.mock('fs/promises', () => mockFs);
+      });
+    
+      afterEach(() => {
+        jest.clearAllMocks();
+      });
+    
+      it('should set destinationIsEmpty to true when directory is empty', async () => {
+        mockFs.readdir.mockResolvedValue([]);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(true);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: true`
+        );
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+    
+      it('should set destinationIsEmpty to false when directory has contents', async () => {
+        mockFs.readdir.mockResolvedValue(['file1.txt', 'file2.txt']);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: false`
+        );
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+    
+      it('should handle errors when reading directory fails', async () => {
+        const error = new Error('Permission denied');
+        mockFs.readdir.mockRejectedValue(error);
+        
+        await executeCheckDestinationPath();
+        
+        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
+        expect(PreCheckPathOutput.destinationIsEmpty).toBeUndefined();
+        expect(mockLogger.log).not.toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          `Error while checking destination path empty status: Permission denied`
+        );
+      });
+    
+      it('should handle empty directories with hidden files', async () => {
+        mockFs.readdir.mockResolvedValue(['.hidden_file']);
+    
+        await executeCheckDestinationPath();
+        
+        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          `Destination path empty status: false`
+        );
+      });
+    
+      async function executeCheckDestinationPath() {
+        try {
+          const dirContents = await mockFs.readdir(mountPath);
+          PreCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
+          instance.logger.log(`Destination path empty status: ${PreCheckPathOutput?.destinationIsEmpty}`);
+        } catch (error) {
+          instance.logger.error(`Error while checking destination path empty status: ${error.message}`);
+        }
+      }
+    });
+
   });
 });

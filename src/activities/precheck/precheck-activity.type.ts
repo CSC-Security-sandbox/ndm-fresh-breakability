@@ -5,6 +5,7 @@ export interface PreCheckPathOutput{
     status: PreCheckStatus;
     errorCode?: PreCheckErrorCodes;
     workerId: string;
+    destinationIsEmpty?: boolean;
     sourceDataSize?: number;
     destinationAvailableSpace?: number;
 }
