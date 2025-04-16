@@ -65,11 +65,11 @@ export class WorkManagerController {
   })
    updateWorkerConfigurations(
     @Body('jobRunId') jobRunId: string,
-    @Body('workerIds') workerIds: string[],
+    @Body('workerId') workerId: string,
   ) {
     return  this.workManagerService.updateWorkerConfigurations(
       jobRunId,
-      workerIds,
+      workerId,
     );
   }
 }

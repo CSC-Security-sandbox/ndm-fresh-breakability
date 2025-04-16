@@ -1,323 +1,348 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, Not, IsNull } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { WorkManagerService } from './work-manager.service';
-import { WorkflowService } from 'src/workflow/workflow.service';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
-import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
-import { CreateRequestDto } from './dto/validate-connection.dto';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { ConfigEntity } from '../entities/config.entity';
-import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { SendMailService } from 'src/util/send-email';
+import { WorkerStatus, WorkFlowType, WorkFlows } from 'src/constants/enums';
+import { WorkerConfiguration } from 'src/constants/types';
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
-  let workerEntityMock: Partial<Repository<WorkerEntity>>;
-  let jobRunEntityMock: Partial<Repository<JobRunEntity>>;
-  let loggerFactoryMock: Partial<LoggerFactory>;
-  let workflowServiceMock: Partial<WorkflowService>;
-  let configServiceMock: Partial<ConfigService>;
-  let loggerInstance: LoggerService;
+  let workerRepo: Repository<WorkerEntity>;
+  let jobRunRepo: Repository<JobRunEntity>;
   let configRepo: Repository<ConfigEntity>;
+  let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
+  let workflowService: WorkflowService;
+  let configService: ConfigService;
   let sendMailService: SendMailService;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
+
+  // helper worker configuration that is created by createWorkerConfiguration
+  const defaultWorkerConfig: WorkerConfiguration[] = [
+    {
+      configName: WorkFlowType.PARENT_WORKFLOW,
+      dynamicTaskQueue: false,
+      taskQueueId: null,
+      workerId: 'test-worker',
+    },
+    {
+      configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
+      dynamicTaskQueue: true,
+      taskQueueId: 'test-worker',
+      workerId: 'test-worker',
+    },
+  ];
 
   beforeEach(async () => {
-    workerEntityMock = {
-      findOne: jest.fn(),
-      create: jest.fn(),
-      save: jest.fn(),
-      update: jest.fn(),
-      createQueryBuilder: jest.fn(),
-    };
-
-    jobRunEntityMock = {
-      update: jest.fn(),
-      find: jest.fn(),
-      createQueryBuilder: jest.fn(),
-    };
-
-    loggerFactoryMock = {
-      create: jest.fn().mockReturnValue({
-        log: jest.fn(),
-        error: jest.fn(),
-        warn: jest.fn(),
-      }),
-    };
-
-    workflowServiceMock = {
-      startWorkflow: jest.fn().mockResolvedValue({ workflowId: '123' }) as jest.Mock,
-      getWorkFlowRes: jest.fn().mockResolvedValue({ result: 'success' }) as jest.Mock,
-    };
-
-    configServiceMock = {
-      get: jest.fn().mockReturnValue({ feature: true }),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkManagerService,
-        SendMailService,
-        { provide: getRepositoryToken(WorkerEntity), useValue: workerEntityMock },
-        { provide: getRepositoryToken(JobRunEntity), useValue: jobRunEntityMock },
-        { provide: getRepositoryToken(ConfigEntity), useValue: { update: jest.fn() } },
-        { provide: LoggerFactory, useValue: loggerFactoryMock },
-        { provide: WorkflowService, useValue: workflowServiceMock },
-        { provide: ConfigService, useValue: configServiceMock },
+        {
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            find: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(ConfigEntity),
+          useValue: {
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(WorkerJobRunMap),
+          useValue: {
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: WorkflowService,
+          useValue: {
+            startWorkflow: jest.fn(),
+            getWorkFlowRes: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('test-feature'),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              debug: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+            }),
+          },
+        },
+        {
+          provide: SendMailService,
+          useValue: {
+            sendMail: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<WorkManagerService>(WorkManagerService);
-    loggerInstance = loggerFactoryMock.create!(WorkManagerService.name);
+    workerRepo = module.get<Repository<WorkerEntity>>(getRepositoryToken(WorkerEntity));
+    jobRunRepo = module.get<Repository<JobRunEntity>>(getRepositoryToken(JobRunEntity));
     configRepo = module.get<Repository<ConfigEntity>>(getRepositoryToken(ConfigEntity));
+    workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(getRepositoryToken(WorkerJobRunMap));
+    workflowService = module.get<WorkflowService>(WorkflowService);
+    configService = module.get<ConfigService>(ConfigService);
     sendMailService = module.get<SendMailService>(SendMailService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    // Capture the logger mock for expectations on logging
+    logger = service.logger;
   });
 
   describe('getConfiguration', () => {
-    const workerId = 'worker-1';
+    const workerId = 'test-worker';
     const ip = '127.0.0.1';
-    const projectId = 'project-1';
+    const projectId = 'project-123';
 
-    it('should return existing worker configuration if found', async () => {
-      const existingWorker = {
+    it('should return metaConfig when worker exists and has job run configurations', async () => {
+      const workerFromDb = {
         workerId,
-        metaConfig: [
-          {
-            configName: WorkFlowType.PARENT_WORKFLOW,
-            dynamicTaskQueue: false,
-            taskQueueId: null,
-            workerId,
-          },
-        ],
+        metaConfig: [],
       };
+      // Simulate a jobRun configuration with valid workerMap array
+      const jobRunConfig = [
+        {
+          id: 'job1',
+          workerMap: [
+            { workerId, metaConfig: { key: 'value1' } },
+            { workerId, metaConfig: { key: 'value2' } },
+          ],
+        },
+      ];
 
-      const jobRunConfigs = [{
-        metaConfig: [{
-          configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
-          dynamicTaskQueue: true,
-          taskQueueId: 'job-1',
-          workerId,
-        }],
-      }];
-
-      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(existingWorker);
-      (jobRunEntityMock.find as jest.Mock).mockResolvedValue(jobRunConfigs);
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue(jobRunConfig);
 
       const result = await service.getConfiguration(workerId, ip, projectId);
-
-      expect(result).toEqual([
-        ...existingWorker.metaConfig,
-        ...jobRunConfigs[0].metaConfig,
-      ]);
-      expect(workerEntityMock.findOne).toHaveBeenCalledWith({
-        where: { workerId },
-      });
-      expect(jobRunEntityMock.find).toHaveBeenCalledWith({
-        where: {
-          status: Not(JobRunStatus.Completed),
-          workerMap: {
-            workerId,
-          },
-          metaConfig: Not(IsNull()),
-        },
-        relations: {
-          workerMap: true,
-        },
-        select: {
-          workerMap: false,
-          metaConfig: true,
-        },
-      });
+      expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
+      // Verify that debug logging is called for each workerMap entry
+      expect(logger.debug).toHaveBeenCalledTimes(2);
     });
 
-    it('should create and return new worker configuration if not found', async () => {
-      (workerEntityMock.findOne as jest.Mock).mockResolvedValue(null);
-      
+    it('should create a new worker when not found, send email and update worker name', async () => {
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      // Setup mocks for worker creation and saving:
       const newWorker = {
         workerId,
         ipAddress: ip,
-        metaConfig: [
-          {
-            configName: WorkFlowType.PARENT_WORKFLOW,
-            dynamicTaskQueue: false,
-            taskQueueId: null,
-            workerId,
-          },
-          {
-            configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
-            dynamicTaskQueue: true,
-            taskQueueId: workerId,
-            workerId,
-          },
-        ],
+        metaConfig: defaultWorkerConfig,
         status: WorkerStatus.Online,
         workerName: workerId,
         createdBy: workerId,
         projectId,
-        workerNumber: 1,
       };
 
-      (workerEntityMock.create as jest.Mock).mockReturnValue(newWorker);
-      (workerEntityMock.save as jest.Mock).mockResolvedValue(newWorker);
+      const savedWorker = {
+        ...newWorker,
+        workerNumber: 42,
+      };
+
+      (workerRepo.create as jest.Mock).mockReturnValue(newWorker);
+      (workerRepo.save as jest.Mock).mockResolvedValue(savedWorker);
+      (workerRepo.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.getConfiguration(workerId, ip, projectId);
-
-      expect(result).toEqual(newWorker.metaConfig);
-      expect(workerEntityMock.create).toHaveBeenCalledWith({
-        workerId,
-        ipAddress: ip,
-        metaConfig: expect.any(Array),
-        status: WorkerStatus.Online,
-        workerName: workerId,
-        createdBy: workerId,
-        projectId,
+      expect(result).toEqual(savedWorker.metaConfig);
+      expect(sendMailService.sendMail).toHaveBeenCalledWith({
+        body: `<p>Hello</p> The Seceret Client Id ${workerId} has been used from address ${ip} <p></p>`,
       });
-      expect(workerEntityMock.save).toHaveBeenCalled();
-      expect(workerEntityMock.update).toHaveBeenCalledWith(
-        { workerId },
-        { workerName: `Worker-${newWorker.workerNumber}` },
+      // Ensure update worker name is called after saving
+      expect(workerRepo.update).toHaveBeenCalledWith(
+        { workerId: savedWorker.workerId },
+        { workerName: `Worker-${savedWorker.workerNumber}` },
       );
     });
 
-    it('should handle errors gracefully', async () => {
-      (workerEntityMock.findOne as jest.Mock).mockRejectedValue(new Error('Database error'));
-
-      await expect(service.getConfiguration(workerId, ip, projectId))
-        .rejects
-        .toThrow('Error while fetching worker configuration');
+    it('should throw an error if something fails', async () => {
+      (workerRepo.findOne as jest.Mock).mockRejectedValue(new Error('DB error'));
+      await expect(service.getConfiguration(workerId, ip, projectId)).rejects.toThrow(
+        'Error while fetching worker configuration',
+      );
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 
   describe('createWorkerConfiguration', () => {
-    it('should return a default worker configuration', () => {
-      const workerId = '123';
-      const expectedConfig = [
-        {
-          configName: WorkFlowType.PARENT_WORKFLOW,
-          dynamicTaskQueue: false,
-          taskQueueId: null,
-          workerId,
-        },
-        {
-          configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
-          dynamicTaskQueue: true,
-          taskQueueId: workerId,
-          workerId,
-        },
-      ];
-      const result = service.createWorkerConfiguration(workerId);
-      expect(result).toEqual(expectedConfig);
+    it('should return default worker configuration array for given workerId', () => {
+      const result = service.createWorkerConfiguration('test-worker');
+      expect(result).toEqual(defaultWorkerConfig);
     });
   });
 
   describe('validateConnection', () => {
-    it('should start the workflow with the correct payload and return workflowId', async () => {
-      const payload: CreateRequestDto = {
-        options: {
-          startDelay: '10',
-          workflowExecutionTimeout: '12',
-          workflowRunTimeout: '12',
-          workflowTaskTimeout: '12',
-        },
-        fileServer: { hostname: 'test', protocols: [] },
-        workerIds: ['123'],
-      };
-      const traceId = 'trace123';
+    const payload = {
+      options: { someOption: true },
+      someField: 'test',
+    };
+    const traceId = 'trace-123';
 
-      const expectedWorkflowPayload = {
-        workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}`,
+    it('should return workflow id on success', async () => {
+      const workflowResponse = { workflowId: 'wf-123' };
+      (workflowService.startWorkflow as jest.Mock).mockResolvedValue(workflowResponse);
+
+      const result = await service.validateConnection(payload as any, traceId);
+
+      expect(result).toEqual({ workflowId: workflowResponse.workflowId });
+      expect(workflowService.startWorkflow).toHaveBeenCalled();
+
+      // validate that startWorkflow was called with the correct workflow type and payload
+      const expectedPayload = {
+        workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
         taskQueue: 'ParentWorkflow-TaskQueue',
         args: [
           {
-            traceId,
-            payload: { traceId, feature: configServiceMock.get!('app.feature'), ...payload },
+            traceId: traceId,
+            payload: {
+              traceId,
+              feature: 'test-feature',
+              ...payload,
+            },
             options: payload.options,
           },
         ],
         ...payload.options,
       };
 
-      const result = await service.validateConnection(payload, traceId);
-      expect(workflowServiceMock.startWorkflow).toHaveBeenCalledWith(
+      expect(workflowService.startWorkflow).toHaveBeenCalledWith(
         WorkFlows.VALIDATE_CONNECTION,
-        expectedWorkflowPayload,
+        expectedPayload,
       );
-      expect(result).toEqual({ workflowId: '123' });
     });
 
-    it('should handle workflow start errors', async () => {
-      (workflowServiceMock.startWorkflow as jest.Mock).mockRejectedValue(new Error('Workflow error'));
+    it('should throw InternalServerErrorException on workflow failure', async () => {
+      const errorMessage = 'workflow startup error';
+      (workflowService.startWorkflow as jest.Mock).mockRejectedValue(new Error(errorMessage));
 
-      await expect(service.validateConnection({ options: {} } as CreateRequestDto, 'trace-123'))
-        .rejects.toThrow(InternalServerErrorException);
+      await expect(service.validateConnection(payload as any, traceId)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        `Error in validateConnection: ${errorMessage}`,
+      );
+    });
+  });
+
+  describe('validateWorkingDirectory', () => {
+    it('should update config repo with provided data', async () => {
+      const data = { configId: 'config-1', status: 'SUCCESS', errorMessage: null };
+      (configRepo.update as jest.Mock).mockResolvedValue({});
+
+      await service.validateWorkingDirectory(data as any);
+      expect(configRepo.update).toHaveBeenCalledWith(
+        { id: data.configId },
+        { status: data.status, errorMessage: data.errorMessage },
+      );
+    });
+
+    it('should log an error when config repo update fails', async () => {
+      const data = { configId: 'config-1', status: 'FAIL', errorMessage: 'error' };
+      const error = new Error('update failure');
+      (configRepo.update as jest.Mock).mockRejectedValue(error);
+
+      await service.validateWorkingDirectory(data as any);
+      expect(logger.error).toHaveBeenCalledWith(
+        `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
+      );
     });
   });
 
   describe('getChildWorkFlowRes', () => {
-    it('should return the workflow result from workflowService.getWorkFlowRes', async () => {
-      const workflowResult = { result: 'success' };
-      (workflowServiceMock.getWorkFlowRes as jest.Mock).mockResolvedValue(workflowResult);
-
-      const id = 'childWorkflowId';
-      const result = await service.getChildWorkFlowRes(id);
-      expect(workflowServiceMock.getWorkFlowRes).toHaveBeenCalledWith(id);
-      expect(result).toEqual(workflowResult);
-    });
-
-    it('should throw BadRequestException when id is not provided', async () => {
+    it('should throw BadRequestException if id is not provided', async () => {
       await expect(service.getChildWorkFlowRes('')).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw NotFoundException when workflow response is not found', async () => {
-      (workflowServiceMock.getWorkFlowRes as jest.Mock).mockResolvedValue(null);
-      await expect(service.getChildWorkFlowRes('workflow-1')).rejects.toThrow(NotFoundException);
+    it('should throw NotFoundException if workflow response is null', async () => {
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(null);
+      await expect(service.getChildWorkFlowRes('child-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return the workflow response on success', async () => {
+      const dummyResponse = { some: 'data' };
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(dummyResponse);
+      const response = await service.getChildWorkFlowRes('child-id');
+      expect(response).toEqual(dummyResponse);
+    });
+
+    it('should throw InternalServerErrorException on unexpected errors', async () => {
+      const error = new Error('unexpected');
+      (workflowService.getWorkFlowRes as jest.Mock).mockRejectedValue(error);
+      await expect(service.getChildWorkFlowRes('child-id')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        `Error in getChildWorkFlowRes: ${error.message}`,
+      );
     });
   });
 
   describe('updateWorkerConfigurations', () => {
-    const jobRunId = 'job123';
-    const workerIds = ['worker1', 'worker2'];
-    const expectedWorkerConfiguration = workerIds.map((worker) => ({
-      configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
-      dynamicTaskQueue: true,
-      taskQueueId: `${jobRunId}`,
-      workerId: worker,
-    }));
+    const jobRunId = 'job-run-1';
+    const workerId = 'worker-1';
 
     it('should update worker configurations when jobRunId is provided', async () => {
-      (jobRunEntityMock.update as jest.Mock).mockResolvedValue({ affected: 2 });
-      await service.updateWorkerConfigurations(jobRunId, workerIds);
-      expect(jobRunEntityMock.update).toHaveBeenCalledWith(
-        { id: jobRunId },
-        { metaConfig: expectedWorkerConfiguration },
+      (workerJobRunMapRepo.update as jest.Mock).mockResolvedValue({});
+      await service.updateWorkerConfigurations(jobRunId, workerId);
+      const expectedWorkerConfig = {
+        configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
+        dynamicTaskQueue: true,
+        taskQueueId: `${jobRunId}`,
+        workerId: workerId,
+      };
+      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
+        { jobRunId: jobRunId, workerId: workerId },
+        { metaConfig: expectedWorkerConfig },
       );
     });
 
-    it('should throw an error if jobRunId is missing', async () => {
-      const missingJobRunId = '';
-      await expect(service.updateWorkerConfigurations(missingJobRunId, workerIds))
-        .rejects.toThrow('JobRunId is required to update worker configurations');
-      expect(loggerInstance.error).toHaveBeenCalledWith(
-        'JobRunId is required to update worker configurations'
+    it('should throw an error when jobRunId is missing', async () => {
+      await expect(service.updateWorkerConfigurations('', workerId)).rejects.toThrow(
+        'JobRunId is required to update worker configurations',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'JobRunId is required to update worker configurations',
       );
     });
 
-    it('should log an error and throw when update fails', async () => {
-      const errorObj = new Error('Update failed');
-      errorObj.stack = 'error-stack';
-      (jobRunEntityMock.update as jest.Mock).mockRejectedValue(errorObj);
-      await expect(service.updateWorkerConfigurations(jobRunId, workerIds))
-        .rejects.toThrow('Error while updating worker configurations');
-      expect(loggerInstance.error).toHaveBeenCalledWith(
-        `Error while updating worker configurations for jobRunId: ${jobRunId}`,
-        'error-stack'
+    it('should throw an error when update operation fails', async () => {
+      (workerJobRunMapRepo.update as jest.Mock).mockRejectedValue(new Error('update error'));
+      await expect(service.updateWorkerConfigurations(jobRunId, workerId)).rejects.toThrow(
+        'Error while updating worker configurations',
       );
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 });
