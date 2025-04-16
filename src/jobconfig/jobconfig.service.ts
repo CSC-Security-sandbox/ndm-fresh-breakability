@@ -1420,7 +1420,6 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
-    console.log('payload ' + payload)
     allJobsDetails.forEach((job) => {
       payload.push({
         jobConfigId: job.jobconfigid,
