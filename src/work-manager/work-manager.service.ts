@@ -64,10 +64,6 @@ export class WorkManagerService {
             }
           }
         })
-        // let mergedConfigs = [];
-        // if (workerMetaConfig.metaConfig) {
-        //   mergedConfigs.push({ ...workerMetaConfig.metaConfig });
-        // }
         jobRunConfig.forEach((data) => {
           if (Array.isArray(data.workerMap)) {
             data.workerMap.forEach((wm) => {
@@ -80,9 +76,6 @@ export class WorkManagerService {
             });
           }
         });
-
-        // let mergedConfigs = [ ...workerMetaConfig.workerMap.metaConfig];
-        // jobRunConfig.forEach((data) => mergedConfigs = [...mergedConfigs, ...data.workerMap.metaConfig])
         return workerMetaConfig.metaConfig;
       }
       this.logger.warn(`project ID : ${projectId}`);
