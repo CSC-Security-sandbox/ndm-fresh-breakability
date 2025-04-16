@@ -17,4 +17,8 @@ export class SyncEmailEntity extends Base {
 
   @Column({ type: 'boolean', name: 'sync' })
   sync: boolean;
+
+  @Column({ type: 'uuid', name: 'project_id' }) 
+  projectId: string;
+
 }
