@@ -26,11 +26,15 @@ export class PdfService {
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
-  
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, fileName);
       
-      if (reportType === ReportType.JOBS_RREPORT) return await this.generateJobsReportPdf(jobRunId);
+      if (reportType === ReportType.JOBS_RREPORT)
+        {
+          let response =  await this.generateJobsReportPdf(jobRunId);
+          return response;
+        }
+       
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
           return fs.readFileSync(filePath);
@@ -76,13 +80,12 @@ export class PdfService {
         }
 
         const reportData = JSON.parse(data[0].report_data);
-        reportData.last_iteration = reportData.last_iteration || {};
+         reportData.last_iteration = reportData.last_iteration || {};
         reportData.last_errors = reportData.last_errors || {};
         if (!Array.isArray(reportData.summary) || reportData.summary.length === 0) { throw new Error("Invalid or missing summary data in reportData") }
         reportData.last_iteration.summary = reportData.summary[0];
         reportData.last_errors.summary = reportData.summary[0];
         reportData.cutovers = reportData.summary.filter((item) => item.source.job_type === 'CUT_OVER') ?? [];
-
         // add customerInfo and report generation date
         reportData.customerInfo = {
           projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
