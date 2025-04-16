@@ -81,11 +81,11 @@ export class ValidateWorkingDirectoryActivity {
     const errorMsg = error?.message;
 
     if (errorMsg.includes('illegal NFS version value')) {
-      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
     } else if (errorMsg.includes('RPC prog. not avail')) {
-      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
     } else if(errorMsg.includes('Protocol not supported for')) {
-      return 'The server does not support to provided protocol version. Please use a valid protocol version.';
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
     } else {
       return errorMsg;
     }

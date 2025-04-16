@@ -12,5 +12,6 @@ export interface ConfigStatusPayload {
 
 export enum ConfigError {
   INVALID_EXPORT_PATH = 'Invalid export path',
-  INVALID_WORKING_DIRECTORY = 'Invalid working directory'
+  INVALID_WORKING_DIRECTORY = 'Invalid working directory',
+  PROTOCOL_NOT_SUPPORTED = 'The server does not support provided protocol version. Please use a valid protocol version.'
 }
