@@ -285,7 +285,7 @@ describe('EmailService', () => {
     let service: EmailService;
   
     beforeEach(() => {
-      service = new EmailService({} as any); // Mock Repository
+      service = new EmailService({} as any, {} as any ); // Mock Repository
     });
   
     it('should send email for failure event successfully', async () => {

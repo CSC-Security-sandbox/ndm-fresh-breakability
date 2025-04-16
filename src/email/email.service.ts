@@ -8,12 +8,15 @@ import { Repository } from 'typeorm';
 import hbs from 'nodemailer-express-handlebars';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
 
+import { SyncEmail } from 'src/entities/sync-email.entity';
 @Injectable()
 export class EmailService {
   transporter: nodemailer.Transporter;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
+    @InjectRepository(SyncEmail)
+    private syncEmailRepo: Repository<SyncEmail>,
   ) {}
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
@@ -110,11 +113,19 @@ export class EmailService {
         summary,
       },
     };
+    const syncEmail = new SyncEmail();
+    syncEmail.sender = from;
+    syncEmail.reciever = to;
+    syncEmail.mailContent = JSON.stringify(emailContent);
     try {
       const info = await this.transporter.sendMail(mailOptions);
+      syncEmail.sync = true;
     } catch (error) {
       console.error('Error sending email:', error.message);
+      syncEmail.sync = false;
       throw new Error(`Error sending email: ${error.message}`);
+    } finally {
+      await this.syncEmailRepo.save(syncEmail);
     }
   }
 
