@@ -14,12 +14,13 @@ import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { SendMailService } from 'src/util/send-email';
+import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ConfigModule.forRoot({ load: [appConfig] }),
-        TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity, FileServerWorkingDirectoryMappingEntity, ProjectEntity]),
+        TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity, FileServerWorkingDirectoryMappingEntity, ProjectEntity, WorkerStatsEntity]),
         AuthKeycloakModule,
         WorkflowModule
     ],

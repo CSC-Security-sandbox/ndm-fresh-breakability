@@ -517,6 +517,7 @@ export class ConfigurationService {
           currentTime.getTime() - new Date(worker?.stats?.updatedAt).getTime(),
         ) / 1000,
       );
+
       return diffInSeconds >= this.timeout;
     });
   }
@@ -791,11 +792,13 @@ export class ConfigurationService {
           `Sending email for config updation ${update.id} with payload ${JSON.stringify(payload)}`,
         );
         await this.sendMailService.sendMail(payload);
+
         await this.startValidateWorkingDirectoryWorkflow(
           updateConfig,
           update.id,
           traceId,
         );
+
         this.refreshConfig(update.id, traceId);
       }
       return update;
@@ -803,7 +806,12 @@ export class ConfigurationService {
       this.logger.error(
         `Error Occurred during updating Config ${error.message} for traceId ${traceId}`,
       );
-      if (error instanceof NotFoundException) throw error;
+
+      // If the error is a NotFoundException, re-throw it
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
       // Otherwise, throw an InternalServerErrorException for any other errors
       throw new InternalServerErrorException(
         'Error Occurred during updating Config',
