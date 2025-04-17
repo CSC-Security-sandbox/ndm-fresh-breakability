@@ -76,7 +76,7 @@ export interface PreChecks {
     pathId: string;
     pathName: string;
     serverId: string
-    workers: string[]
+    workers: { workerId: string; ishealthy: boolean }[]
   }[],
 }
 export interface PreCheckWorkflowOPayload {
