@@ -30,6 +30,7 @@ import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
+import { SyncEmailEntity } from "src/entities/sync-email.entity";
 
 export default registerAs(
   "typeorm",
@@ -70,6 +71,7 @@ export default registerAs(
       IdentityConfigCrossMappingEntity,
       IdentityMappingEntity, ErrorRemedyEntity,
       WorkerStatsEntity,
+      SyncEmailEntity
     ],
     migrations: [],
   }),

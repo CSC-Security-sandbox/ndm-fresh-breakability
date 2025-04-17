@@ -30,13 +30,14 @@ import { SendMailService } from 'src/utils/send-email';
 import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
 import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
 import { WorkersService } from 'src/workers/workers.service';
+import { SyncEmailEntity } from 'src/entities/sync-email.entity';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity]),
         WorkerModule,
         RedisModule
     ],

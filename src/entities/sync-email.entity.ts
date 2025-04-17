@@ -1,24 +1,37 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 
+export enum IncidentStatus {
+  OPEN = 'OPEN',
+  CLOSED = 'CLOSED',
+}
+
 @Entity('sync_email')
 export class SyncEmailEntity extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;
   
-  @Column({ type: 'varchar', length: 255, name: 'sender' })
-  sender: string;
+  @Column({ type: 'jsonb', name: 'mail_content', nullable: false })
+  mailContent: Record<string, any>;
 
-  @Column({ type: 'text', name: 'receiver' })
-  reciever: string;
+  @Column({
+    type: 'enum',
+    enum: IncidentStatus,
+    name: 'incident_status',
+    nullable: false,
+  })
+  incidentStatus: IncidentStatus;
 
-  @Column({ type: 'varchar', nullable: true, name: 'mail_content' })
-  mailContent: string;
+  @Column({ type: 'text', nullable: true })
+  description: string;
 
-  @Column({ type: 'boolean', name: 'sync' })
-  sync: boolean;
+  @Column({ type: 'text', nullable: true })
+  summary: string;
 
-  @Column({ type: 'uuid', name: 'project_id' }) 
-  projectId: string;
+  @Column({ name: 'pod', type: 'text', nullable: true })
+  pod: string;
 
+  @Column({ name: 'alertname', type: 'text', nullable: true })
+  alertName: string;
+  
 }

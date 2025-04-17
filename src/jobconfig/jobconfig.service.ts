@@ -78,7 +78,7 @@ import { SendMailService } from "src/utils/send-email";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
-import { SyncEmailEntity } from "src/entities/sync-email.entity";
+import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -1363,12 +1363,11 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
-    const severityMessages = await this.syncEmailRepo
-    .createQueryBuilder("se")
-    .select("se.emailContent") // Selecting only the emailContent field
-    .innerJoin("se.project", "p") // Assuming there's a relation to the project
-    .where("p.id = :projectId", { projectId })
-    .getMany(); // Use getMany to retrieve all matching records
+    const severityMessages =
+      await this.syncEmailRepo
+        .createQueryBuilder('syncEmail')
+        .where('syncEmail.incidentStatus = :status', { status: IncidentStatus.OPEN })
+        .getMany();
 
     this.logger.log(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
