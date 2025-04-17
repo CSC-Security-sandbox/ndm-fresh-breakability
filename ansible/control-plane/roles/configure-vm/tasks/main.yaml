@@ -131,13 +131,11 @@
         path: /etc/systemd/timesyncd.conf
         regexp: "^#?PollIntervalMinSec="
         line: "PollIntervalMinSec=20"
-        insertafter: '^\[Time\]'
         state: present
     - lineinfile:
         path: /etc/systemd/timesyncd.conf
         regexp: "^#?PollIntervalMaxSec="
         line: "PollIntervalMaxSec=600"
-        insertafter: '^\[Time\]'
         state: present
 
 - name: Restart systemd-timesyncd
