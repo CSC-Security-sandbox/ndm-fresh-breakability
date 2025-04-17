@@ -311,9 +311,18 @@ export class ConfigurationService {
         return config.fileServers.flatMap(fileServer =>
             fileServer.volumes.flatMap(volume =>
                 volume.jobConfig
-                    .filter(jobConfig =>
-                        jobConfig.jobType === JobType.Migrate  && jobConfig.status !== JobStatus.InActive &&
-                        jobConfig.jobRunDetails.some(jobRun => jobRun.status === JobRunStatus.Completed)
+                    .filter(jobConfig => {
+                        const expectedRunStatusByType: Partial<Record<JobType, JobRunStatus>> = {
+                            [JobType.Migrate]:    JobRunStatus.Completed,
+                            [JobType.CutOver]:    JobRunStatus.Errored,
+                          };
+                        const expectedStatus = expectedRunStatusByType[jobConfig.jobType];
+                        return (
+                            jobConfig.status !== JobStatus.InActive &&
+                            expectedStatus !== undefined &&
+                            jobConfig.jobRunDetails.some(run => run.status === expectedStatus)
+                          );
+                    }
                     )
                     .map(job => ({
                         protocol: fileServer.protocol,
