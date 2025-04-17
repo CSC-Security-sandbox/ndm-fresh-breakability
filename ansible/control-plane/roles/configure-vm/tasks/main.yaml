@@ -120,26 +120,25 @@
     cmd: timedatectl set-timezone UTC
   become: yes
 
-- name: Install systemd-timesyncd
-  become: yes
-  apt:
-    name: systemd-timesyncd
-    state: present
-
 - name: Enable NTP with timedatectl
   become: yes
   command: timedatectl set-ntp true
 
-- name: Configure systemd-timesyncd PollInterval
+- name: Set PollIntervalMinSec and PollIntervalMaxSec in timesyncd.conf
   become: yes
-  blockinfile:
-    path: /etc/systemd/timesyncd.conf
-    block: |
-      [Time]
-      PollIntervalMinSec=20
-      PollIntervalMaxSec=600
-    create: yes
-    marker: "# {mark} timesyncd poll interval"
+  block:
+    - lineinfile:
+        path: /etc/systemd/timesyncd.conf
+        regexp: "^#?PollIntervalMinSec="
+        line: "PollIntervalMinSec=20"
+        insertafter: '^\[Time\]'
+        state: present
+    - lineinfile:
+        path: /etc/systemd/timesyncd.conf
+        regexp: "^#?PollIntervalMaxSec="
+        line: "PollIntervalMaxSec=600"
+        insertafter: '^\[Time\]'
+        state: present
 
 - name: Restart systemd-timesyncd
   become: yes
