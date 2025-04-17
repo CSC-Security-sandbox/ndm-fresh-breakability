@@ -1,6 +1,5 @@
 import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
-import { SpeedTestActivity } from 'src/activities/speed-test/speed-test.activities';
-import { SpeedTestReadActivity } from 'src/activities/speed-test/speed-test-read-activities';
+import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activities';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus, TaskStatus } from 'src/activities/discovery/enums';
 import { SpeedTestOutput } from 'src/activities/speed-test/speed-test.type';
@@ -10,10 +9,13 @@ async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity} = proxyActivities<SpeedTestReadActivity>({ startToCloseTimeout: '300s' });
+const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity} = proxyActivities<SpeedTestActivities>({ startToCloseTimeout: '300s' });
 
-const {speedTestStatusUpdate: updateSpeedTestStatus} = proxyActivities<SpeedTestActivity>({ startToCloseTimeout: '5h' });
-
+const { 
+  updateStatus: updateStatusActivity,
+} = proxyActivities<CommonActivityService>({ 
+  startToCloseTimeout: '24h', 
+ });
 
 const { 
   getJobState: getJobStateActivity,
@@ -24,7 +26,7 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
   log(traceId, `Starting SpeedTestWorkerWorkflow with args-->: ${JSON.stringify(tests)}`);
   
   try {
-    await updateSpeedTestStatus(traceId, TaskStatus.Running);
+    await updateStatusActivity({jobRunId:traceId, status :JobRunStatus.Running})
     const jobState = await getJobStateActivity(traceId);
     if(jobState.status !== JobRunStatus.Running) {
       return { message: `Job status changed to ${jobState.status}` };
@@ -52,7 +54,7 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
     };
 
     await postResultsActivity(traceId, workerId, args.fileServerId, results);
-    await updateSpeedTestStatus(traceId, 'COMPLETED');
+    await updateStatusActivity({jobRunId:traceId, status :JobRunStatus.Completed})
     log(traceId, 'Speed test completed successfully');
 
   } catch (error) {
@@ -60,7 +62,7 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
       log(traceId, `Workflow continued as new: ${error.message}`);
       throw error; 
     } else {
-      await updateSpeedTestStatus(traceId, 'FAILED')
+      await updateStatusActivity({jobRunId:traceId, status :JobRunStatus.Failed})
         .then(() => log(traceId, 'Speed test status updated to FAILED'))
         .catch((err) => log(traceId, `Failed to update speed test status: ${err}`));
       log(traceId, `Error occurred: ${error.message}`);

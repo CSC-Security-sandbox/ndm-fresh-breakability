@@ -26,7 +26,7 @@ export interface NetworkMetrics {
 }
 
 @Injectable()
-export class SpeedTestReadActivity {
+export class SpeedTestActivities {
   constructor(
     private readonly logger: Logger,
     private readonly redisService: RedisService,
@@ -57,7 +57,6 @@ export class SpeedTestReadActivity {
     }
     return output;
   }
-
 
   async networkPerformanceActivity(payload: any, traceId: string): Promise<SpeedTestOutput> {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };   
@@ -269,7 +268,6 @@ export class SpeedTestReadActivity {
       throw error; // Propagate the error to the parent function
     }
   }
-
   
   async readTest(fsDetails: FileServerDetails, traceId: string, volumeId:string, resultId:string): Promise<any> {
       const basePath = `${fsDetails.workingDirectory}/${traceId}/${volumeId}`;
@@ -283,7 +281,6 @@ export class SpeedTestReadActivity {
       return await this.createFile(basePath, fileName, traceId, resultId);
   }
 
-  
   private async ensureDirectoryExists(basePath: string): Promise<void> {
     try {
       await fs.promises.lstat(basePath);
@@ -413,7 +410,6 @@ export class SpeedTestReadActivity {
   }
 
   async createFileIfNotExists(basePath: string, fileName: string, jobRunId: string, resultId:string) {
-
     try {
       await fs.promises.open(path.join(basePath, fileName), 'wx');
       await this.createFile(basePath, fileName, jobRunId, resultId);
@@ -512,11 +508,4 @@ export class SpeedTestReadActivity {
       throw error;
     }
   }
- 
-  async processErrors(error: DMError, jobContext: JobContext, discoveryStats: TaskStats) {
-    this.logger.error(`[${jobContext.jobRunId}] Error encountered: ${JSON.stringify(error)}`);
-    discoveryStats.numErrors += 1;
-    await jobContext.appendToErrorList(error);
-  }
-
 }

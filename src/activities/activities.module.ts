@@ -15,14 +15,14 @@ import { PrecheckActivity } from './precheck/precheck-activity';
 import { CommonActivityService } from './common/common.service';
 import { ShellService } from './common/shell.service';
 import { WorkerThreadModule } from 'src/thread/worker.thread.module';
-import { SpeedTestActivity } from './speed-test/speed-test.activities';
-import { SpeedTestReadActivity } from './speed-test/speed-test-read-activities';
+import { SpeedTestActivities } from './speed-test/speed-test-activities';
 import { AuthModule } from 'src/auth/auth.module';
+
 
 @Module({
   imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, SpeedTestActivity, SpeedTestReadActivity,],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, SpeedTestActivity,SpeedTestReadActivity,],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, PowerShellService, SpeedTestActivities,],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService, PowerShellService, SpeedTestActivities,],
 })
 export class ActivitiesModule {}
