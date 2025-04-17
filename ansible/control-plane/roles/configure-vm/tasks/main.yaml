@@ -48,13 +48,13 @@
 - name: 2.2. Ensure essential packages are installed
   apt:
     name:
+      - systemd-timesyncd
       - curl
       - apt-transport-https
       - software-properties-common
       - ca-certificates
       - snapd
       - ufw
-      - ntp
       - net-tools
       - acl
       - jq
@@ -119,3 +119,28 @@
   ansible.builtin.command:
     cmd: timedatectl set-timezone UTC
   become: yes
+
+- name: Enable NTP with timedatectl
+  become: yes
+  command: timedatectl set-ntp true
+
+- name: Set PollIntervalMinSec and PollIntervalMaxSec in timesyncd.conf
+  become: yes
+  block:
+    - lineinfile:
+        path: /etc/systemd/timesyncd.conf
+        regexp: "^#?PollIntervalMinSec="
+        line: "PollIntervalMinSec=20"
+        state: present
+    - lineinfile:
+        path: /etc/systemd/timesyncd.conf
+        regexp: "^#?PollIntervalMaxSec="
+        line: "PollIntervalMaxSec=600"
+        state: present
+
+- name: Restart systemd-timesyncd
+  become: yes
+  systemd:
+    name: systemd-timesyncd
+    state: restarted
+    enabled: yes
