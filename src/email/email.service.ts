@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import * as path from 'path';
@@ -8,9 +8,11 @@ import { Repository } from 'typeorm';
 import hbs from 'nodemailer-express-handlebars';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
 
-import { SyncEmail } from 'src/entities/sync-email.entity';
+import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
+import { EmailContentStatus } from 'src/constants/email-content.enum';
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
   transporter: nodemailer.Transporter;
   constructor(
     @InjectRepository(GlobalSettings)
@@ -84,7 +86,7 @@ export class EmailService {
        await this.sendEmailForSuccessEvent(emailContent, fromAddress, toAddress);
       }
     } catch (error) {
-      console.error(
+      this.logger.error(
         'Error setting up SMTP transporter and sending mail:',
         error.message,
       );
@@ -98,6 +100,7 @@ export class EmailService {
     const { alerts } = emailContent;
     const severity = alerts[0]?.labels?.severity || 'unknown';
     const podName = alerts[0]?.labels?.pod || 'N/A';
+    const alertName = alerts[0]?.labels?.alertname || 'N/A';
     const description =
       alerts[0]?.annotations?.description || 'No description available.';
     const summary = alerts[0]?.annotations?.summary || 'No summary available.';
@@ -113,19 +116,26 @@ export class EmailService {
         summary,
       },
     };
+
     const syncEmail = new SyncEmail();
-    syncEmail.sender = from;
-    syncEmail.reciever = to;
-    syncEmail.mailContent = JSON.stringify(emailContent);
+    syncEmail.mailContent = emailContent;
+    syncEmail.incidentStatus = IncidentStatus.OPEN;
+    syncEmail.description = description;
+    syncEmail.summary = summary;
+    syncEmail.pod = podName;
+    syncEmail.alertName = alertName;
+
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      syncEmail.sync = true;
+      await this.transporter.sendMail(mailOptions);
     } catch (error) {
-      console.error('Error sending email:', error.message);
-      syncEmail.sync = false;
+      this.logger.error(`Error sending email: ${error.message}`);
       throw new Error(`Error sending email: ${error.message}`);
     } finally {
-      await this.syncEmailRepo.save(syncEmail);
+      if(emailContent.status === EmailContentStatus.FIRING) {
+        await this.syncEmailRepo.save(syncEmail);
+      } else {
+        await this.syncEmailRepo.update({ incidentStatus: IncidentStatus.OPEN, pod: podName, alertName: alertName }, { incidentStatus: IncidentStatus.CLOSED });
+      }
     }
   }
 

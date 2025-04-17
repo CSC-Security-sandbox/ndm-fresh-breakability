@@ -1,13 +1,15 @@
+CREATE TYPE incident_status AS ENUM ('OPEN', 'CLOSED');
+
 CREATE TABLE IF NOT EXISTS sync_email (
-    id SERIAL PRIMARY KEY,
-    sender VARCHAR(255) NOT NULL,
-    receiver VARCHAR[] NOT NULL,
-    mail_content TEXT NOT NULL,
-    sync BOOLEAN NOT NULL DEFAULT FALSE,
+    id uuid DEFAULT uuid_generate_v4() NOT NULL PRIMARY KEY,
+    mail_content JSONB NOT NULL,
+    incident_status incident_status NOT NULL,
+    description TEXT,
+    summary TEXT,
+    pod TEXT,
+    alertname TEXT,
     created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,
 	updated_at timestamp DEFAULT now() NOT NULL,
 	updated_by uuid NULL
-    project_id UUID,
-    FOREIGN KEY (project_id) REFERENCES project(id) 
 );
