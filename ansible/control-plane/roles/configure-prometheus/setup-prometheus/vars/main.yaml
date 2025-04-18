@@ -749,7 +749,7 @@ customAlertingRules:
           severity: warning
         annotations:
           summary: "High node CPU usage"
-          description: "Node CPU usage is above 80% for more than 2 minutes."
+          description: "Node CPU usage is above 80% for more than 5 minutes."
 
       - alert: NodeHighMemoryUsage
         expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
