@@ -1,9 +1,9 @@
-customScrapeConfigs: 
+customScrapeConfigs:
   - job_name: prometheus
     metrics_path: /metrics
     static_configs:
-    - targets:
-      - localhost:9090
+      - targets:
+          - localhost:9090
 
   # A scrape configuration for running Prometheus on a Kubernetes cluster.
   # This uses separate scrape configs for cluster components (i.e. API server, node)
@@ -19,7 +19,7 @@ customScrapeConfigs:
   # the endpoints associated with the default/kubernetes service using the
   # default named port `https`. This works for single API server deployments as
   # well as HA API server deployments.
-  - job_name: 'kubernetes-apiservers'
+  - job_name: "kubernetes-apiservers"
 
     kubernetes_sd_configs:
       - role: endpoints
@@ -49,11 +49,16 @@ customScrapeConfigs:
     # will add targets for each API server which Kubernetes adds an endpoint to
     # the default/kubernetes service.
     relabel_configs:
-      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+      - source_labels:
+          [
+            __meta_kubernetes_namespace,
+            __meta_kubernetes_service_name,
+            __meta_kubernetes_endpoint_port_name,
+          ]
         action: keep
         regex: default;kubernetes;https
 
-  - job_name: 'kubernetes-nodes'
+  - job_name: "kubernetes-nodes"
 
     # Default to scraping over https. If required, just disable this or change to
     # `http`.
@@ -89,8 +94,7 @@ customScrapeConfigs:
         target_label: __metrics_path__
         replacement: /api/v1/nodes/$1/proxy/metrics
 
-
-  - job_name: 'kubernetes-nodes-cadvisor'
+  - job_name: "kubernetes-nodes-cadvisor"
 
     # Default to scraping over https. If required, just disable this or change to
     # `http`.
@@ -151,20 +155,23 @@ customScrapeConfigs:
   # service then set this appropriately.
   # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
   # then you can set any parameter
-  - job_name: 'kubernetes-service-endpoints'
+  - job_name: "kubernetes-service-endpoints"
     honor_labels: true
 
     kubernetes_sd_configs:
       - role: endpoints
 
     relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_scrape]
         action: keep
         regex: true
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
         action: drop
         regex: true
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_scheme]
         action: replace
         target_label: __scheme__
         regex: (https?)
@@ -172,7 +179,8 @@ customScrapeConfigs:
         action: replace
         target_label: __metrics_path__
         regex: (.+)
-      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+      - source_labels:
+          [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
         action: replace
         target_label: __address__
         regex: (.+?)(?::\d+)?;(\d+)
@@ -206,7 +214,7 @@ customScrapeConfigs:
   # service then set this appropriately.
   # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
   # then you can set any parameter
-  - job_name: 'kubernetes-service-endpoints-slow'
+  - job_name: "kubernetes-service-endpoints-slow"
     honor_labels: true
 
     scrape_interval: 5m
@@ -216,10 +224,12 @@ customScrapeConfigs:
       - role: endpoints
 
     relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
         action: keep
         regex: true
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_scheme]
         action: replace
         target_label: __scheme__
         regex: (https?)
@@ -227,7 +237,8 @@ customScrapeConfigs:
         action: replace
         target_label: __metrics_path__
         regex: (.+)
-      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+      - source_labels:
+          [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
         action: replace
         target_label: __address__
         regex: (.+?)(?::\d+)?;(\d+)
@@ -247,14 +258,15 @@ customScrapeConfigs:
         action: replace
         target_label: node
 
-  - job_name: 'prometheus-pushgateway'
+  - job_name: "prometheus-pushgateway"
     honor_labels: true
 
     kubernetes_sd_configs:
       - role: service
 
     relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_probe]
         action: keep
         regex: pushgateway
 
@@ -264,7 +276,7 @@ customScrapeConfigs:
   # via the following annotations:
   #
   # * `prometheus.io/probe`: Only probe services that have a value of `true`
-  - job_name: 'kubernetes-services'
+  - job_name: "kubernetes-services"
     honor_labels: true
 
     metrics_path: /probe
@@ -275,7 +287,8 @@ customScrapeConfigs:
       - role: service
 
     relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+      - source_labels:
+          [__meta_kubernetes_service_annotation_prometheus_io_probe]
         action: keep
         regex: true
       - source_labels: [__address__]
@@ -302,7 +315,7 @@ customScrapeConfigs:
   # to set this to `https` & most likely set the `tls_config` of the scrape config.
   # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
   # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
-  - job_name: 'kubernetes-pods'
+  - job_name: "kubernetes-pods"
     honor_labels: true
 
     kubernetes_sd_configs:
@@ -312,7 +325,8 @@ customScrapeConfigs:
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
         action: keep
         regex: true
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+      - source_labels:
+          [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
         action: drop
         regex: true
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
@@ -323,12 +337,20 @@ customScrapeConfigs:
         action: replace
         target_label: __metrics_path__
         regex: (.+)
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+      - source_labels:
+          [
+            __meta_kubernetes_pod_annotation_prometheus_io_port,
+            __meta_kubernetes_pod_ip,
+          ]
         action: replace
         regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
-        replacement: '[$2]:$1'
+        replacement: "[$2]:$1"
         target_label: __address__
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+      - source_labels:
+          [
+            __meta_kubernetes_pod_annotation_prometheus_io_port,
+            __meta_kubernetes_pod_ip,
+          ]
         action: replace
         regex: (\d+);((([0-9]+?)(\.|$)){4})
         replacement: $2:$1
@@ -362,7 +384,7 @@ customScrapeConfigs:
   # to set this to `https` & most likely set the `tls_config` of the scrape config.
   # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
   # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
-  - job_name: 'kubernetes-pods-slow'
+  - job_name: "kubernetes-pods-slow"
     honor_labels: true
 
     scrape_interval: 5m
@@ -372,7 +394,8 @@ customScrapeConfigs:
       - role: pod
 
     relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+      - source_labels:
+          [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
         action: keep
         regex: true
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
@@ -383,12 +406,20 @@ customScrapeConfigs:
         action: replace
         target_label: __metrics_path__
         regex: (.+)
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+      - source_labels:
+          [
+            __meta_kubernetes_pod_annotation_prometheus_io_port,
+            __meta_kubernetes_pod_ip,
+          ]
         action: replace
         regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
-        replacement: '[$2]:$1'
+        replacement: "[$2]:$1"
         target_label: __address__
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+      - source_labels:
+          [
+            __meta_kubernetes_pod_annotation_prometheus_io_port,
+            __meta_kubernetes_pod_ip,
+          ]
         action: replace
         regex: (\d+);((([0-9]+?)(\.|$)){4})
         replacement: $2:$1
@@ -423,8 +454,9 @@ customAlertingRules:
           summary: "datamigrator pod is not running"
           description: "A pod in the 'datamigrator' namespace has been in a non-running state (Pending, Failed, or Unknown) for at least 5 minutes."
       - alert: DataMigratorPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="datamigrator"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="datamigrator"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="datamigrator"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="datamigrator"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -451,8 +483,9 @@ customAlertingRules:
           summary: "Keycloak pod is not running"
           description: "A pod in the 'keycloak' namespace has been in a non-running state for at least 5 minutes."
       - alert: KeycloakPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="keycloak"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="keycloak"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="keycloak"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="keycloak"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -479,8 +512,9 @@ customAlertingRules:
           summary: "Redis pod is not running"
           description: "A pod in the 'redis' namespace has been in a non-running state for at least 5 minutes."
       - alert: RedisPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="redis"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="redis"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="redis"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="redis"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -507,8 +541,9 @@ customAlertingRules:
           summary: "Temporal pod is not running"
           description: "A pod in the 'temporal' namespace has been in a non-running state for at least 5 minutes."
       - alert: TemporalPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="temporal"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="temporal"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="temporal"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="temporal"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -535,8 +570,9 @@ customAlertingRules:
           summary: "Grafana pod is not running"
           description: "A pod in the 'grafana' namespace has been in a non-running state for at least 5 minutes."
       - alert: GrafanaPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="grafana"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="grafana"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="grafana"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="grafana"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -563,8 +599,9 @@ customAlertingRules:
           summary: "Prometheus pod is not running"
           description: "A pod in the 'prometheus' namespace has been in a non-running state for at least 5 minutes."
       - alert: PrometheusPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="prometheus"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="prometheus"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="prometheus"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="prometheus"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -591,8 +628,9 @@ customAlertingRules:
           summary: "Fluentbit pod is not running"
           description: "A pod in the 'fluentbit' namespace has been in a non-running state for at least 5 minutes."
       - alert: FluentbitPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="fluentbit"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="fluentbit"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="fluentbit"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="fluentbit"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -619,8 +657,9 @@ customAlertingRules:
           summary: "Default namespace pod is not running"
           description: "A pod in the 'default' namespace has been in a non-running state for at least 5 minutes."
       - alert: DefaultPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="default"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="default"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="default"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="default"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -647,8 +686,9 @@ customAlertingRules:
           summary: "kube-system pod is not running"
           description: "A pod in the 'kube-system' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubeSystemPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-system"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-system"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-system"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-system"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -675,8 +715,9 @@ customAlertingRules:
           summary: "kube-public pod is not running"
           description: "A pod in the 'kube-public' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubePublicPodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-public"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-public"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-public"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-public"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -703,8 +744,9 @@ customAlertingRules:
           summary: "kube-node-lease pod is not running"
           description: "A pod in the 'kube-node-lease' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubeNodeLeasePodHighCPUUsage
-        expr: (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-node-lease"}[5m]))
-              / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-node-lease"})) > 80
+        expr:
+          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-node-lease"}[5m]))
+          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-node-lease"})) > 80
         for: 2m
         labels:
           severity: warning
@@ -761,7 +803,7 @@ customAlertingRules:
           description: "Node memory usage is above 85% for more than 2 minutes."
 
       - alert: NodeHighDiskUsage
-        expr: 100 - ((node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} * 100) / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}) > 85
+        expr: (node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}) / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} * 100 > 85
         for: 5m
         labels:
           severity: warning
