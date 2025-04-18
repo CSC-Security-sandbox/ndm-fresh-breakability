@@ -740,3 +740,31 @@ customAlertingRules:
           summary: "High Memory Usage"
           description: "Available memory is below 10% for more than 2 minutes."
 
+  - name: node-resource-alerts
+    rules:
+      - alert: NodeHighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High node CPU usage"
+          description: "Node CPU usage is above 80% for more than 2 minutes."
+
+      - alert: NodeHighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High node memory usage"
+          description: "Node memory usage is above 85% for more than 2 minutes."
+
+      - alert: NodeHighDiskUsage
+        expr: 100 - ((node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} * 100) / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High node disk usage"
+          description: "Node disk usage has exceeded 85% for more than 5 minutes."
