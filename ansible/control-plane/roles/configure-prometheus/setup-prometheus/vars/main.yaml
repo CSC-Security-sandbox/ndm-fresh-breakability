@@ -197,6 +197,9 @@ customScrapeConfigs:
         action: replace
         target_label: service
       - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: instance
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_node_name]
         action: replace
         target_label: node
 
