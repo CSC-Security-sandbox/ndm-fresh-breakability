@@ -67,7 +67,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(report|reports-docs)/*"
+  trailingPath: "(report|reports-docs)"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

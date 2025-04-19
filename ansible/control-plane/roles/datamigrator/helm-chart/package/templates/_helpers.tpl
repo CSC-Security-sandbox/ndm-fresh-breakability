@@ -153,11 +153,11 @@ spec:
     http:
       paths:
       {{- if .Values.ingress.pathPrefix }}
-      - path: /{{ .Values.ingress.pathPrefix }}{{ .Values.ingress.trailingPath }}
+      - path: /{{ .Values.ingress.pathPrefix }}{{ .Values.ingress.trailingPath }}(?:/|$)
       {{- else }}
       - path: /
       {{- end }}
-        pathType: Prefix
+        pathType: ImplementationSpecific
         backend:
           service:
             name: {{ .Values.appName }}-service
