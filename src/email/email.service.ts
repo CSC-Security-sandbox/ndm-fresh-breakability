@@ -98,8 +98,11 @@ export class EmailService {
 
   async sendEmailForFailureEvents(emailContent: any, from: string, to: string) {
     const { alerts } = emailContent;
+    const status = alerts[0]?.status || 'unknown';
+    const isResolved = status === 'resolved';
     const severity = alerts[0]?.labels?.severity || 'unknown';
-    const podName = alerts[0]?.labels?.pod || 'N/A';
+    const podName = alerts[0]?.labels?.pod || null;
+    const instanceName = alerts[0]?.labels?.instance || null;
     const alertName = alerts[0]?.labels?.alertname || 'N/A';
     const description =
       alerts[0]?.annotations?.description || 'No description available.';
@@ -110,10 +113,13 @@ export class EmailService {
       subject: `DataMigrator Alert - Severity: ${severity}`,
       template: 'failure',
       context: {
+        isResolved,
         severity,
         podName,
+        instanceName,
         description,
         summary,
+        alerts,
       },
     };
 
