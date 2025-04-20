@@ -119,7 +119,6 @@ export class EmailService {
         instanceName,
         description,
         summary,
-        alerts,
       },
     };
 
