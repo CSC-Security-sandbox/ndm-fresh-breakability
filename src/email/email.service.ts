@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import * as path from 'path';
@@ -8,12 +8,17 @@ import { Repository } from 'typeorm';
 import hbs from 'nodemailer-express-handlebars';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
 
+import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
+import { EmailContentStatus } from 'src/constants/email-content.enum';
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
   transporter: nodemailer.Transporter;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
+    @InjectRepository(SyncEmail)
+    private syncEmailRepo: Repository<SyncEmail>,
   ) {}
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
@@ -81,7 +86,7 @@ export class EmailService {
        await this.sendEmailForSuccessEvent(emailContent, fromAddress, toAddress);
       }
     } catch (error) {
-      console.error(
+      this.logger.error(
         'Error setting up SMTP transporter and sending mail:',
         error.message,
       );
@@ -93,8 +98,12 @@ export class EmailService {
 
   async sendEmailForFailureEvents(emailContent: any, from: string, to: string) {
     const { alerts } = emailContent;
+    const status = alerts[0]?.status || 'unknown';
+    const isResolved = status === 'resolved';
     const severity = alerts[0]?.labels?.severity || 'unknown';
-    const podName = alerts[0]?.labels?.pod || 'N/A';
+    const podName = alerts[0]?.labels?.pod || null;
+    const instanceName = alerts[0]?.labels?.instance || null;
+    const alertName = alerts[0]?.labels?.alertname || 'N/A';
     const description =
       alerts[0]?.annotations?.description || 'No description available.';
     const summary = alerts[0]?.annotations?.summary || 'No summary available.';
@@ -104,17 +113,34 @@ export class EmailService {
       subject: `DataMigrator Alert - Severity: ${severity}`,
       template: 'failure',
       context: {
+        isResolved,
         severity,
         podName,
+        instanceName,
         description,
         summary,
       },
     };
+
+    const syncEmail = new SyncEmail();
+    syncEmail.mailContent = emailContent;
+    syncEmail.incidentStatus = IncidentStatus.OPEN;
+    syncEmail.description = description;
+    syncEmail.summary = summary;
+    syncEmail.alertSource = podName ?? instanceName;
+    syncEmail.alertName = alertName;
+
     try {
-      const info = await this.transporter.sendMail(mailOptions);
+      await this.transporter.sendMail(mailOptions);
     } catch (error) {
-      console.error('Error sending email:', error.message);
+      this.logger.error(`Error sending email: ${error.message}`);
       throw new Error(`Error sending email: ${error.message}`);
+    } finally {
+      if(emailContent.status === EmailContentStatus.FIRING) {
+        await this.syncEmailRepo.save(syncEmail);
+      } else {
+        await this.syncEmailRepo.update({ incidentStatus: IncidentStatus.OPEN, alertSource: podName ?? instanceName, alertName: alertName }, { incidentStatus: IncidentStatus.CLOSED });
+      }
     }
   }
 

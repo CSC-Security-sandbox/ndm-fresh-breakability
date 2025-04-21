@@ -5,6 +5,7 @@ import { EmailDto } from './dto/emailDto';
 import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { SyncEmail } from 'src/entities/sync-email.entity';
 jest.mock('nodemailer-express-handlebars', () => ({
   __esModule: true,
   default: jest.fn(() => ({
@@ -14,7 +15,8 @@ jest.mock('nodemailer-express-handlebars', () => ({
 describe('EmailController', () => {
   let controller: EmailController;
   let service: EmailService;
-  let globalSettingsRepo: Repository<GlobalSettings>;;
+  let globalSettingsRepo: Repository<GlobalSettings>;
+  let syncEmailRepo: Repository<SyncEmail>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -24,12 +26,17 @@ describe('EmailController', () => {
           provide: getRepositoryToken(GlobalSettings),
           useClass: Repository,
         },
+        {
+          provide: getRepositoryToken(SyncEmail),
+          useClass: Repository,
+        },
       ],
     }).compile();
 
     controller = module.get<EmailController>(EmailController);
     service = module.get<EmailService>(EmailService);
     globalSettingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
+    syncEmailRepo = module.get<Repository<SyncEmail>>(getRepositoryToken(SyncEmail));
   });
 
   describe('create', () => {
