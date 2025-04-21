@@ -602,6 +602,13 @@ export class JobConfigService {
           },
         });
 
+        // Check if any existing job is inactive
+        if (existingJobConfigs.some(job => job.status === JobStatus.InActive)) {
+          throw new BadRequestException(
+            `An inactive job already exists for source path ID ${config?.sourcePathId} and destination path ID ${destinationPath}. Please reactivate or remove the existing job before creating a new one.`
+          );
+        }
+        
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
