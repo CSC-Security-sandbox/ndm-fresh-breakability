@@ -1,3 +1,6 @@
+import React from "react";
+import JobTaskErrorsCellRenderer from "@modules/jobs/job-task-errors/components/JobTaskErrorsCellRenderer";
+import { BlueXpTableRowType, JobErrorType } from "@/types/app.type";
 export const ERROR_COLUMN_DEF = [
   {
     header: "File",
@@ -6,7 +9,7 @@ export const ERROR_COLUMN_DEF = [
   },
   {
     header: "Operation",
-    accessor: "operation",
+    accessor: "operationType",
     id: "2",
   },
   {
@@ -26,7 +29,9 @@ export const ERROR_COLUMN_DEF = [
   },
   {
     header: "Error Details",
-    accessor: "errorDetails",
+    accessor: "errorMessage",
+    Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
+      React.createElement(JobTaskErrorsCellRenderer, { ...props }),
     id: "6",
   },
 ];
