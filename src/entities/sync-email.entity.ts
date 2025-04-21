@@ -28,8 +28,8 @@ export class SyncEmail extends Base {
   @Column({ type: 'text', nullable: true })
   summary: string;
 
-  @Column({ name: 'pod', type: 'text', nullable: true })
-  pod: string;
+  @Column({ name: 'alertsource', type: 'text', nullable: true })
+  alertSource: string;
 
   @Column({ name: 'alertname', type: 'text', nullable: true })
   alertName: string;

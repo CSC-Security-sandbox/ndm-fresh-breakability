@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS sync_email (
     incident_status incident_status NOT NULL,
     description TEXT,
     summary TEXT,
-    pod TEXT,
+    alertsource TEXT,
     alertname TEXT,
     created_at timestamp DEFAULT now() NOT NULL,
 	created_by uuid NULL,

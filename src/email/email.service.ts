@@ -127,7 +127,7 @@ export class EmailService {
     syncEmail.incidentStatus = IncidentStatus.OPEN;
     syncEmail.description = description;
     syncEmail.summary = summary;
-    syncEmail.pod = podName;
+    syncEmail.alertSource = podName ?? instanceName;
     syncEmail.alertName = alertName;
 
     try {
@@ -139,7 +139,7 @@ export class EmailService {
       if(emailContent.status === EmailContentStatus.FIRING) {
         await this.syncEmailRepo.save(syncEmail);
       } else {
-        await this.syncEmailRepo.update({ incidentStatus: IncidentStatus.OPEN, pod: podName, alertName: alertName }, { incidentStatus: IncidentStatus.CLOSED });
+        await this.syncEmailRepo.update({ incidentStatus: IncidentStatus.OPEN, alertSource: podName ?? instanceName, alertName: alertName }, { incidentStatus: IncidentStatus.CLOSED });
       }
     }
   }
