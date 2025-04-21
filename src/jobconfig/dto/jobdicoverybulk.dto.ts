@@ -209,25 +209,25 @@ export class Options {
 
   @ApiProperty({
     description: "Timeout for workflow task",
-    default: "30s",
+    default: "5m",
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowTaskTimeout: string = "30s";
+  workflowTaskTimeout: string = "5m";
 
   @ApiProperty({
     description: "Timeout for workflow run",
-    default: "60s",
+    default: "5m",
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowRunTimeout: string = "60s";
+  workflowRunTimeout: string = "5m";
 
   @ApiProperty({
     description: "Delay before starting the workflow",
-    default: "10s",
+    default: "1s",
     required: false,
   })
   @IsOptional()
