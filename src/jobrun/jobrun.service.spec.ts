@@ -74,6 +74,7 @@ import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
 import { WorkersService } from "src/workers/workers.service";
 import { HealthStatus } from "src/workers/worker.types";
 import { config } from "dotenv";
+import { SyncEmailEntity } from "src/entities/sync-email.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -142,6 +143,19 @@ describe("JobRunService", () => {
         },
         {
           provide: getRepositoryToken(ProjectEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SyncEmailEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
