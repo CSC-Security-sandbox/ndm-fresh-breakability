@@ -79,6 +79,7 @@ import { SendMailService } from "src/utils/send-email";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -86,6 +87,8 @@ export class JobConfigService {
   constructor(
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
+    @InjectRepository(SyncEmailEntity)
+    private syncEmailRepo: Repository<SyncEmailEntity>,
     @InjectRepository(JobConfigEntity)
     private jobConfigRepo: Repository<JobConfigEntity>,
     @InjectRepository(SpeedTestConfigEntity)
@@ -1242,6 +1245,12 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
+    const severityMessages =
+      await this.syncEmailRepo
+        .createQueryBuilder('syncEmail')
+        .where('syncEmail.incidentStatus = :status', { status: IncidentStatus.OPEN })
+        .getMany();
+
     this.logger.log(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
     );
@@ -1251,6 +1260,7 @@ export class JobConfigService {
       countBlockedCutoverJobRuns,
       countRecentJobConfigs,
       countCompletedJobRuns,
+      severityMessages
     };
   }
 
