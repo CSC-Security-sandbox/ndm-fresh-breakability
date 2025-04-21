@@ -6,6 +6,14 @@ import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
+import { SyncEmail, IncidentStatus } from 'src/entities/sync-email.entity';
+import { Logger } from '@nestjs/common';
+
+enum EmailContentStatus {
+  FIRING = 'firing',
+  RESOLVED = 'resolved'
+}
+
 jest.mock('nodemailer-express-handlebars', () => ({
   __esModule: true,
   default: jest.fn(() => ({
@@ -15,11 +23,13 @@ jest.mock('nodemailer-express-handlebars', () => ({
 
 const mockSettingsRepo = {
   find: jest.fn(),
+  update: jest.fn()
 };
 describe('EmailService', () => {
   let transporterMock: any;
   let service: EmailService;
   let settingsRepo: Repository<GlobalSettings>;
+  let syncEmailRepo: Repository<SyncEmail>;
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -28,10 +38,31 @@ describe('EmailService', () => {
           provide: getRepositoryToken(GlobalSettings),
           useValue: mockSettingsRepo,
         },
+        {
+          provide: getRepositoryToken(SyncEmail),
+          useValue: {
+            save: jest.fn().mockResolvedValue({}),
+            update: jest.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: Logger,
+          useValue: {
+            error: jest.fn(),
+          },
+        },
       ],
     }).compile();
     service = module.get<EmailService>(EmailService);
     settingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
+    syncEmailRepo = module.get<Repository<SyncEmail>>(getRepositoryToken(SyncEmail));
+
+    (service as any).transporter = {
+      sendMail: jest.fn().mockResolvedValue({}),
+      verify: jest.fn().mockResolvedValue(true),
+      use: jest.fn(),
+    };
+
   });
   afterEach(() => {
     jest.clearAllMocks();
@@ -282,17 +313,17 @@ describe('EmailService', () => {
     });
   });
   describe('sendEmailForFailureEvents', () => {
-    let service: EmailService;
-  
-    beforeEach(() => {
-      service = new EmailService({} as any, {} as any ); // Mock Repository
-    });
-  
-    it('should send email for failure event successfully', async () => {
+    it('should send email and save record when status is FIRING', async () => {
       const emailContent = {
+        status: EmailContentStatus.FIRING,
         alerts: [
           {
-            labels: { severity: 'critical', pod: 'pod-123' },
+            status: 'firing',
+            labels: { 
+              severity: 'critical', 
+              pod: 'pod-123',
+              alertname: 'HighCPUUsage'
+            },
             annotations: { description: 'Service down', summary: 'Outage' },
           },
         ],
@@ -306,30 +337,96 @@ describe('EmailService', () => {
         subject: `DataMigrator Alert - Severity: critical`,
         template: 'failure',
         context: {
+          isResolved: false,
           severity: 'critical',
           podName: 'pod-123',
+          instanceName: null,
           description: 'Service down',
           summary: 'Outage',
         },
       };
   
-      const transporterMock = {
-        sendMail: jest.fn().mockResolvedValue({}),
-        verify: jest.fn().mockResolvedValue(true),
-        use: jest.fn(),
+      await service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
+  
+      expect((service as any).transporter.sendMail).toHaveBeenCalledWith(mailOptions);
+      expect(syncEmailRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        mailContent: emailContent,
+        incidentStatus: IncidentStatus.OPEN,
+        description: 'Service down',
+        summary: 'Outage',
+        alertSource: 'pod-123',
+        alertName: 'HighCPUUsage'
+      }));
+      expect(syncEmailRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('should send email and update record status to CLOSED when status is RESOLVED', async () => {
+      const emailContent = {
+        status: EmailContentStatus.RESOLVED,
+        alerts: [
+          {
+            status: 'resolved',
+            labels: { 
+              severity: 'critical', 
+              pod: 'pod-123',
+              alertname: 'HighCPUUsage'
+            },
+            annotations: { description: 'Service recovered', summary: 'Recovery' },
+          },
+        ],
       };
-      (service as any).transporter = transporterMock;
+      const fromAddress = 'from@example.com';
+      const toAddress = 'to@example.com';
   
       await service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
   
-      expect(transporterMock.sendMail).toHaveBeenCalledWith(mailOptions);
+      expect((service as any).transporter.sendMail).toHaveBeenCalled();
+      expect(syncEmailRepo.save).not.toHaveBeenCalled();
+      expect(syncEmailRepo.update).toHaveBeenCalledWith(
+        { 
+          incidentStatus: IncidentStatus.OPEN, 
+          alertSource: 'pod-123', 
+          alertName: 'HighCPUUsage' 
+        },
+        { 
+          incidentStatus: IncidentStatus.CLOSED 
+        }
+      );
     });
-  
-    it('should throw an error when email sending fails', async () => {
+
+    it('should handle instance name when pod is not available', async () => {
       const emailContent = {
+        status: EmailContentStatus.FIRING,
         alerts: [
           {
-            labels: { severity: 'critical', pod: 'pod-123' },
+            status: 'firing',
+            labels: { 
+              severity: 'critical', 
+              instance: 'server-456',
+              alertname: 'DiskSpaceLow'
+            },
+            annotations: { description: 'Disk space low', summary: 'Storage issue' },
+          },
+        ],
+      };
+      const fromAddress = 'from@example.com';
+      const toAddress = 'to@example.com';
+  
+      await service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
+  
+      expect(syncEmailRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        alertSource: 'server-456',
+        alertName: 'DiskSpaceLow'
+      }));
+    });
+
+    it('should throw an error when email sending fails but still try to save data', async () => {
+      const emailContent = {
+        status: EmailContentStatus.FIRING,
+        alerts: [
+          {
+            status: 'firing',
+            labels: { severity: 'critical', pod: 'pod-123', alertname: 'HighCPUUsage' },
             annotations: { description: 'Service down', summary: 'Outage' },
           },
         ],
@@ -338,23 +435,21 @@ describe('EmailService', () => {
       const toAddress = 'to@example.com';
   
       const errorMessage = 'SMTP connection failed';
-  
-      const transporterMock = {
-        sendMail: jest.fn().mockRejectedValue(new Error(errorMessage)), 
-        verify: jest.fn().mockResolvedValue(true),
-        use: jest.fn(),
-      };
-      (service as any).transporter = transporterMock;
+      (service as any).transporter.sendMail = jest.fn().mockRejectedValue(new Error(errorMessage));
   
       await expect(
         service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress)
       ).rejects.toThrow(`Error sending email: ${errorMessage}`);
   
-      expect(transporterMock.sendMail).toHaveBeenCalled();
+      expect((service as any).transporter.sendMail).toHaveBeenCalled();
+      expect(syncEmailRepo.save).toHaveBeenCalled();
     });
   
     it('should handle missing alert data gracefully', async () => {
-      const emailContent = { alerts: [{}] }; 
+      const emailContent = { 
+        status: EmailContentStatus.FIRING,
+        alerts: [{}] 
+      }; 
       const fromAddress = 'from@example.com';
       const toAddress = 'to@example.com';
   
@@ -364,21 +459,49 @@ describe('EmailService', () => {
         subject: `DataMigrator Alert - Severity: unknown`,
         template: 'failure',
         context: {
+          isResolved: false,
           severity: 'unknown',
-          podName: 'N/A',
+          podName: null,
+          instanceName: null,
           description: 'No description available.',
           summary: 'No summary available.',
         },
       };
   
-      const transporterMock = {
-        sendMail: jest.fn().mockResolvedValue({}),
-        verify: jest.fn().mockResolvedValue(true),
-        use: jest.fn(),
-      };
-      (service as any).transporter = transporterMock;
       await service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
-      expect(transporterMock.sendMail).toHaveBeenCalledWith(mailOptions);
+      
+      expect((service as any).transporter.sendMail).toHaveBeenCalledWith(mailOptions);
+      expect(syncEmailRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        alertSource: null,
+        alertName: 'N/A'
+      }));
+    });
+
+    it('should correctly determine if alert is resolved based on status', async () => {
+      const emailContent = {
+        status: EmailContentStatus.FIRING,
+        alerts: [
+          {
+            status: 'resolved',
+            labels: { severity: 'critical', pod: 'pod-123', alertname: 'HighCPUUsage' },
+            annotations: { description: 'Service recovering', summary: 'Recovery in progress' },
+          },
+        ],
+      };
+      const fromAddress = 'from@example.com';
+      const toAddress = 'to@example.com';
+  
+      await service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress);
+  
+      expect((service as any).transporter.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            isResolved: true
+          })
+        })
+      );
+      
+      expect(syncEmailRepo.save).toHaveBeenCalled();
     });
   });
   
