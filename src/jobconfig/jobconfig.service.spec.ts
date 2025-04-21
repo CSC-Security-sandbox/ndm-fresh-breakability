@@ -1243,6 +1243,32 @@ describe("JobConfigService", () => {
     );
     expect(identityMappingRepo.save).toHaveBeenCalled();
   });
+  
+  it('should throw BadRequestException when an inactive job already exists', async () => {
+    const bulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: 'source1',
+          destinationPathId: ['dest1'],
+        },
+      ],
+    };
+
+    (jobConfigRepo.find as jest.Mock).mockResolvedValue([
+      {
+        status: JobStatus.InActive,
+        sourcePathId: 'source1',
+        targetPathId: 'dest1',
+        jobType: JobType.MIGRATE,
+      },
+    ]);
+
+    await expect(service.createBulkMigrate(bulkMigrate as any)).rejects.toThrow(
+      new BadRequestException(
+        'An inactive job already exists for source path ID source1 and destination path ID dest1. Please reactivate or remove the existing job before creating a new one.'
+      )
+    );
+  });
 
   it("should delete Redis keys for job runs when keys exist", async () => {
     const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
