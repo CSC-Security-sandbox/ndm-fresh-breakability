@@ -631,6 +631,7 @@ export class JobConfigService {
               status: JobStatus.Active,
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
+              futureScheduleAt: bulkMigrate?.futureRunSchedule,
             }
           );
           const jobConfigIds = existingJobConfigs.map(
