@@ -53,6 +53,7 @@ import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import { v4 as uuid } from "uuid";
 import { SendMailService } from "src/utils/send-email";
 import { HealthStatus } from "src/workers/worker.types";
+import { SyncEmailEntity } from "src/entities/sync-email.entity";
 
 describe("JobConfigService", () => {
   let service: JobConfigService;
@@ -129,6 +130,18 @@ describe("JobConfigService", () => {
             find: jest.fn(),
             update: jest.fn(),
             createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(SyncEmailEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn()
           },
         },
         {
@@ -3124,9 +3137,24 @@ describe("JobConfigService", () => {
         expect(saveIdentityCrossMappingSpy).toHaveBeenCalled();
       });
     });
+   
     describe("getNoticeBoardDetailsByProjectId", () => {
+      let syncEmailRepo: Repository<SyncEmailEntity>;
+      
+      beforeEach(() => {
+        syncEmailRepo = {
+          createQueryBuilder: jest.fn(),
+        } as unknown as Repository<SyncEmailEntity>;
+        
+        (service as any).syncEmailRepo = syncEmailRepo;
+      });
+      
       it("should return correct counts for different job statuses", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
+        const mockSeverityMessages = [
+          { id: 1, incidentStatus: 'OPEN' },
+          { id: 2, incidentStatus: 'OPEN' }
+        ];
 
         jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
           return {
@@ -3152,23 +3180,32 @@ describe("JobConfigService", () => {
             } as any;
           });
 
-        const result =
-          await service.getNoticeBoardDetailsByProjectId(projectId);
-
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
+          return {
+            where: jest.fn().mockReturnThis(),
+            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+          } as any;
+        });
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
         expect(result).toEqual({
           countErroredJobRuns: 5,
           countBlockedCutoverJobRuns: 5,
           countRecentJobConfigs: 4,
           countCompletedJobRuns: 5,
+          severityMessages: mockSeverityMessages,
         });
-
+    
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
         expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+        expect(syncEmailRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
       });
-
+    
       it("should return zero counts when no job runs exist", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
-
+        const mockSeverityMessages = [];
+    
         jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
           return {
             innerJoin: jest.fn().mockReturnThis(),
@@ -3177,7 +3214,7 @@ describe("JobConfigService", () => {
             getCount: jest.fn().mockResolvedValue(0),
           } as any;
         });
-
+    
         jest
           .spyOn(jobConfigRepo, "createQueryBuilder")
           .mockImplementation(() => {
@@ -3188,21 +3225,30 @@ describe("JobConfigService", () => {
               getCount: jest.fn().mockResolvedValue(0),
             } as any;
           });
-
-        const result =
-          await service.getNoticeBoardDetailsByProjectId(projectId);
-
+    
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
+          return {
+            where: jest.fn().mockReturnThis(),
+            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+          } as any;
+        });
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
         expect(result).toEqual({
           countErroredJobRuns: 0,
           countBlockedCutoverJobRuns: 0,
           countRecentJobConfigs: 0,
           countCompletedJobRuns: 0,
+          severityMessages: mockSeverityMessages,
         });
-
+    
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
         expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+        expect(syncEmailRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
       });
     });
+
   });
 
   describe("createBulkMigrate", () => {
