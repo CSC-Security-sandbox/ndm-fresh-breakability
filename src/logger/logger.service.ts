@@ -2,13 +2,19 @@ import { Injectable, LoggerService } from '@nestjs/common';
 import * as fs from 'fs';
 import * as winston from 'winston';
 import 'winston-daily-rotate-file';
-import { DefaultLogger, makeTelemetryFilterString, Runtime } from '@temporalio/worker';
+import {
+  DefaultLogger,
+  makeTelemetryFilterString,
+  Runtime,
+} from '@temporalio/worker';
+import { support as fluentSupport } from 'fluent-logger';
 
 @Injectable()
 export class Logger implements LoggerService {
   static logLevel: string = process.env.LOG_LEVEL || 'info';
   static logDir: string = process.env.LOG_DIR || './logs';
-  static workerId: string = process.env.WORKER_ID || '6cf21220-5627-4614-a947-778915dba29d';
+  static workerId: string =
+    process.env.WORKER_ID || '6cf21220-5627-4614-a947-778915dba29d';
 
   static logFormat = winston.format.printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
@@ -21,8 +27,8 @@ export class Logger implements LoggerService {
       label: entry.meta?.activityId
         ? 'activity'
         : entry.meta?.workflowId
-        ? 'workflow'
-        : 'worker',
+          ? 'workflow'
+          : 'worker',
       level: entry.level.toLowerCase(),
       message: entry.message,
       timestamp: Number(entry.timestampNanos / 1_000_000n),
@@ -35,6 +41,22 @@ export class Logger implements LoggerService {
       fs.mkdirSync(Logger.logDir);
     }
 
+    const fluentConfig = {
+      host: process.env.CONTROL_PLANE_IP || '192.168.64.189',
+      port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
+      timeout: 3.0,
+      reconnectInterval: 6000,
+      security: {
+        clientHostname: process.env.FLUENT_CLIENT_HOST || 'worker-client',
+        sharedKey:
+          process.env.FLUENT_SHARED_KEY || 'secure_communication_is_awesome',
+      },
+      requireAckResponse: true,
+    };
+
+    const fluentTransport = fluentSupport.winstonTransport();
+    const fluent = new fluentTransport('worker.tag', fluentConfig);
+
     this.loggerInstance = winston.createLogger({
       level: Logger.logLevel,
       format: winston.format.combine(
@@ -44,27 +66,29 @@ export class Logger implements LoggerService {
       ),
       transports: [
         new winston.transports.Console(),
-      //   new winston.transports.DailyRotateFile({
-      //     filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
-      //     datePattern: 'YYYY-MM-DD',
-      //     maxFiles: '14d',
-      //     zippedArchive: true,
-      //     maxSize: '10m'
-      //   }),
-      // ],
-      // exceptionHandlers: [
-      //   new winston.transports.DailyRotateFile({
-      //     filename: `${Logger.logDir}/${Logger.workerId}-%DATE%_exception.log`,
-      //     datePattern: 'YYYY-MM-DD',
-      //     maxFiles: '14d',
-      //     zippedArchive: true,
-      //     maxSize: '10m'
-      //   })
-      ]
+        fluent,
+        // new winston.transports.DailyRotateFile({
+        //   filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
+        //   datePattern: 'YYYY-MM-DD',
+        //   maxFiles: '14d',
+        //   zippedArchive: true,
+        //   maxSize: '10m'
+        // }),
+        // ],
+        // exceptionHandlers: [
+        //   new winston.transports.DailyRotateFile({
+        //     filename: `${Logger.logDir}/${Logger.workerId}-%DATE%_exception.log`,
+        //     datePattern: 'YYYY-MM-DD',
+        //     maxFiles: '14d',
+        //     zippedArchive: true,
+        //     maxSize: '10m'
+        //   })
+      ],
     });
 
     if (!Logger.isRuntimeInstalled) {
-      Runtime.install({ logger: this.defaultLogger,
+      Runtime.install({
+        logger: this.defaultLogger,
         telemetryOptions: {
           logging: {
             forward: {},
@@ -72,8 +96,7 @@ export class Logger implements LoggerService {
           },
         },
       });
-
-      Logger.isRuntimeInstalled = true;  // Prevent future calls to Runtime.install()
+      Logger.isRuntimeInstalled = true; // Prevent future calls to Runtime.install()
     }
   }
 
