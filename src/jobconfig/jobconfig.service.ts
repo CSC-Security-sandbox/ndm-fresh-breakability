@@ -63,6 +63,7 @@ import {
   PreCheckWorkflowOPayload,
   SpeedTestEntry,
   SpeedTestJobRun,
+  workerWithStatus,
 } from "./jobconfig.types";
 import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
@@ -949,7 +950,7 @@ export class JobConfigService {
             destinations: [],
           };
         
-          const workerIds = new Set<{ workerId: string; ishealthy: boolean }>(
+          const workerWithStatusSet = new Set<workerWithStatus>(
             sourceVolume.fileServer.workers
               .map((worker) => ({
                 workerId: worker.workerId,
@@ -961,19 +962,18 @@ export class JobConfigService {
               (p) => p.id === destinationPathId
             );
             if (destinationVolume) {
-              const workers: { workerId: string; ishealthy: boolean }[] = [];
+              const workerWithStatus: workerWithStatus[] = [];
               destinationVolume.fileServer.workers
-               
                 .forEach((worker) => {
-                  if ([...workerIds].some((w) => w.workerId === worker.workerId)) {
-                    workers.push({workerId:worker.workerId, ishealthy:filterUnhealthyWorkers(worker, helathCheckTimout)});
+                  if ([...workerWithStatusSet].some((w) => w.workerId === worker.workerId)) {
+                    workerWithStatus.push({workerId:worker.workerId, ishealthy:filterUnhealthyWorkers(worker, helathCheckTimout)});
                   }
                 });
               preChecks.destinations.push({
                 pathId: destinationPathId,
                 serverId: destinationVolume.fileServer.id,
                 pathName: destinationVolume.volumePath,
-                workers: workers,
+                workers: workerWithStatus,
               });
             }
           });

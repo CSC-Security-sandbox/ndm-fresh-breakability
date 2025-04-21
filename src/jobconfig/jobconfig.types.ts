@@ -68,6 +68,11 @@ export interface ServerCredentials{
   serverType: string;
   protocolVersion: string;
 }
+
+export interface workerWithStatus {
+  workerId: string;
+  ishealthy: boolean 
+}
 export interface PreChecks {
   pathId: string;
   pathName: string;
@@ -76,7 +81,7 @@ export interface PreChecks {
     pathId: string;
     pathName: string;
     serverId: string
-    workers: { workerId: string; ishealthy: boolean }[]
+    workers: workerWithStatus[]
   }[],
 }
 export interface PreCheckWorkflowOPayload {
