@@ -11,7 +11,6 @@ export enum ConfigStatus {
 }
 
 export enum ConfigErrorMsg {
-    ACTIVE = '',
     ERRORED = 'worker is down'
 }
 

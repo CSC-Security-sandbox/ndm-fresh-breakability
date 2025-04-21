@@ -509,7 +509,7 @@ export class ConfigurationService {
     }
   }
 
-  async IsAllUnHealthyWorkers(workers: WorkerEntity[]): Promise<boolean> {
+  async isAllWorkerUnHealthy(workers: WorkerEntity[]): Promise<boolean> {
     const currentTime = new Date();
     return workers.every((worker) => {
       const diffInSeconds = Math.floor(
@@ -582,14 +582,16 @@ export class ConfigurationService {
         createdBy: userId,
       });
 
-      if (workers?.length > 0 && (await this.IsAllUnHealthyWorkers(workers)))
+      if (workers?.length > 0 && (await this.isAllWorkerUnHealthy(workers)))
         allUnHealthy = true;
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
       }
       const update = await this.configEntity.save(config);
-      if (!allUnHealthy) {
+      if (allUnHealthy) {
+        return update;
+      }
         await this.startValidateWorkingDirectoryWorkflow(
           createConfig,
           update.id,
@@ -633,7 +635,7 @@ export class ConfigurationService {
           workingDirectory,
         );
         this.refreshConfig(update.id, traceId);
-      }
+      
 
       return update;
     } catch (error) {
@@ -732,7 +734,7 @@ export class ConfigurationService {
       });
       if (
         workersWithStats?.length > 0 &&
-        (await this.IsAllUnHealthyWorkers(workersWithStats))
+        (await this.isAllWorkerUnHealthy(workersWithStats))
       )
         allUnHealthy = true;
 
@@ -773,7 +775,9 @@ export class ConfigurationService {
       }
 
       const update = await this.configEntity.save(config);
-      if (!allUnHealthy) {
+      if (allUnHealthy) {
+        return update;
+      }
         const htmlContent = `
             <p>Hello</p>
             <p>Config ${update.configName} has been updated successfully</p>
@@ -800,7 +804,7 @@ export class ConfigurationService {
         );
 
         this.refreshConfig(update.id, traceId);
-      }
+      
       return update;
     } catch (error) {
       this.logger.error(
