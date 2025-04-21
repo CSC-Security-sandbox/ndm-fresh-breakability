@@ -30,6 +30,7 @@ export interface FetchScanTaskOutPut {
 
 export interface ScanPathInput{
     jobRunId: string;
+    failedWorkers: string[];
 }
 export interface ScanPathOutput{
     isTaskCreated: boolean;
@@ -41,6 +42,7 @@ export interface ScanPathOutput{
     noTaskFound: boolean;
     files: number;
     folders: number;
+    workerId: string;
 }
 
 export interface PublishScanTaskInput{
@@ -68,7 +70,8 @@ export interface FetchMigrationTaskOutput {
 }
 
 export interface SyncTaskInput {
-    jobRunId: string
+    jobRunId: string,
+    failedWorkers: string[];
 }
 
 export interface SyncTaskOutput {
@@ -79,6 +82,7 @@ export interface SyncTaskOutput {
     errorType?: ErrorType | undefined
     isFatal : boolean
     noTaskFound: boolean
+    workerId: string;
 }
 
 export interface SyncOperationInput {

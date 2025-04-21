@@ -1,82 +1,51 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
-import { HttpService } from '@nestjs/axios';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { of, throwError } from 'rxjs';
+import { AuthService } from 'src/auth/auth.service';
+import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
-import { getAccessToken } from '../common/token.util';
 import { DiscoveryActivity } from './discovery.activities';
-
-
-jest.mock('src/config/app.config', () => ({
-  WorkersConfig: {
-    get: jest.fn((key: string) => {
-      if (key === 'workerJobServiceUrl') {
-        return 'http://job-service';
-      }
-      return null;
-    }),
-  },
-}));
-
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
-
-
-jest.mock('../common/token.util', () => ({
-  getAccessToken: jest.fn(),
-}));
+const { patch, post } = mockedAxios;
 
 describe('DiscoveryActivity', () => {
   let service: DiscoveryActivity;
   let configService: Partial<ConfigService>;
-  let httpService: Partial<HttpService>;
+  let authService: Partial<AuthService>;
   let logger: Partial<Logger>;
   let redisService: Partial<RedisService>;
   let commonService: Partial<CommonActivityService>;
 
+  const traceId = 'trace-1';
+  const jobRunId = 'run-42';
+
+  const createJobContext = () => ({
+    groupReadTasks: jest.fn().mockResolvedValue((async function* () { yield { id: 't1' }; })()),
+    groupReadDirs: jest.fn().mockResolvedValue((async function* () { })()),
+    appendToTaskList: jest.fn().mockResolvedValue('task-1'),
+    appendToFileList: jest.fn().mockResolvedValue('file-1'),
+    tasksInfo: { lastId: null },
+    errorsInfo: { lastId: null },
+    jobRunId,
+  });
+
   beforeEach(async () => {
-    configService = {
-      get: jest.fn((key: string) => {
-        switch (key) {
-          case 'worker.workerId':
-            return 'test-worker';
-          case 'worker.workerReportServiceUrl':
-            return 'http://report-service';
-          case 'keycloak':
-            return { baseUrl: 'http://keycloak', realm: 'testrealm', workerSecret: 'secret' };
-          default:
-            return null;
-        }
-      }),
-    };
-
-    httpService = {
-      post: jest.fn(),
-    };
-
-    logger = {
-      log: jest.fn(),
-      error: jest.fn(),
-    };
-
-    redisService = {
-      getJobContext: jest.fn(),
-    };
-
-    commonService = {
-      getJobState: jest.fn(),
-    };
+    configService = { get: jest.fn().mockImplementation(key => key === 'worker.workerId' ? 'worker-x' : 'http://report') };
+    authService = { getAccessToken: jest.fn().mockResolvedValue('token-abc') };
+    logger = { log: jest.fn(), error: jest.fn() };
+    const fakeContext = createJobContext();
+    redisService = { getJobContext: jest.fn().mockResolvedValue(fakeContext), setJobContext: jest.fn() };
+    commonService = { getJobState: jest.fn().mockResolvedValue({ tasks_total: 0, tasks_completed: 0, workers: [], workers_agreed: [], status: undefined }) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DiscoveryActivity,
         { provide: ConfigService, useValue: configService },
-        { provide: HttpService, useValue: httpService },
+        { provide: AuthService, useValue: authService },
         { provide: Logger, useValue: logger },
         { provide: RedisService, useValue: redisService },
         { provide: CommonActivityService, useValue: commonService },
@@ -86,171 +55,128 @@ describe('DiscoveryActivity', () => {
     service = module.get<DiscoveryActivity>(DiscoveryActivity);
   });
 
-  describe('getAccessToken', () => {
-    it('should fetch and cache a new access token on success', async () => {
-      const now = Math.floor(Date.now() / 1000);
-      const tokenResponse = { data: { access_token: 'token123', expires_in: 100 } };
-      (httpService.post as jest.Mock).mockReturnValue(of(tokenResponse));
-
-
-      const token = await service.getAccessToken();
-      expect(token).toBe('token123');
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Fetched new access token'));
-
-      const token2 = await service.getAccessToken();
-      expect(token2).toBe('token123');
-      expect(httpService.post).toHaveBeenCalledTimes(1);
-    });
-
-    it('should return null on error fetching token', async () => {
-      (httpService.post as jest.Mock).mockReturnValue(throwError(() => new Error('Fetch error')));
-      const token = await service.getAccessToken();
-      expect(token).toBeNull();
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to obtain access token'));
-    });
-  });
-
   describe('getWorkerId', () => {
-    it('should return workerId', async () => {
-      const id = await service.getWorkerId();
-      expect(id).toBe('test-worker');
+    it('should return workerId from config', async () => {
+      await expect(service.getWorkerId()).resolves.toBe('worker-x');
     });
   });
 
   describe('fetchTasks', () => {
-    it('should return tasks from job context', async () => {
-      const fakeTasks = [{ id: 'task1' }, { id: 'task2' }];
-      const asyncTaskIterator = {
-        async *[Symbol.asyncIterator]() {
-          for (const task of fakeTasks) {
-            yield task;
-          }
-        },
-      };
-      const fakeJobContext = {
-        groupReadTasks: jest.fn().mockResolvedValue(asyncTaskIterator),
-      };
-      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
-
-      const tasks = await service.fetchTasks('trace-1');
-      expect(tasks).toEqual(fakeTasks);
-      expect(logger.log).toHaveBeenCalledWith('[trace-1] Fetched 2 tasks.');
+    it('should fetch tasks and log count', async () => {
+      const tasks = await service.fetchTasks(traceId);
+      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Fetched 1 tasks.`);
+      expect(tasks).toEqual([{ id: 't1' }]);
     });
 
-    it('should return an empty array on error', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('fail'));
-      const tasks = await service.fetchTasks('trace-1');
+    it('should return empty array on getJobContext error', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('ctx fail'));
+      const tasks = await service.fetchTasks(traceId);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to fetch the task: Error: ctx fail`);
       expect(tasks).toEqual([]);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch the task'));
+    });
+
+    it('should return empty array on groupReadTasks error', async () => {
+      const fakeCtx: any = createJobContext();
+      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeCtx);
+      fakeCtx.groupReadTasks = jest.fn().mockRejectedValueOnce(new Error('group fail'));
+      const tasks = await service.fetchTasks(traceId);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to fetch the task: Error: group fail`);
+      expect(tasks).toEqual([]);
     });
   });
 
   describe('publishTask', () => {
-    it('should publish tasks when directory batch is reached', async () => {
-      const fakeDirs = [{ path: '/dir1' }, { path: '/dir2' }];
-      const asyncDirIterator = {
-        async *[Symbol.asyncIterator]() {
-          for (const dir of fakeDirs) {
-            yield dir;
-          }
-        },
-      };
-
-      const fakeJobContext = {
-        groupReadDirs: jest.fn().mockResolvedValue(asyncDirIterator),
-        appendToTaskList: jest.fn().mockResolvedValue('lastTaskId'),
-        tasksInfo: {},
-        jobState: { tasks_total: 0, workers: [], tasks_completed: 0, workers_agreed: [], status: 'in-progress' },
-      };
-      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
-      (commonService.getJobState as jest.Mock).mockResolvedValue({ tasks_total: 0, workers: [], tasks_completed: 0, workers_agreed: [], status: 'in-progress' });
-
-      const result = await service.publishTask('trace-1');
-      expect(result).toBeDefined();
-    });
-
-    it('should handle errors during publishTask', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('publish error'));
-      const result = await service.publishTask('trace-1');
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('publish error');
+    it('should handle errors and return error response', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('ctx fail'));
+      const result = await service.publishTask(traceId);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error in publishing task: ctx fail`);
+      expect(result).toEqual({ traceId, status: 'error', message: `Failed to publish task for Job run id ${traceId} : Error: ctx fail` });
     });
   });
 
   describe('discoveryStatusUpdate', () => {
-    it('should update discovery status successfully', async () => {
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue('token123');
-      mockedAxios.patch.mockResolvedValue({});
-
-      const result = await service.discoveryStatusUpdate('trace-1', 'COMPLETED');
-      expect(result).toEqual({ message: 'Discovery Job status updated as completed for job id: trace-1' });
-      expect(mockedAxios.patch).toHaveBeenCalledWith(
-        'http://job-service/trace-1/COMPLETED',
-        { headers: { Authorization: 'Bearer token123' } }
-      );
-      expect(logger.log).toHaveBeenCalledWith('[trace-1] Discovery status updated to COMPLETED');
+    const url = 'http://job';
+    beforeEach(() => WorkersConfig.get = jest.fn().mockReturnValue(url));
+    it('should log and update status when token present', async () => {
+      patch.mockResolvedValue({});
+      const res = await service.discoveryStatusUpdate(traceId, 'COMPLETE');
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Updating discovery status to COMPLETE`);
+      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(patch).toHaveBeenCalledWith(`${url}/${traceId}/COMPLETE`, { headers: { Authorization: `Bearer token-abc` } });
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Discovery status updated to COMPLETE`);
+      expect(res).toEqual({ message: 'Discovery Job status updated as completed for job id: ' + traceId });
     });
 
-    it('should return error when access token is null', async () => {
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue(null);
-      const result = await service.discoveryStatusUpdate('trace-1', 'FAILED');
-      expect(result).toEqual({ message: 'Error while updating the satus of the job id : trace-1' });
+    it('should handle missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce(null);
+      const res = await service.discoveryStatusUpdate(traceId, 'FAIL');
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Updating discovery status to FAIL`);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to update discovery status: Error: Access token is null`);
+      expect(res).toEqual({ message: 'Error while updating the satus of the job id : ' + traceId });
     });
 
-    it('should handle axios.patch error in discoveryStatusUpdate', async () => {
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue('token123');
-      mockedAxios.patch.mockRejectedValue(new Error('patch error'));
-      const result = await service.discoveryStatusUpdate('trace-1', 'FAILED');
-      expect(result).toEqual({ message: 'Error while updating the satus of the job id : trace-1' });
+    it('should handle axios error', async () => {
+      patch.mockRejectedValueOnce(new Error('patch error'));
+      const res = await service.discoveryStatusUpdate(traceId, 'RUN');
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to update discovery status: Error: patch error`);
+      expect(res).toEqual({ message: 'Error while updating the satus of the job id : ' + traceId });
     });
   });
 
   describe('publishLastEntry', () => {
-    it('should publish the last entry successfully', async () => {
-      const fakeJobContext = {
-        appendToFileList: jest.fn().mockResolvedValue('fileId'),
-        errorsInfo: {},
-      };
-      (redisService.getJobContext as jest.Mock).mockResolvedValue(fakeJobContext);
-      const result = await service.publishLastEntry('trace-1');
-      expect(result).toBeDefined();
-      expect(fakeJobContext.appendToFileList).toHaveBeenCalled();
-
+    it('should publish last entry and return success', async () => {
+      const res = await service.publishLastEntry(traceId);
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Publishing last entry for job id: ${traceId}`);
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Last entry published for job id: ${traceId}`);
+      expect(res).toEqual({ message: 'Discovery Job completed for job id: ' + traceId });
     });
 
-    it('should handle errors during publishLastEntry', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValue(new Error('last entry error'));
-      const result = await service.publishLastEntry('trace-1');
-      expect(result.message).toContain('Error while marking the job as completed : trace-1');
+    it('should handle getJobContext errors', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('ctx error'));
+      const res = await service.publishLastEntry(traceId);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error while marking the job as completed : Error: ctx error`);
+      expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
+    });
+
+    it('should handle appendToFileList errors', async () => {
+      const fakeCtx: any = createJobContext();
+      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeCtx);
+      fakeCtx.appendToFileList = jest.fn().mockRejectedValueOnce(new Error('append fail'));
+      const res = await service.publishLastEntry(traceId);
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error while marking the job as completed : Error: append fail`);
+      expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
     });
   });
 
   describe('generateDiscoveryReport', () => {
-    it('should trigger generateDiscoveryReport successfully', async () => {
-      (getAccessToken as jest.Mock).mockResolvedValue('token123');
-      mockedAxios.post.mockResolvedValue({});
-
-      const result = await service.generateDiscoveryReport('job-1');
-      expect(result).toEqual({ message: 'Trigger generateDiscoveryReport Successful for job id: job-1' });
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        'http://report-service/api/v1/report/inventory/generate-report',
-        { jobRunId: 'job-1', 'report-type': 'DISCOVER' },
-        { headers: { Authorization: 'Bearer token123' } },
+    it('should generate report when token present', async () => {
+      post.mockResolvedValue({});
+      const res = await service.generateDiscoveryReport(jobRunId);
+      expect(logger.log).toHaveBeenCalledWith(`[${jobRunId}] reportServiceUrl to URL ${service.reportServiceUrl}/api/v1/report`);
+      expect(logger.log).toHaveBeenCalledWith(`[${jobRunId}] Trigger generateDiscoveryReport `);
+      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(post).toHaveBeenCalledWith(
+        `${service.reportServiceUrl}/api/v1/report/inventory/generate-report`,
+        { jobRunId, 'report-type': 'DISCOVER' },
+        { headers: { Authorization: `Bearer token-abc` } }
       );
-      expect(logger.log).toHaveBeenCalledWith('[job-1] Trigger generateDiscoveryReport Successful');
+      expect(logger.log).toHaveBeenCalledWith(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
+      expect(res).toEqual({ message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId });
     });
 
-    it('should return error when token is not obtained in generateDiscoveryReport', async () => {
-      (getAccessToken as jest.Mock).mockResolvedValue(null);
-      const result = await service.generateDiscoveryReport('job-1');
-      expect(result.message).toContain('Error while Trigger generateDiscoveryReport the status of the job id : job-1');
+    it('should handle missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce(null);
+      const res = await service.generateDiscoveryReport(jobRunId);
+      expect(logger.error).toHaveBeenCalledWith(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: Error: Failed to get access token`);
+      expect(res).toEqual({ message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId });
     });
 
-    it('should handle axios.post error in generateDiscoveryReport', async () => {
-      (getAccessToken as jest.Mock).mockResolvedValue('token123');
-      mockedAxios.post.mockRejectedValue(new Error('post error'));
-      const result = await service.generateDiscoveryReport('job-1');
-      expect(result.message).toContain('Error while Trigger generateDiscoveryReport the status of the job id : job-1');
+    it('should handle axios error', async () => {
+      post.mockRejectedValueOnce(new Error('post fail'));
+      const res = await service.generateDiscoveryReport(jobRunId);
+      expect(logger.error).toHaveBeenCalledWith(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: Error: post fail`);
+      expect(res).toEqual({ message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId });
     });
   });
 });

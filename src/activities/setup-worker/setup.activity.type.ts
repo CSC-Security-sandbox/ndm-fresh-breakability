@@ -4,5 +4,7 @@ interface SetupOutput {
     protocolType?: string;
     workerId: string;
     message: string;
-    state?: any
+    state?: any,
+    jobStateUpdatedAfterWait?: any,
+    jobStateUpdated?: any
   }

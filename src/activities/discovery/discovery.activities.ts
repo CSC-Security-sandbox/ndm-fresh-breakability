@@ -1,4 +1,3 @@
-import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';

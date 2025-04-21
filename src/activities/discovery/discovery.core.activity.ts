@@ -1,14 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CommandStatus, ErrorType, FileInfo, JobContext, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ConfigService } from '@nestjs/config';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { RedisService } from 'src/redis/redis.service';
+import { CommonActivityService } from '../common/common.service';
 import { basePrefix, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from '../utils/utils';
 import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
-import { CommonActivityService } from '../common/common.service';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -34,16 +33,17 @@ export class DiscoveryScanActivity {
         return await fs.promises.readdir(directoryPath);
     }
 
-    async scanActivity({ jobRunId }: DiscoverPathInput): Promise<DiscoverPathOutput> {
+    async scanActivity({ jobRunId, failedWorkers }: DiscoverPathInput): Promise<DiscoverPathOutput> {
 
-        const scanActivityOutput: DiscoverPathOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined, files: 0, folders: 0 };
+        const scanActivityOutput: DiscoverPathOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined, files: 0, folders: 0 , workerId: this.workerId};
         this.logger.log(`[${jobRunId}] Starting Discovery Scan Activity`);
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
 
-        const jobState = jobContext.getJobState() 
-        if(jobState?.failedWorkers.includes(this.workerId)) {
-          this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
-          return scanActivityOutput
+        if(failedWorkers.includes(this.workerId)) {
+            scanActivityOutput.isFatalErrored = true;
+            scanActivityOutput.noTaskFound = true;
+            this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
+            return scanActivityOutput
         }
         
         const task = await this.commonService.fetchOneTask(jobContext)
@@ -69,9 +69,6 @@ export class DiscoveryScanActivity {
         scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
         scanActivityOutput.files = discoverOutput.files;
         scanActivityOutput.folders = discoverOutput.folders;
-
-        if(scanActivityOutput.isFatalErrored)
-            await this.commonService.addFailedWorkerToJobState(jobRunId, this.workerId);
 
         this.logger.debug(`[${jobRunId}] Discovery Scan Activity completed with ${discoverOutput.error} errors and ${discoverOutput.success} success.`);
         if (discoverOutput.errors.size === 0)

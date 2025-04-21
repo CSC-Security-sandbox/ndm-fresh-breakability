@@ -56,7 +56,7 @@ parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
         const result = await smartCopy(task.data.sourcePath, task.data.destinationPath);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
-        return {  isRejected: true, id: task.id, data: error, Operation: task.Operation };
+        return {  isRejected: true, id: task.id, data: {code: error?.code, message:error?.message }, Operation: task.Operation };
     }
   }))
   parentPort.postMessage(result);

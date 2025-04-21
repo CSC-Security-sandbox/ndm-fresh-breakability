@@ -4,6 +4,7 @@ import { MigrationScanService } from "src/activities/migrate/migrate.scan.servic
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
+import { ScanPathOutput } from "src/activities/migrate/migrate.type";
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
@@ -29,13 +30,33 @@ const {
  });
    
 interface ScanWorkflowInput {
-    jobRunId: string;
-    workerId: string
+  jobRunId: string;
+  workers: string[];
+  failedWorkers: string[];
 }
 
-export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any> => {
+interface ScanWorkflowOutput{
+  jobRunId: string;
+  workers: string[];
+  failedWorkers: string[];
+  status: JobRunStatus;
+  error?: string;
+}
+
+export const syncWorkerListSignal = wf.defineSignal<[string[]]>('syncWorkerList');
+
+export const ScanWorkflow = async ({jobRunId, workers, failedWorkers } : ScanWorkflowInput): Promise<ScanWorkflowOutput> => {
   console.log('Starting MigrateScan ', jobRunId)
+  // signal handler for syncWorkerList
+  wf.setHandler(syncWorkerListSignal, (workerList: string[]) => {
+    log(jobRunId, `syncWorkerListSignal called with value: ${workerList}`);
+    for(const worker of workerList) 
+      if (!workers.includes(worker)) 
+        workers.push(worker);
+  });
+
   let iteration = 0;
+  
   try {
     await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
     const jobState = await getJobStateActivity(jobRunId)
@@ -49,45 +70,58 @@ export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any
 
       if(jobState.status === JobRunStatus.Stopped) {
         log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
-        return { message: 'Scan Stopped' };
+        return { jobRunId, workers, failedWorkers, status: JobRunStatus.Stopped };
       }
 
       if(jobState.status === JobRunStatus.Paused) {
-        log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
-        return { message: 'Scan Stopped' };
+        log(jobRunId, `JobRun ${jobRunId} is Paused. Exiting scan workflow.`);
+        return { jobRunId, workers, failedWorkers, status: JobRunStatus.Paused };
       }
 
-      const outputs = await Promise.all(
-        jobState.workers_agreed.map(async() => { return await scanActivity({ jobRunId })})
+      const outputs: ScanPathOutput[] = await Promise.all(
+        workers.map(async() => { 
+          return await scanActivity({ jobRunId , failedWorkers})
+        })
       );
-
-      const noTaskFound = outputs.every((output) => output.noTaskFound);
-      const isFatalErrored = outputs.every((output) => output.isFatal);
       
-      await Promise.all(
-        jobState.workers_agreed.map(() => publishTaskActivity({jobRunId}))
-      );
-
-      if (noTaskFound) {
-        log(jobRunId, `No tasks found.`);
-        const currentJobState = await getJobStateActivity(jobRunId);
-        await setJobStateActivity(jobRunId, {...currentJobState, isScanCompleted: true})
-        return { message: 'Scan Completed' };
+       // TODO: handle the offline workers scenario 
+      let taskNotFoundCount:number = 0;
+      for(const output of outputs) {
+        if(!workers.includes(output.workerId)) workers.push(output.workerId);
+        if(output.isFatal && !failedWorkers.includes(output.workerId))  {
+          failedWorkers.push(output.workerId);
+          log(jobRunId, `Worker ${output.workerId} has failed with error: ${output.errors}`);
+        }
+        if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       }
 
-      if(isFatalErrored) {
+      await Promise.all(
+        workers.map(async () => {
+          return await publishTaskActivity({jobRunId})
+        })
+      );
+
+      if(workers.length === failedWorkers.length) {
         log(jobRunId, `Fatal Error Occurred On JobRun ${jobRunId}`)
         const currentJobState = await getJobStateActivity(jobRunId);
         const updatedJobState = {...currentJobState, status: JobRunStatus.Errored};
         await setJobStateActivity(jobRunId, updatedJobState)
-        return { message: 'Scan Errored' };
+        return { jobRunId, workers, failedWorkers, status: JobRunStatus.Errored };
+      }
+
+      if (taskNotFoundCount === (workers.length-failedWorkers.length)) {
+        log(jobRunId, `No tasks found.`);
+        const currentJobState = await getJobStateActivity(jobRunId);
+        await setJobStateActivity(jobRunId, {...currentJobState, isScanCompleted: true})
+        return { jobRunId, workers, failedWorkers, status: JobRunStatus.Completed };
       }
 
       if(iteration >= 100) {
         log(jobRunId, `Iteration limit reached. Continuing as new...`);
-        await continueAsNew({ jobRunId });
+        await continueAsNew({ jobRunId, workers, failedWorkers });
       }
     }
+
   } catch (error) {
       if (error instanceof ContinueAsNew) {
           log(jobRunId, `Workflow continued as new: ${error.message}`);
@@ -97,7 +131,7 @@ export const ScanWorkflow = async ({jobRunId } : ScanWorkflowInput): Promise<any
             .then(() => log(jobRunId, ` status updated to Failed`))
             .then(async () => await updateLastEntryActivity(jobRunId))
             .catch((err) => log(jobRunId, `Failed to discovery status: ${err}`));
-          return { message: `Scan Errored ${error}` };
+           return { jobRunId, workers, failedWorkers, status: JobRunStatus.Errored,  error: error?.message };
       }
   }
 

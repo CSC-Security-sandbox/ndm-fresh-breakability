@@ -55,6 +55,7 @@ describe('MigrationSyncService', () => {
                     useValue: {
                         fetchOneTask: jest.fn(),
                         fetchOneMigrationTask: jest.fn(),
+                        addFailedWorkerToJobState: jest.fn()
                     }
                 }
             ],
@@ -460,7 +461,14 @@ describe('MigrationSyncService', () => {
                 updatedTaskInfo: {
                     lastId: 'task-id'
                 },
-                getJobState: jest.fn().mockResolvedValue({}),
+                getJobState: jest.fn().mockReturnValue({
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                }),
                 setJobState: jest.fn(),
                 getJobConfig: jest.fn(),
                 setJobConfig: jest.fn(),
@@ -525,13 +533,22 @@ describe('MigrationSyncService', () => {
             jest.spyOn(service, 'getFileInfo').mockResolvedValue({} as any);
             jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
 
-            const result = await service.syncTask(mockInput as any);
+            const result = await service.syncTask({failedWorkers: [], jobRunId: '1234', jobContext: mockJobContext} as any);
             expect(result).toBeDefined();
         });
 
         // test for no task found
         it('should handle no task found', async () => {
-            const mockedJobContext = {}
+            const mockedJobContext = {
+                getJobState: jest.fn().mockReturnValue({
+                    workers: [],
+                    tasks_completed: 1,
+                    tasks_total: 2,
+                    workers_agreed: [],
+                    status: 'RUNNING',
+                    failedWorkers: []
+                  })
+            }
             const mockInput = {
                 jobContext: mockedJobContext,
             }
@@ -540,7 +557,7 @@ describe('MigrationSyncService', () => {
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
             jest.spyOn(commonService, 'fetchOneMigrationTask').mockReturnValue(mockedTask);
 
-            const result = await service.syncTask(mockInput as any);
+            const result = await service.syncTask({failedWorkers: [], jobRunId: '1234'} as any);
             expect(result).toEqual({
                 errors: new Set(),
                 success: 0,

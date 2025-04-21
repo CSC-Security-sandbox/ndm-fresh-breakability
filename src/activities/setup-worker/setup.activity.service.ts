@@ -1,19 +1,16 @@
-import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
-import * as fs from 'fs';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
-import * as util from 'util';
 
+import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
-import { AuthService } from 'src/auth/auth.service';
 @Injectable()
 export class SetupActivityService {
 
@@ -176,13 +173,7 @@ export class SetupActivityService {
         { jobRunId, workerId: this.workerId },
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
-      const jobState: JobState = await this.redisService.getJobState(jobRunId);
-
-      if(!jobState.workers.some((worker) => worker === this.workerId)) 
-        jobState.workers.push(this.workerId);
       
-      context.jobState = new JobState(jobState.workers, jobState.tasks_completed, jobState.tasks_total, [this.workerId ,...(jobState.workers_agreed ??[]) ] , jobState.status, jobState.failedWorkers ?? [])
-      await this.redisService.setJobContext(jobRunId, context);
       await this.waitFor(1000);
 
       return {
@@ -292,261 +283,6 @@ export class SetupActivityService {
         status: 'error',
         workerId: this.workerId,
         message: `Cleanup failed: ${error.message}`,
-      };
-    }
-  }
-
-  async mountAndCheckWritePermission(
-    payload: any,
-    traceId: string,
-    checkWritePermission: boolean = false,
-  ): Promise<any> {
-    const protocolType = payload.protocols.type;
-    const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-    const mountBasePath = this.baseWorkingPath;
-    const { hostname, pathId, exportPathName, protocols, protocolVersion } =
-      payload;
-    const mountPayload = {
-      hostname,
-      username: protocols?.userName,
-      password: protocols?.password,
-      protocolVersion,
-      path: exportPathName,
-      mountBasePath: mountBasePath,
-      pathId,
-      jobRunId: traceId,
-    };
-    this.logger.log(
-      `[${traceId}] - Mounting path  ${exportPathName} for ${hostname} ---- ${JSON.stringify(mountPayload)}`,
-    );
-    const result = await protocol.mountPath(traceId, mountPayload);
-    if (result.status === 'error') {
-      if (payload.type == 'DESTINATION') {
-        return {
-          destinationId: pathId,
-          status: 'failed',
-          errors: ['DESTINATION_PATH_MOUNT_FAILED'],
-        };
-      } else {
-        return {
-          sourceId: pathId,
-          status: 'failed',
-          errors: ['SOURCE_PATH_MOUNT_FAILED'],
-        };
-      }
-    }
-    const delay = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms));
-    this.logger.log(
-      `[${traceId}] - Mounting path successful`,
-      JSON.stringify(result),
-    );
-    this.logger.log('Checking write permission');
-    this.logger.log(
-      `[${traceId}] - Checking write permission for ${exportPathName}`,
-    );
-    if (checkWritePermission) {
-      const writePermission = await this.checkWritePermission(
-        payload.exportPathName,
-        payload.pathId,
-        traceId,
-        mountBasePath,
-        hostname,
-        protocols?.userName,
-        protocols?.password,
-        protocol,
-        payload.type,
-        protocolVersion,
-      );
-      if (writePermission.status === 'failed') {
-        await protocol.unmountPath(traceId, mountPayload);
-        delay(5000);
-        if (payload.type == 'DESTINATION') {
-          return {
-            destinationId: pathId,
-            status: 'failed',
-            errors: ['DESTINATION_PATH_WRITE_PERMISSION_FAILED'],
-          };
-        } else {
-          return {
-            sourceId: pathId,
-            status: 'failed',
-            errors: ['SOURCE_PATH_WRITE_PERMISSION_FAILED'],
-          };
-        }
-      }
-      this.logger.log(
-        `[${traceId}] -Write permission`,
-        JSON.stringify(writePermission),
-      );
-      this.logger.log(
-        `[${traceId}] - Mounting path successful`,
-        JSON.stringify(result),
-      );
-      return { status: 'success' };
-    } else {
-      await protocol.unmountPath(traceId, mountPayload);
-      delay(5000);
-      if (payload.type == 'DESTINATION') {
-        return {
-          destinationId: pathId,
-          status: 'success',
-        };
-      } else {
-        return {
-          sourceId: pathId,
-          status: 'success',
-        };
-      }
-    }
-  }
-  checkWritePermission(
-    exportPathName: string,
-    pathId: string,
-    traceId: string,
-    mountBasePath: string,
-    hostname: string,
-    userName: string,
-    password: string,
-    protocol: Protocol,
-    type: string,
-    protocolVersion: string,
-  ): Promise<any> {
-    this.logger.log(
-      `[${traceId}] - Checking write permission for ${exportPathName}`,
-    );
-    const delay = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms));
-    return new Promise(async (resolve, reject) => {
-      const mountPayload = {
-        hostname,
-        username: userName,
-        password: password,
-        path: exportPathName,
-        mountBasePath: mountBasePath,
-        pathId,
-        jobRunId: traceId,
-        protocolVersion,
-      };
-
-      const testFile = `${mountBasePath}/${traceId}/${pathId}/test-${traceId}.txt`;
-      this.logger.log(
-        `[${traceId}] - Checking write permission for ${testFile}`,
-      );
-      const closeAsync = util.promisify(fs.close);
-      const unlinkAsync = util.promisify(fs.unlink);
-      fs.open(testFile, 'w', async (err, fd) => {
-        try {
-          if (err) {
-            this.logger.error(
-              `[${traceId}] - Write permission check failed: ${err.message}`,
-            );
-            resolve({
-              traceId,
-              status: 'failed',
-              message: `Write permission check failed: ${err.message}`,
-            });
-            return;
-          }
-          this.logger.log(`[${traceId}] - Write permission check successful`);
-
-          try {
-            await protocol.unmountPath(traceId, mountPayload);
-          } catch (umountErr) {
-            this.logger.error(
-              `[${traceId}] - Unmount failed: ${umountErr.message}`,
-            );
-          }
-
-          resolve({
-            traceId,
-            status: 'success',
-            message: `Write permission check successful`,
-          });
-        } catch (error) {
-          this.logger.error(
-            `[${traceId}] - Unexpected error: ${error.message}`,
-          );
-          resolve({
-            traceId,
-            status: 'failed',
-            message: `Unexpected error: ${error.message}`,
-          });
-        } finally {
-          if (fd) {
-            try {
-              await closeAsync(fd);
-            } catch (closeErr) {
-              this.logger.error(
-                `[${traceId}] - Error closing file descriptor: ${closeErr.message}`,
-              );
-            }
-          }
-        }
-        try {
-          await unlinkAsync(testFile);
-          this.logger.log(`[${traceId}] - Test file deleted successfully.`);
-        } catch (error) {
-          this.logger.error(
-            `[${traceId}] - Error deleting test file: ${error}`,
-          );
-        }
-      });
-    });
-  }
-  async disconnectActiveSession(payload: any): Promise<any> {
-    try {
-      this.logger.log(
-        payload.traceId,
-        `[DisconnectActiveSession] Disconnecting active session for ${payload.fileServer.hostname}`,
-      );
-      const protocol: Protocol = Protocols.getProtocol(
-        ProtocolTypes[payload.fileServer.protocolType],
-      );
-      // const response = await protocol.disconnectSession(payload.traceId, payload);
-      // this.logger.log(
-      //   payload.traceId,
-      //   `[DisconnectActiveSession] Session disconnected for ${payload.fileServer.hostname}`,
-      // );
-      return { response: 'success' };
-    } catch (error) {
-      this.logger.log(
-        payload.traceId,
-        `[DisconnectActiveSession] Error disconnecting session for ${payload.fileServer.hostname}: ${error}`,
-      );
-      return {
-        traceId: payload.traceId,
-        status: 'error',
-        workerId: payload.workerId,
-        message: `Error disconnecting session for ${payload.fileServer.hostname}: ${error}`,
-      };
-    }
-  }
-  async cleanUpMountPath(payload: any): Promise<any> {
-    try {
-      this.logger.log(
-        payload.traceId,
-        `[cleanUp] Cleaning up for ${payload.fileServer.hostname}`,
-      );
-      const protocol: Protocol = Protocols.getProtocol(
-        ProtocolTypes[payload.fileServer.protocolType],
-      );
-      const response = await protocol.unmountPath(payload.traceId, payload);
-      this.logger.log(
-        payload.traceId,
-        `[cleanUp] Cleaned up for ${payload.fileServer.hostname}`,
-      );
-      return response;
-    } catch (error) {
-      this.logger.log(
-        payload.traceId,
-        `[cleanUp] Error cleaning up for ${payload.fileServer.hostname}: ${error}`,
-      );
-      return {
-        traceId: payload.traceId,
-        status: 'error',
-        workerId: payload.workerId,
-        message: `Error cleaning up for ${payload.fileServer.hostname}: ${error}`,
       };
     }
   }

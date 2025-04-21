@@ -1,11 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
-import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import { CommonActivityService } from "../common/common.service";
 import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { Operation, Origin } from "../utils/utils.types";
@@ -121,15 +120,15 @@ export class MigrationScanService {
         return syncContentOutput;
     }
 
-    async scanPath({ jobRunId }: ScanPathInput): Promise<ScanPathOutput> {
-        const scanPath: ScanPathOutput = { isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false, noTaskFound: false, files: 0, folders: 0 };
+    async scanPath({ jobRunId, failedWorkers }: ScanPathInput): Promise<ScanPathOutput> {
+        const scanPath: ScanPathOutput = { workerId: this.workerId, isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false, noTaskFound: false, files: 0, folders: 0 };
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
-        const jobState = jobContext.getJobState() 
-        if(jobState?.failedWorkers.includes(this.workerId)) {
+        if(failedWorkers.includes(this.workerId)) {
+            scanPath.isFatal = true;
+            scanPath.noTaskFound = true;
             this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
             return scanPath
         }
-       
         const task  = await this.commonService.fetchOneTask(jobContext) 
        
         if(!task) {
@@ -200,7 +199,6 @@ export class MigrationScanService {
                         scanPath.success++;
                         command.status = CommandStatus.COMPLETED;
                     }
-        
                     scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
                 })
             );
@@ -237,7 +235,6 @@ export class MigrationScanService {
                 jobContext.tasksInfo.lastId= await jobContext.appendToTaskList(task);
             } else if(scanPath.isFatal){
                 this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
-                await this.commonService.addFailedWorkerToJobState(jobRunId, this.workerId);
                 jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
             }
         }

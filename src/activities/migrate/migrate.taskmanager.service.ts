@@ -1,13 +1,13 @@
+import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, JobContext, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, JobContext, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
-import { RedisService } from 'src/redis/redis.service';
-import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusInput, UpdateStatusOutput } from './migrate.type';
-import { buildTask, generateDummyFileEntry } from '../utils/utils';
 import axios from 'axios';
-import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
+import { RedisService } from 'src/redis/redis.service';
+import { buildTask } from '../utils/utils';
+import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusOutput } from './migrate.type';
 
 @Injectable()
 export class MigrationTaskService{

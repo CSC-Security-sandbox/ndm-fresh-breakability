@@ -2,6 +2,7 @@ import { Command, ErrorType, JobContext, Task, TaskStats } from "@netapp-cloud-d
 
 export interface DiscoverPathInput{
     jobRunId: string;
+    failedWorkers: string[];
 }
 export interface DiscoverPathOutput{
     isFatalErrored : boolean
@@ -9,6 +10,8 @@ export interface DiscoverPathOutput{
     taskId?: string
     files: number;
     folders: number;
+    workerId: string;
+    errors?: string | undefined;
 }
 
 export interface DiscoveryInput {

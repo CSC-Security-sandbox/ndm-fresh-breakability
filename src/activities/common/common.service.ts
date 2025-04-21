@@ -122,7 +122,7 @@ export class CommonActivityService{
       jobState.status as JobStatus,
       jobState.failedWorkers ?? [],
       jobState.isScanCompleted ?? false,
-    );;
+    );
     await this.redisService.setJobContext(traceId, jobContext);
   }
 
@@ -156,12 +156,4 @@ export class CommonActivityService{
     }
   }
 
-  async addFailedWorkerToJobState(jobRunId: string, workerId: string) {
-    const jobState = await this.redisService.getJobState(jobRunId);
-    const failedWorkers = jobState?.failedWorkers || [];
-    if(!failedWorkers.includes(workerId)) 
-        failedWorkers.push(workerId);
-    const updatedJobState = {...jobState, failedWorkers};
-    await this.redisService.setJobState(jobRunId, updatedJobState);
-  }
 }

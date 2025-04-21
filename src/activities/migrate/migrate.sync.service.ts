@@ -12,7 +12,6 @@ import { ShellService } from '../common/shell.service';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
 import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 
 
 @Injectable()
@@ -23,8 +22,6 @@ export class MigrationSyncService {
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number = 3;
   readonly maxConcurrency: number = 10;
-
-  
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -233,7 +230,7 @@ export class MigrationSyncService {
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
           await jobContext.appendToErrorList(dmErr);
           syncOperation.errors.add(error.code)
-          this.logger.error(`Error in SyncOperation File: ${error.message}`);
+          this.logger.error(`Error in SyncOperation File: ${error.message} | ${error?.code}`);
           return syncOperation
         }
       }
@@ -259,13 +256,14 @@ export class MigrationSyncService {
     return syncOperation ;
   }
 
-  async syncTask({ jobRunId }: SyncTaskInput): Promise<SyncTaskOutput> {
-    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false };
+  async syncTask({ jobRunId , failedWorkers}: SyncTaskInput): Promise<SyncTaskOutput> {
+    const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false, workerId: this.workerId };
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
-
-    const jobState = jobContext.getJobState() 
-    if(jobState?.failedWorkers.includes(this.workerId)) {
+    
+    if(failedWorkers.includes(this.workerId)) {
       this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
+      syncTask.noTaskFound = true;
+      syncTask.isFatal = true;
       return syncTask
     }
     
@@ -363,7 +361,6 @@ export class MigrationSyncService {
       else if(syncTask.isFatal){
         this.logger.debug(`[${jobRunId}] Fatal Error Detected for task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length} `)
         task.status = TaskStatus.ERRORED;
-        await this.commonService.addFailedWorkerToJobState(jobRunId, this.workerId);
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
       }
     }else {

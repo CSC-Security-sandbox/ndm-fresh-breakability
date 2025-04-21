@@ -14,19 +14,21 @@ import { AuthService } from 'src/auth/auth.service';
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
+  readonly baseWorkingPath: string;
+  readonly workerConfigUrl: string;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
-    private readonly httpService: HttpService,
     private readonly authService: AuthService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
+    this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
-    const workerConfigUrl = WorkersConfig.get('workerConfigUrl');
-    const apiUrl = `${workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
-    const accessToken = "ACCESS_TOKEN"; // TODO: Handle access token logic
+    const apiUrl = `${this.workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
+
 
     const configStatusPayload: ConfigStatusPayload = {
       configId: payload.configId,
@@ -65,7 +67,7 @@ export class ValidateWorkingDirectoryActivity {
       }
     }
 
-    await this.updateConfigStatus(apiUrl, accessToken, configStatusPayload);
+    await this.updateConfigStatus(apiUrl, configStatusPayload);
 
     return {
       traceId,
@@ -93,8 +95,6 @@ export class ValidateWorkingDirectoryActivity {
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
     try {
-      const baseMountDir = WorkersConfig.get('baseWorkingPath');
-
       for (const fileServer of payload.listPathPayload) {
         const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
@@ -104,7 +104,7 @@ export class ValidateWorkingDirectoryActivity {
           password: fileServer.password,
           protocolVersion: fileServer.protocolVersion,
           path: payload.fetchedPath,
-          mountBasePath: baseMountDir,
+          mountBasePath: this.baseWorkingPath,
           pathId: traceId,
           jobRunId: traceId,
         };
@@ -123,7 +123,7 @@ export class ValidateWorkingDirectoryActivity {
     }
   }
 
-  async updateConfigStatus(apiUrl: string, accessToken: string, payload: ConfigStatusPayload) {
+  async updateConfigStatus(apiUrl: string, payload: ConfigStatusPayload) {
     try {
       const accessToken = await this.authService.getAccessToken();
       await axios.post(apiUrl, payload, {
@@ -139,7 +139,6 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async isValidDirectory(payload: any, traceId: string): Promise<boolean> {
-    const baseMountDir = WorkersConfig.get('baseWorkingPath');
     let isDirectoryValid = false;
     let hasWritePermission = false;
 
@@ -153,7 +152,7 @@ export class ValidateWorkingDirectoryActivity {
           password: fileServer.password,
           protocolVersion: fileServer.protocolVersion,
           path: payload.exportPath,
-          mountBasePath: baseMountDir,
+          mountBasePath: this.baseWorkingPath,
           pathId: traceId,
           jobRunId: traceId
         };
@@ -163,7 +162,7 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("Started validating the working directory");
-        const mountPoint = path.join(baseMountDir, traceId, traceId);
+        const mountPoint = path.join(this.baseWorkingPath, traceId, traceId);
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {
@@ -196,7 +195,6 @@ export class ValidateWorkingDirectoryActivity {
  
   checkWritable(directoryPath: string): boolean {
     const testFile = join(directoryPath, '.nfs_write_test');
-
     try {
       writeFileSync(testFile, '');
       unlinkSync(testFile);

@@ -4,6 +4,7 @@ import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { isErrored } from 'stream';
 
 export const isReportedQuery = wf.defineQuery<boolean>('isReported');
 
@@ -20,14 +21,14 @@ const {
 
 const {
   updateStatus: updateStatusActivity,
-  getJobState: getJobStateActivity,
   generateJobsReport: generateJobsReportActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
   
 
 export const ReportingWorkflow = async (
     traceId: string,
-    signal: wf.SignalDefinition<[string], string>
+    signal: wf.SignalDefinition<[string], string>,
+    isErrored: boolean,
   ): Promise<string> => {
     let isBlocked = true;
     let reportType : JobReportType | null 
@@ -45,24 +46,22 @@ export const ReportingWorkflow = async (
     });
 
     wf.log.info('Waiting for reporting signal...');
-    let jobState = await getJobStateActivity(traceId);
-    let errored = jobState.failedWorkers.length === jobState.workers.length;
     try {
       await wf.condition(() => !isBlocked);
       switch(reportType) {
         case JobReportType.CUT_OVER: {
-            await updateStatusActivity({jobRunId: traceId, status: errored ? JobRunStatus.Errored :JobRunStatus.BLOCKED})
+            await updateStatusActivity({jobRunId: traceId, status: isErrored ? JobRunStatus.Errored :JobRunStatus.BLOCKED})
             await generateCOCReportActivity(traceId);
             await generateJobsReportActivity(traceId);
             break
         }
         case JobReportType.DISCOVER: {
-            await updateStatusActivity({jobRunId: traceId, status: errored ? JobRunStatus.Errored :JobRunStatus.Completed})
+            await updateStatusActivity({jobRunId: traceId, status: isErrored ? JobRunStatus.Errored :JobRunStatus.Completed})
             await generateDiscoveryReportActivity(traceId)
             break
         }
         case JobReportType.MIGRATE: {
-            await updateStatusActivity({jobRunId: traceId, status: errored ? JobRunStatus.Errored :JobRunStatus.Completed})
+            await updateStatusActivity({jobRunId: traceId, status: isErrored ? JobRunStatus.Errored :JobRunStatus.Completed})
             await generateCOCReportActivity(traceId)
             break
         }

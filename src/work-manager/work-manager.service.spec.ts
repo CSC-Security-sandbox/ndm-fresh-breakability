@@ -7,6 +7,7 @@ import { Logger } from 'src/logger/logger.service';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
+import { AuthService } from 'src/auth/auth.service';
 
 jest.mock('@nestjs/axios');
 jest.mock('@nestjs/config');
@@ -34,6 +35,7 @@ describe('WorkManagerService', () => {
   let service: WorkManagerService;
   let httpService: HttpService;
   let configService: ConfigService;
+  let authService: AuthService;
   let logger: Logger;
 
   beforeEach(async () => {
@@ -46,6 +48,12 @@ describe('WorkManagerService', () => {
             get: jest.fn(),
             post: jest.fn(),
             subscribe: jest.fn().mockImplementation((nextFn: any) => nextFn.next()),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
           },
         },
         {
@@ -84,6 +92,7 @@ describe('WorkManagerService', () => {
     }).compile();
 
     service = module.get<WorkManagerService>(WorkManagerService);
+    authService = module.get<AuthService>(AuthService);
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<ConfigService>(ConfigService);
     logger = module.get<Logger>(Logger);
@@ -93,39 +102,6 @@ describe('WorkManagerService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('getAccessToken', () => {
-    it('should fetch a new access token when none is cached or expired', async () => {
-      // @ts-ignore
-      jest.spyOn(httpService, 'post').mockReturnValue(
-        of({ data: { access_token: 'new-token', expires_in: 300 } } as any)
-      );
-      service['accessToken'] = null;
-      service['expiresAt'] = 0;
-      const token = await service.getAccessToken();
-      expect(token).toBeDefined();
-    });
-
-    it('should return the cached token if not expired', async () => {
-      service['accessToken'] = 'cached-token';
-      service['expiresAt'] = Math.floor(Date.now() / 1000) + 100;
-      const token = await service.getAccessToken();
-      expect(token).toEqual('cached-token');
-    });
-
-    it('should return null if token fetch fails', async () => {
-      // @ts-ignore
-      jest.spyOn(httpService, 'post').mockReturnValue(
-        throwError(() => new Error('Keycloak error'))
-      );
-      service['accessToken'] = null;
-      service['expiresAt'] = 0;
-      const token = await service.getAccessToken();
-      expect(token).toBeNull();
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/Failed to obtain access token/)
-      );
-    });
-  });
 
   describe('handleCron', () => {
     it('should exit early if loadingConfigs is true', async () => {
@@ -137,7 +113,7 @@ describe('WorkManagerService', () => {
 
     it('should fetch configurations and call handleConfigurations', async () => {
       service['loadingConfigs'] = false;
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue('valid-token');
+      jest.spyOn(authService, 'getAccessToken').mockResolvedValue('valid-token');
       jest.spyOn(httpService, 'get').mockReturnValue(
         of({ status: 200, data: [] } as any)
       );
@@ -149,7 +125,7 @@ describe('WorkManagerService', () => {
 
     it('should log error when accessToken is null', async () => {
       service['loadingConfigs'] = false;
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue(null);
+      jest.spyOn(authService, 'getAccessToken').mockResolvedValue(null);
       await service.handleCron();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringMatching(/Error fetching configurations: Access token is null/)
@@ -158,7 +134,7 @@ describe('WorkManagerService', () => {
 
     it('should throw error on non-200 response', async () => {
       service['loadingConfigs'] = false;
-      jest.spyOn(service, 'getAccessToken').mockResolvedValue('valid-token');
+      jest.spyOn(authService, 'getAccessToken').mockResolvedValue('valid-token');
       jest.spyOn(httpService, 'get').mockReturnValue(
         of({ status: 500, data: [] } as any)
       );
@@ -190,12 +166,6 @@ describe('WorkManagerService', () => {
       expect(service['activeWorkers'].get(id)).toBe(worker);
     }, 3000);
 
-    // it('should catch errors thrown during startWorker', async () => {
-    //   const id = 'worker-error';
-    //   const workerOptions = { options: 'errorOptions' };
-    //   (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker creation error'));
-    //   await expect(service.startWorker(id, workerOptions)).rejects.toThrow('Worker creation error');
-    // });
   });
 
   describe('shutdownWorker', () => {
