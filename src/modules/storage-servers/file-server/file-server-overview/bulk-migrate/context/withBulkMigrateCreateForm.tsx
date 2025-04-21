@@ -401,7 +401,7 @@ export function withBulkMigrateCreateForm(
           onSuccessfulSubmit?.();
         })
         .catch((err) => {
-          notify.error("Bulk Migrate failed.");
+          notify.error(err?.message || "Bulk Migrate failed.");
           console.error(err);
         });
     };
