@@ -43,9 +43,15 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 errors: [],
                 commonWorkers: destination.workers
             }
+
             if(destination.workers.length === 0) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.NO_COMMON_WORKERS);
+            }
+
+            if (destination.workers.every(worker => worker.ishealthy === false)) {
+                preCheckDestinationStatus.status = PreCheckStatus.FAILED;
+                preCheckDestinationStatus.errors.push(PreCheckErrorCodes.ALL_WORKERS_UNHEALTHY);
             }
             if(sourceVersion !== serverCredentials.get(destination.serverId).protocolVersion) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
@@ -57,13 +63,13 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 pathName: destination.pathName,
                 isSource: false
             }
-            destination.workers.map((workerId) => {
-                if(!workers.includes(workerId))
-                    workers.push(workerId);
-                if (workerTasks.has(workerId)) {
-                    workerTasks.get(workerId).push(workerDestinationTaskPaths);
+            destination.workers.map((worker) => {
+                if(!workers.includes(worker.workerId) &&  worker.ishealthy) 
+                    workers.push(worker.workerId);
+                if (workerTasks.has(worker.workerId)) {
+                    workerTasks.get(worker.workerId).push(workerDestinationTaskPaths);
                 } else {
-                    workerTasks.set(workerId, [workerSourceTaskPaths, workerDestinationTaskPaths]);
+                    workerTasks.set(worker.workerId, [workerSourceTaskPaths, workerDestinationTaskPaths]);
                 }
             })
             serverResponse.destination.push(preCheckDestinationStatus);
@@ -73,7 +79,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
 
 
 
-    const workflows =workers.map((workerId) => executeChild(PreCheckWorkerValidationWorkflow, {
+    const workflows = workers.map((workerId) => executeChild(PreCheckWorkerValidationWorkflow, {
             args: [
                 workerId, 
                 {
@@ -107,7 +113,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
             const sourceRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId);
             const destinationRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].destination[j].destinationPathId);
 
-            if (destinationRes.destinationAvailableSpace < sourceRes.sourceDataSize) {
+            if (destinationRes?.destinationAvailableSpace < sourceRes?.sourceDataSize) {
                 response[i].destination[j].status = PreCheckStatus.FAILED;
                 response[i].destination[j].errors.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
             }

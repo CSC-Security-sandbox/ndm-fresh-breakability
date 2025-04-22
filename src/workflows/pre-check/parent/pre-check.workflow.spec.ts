@@ -264,4 +264,67 @@ describe('PreCheckValidationWorkflow', () => {
         expect(result.paths[1].status).toBe(PreCheckStatus.FAILED);
         expect(result.paths[1].errorCode).toBe(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
     });
+
+    it('should fail if all workers in the destination are unhealthy', async () => {
+        const request: PreCheckWorkflowRequest = {
+          traceId: 'test-trace-id',
+          options: {
+            workflowExecutionTimeout: '1m',
+            workflowTaskTimeout: '30s',
+            workflowRunTimeout: '5m',
+            startDelay: '0s'
+          },
+          payload: {
+            settings: {
+              preserveAccessTime: false
+            },
+            serverCredentials: [
+              {
+                id: 'server-1',
+                host: 'host1',
+                userName: 'user1',
+                password: 'pass1',
+                protocol: 'sftp',
+                protocolVersion: '1.0.0',
+                serverType: 'linux'
+              },
+              {
+                id: 'server-2',
+                host: 'host2',
+                userName: 'user2',
+                password: 'pass2',
+                protocol: 'sftp',
+                protocolVersion: '1.0.0',
+                serverType: 'linux'
+              }
+            ],
+            preChecks: [
+              {
+                pathId: 'source-path-1',
+                serverId: 'server-1',
+                pathName: 'Source Path 1',
+                destinations: [
+                  {
+                    pathId: 'dest-path-1',
+                    serverId: 'server-2',
+                    pathName: 'Destination Path 1',
+                    workers: [
+                      { workerId: 'worker-1', ishealthy: false },
+                      { workerId: 'worker-2', ishealthy: false }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        };
+      
+        const result = await PreCheckValidationWorkflow(request);
+      
+        expect(result[0].destination[0].status).toBe(PreCheckStatus.FAILED);
+        expect(result[0].destination[0].errors).toContain(PreCheckErrorCodes.ALL_WORKERS_UNHEALTHY);
+      });
+      
+
+    
 });

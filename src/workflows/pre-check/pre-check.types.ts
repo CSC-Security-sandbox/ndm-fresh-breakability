@@ -19,7 +19,7 @@ export interface Destination {
   pathId: string;
   serverId: string;
   pathName: string;
-  workers: string[];
+  workers: workerRecord[]
 }
 
 export interface Settings {
@@ -56,7 +56,8 @@ export enum PreCheckErrorCodes {
   SOURCE_PATH_NOT_FOUND = "SOURCE_PATH_NOT_FOUND",
   INSUFFICIENT_DESTINATION_SPACE = "INSUFFICIENT_DESTINATION_SPACE",
   NO_SPACE_LEFT_ON_SOURCE_PATH = 'NO_SPACE_LEFT_ON_SOURCE_PATH',
-  NO_SPACE_LEFT_ON_DESTINATION_PATH = 'NO_SPACE_LEFT_ON_DESTINATION_PATH'
+  NO_SPACE_LEFT_ON_DESTINATION_PATH = 'NO_SPACE_LEFT_ON_DESTINATION_PATH',
+  ALL_WORKERS_UNHEALTHY = 'ALL_WORKERS_UNHEALTHY',
 }
 export enum PreCheckStatus {
   SUCCESS = "success",
@@ -71,11 +72,16 @@ export interface PreCheckWorkflowResponse {
   errors?: PreCheckErrorCodes[];
 }
 
+export interface workerRecord {
+  workerId: string; 
+  ishealthy: boolean
+}
+
 export interface PreCheckDestinationStatus {
   destinationPathId: string;
   status: PreCheckStatus;
   errors?: PreCheckErrorCodes[];  
-  commonWorkers: string[];
+  commonWorkers:workerRecord[]
 }
 
 export interface WorkerTaskPaths {
