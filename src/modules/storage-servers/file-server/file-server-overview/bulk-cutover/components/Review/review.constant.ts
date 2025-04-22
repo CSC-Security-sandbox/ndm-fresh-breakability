@@ -67,7 +67,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
     width: 80,
   },
   {
-    header: "Data",
+    header: "Size",
     accessor: "totalScannedSize",
     id: "size",
     width: 80,

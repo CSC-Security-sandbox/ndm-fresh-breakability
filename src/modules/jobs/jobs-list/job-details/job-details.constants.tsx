@@ -59,7 +59,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     width: 80,
   },
   {
-    header: "Data",
+    header: "Size",
     accessor: "totalScannedSize",
     id: "totalScannedSize",
     Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
