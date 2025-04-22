@@ -60,7 +60,7 @@ export function withBulkMigrateCreateForm(
   return function WithBulkMigrateCreateFormComponent(props: any) {
     const interval = useRef<any | undefined>("");
     const navigate = useNavigate();
-    const timeIntervalInSeconds = 4000;
+    const timeIntervalInSeconds = 15000;
     const { selectedProjectId: projectId } = useSelectedProjectId();
     const [selectedMountPathsId, setSelectedMountPathsId] = useState<string[]>(
       []
@@ -401,7 +401,7 @@ export function withBulkMigrateCreateForm(
           onSuccessfulSubmit?.();
         })
         .catch((err) => {
-          notify.error("Bulk Migrate failed.");
+          notify.error(err?.message || "Bulk Migrate failed.");
           console.error(err);
         });
     };
