@@ -94,7 +94,7 @@ env:
   - name: SEND_EMAIL
     value: "http://admin-service-service:3000"
   - name: HEALTHCHECK_STATUS_TIMEOUT_SEC
-    value: "180"
+    value: "60"
 
 service:
   type: ClusterIP
