@@ -59,7 +59,7 @@ export class WorkManagerService {
           },
           select: {
             workerMap: {
-              metaConfig: true,
+              metaConfig: {},
               workerId: true
             }
           }

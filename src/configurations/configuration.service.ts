@@ -707,6 +707,13 @@ export class ConfigurationService {
               relations: { stats: true },
             })
           : [];
+
+          if (
+            workersWithStats?.length > 0 &&
+            (await this.isAllWorkerUnHealthy(workersWithStats))
+          )
+            allUnHealthy = true;
+
         credentials.push({
           details: {
             hostname: update.host,
@@ -732,11 +739,6 @@ export class ConfigurationService {
           isRefreshed: false,
         });
       });
-      if (
-        workersWithStats?.length > 0 &&
-        (await this.isAllWorkerUnHealthy(workersWithStats))
-      )
-        allUnHealthy = true;
 
       const { workingDirectory } = updateConfig;
       const mapping =
