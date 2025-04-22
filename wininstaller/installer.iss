@@ -128,10 +128,10 @@ begin
       'KEYCLOAK_BASE_URL=https://' + ConfigControlPlaneIP + '/keycloak' + #13#10 +
       'WORKER_ID=' + ConfigWorkerID + #13#10 +
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
+      'FLUENT_HOST=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_USERNAME=default' + #13#10 +
       'REDIS_PASSWORD=welcome' + #13#10 +
-      'REDIS_PORT=6379' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''';
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
