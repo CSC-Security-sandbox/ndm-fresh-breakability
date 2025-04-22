@@ -689,7 +689,7 @@ export class ConfigurationService {
         ? ConfigStatus.IN_PROGRESS
         : ConfigStatus.ACTIVE
       : ConfigStatus.DRAFT;
-    let workersWithStats: WorkerEntity[];
+  
 
     try {
       const fileServerPromises = config.fileServers.map(async (fileServer) => {
@@ -701,12 +701,15 @@ export class ConfigurationService {
               where: { workerId: In(update.workers) },
             })
           : [];
-        workersWithStats = Array.isArray(update?.workers)
-          ? await this.WorkerEntity.find({
-              where: { workerId: In(update.workers) },
-              relations: { stats: true },
-            })
-          : [];
+
+          let workersWithStats: WorkerEntity[] = Array.isArray(update?.workers)
+            ? await this.WorkerEntity.find({
+                where: { workerId: In(update.workers) },
+                relations: { stats: true },
+              })
+            : [];
+            console.log("ye dekh bhai : ",workersWithStats)
+
 
           if (
             workersWithStats?.length > 0 &&
