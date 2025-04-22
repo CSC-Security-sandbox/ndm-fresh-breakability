@@ -1015,6 +1015,7 @@ describe("JobConfigService", () => {
         excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
         skipFile: mockBulkMigrate.options.skipFile,
         firstRunAt: mockBulkMigrate.firstRunAt,
+        futureScheduleAt: "0 0 * * *",
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
       }
