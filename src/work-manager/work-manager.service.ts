@@ -13,6 +13,7 @@ import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 import { SendMailService } from 'src/util/send-email';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 
 @Injectable()
 export class WorkManagerService {
@@ -26,6 +27,8 @@ export class WorkManagerService {
     private readonly jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(ConfigEntity)
     private readonly configRepo: Repository<ConfigEntity>,
+    @InjectRepository(WorkerJobRunMap)
+    private readonly workerJobRunMap: Repository<WorkerJobRunMap>,
     private readonly configService: ConfigService,
     private readonly sendMailService: SendMailService
   ) {
@@ -47,20 +50,33 @@ export class WorkManagerService {
             status: Not(JobRunStatus.Completed),
             workerMap: {
               workerId: id,
-            },
-            metaConfig: Not(IsNull())
+              metaConfig: Not(IsNull()),
+              isActive: true,
+            }
           },
           relations: {
             workerMap: true
           },
           select: {
-            workerMap: false,
-            metaConfig: true
+            workerMap: {
+              metaConfig: true,
+              workerId: true
+            }
           }
         })
-        let mergedConfigs = [ ...workerMetaConfig.metaConfig];
-        jobRunConfig.forEach((data) => mergedConfigs = [...mergedConfigs, ...data.metaConfig])
-        return mergedConfigs;
+        jobRunConfig.forEach((data) => {
+          if (Array.isArray(data.workerMap)) {
+            data.workerMap.forEach((wm) => {
+              if (wm.metaConfig) {
+                this.logger.debug(
+                  `JobRunId: ${data.id}, WorkerId: ${wm.workerId}, MetaConfig: ${JSON.stringify(wm.metaConfig)}`
+                );
+                workerMetaConfig.metaConfig.push(wm.metaConfig);
+              }
+            });
+          }
+        });
+        return workerMetaConfig.metaConfig;
       }
       this.logger.warn(`project ID : ${projectId}`);
       const newWorker = this.workerEntity.create({
@@ -166,20 +182,22 @@ export class WorkManagerService {
     }
   }
 
-  async updateWorkerConfigurations(jobRunId: string, workerIds: string[]) {
+  async updateWorkerConfigurations(jobRunId: string, workerId: string) {
     if (jobRunId) {
       try {
-        const workerConfiguration = workerIds.map((worker) => ({
+        const workerConfiguration = {
           configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
           dynamicTaskQueue: true,
           taskQueueId: `${jobRunId}`,
-          workerId: worker,
-        }));
+          workerId: workerId,
+        }
 
-        await this.jobRunRepo.update(
-          { id: jobRunId },
+        await this.workerJobRunMap.update(
+          { jobRunId: jobRunId, workerId: workerId },
           { metaConfig: workerConfiguration },
         );
+
+
       } catch (error) {
         this.logger.error(
           `Error while updating worker configurations for jobRunId: ${jobRunId}`,
