@@ -11,7 +11,7 @@ const CutOverJobsCountRenderer = ({
     jobType={JOBS_TYPE.CUT_OVER}
     renderCount={(statusCounts, jobRunDetailsLength) => (
       <Text>
-        {`${
+        {`${statusCounts[JOB_STATUS_TYPE_ENUM.RUNNING]}/${
           statusCounts[JOB_STATUS_TYPE_ENUM.COMPLETED]
         }/${jobRunDetailsLength}`}
       </Text>
