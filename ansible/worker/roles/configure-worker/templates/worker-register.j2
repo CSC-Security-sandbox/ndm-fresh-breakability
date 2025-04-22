@@ -66,10 +66,10 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "KEYCLOAK_BASE_URL=https://${CONTROL_PLANE_IP}/keycloak"
     echo "WORKER_ID=${WORKER_ID}"
     echo "WORKER_SECRET=${WORKER_SECRET}"
+    echo "FLUENT_HOST=${CONTROL_PLANE_IP}"
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
     echo "REDIS_USERNAME=default"
     echo "REDIS_PASSWORD=welcome"
-    echo "REDIS_PORT=6379"
 } >> "$ENV_FILE"
 
 # Check if the worker.env file was created successfully

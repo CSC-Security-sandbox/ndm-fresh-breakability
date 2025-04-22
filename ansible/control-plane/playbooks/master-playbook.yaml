@@ -22,7 +22,6 @@
 
 - name: Configure fluentd
   import_playbook: configure-fluentd.yaml
-  when: local_cluster is not defined
 
 - name: Configure grafana
   import_playbook: configure-grafana.yaml

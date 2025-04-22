@@ -8,6 +8,12 @@ resources:
     cpu: 400m
     memory: 128Mi
 
+service:
+  ports:
+    - name: logs
+      protocol: TCP
+      containerPort: 32422    
+
 volumes:
   - name: fluentd-logs
     hostPath:
