@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,9 @@ import (
 )
 
 var isDebug = true
+var tr = &http.Transport{
+	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+}
 
 const (
 	ContentTypeJSON = "application/json"
@@ -38,7 +42,7 @@ func logError(msg string) {
 }
 
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
-func GetBearerToken(userN, pass string) string {
+func GetBearerToken(userN, pass string) (string, error) {
 	if err := godotenv.Load("../.env"); err != nil {
 		log.Printf("Warning: could not load .env file: %v", err)
 	} else {
@@ -69,34 +73,34 @@ func GetBearerToken(userN, pass string) string {
 	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBufferString(requestBody))
 	if err != nil {
 		log.Printf("Error creating request: %v", err)
-		return ""
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{}
+	client := &http.Client{Transport: tr}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error executing request: %v", err)
-		return ""
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("Error reading response: %v", err)
-			return ""
+			return "", err
 		}
 		var jsonResponse map[string]interface{}
 		if err = json.Unmarshal(bodyBytes, &jsonResponse); err != nil {
 			log.Printf("Error parsing JSON response: %v", err)
-			return ""
+			return "", err
 		}
 		accessToken, ok := jsonResponse["access_token"].(string)
 		if !ok {
 			log.Printf("access_token not found in response")
-			return ""
+			return "", err
 		}
 		log.Printf("Access Token: Fetched")
-		return accessToken
+		return accessToken, nil
 	} else {
 		log.Printf("Failed to get token, HTTP response code: %d", resp.StatusCode)
 		errorBytes, err := io.ReadAll(resp.Body)
@@ -105,8 +109,8 @@ func GetBearerToken(userN, pass string) string {
 		} else {
 			log.Printf("Error Response: %s", string(errorBytes))
 		}
+		return "", fmt.Errorf("failed to get token, HTTP response code: %d", resp.StatusCode)
 	}
-	return ""
 }
 
 // buildRequestBody builds the JSON payload directly from the YAML "data" field.
@@ -162,7 +166,10 @@ func SendAPIRequest(method, url string, body []byte, authToken string) (*http.Re
 	req.Header.Set(AuthHeader, BearerPrefix+authToken)
 
 	logDebug(fmt.Sprintf("Sending Request: %s %s\nPayload:\n%s\n", req.Method, url, string(body)))
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
 	return client.Do(req)
 }
 

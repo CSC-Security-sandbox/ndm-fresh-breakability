@@ -27,8 +27,7 @@ var (
 	scenarioFileNames []string
 	scenarioFiles     []string
 
-	authToken = utils.GetBearerToken("", "")
-
+	authToken string
 	// sharedVars holds default values and any values parsed from prior API responses.
 	sharedVars map[string]interface{}
 )
@@ -41,6 +40,11 @@ func logDebug(msg string) {
 }
 
 func init() {
+	var tokenErr error
+	authToken, tokenErr = utils.GetBearerToken("", "")
+	if tokenErr != nil {
+		log.Fatalf("Error getting bearer token: %v", tokenErr)
+	}
 	scenarioConfigPath := filepath.Join("..", "scenario_config.yml")
 
 	// Load the scenario config file.
@@ -107,7 +111,9 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 					if !usernameOk || !passwordOk {
 						fmt.Errorf("username or password is not a string")
 					}
-					authToken = utils.GetBearerToken(username, password)
+					authToken, err = utils.GetBearerToken(username, password)
+					Expect(err).To(BeNil(), "Error Getting Bearer Token '%s'", scData.Name)
+
 					continue
 				}
 				fullURL := utils.BuildFullURL(scData, sharedVars)
