@@ -6,11 +6,8 @@ const ErrorNumberCellRenderer = ({ value }: ErrorNumberCellRendererProps) => {
   const props = value.length > 0 ? { color: "error" } : {};
 
   const getErrorCount = () => {
-    if (value.length === 0) {
-      return "-";
-    } else {
-      return value.reduce((totalJobRunErrors, error) => totalJobRunErrors + Number(error.count), 0);
-    }
+    if (value.length === 0) return "-";
+    return value.reduce((totalJobRunErrors, error) => totalJobRunErrors + Number(error.count), 0);
   };
   const errorCount = useMemo(() => getErrorCount(), [value]);
 
