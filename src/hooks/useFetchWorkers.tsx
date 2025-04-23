@@ -20,7 +20,13 @@ const useFetchWorkers = () => {
     isLoading,
     isFetching,
     refetch: refetchAllWorkers,
-  } = useGetAllWorkersQuery(getParams(), { skip: !selectedProjectId });
+  } = useGetAllWorkersQuery(getParams(), {
+    skip: !selectedProjectId,
+    pollingInterval: Number(
+      window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+    ),
+    skipPollingIfUnfocused: true,
+  });
 
   return {
     workers,
