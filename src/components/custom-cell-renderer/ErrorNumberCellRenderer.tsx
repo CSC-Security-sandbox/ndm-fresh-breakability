@@ -5,11 +5,10 @@ import { ErrorNumberCellRendererProps } from "@/types/app.type";
 const ErrorNumberCellRenderer = ({ value }: ErrorNumberCellRendererProps) => {
   const props = value.length > 0 ? { color: "error" } : {};
 
-  const getErrorCount = () => {
+  const errorCount = useMemo(() => {
     if (value.length === 0) return "-";
     return value.reduce((totalJobRunErrors, error) => totalJobRunErrors + Number(error.count), 0);
-  };
-  const errorCount = useMemo(() => getErrorCount(), [value]);
+  }, [value]);
 
   return <Span {...props}>{errorCount}</Span>;
 };

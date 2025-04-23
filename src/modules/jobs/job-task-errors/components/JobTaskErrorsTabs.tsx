@@ -50,9 +50,15 @@ const JobTaskErrorsTabs = ({
   const showRecoverableError = errorCounts[JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR] > 0;
 
   useEffect(() => {
-    const defaultTab = showFatalError ?
-                        JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR : showTransientError ?
-                        JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR : JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR;
+    let defaultTab: string;
+    if (showFatalError) {
+      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR;
+    } else if (showTransientError) {
+      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR;
+    } else {
+      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR;
+    }
+   
     setCurrentErrorType(defaultTab);
   },[]);
   
