@@ -84,7 +84,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["errors"]>) => (
-      <ErrorNumberCellRenderer value={value?.length || 0} />
+      <ErrorNumberCellRenderer value={value} />
     ),
   },
 ];
