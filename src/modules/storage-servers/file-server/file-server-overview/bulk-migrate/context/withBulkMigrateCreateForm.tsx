@@ -316,10 +316,9 @@ export function withBulkMigrateCreateForm(
                 `Precheck timed out. This may be due to an unhealthy worker. Please check the worker's status and try again.`
               );
               showErrorOnFailure(error);
-            }
-            if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+            } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
               const error = new Error(
-                `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+                `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts. Possibly due to an unhealthy worker.`
               );
               showErrorOnFailure(error);
             }

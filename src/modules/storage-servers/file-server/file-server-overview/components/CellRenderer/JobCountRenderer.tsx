@@ -25,6 +25,7 @@ const JobsCountRenderer: React.FC<JobsCountRendererProps> = ({
   const jobDetails = row?.jobConfig?.find(
     (jobs) => jobs?.jobType?.toUpperCase() === jobType
   );
+  let totalJobRunsCount = 0;
 
   if (!jobDetails) {
     return "-";
@@ -51,17 +52,18 @@ const JobsCountRenderer: React.FC<JobsCountRendererProps> = ({
       ) {
         statusCounts[jobDetail.status as keyof typeof statusCounts]++;
       }
+      if (jobType === config?.jobType) totalJobRunsCount++;
     });
   });
 
   return (
     <>
-      {renderCount(statusCounts, jobDetails.jobRunDetails.length)}
+      {renderCount(statusCounts, totalJobRunsCount)}
 
       <Tooltip placement="center">
         <Text>
           Total {jobType.toLowerCase().replace("_", " ")} jobs:{" "}
-          {jobDetails.jobRunDetails.length}
+          {totalJobRunsCount}
         </Text>
         {Object.entries(statusCounts).map(([status, count]) => (
           <StatusWithCount

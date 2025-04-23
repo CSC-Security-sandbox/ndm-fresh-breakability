@@ -28,14 +28,14 @@ export const EXPORT_PATHS_TABLE_COLS_DEF = [
     id: 4,
     header: "Migration",
     accessor: "isBaselineMigrationDone",
-    popoverText: "Completed / Total Job Runs",
+    popoverText: "Running / Completed / Total Job Runs",
     Renderer: MigrationJobsCountRenderer,
   },
   {
     id: 5,
     header: "Cutover",
     accessor: "cutover",
-    popoverText: "Completed / Total Job Runs",
+    popoverText: "Running / Completed / Total Job Runs",
     Renderer: CutOverJobsCountRenderer,
   },
 ];
