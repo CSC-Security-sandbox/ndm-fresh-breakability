@@ -3,81 +3,84 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { PrecheckActivity } from './precheck-activity';
 import { Protocols } from 'src/protocols/protocols';
-import {
-  PreCheckStatus,
-  PreCheckErrorCodes,
-} from 'src/workflows/pre-check/pre-check.types';
-import * as fs from 'fs/promises';
+import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from 'src/workflows/pre-check/pre-check.types';
 
-jest.mock('@nestjs/config');
+jest.mock('fs', () => ({
+  promises: {
+    open: jest.fn(),
+    readFile: jest.fn(),
+    unlink: jest.fn(),
+    readdir: jest.fn(),
+  },
+}));
+
 jest.mock('src/protocols/protocols');
-jest.mock('fs/promises');
-
-jest.mock('fast-folder-size', () => {
-  return jest.fn().mockImplementation((path, callback) => callback(null, 0));
-});
-
+jest.mock('@temporalio/worker', () => ({
+  Worker: jest.fn(),
+}));
 describe('PrecheckActivity', () => {
-  let precheckActivity: PrecheckActivity;
-  let mockConfigService: jest.Mocked<ConfigService>;
-  let mockLogger: jest.Mocked<Logger>;
+  let service: PrecheckActivity;
+  let mockConfigService: Partial<ConfigService>;
+  let mockLogger: Partial<Logger>;
   let mockProtocol: any;
 
-  const mockSettings = {
-    preserveAccessTime: false,
+  const mockTraceId = 'test-trace-id';
+  const mockSettings: Settings = {
+    preserveAccessTime: true,
   };
-
-  const mockServerCredentials = {
-    id: 'server-1',
-    serverType: 'SFTP',
-    host: 'test-server',
-    userName: 'testuser',
-    password: 'testpass',
+  const mockServerCredential: ServerCredential = {
+    host: 'test-host',
+    userName: 'test-user',
+    password: 'test-pass',
     protocol: 'SFTP',
-    protocolVersion: '1.0',
+    protocolVersion: '1',
+    id: '',
+    serverType: ''
   };
-
-  const mockServerPaths = {
-    pathId: 'path123',
-    pathName: '/test/path',
+  const mockSourcePath: WorkerTaskPaths = {
+    pathId: 'source-path-id',
+    pathName: '/source/path',
     isSource: true,
-    serverId: 'server-1',
+    serverId: ''
   };
-
-  const mockTraceId = 'trace-123';
+  const mockDestinationPath: WorkerTaskPaths = {
+    pathId: 'dest-path-id',
+    pathName: '/dest/path',
+    isSource: false,
+    serverId: ''
+  };
 
   beforeEach(async () => {
+    mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue(true),
+      mountPath: jest.fn().mockResolvedValue(true),
+      listPaths: jest.fn().mockResolvedValue([]),
+      getTotalUsedMemory: jest.fn().mockResolvedValue(0),
+      getAvailableDiskSpace: jest.fn().mockResolvedValue({ size: 0 }),
+      unmountPath: jest.fn().mockResolvedValue(true),
+    };
+    
+    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
     mockConfigService = {
-      get: jest.fn(),
-    } as any;
-
-    mockConfigService.get.mockImplementation((key: string) => {
-      switch (key) {
-        case 'worker.workerId':
-          return 'worker-1';
-        case 'worker.baseWorkingPath':
-          return '/base/working/path';
-        default:
-          return null;
-      }
-    });
+      get: jest.fn((key: string) => {
+        switch (key) {
+          case 'worker.workerId':
+            return 'test-worker-id';
+          case 'worker.baseWorkingPath':
+            return '/base/working/path';
+          case 'worker.checkAvailableDiskSpace':
+            return 'true';
+          default:
+            return null;
+        }
+      }),
+    };
 
     mockLogger = {
       log: jest.fn(),
-      warn: jest.fn(),
       error: jest.fn(),
       debug: jest.fn(),
-    } as any;
-
-    mockProtocol = {
-      validateConnection: jest.fn(),
-      mountPath: jest.fn(),
-      listPaths: jest.fn(),
-      unmountPath: jest.fn(),
-      getTotalSizeWindows: jest.fn(),
     };
-
-    Protocols.getProtocol = jest.fn().mockReturnValue(mockProtocol);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -87,527 +90,327 @@ describe('PrecheckActivity', () => {
       ],
     }).compile();
 
-    precheckActivity = module.get<PrecheckActivity>(PrecheckActivity);
+    service = module.get<PrecheckActivity>(PrecheckActivity);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('preCheckPath', () => {
-    it('should successfully precheck a path', async () => {
+    it('should successfully pre-check a source path', async () => {
       mockProtocol.validateConnection.mockResolvedValue(true);
       mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
+      mockProtocol.listPaths.mockResolvedValue(['/source/path']);
+      mockProtocol.getTotalUsedMemory.mockResolvedValue(1024);
       mockProtocol.unmountPath.mockResolvedValue(true);
 
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockResolvedValue('');
-      (fs.unlink as jest.Mock).mockResolvedValue(true);
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
 
-      const result = await precheckActivity.preCheckPath(
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
 
       expect(result.status).toBe(PreCheckStatus.SUCCESS);
-      expect(result.errorCode).toBeUndefined();
-      expect(result.workerId).toBe('worker-1');
-      expect(result.pathId).toBe('path123');
+      expect(result.errorCodes).toHaveLength(0);
+      expect(result.sourceDataSize).toBe(1024);
     });
 
-    it('should fail when connection validation fails', async () => {
-      mockProtocol.validateConnection.mockRejectedValue(
-        new Error('Connection failed'),
-      );
-
-      const result = await precheckActivity.preCheckPath(
-        mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_MOUNT_FAILED,
-      );
-    });
-
-    it('should fail when path is not found', async () => {
+    it('should successfully pre-check a destination path', async () => {
       mockProtocol.validateConnection.mockResolvedValue(true);
       mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/different/path']);
+      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
+      mockProtocol.getAvailableDiskSpace.mockResolvedValue({ size: 2048 });
+      mockProtocol.unmountPath.mockResolvedValue(true);
 
-      const result = await precheckActivity.preCheckPath(
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
+      fs.readdir.mockResolvedValue([]);
+
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.SUCCESS);
+      expect(result.errorCodes).toHaveLength(0);
+      expect(result.destinationAvailableSpace).toBe(2048);
+      expect(result.destinationIsEmpty).toBe(true);
+    });
+
+    it('should handle mount failure for source path', async () => {
+      mockProtocol.validateConnection.mockRejectedValue(new Error('Connection failed'));
+
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
 
       expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_MOUNT_FAILED);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error mounting path')
+      );
     });
 
-    it('should fail when test file write fails for destination path', async () => {
-      const modifiedSettings = { preserveAccessTime: true };
-      const destinationPaths = {
-        ...mockServerPaths,
-        isSource: false,
+    it('should handle mount failure for destination path', async () => {
+      mockProtocol.validateConnection.mockRejectedValue(new Error('Connection failed'));
+
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.DESTINATION_PATH_MOUNT_FAILED);
+    });
+
+    it('should skip test file operations when not preserving access time for source', async () => {
+      const settingsWithoutPreserve: Settings = {
+        preserveAccessTime: false,
       };
 
       mockProtocol.validateConnection.mockResolvedValue(true);
       mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
+      mockProtocol.listPaths.mockResolvedValue(['/source/path']);
+      mockProtocol.getTotalUsedMemory.mockResolvedValue(1024);
 
-      (fs.open as jest.Mock).mockRejectedValue(new Error('Write failed'));
+      const fs = require('fs').promises;
+      const openSpy = jest.spyOn(fs, 'open');
 
-      const result = await precheckActivity.preCheckPath(
-        modifiedSettings,
-        mockServerCredentials,
-        destinationPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.DESTINATION_PATH_WRITE_PERMISSION_FAILED,
-      );
-    });
-
-    it('should fail when test file write fails for source path with preserveAccessTime', async () => {
-      const modifiedSettings = { preserveAccessTime: true };
-
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-
-      (fs.open as jest.Mock).mockRejectedValue(new Error('Write failed'));
-
-      const result = await precheckActivity.preCheckPath(
-        modifiedSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED,
-      );
-    });
-
-    it('should successfully precheck a path', async () => {
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-      mockProtocol.unmountPath.mockResolvedValue(true);
-
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockResolvedValue('');
-      (fs.unlink as jest.Mock).mockResolvedValue(true);
-
-      const result = await precheckActivity.preCheckPath(
-        mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+      const result = await service.preCheckPath(
+        settingsWithoutPreserve,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
 
       expect(result.status).toBe(PreCheckStatus.SUCCESS);
-      expect(result.errorCode).toBeUndefined();
-      expect(result.workerId).toBe('worker-1');
-      expect(result.pathId).toBe('path123');
+      expect(openSpy).not.toHaveBeenCalled();
     });
 
-    it('should handle unmount failure gracefully', async () => {
+    it('should always perform test file operations for destination', async () => {
+      const settingsWithoutPreserve: Settings = {
+        preserveAccessTime: false,
+      };
+
       mockProtocol.validateConnection.mockResolvedValue(true);
       mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
+      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
+      mockProtocol.getAvailableDiskSpace.mockResolvedValue({ size: 2048 });
+
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
+      fs.readdir.mockResolvedValue([]);
+
+      const result = await service.preCheckPath(
+        settingsWithoutPreserve,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.SUCCESS);
+      expect(fs.open).toHaveBeenCalled();
+    });
+
+    it('should handle source data size calculation failure', async () => {
+      mockProtocol.validateConnection.mockResolvedValue(true);
+      mockProtocol.mountPath.mockResolvedValue(true);
+      mockProtocol.listPaths.mockResolvedValue(['/source/path']);
+      mockProtocol.getTotalUsedMemory.mockRejectedValue(new Error('Size calc failed'));
+
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
+
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.sourceDataSize).toBeUndefined();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error while calculating source data size')
+      );
+    });
+
+    it('should handle destination space check failure', async () => {
+      mockProtocol.validateConnection.mockResolvedValue(true);
+      mockProtocol.mountPath.mockResolvedValue(true);
+      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
+      mockProtocol.getAvailableDiskSpace.mockRejectedValue(new Error('Space check failed'));
+
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
+      fs.readdir.mockResolvedValue([]);
+
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.destinationAvailableSpace).toBeUndefined();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error while calculating destination available space')
+      );
+    });
+
+    it('should handle destination empty check failure', async () => {
+      mockProtocol.validateConnection.mockResolvedValue(true);
+      mockProtocol.mountPath.mockResolvedValue(true);
+      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
+      mockProtocol.getAvailableDiskSpace.mockResolvedValue({ size: 2048 });
+
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
+      fs.readdir.mockRejectedValue(new Error('Read dir failed'));
+
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
+      );
+
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.destinationIsEmpty).toBeUndefined();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error while checking destination path empty status')
+      );
+    });
+
+    it('should handle unmount failure', async () => {
+      mockProtocol.validateConnection.mockResolvedValue(true);
+      mockProtocol.mountPath.mockResolvedValue(true);
+      mockProtocol.listPaths.mockResolvedValue(['/source/path']);
+      mockProtocol.getTotalUsedMemory.mockResolvedValue(1024);
       mockProtocol.unmountPath.mockRejectedValue(new Error('Unmount failed'));
 
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockResolvedValue('');
-      (fs.unlink as jest.Mock).mockResolvedValue(true);
+      const fs = require('fs').promises;
+      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
+      fs.readFile.mockResolvedValue('test');
+      fs.unlink.mockResolvedValue(true);
 
-      const result = await precheckActivity.preCheckPath(
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
 
-      expect(result.status).toBe(PreCheckStatus.SUCCESS);
-      expect(result.errorCode).toBeUndefined();
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error unmounting path')
+      );
     });
 
-    it('should fail when unmounting path fails', async () => {
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-      mockProtocol.unmountPath.mockRejectedValue(new Error('Unmount failed'));
-
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockResolvedValue('');
-      (fs.unlink as jest.Mock).mockResolvedValue(true);
-
-      const result = await precheckActivity.preCheckPath(
+    it('should handle path not found for source', async () => {
+      mockProtocol.listPaths.mockResolvedValue(['/other/path']);
+    
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
-
-      expect(result.status).toBe(PreCheckStatus.SUCCESS);
-      expect(result.errorCode).toBeUndefined();
+    
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
     });
-
-    it('should fail when listing paths throws an error', async () => {
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockRejectedValue(new Error('List paths failed'));
-
-      const result = await precheckActivity.preCheckPath(
+    
+    it('should handle path not found for destination', async () => {
+      mockProtocol.listPaths.mockResolvedValue(['/other/path']);
+    
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockDestinationPath,
+        mockTraceId
       );
-
+    
       expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND);
     });
-
-    it('should fail when creating test file throws an error', async () => {
-      const modifiedSettings = { preserveAccessTime: true };
-
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-
-      (fs.open as jest.Mock).mockRejectedValue(
-        new Error('File creation failed'),
-      );
-
-      const result = await precheckActivity.preCheckPath(
-        modifiedSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED,
-      );
-    });
-
-    it('should fail when reading test file throws an error', async () => {
-      const modifiedSettings = { preserveAccessTime: true };
-
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockRejectedValue(new Error('Read failed'));
-
-      const result = await precheckActivity.preCheckPath(
-        modifiedSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED,
-      );
-    });
-
-    it('should fail when deleting test file throws an error', async () => {
-      const modifiedSettings = { preserveAccessTime: true };
-
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-
-      (fs.open as jest.Mock).mockResolvedValue({
-        close: jest.fn().mockResolvedValue(true),
-      });
-      (fs.readFile as jest.Mock).mockResolvedValue('');
-      (fs.unlink as jest.Mock).mockRejectedValue(new Error('Delete failed'));
-
-      const result = await precheckActivity.preCheckPath(
-        modifiedSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED,
-      );
-    });
-
-    it('should handle protocol validation and mounting errors gracefully', async () => {
-      mockProtocol.validateConnection.mockRejectedValue(
-        new Error('Validation failed'),
-      );
-
-      const result = await precheckActivity.preCheckPath(
+    
+    it('should handle list paths failure', async () => {
+      mockProtocol.listPaths.mockRejectedValue(new Error('List failed'));
+    
+      const result = await service.preCheckPath(
         mockSettings,
-        mockServerCredentials,
-        mockServerPaths,
-        mockTraceId,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
-
+    
       expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.errorCode).toBe(
-        PreCheckErrorCodes.SOURCE_PATH_MOUNT_FAILED,
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
+    });
+    
+    it('should handle no space left on device', async () => {
+      const fs = require('fs').promises;
+      fs.open.mockRejectedValue({ code: 'ENOSPC' });
+    
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
       );
-    });
-
-    describe('Source data size calculation', () => {
-      it('should handle source data size calculation errors gracefully', async () => {
-        mockProtocol.validateConnection.mockResolvedValue(true);
-        mockProtocol.mountPath.mockResolvedValue(true);
-        mockProtocol.listPaths.mockResolvedValue(['/test/path']);
-        mockProtocol.unmountPath.mockResolvedValue(true);
-        mockProtocol.getTotalSizeWindows.mockRejectedValue(new Error('Size calc failed'));
     
-        const result = await precheckActivity.preCheckPath(
-          mockSettings,
-          mockServerCredentials,
-          mockServerPaths,
-          mockTraceId
-        );
-    
-        expect(result.status).toBe(PreCheckStatus.SUCCESS);
-        expect(result.sourceDataSize).toBeUndefined();
-        expect(mockLogger.error).toHaveBeenCalled();
-      });
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.NO_SPACE_LEFT_ON_SOURCE_PATH);
     });
     
-    describe('Destination available space check', () => { 
-      it('should handle destination space check errors gracefully', async () => {
-        const destinationPaths = {
-          ...mockServerPaths,
-          isSource: false
-        };
-      
-        mockProtocol.validateConnection.mockResolvedValue(true);
-        mockProtocol.mountPath.mockResolvedValue(true);
-        mockProtocol.listPaths.mockResolvedValue([destinationPaths.pathName]);
-        mockProtocol.unmountPath.mockResolvedValue(true);
-          
-        const result = await precheckActivity.preCheckPath(
-          mockSettings,
-          mockServerCredentials,
-          destinationPaths,
-          mockTraceId
-        );
-      
-        expect(result.status).toBe(PreCheckStatus.FAILED);
-        expect(result.destinationAvailableSpace).toBeUndefined();
-        expect(mockLogger.error).toHaveBeenCalled();
-      });
-
+    it('should handle write permission failure', async () => {
+      const fs = require('fs').promises;
+      fs.open.mockRejectedValue(new Error('Permission denied'));
+    
+      const result = await service.preCheckPath(
+        mockSettings,
+        mockServerCredential,
+        mockSourcePath,
+        mockTraceId
+      );
+    
+      expect(result.status).toBe(PreCheckStatus.FAILED);
+      expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED);
     });
-
-    describe('checkDestinationPathEmpty', () => {
-      let instance;
-      let mockFs;
-      let mockLogger;
-      let PreCheckPathOutput;
-      const mountPath = '/test/mount/path';
-    
-      beforeEach(() => {
-        mockFs = {
-          readdir: jest.fn()
-        };
-        
-        mockLogger = {
-          log: jest.fn(),
-          error: jest.fn()
-        };
-        
-        PreCheckPathOutput = {};
-        
-        instance = {
-          logger: mockLogger
-        };
-        
-        jest.mock('fs/promises', () => mockFs);
-      });
-    
-      afterEach(() => {
-        jest.clearAllMocks();
-      });
-    
-      it('should set destinationIsEmpty to true when directory is empty', async () => {
-        mockFs.readdir.mockResolvedValue([]);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(true);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: true`
-        );
-        expect(mockLogger.error).not.toHaveBeenCalled();
-      });
-    
-      it('should set destinationIsEmpty to false when directory has contents', async () => {
-        mockFs.readdir.mockResolvedValue(['file1.txt', 'file2.txt']);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: false`
-        );
-        expect(mockLogger.error).not.toHaveBeenCalled();
-      });
-    
-      it('should handle errors when reading directory fails', async () => {
-        const error = new Error('Permission denied');
-        mockFs.readdir.mockRejectedValue(error);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBeUndefined();
-        expect(mockLogger.log).not.toHaveBeenCalled();
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          `Error while checking destination path empty status: Permission denied`
-        );
-      });
-    
-      it('should handle empty directories with hidden files', async () => {
-        mockFs.readdir.mockResolvedValue(['.hidden_file']);
-        
-        await executeCheckDestinationPath();
-        
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: false`
-        );
-      });
-    
-      async function executeCheckDestinationPath() {
-        try {
-          const dirContents = await mockFs.readdir(mountPath);
-          PreCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
-          instance.logger.log(`Destination path empty status: ${PreCheckPathOutput?.destinationIsEmpty}`);
-        } catch (error) {
-          instance.logger.error(`Error while checking destination path empty status: ${error.message}`);
-        }
-      }
-    });
-
-    describe('checkDestinationPathEmpty', () => {
-      let instance;
-      let mockFs;
-      let mockLogger;
-      let PreCheckPathOutput;
-      const mountPath = '/test/mount/path';
-    
-      beforeEach(() => {
-        mockFs = {
-          readdir: jest.fn()
-        };
-        
-        mockLogger = {
-          log: jest.fn(),
-          error: jest.fn()
-        };
-        
-        PreCheckPathOutput = {};
-        
-        instance = {
-          logger: mockLogger
-        };
-        
-        jest.mock('fs/promises', () => mockFs);
-      });
-    
-      afterEach(() => {
-        jest.clearAllMocks();
-      });
-    
-      it('should set destinationIsEmpty to true when directory is empty', async () => {
-        mockFs.readdir.mockResolvedValue([]);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(true);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: true`
-        );
-        expect(mockLogger.error).not.toHaveBeenCalled();
-      });
-    
-      it('should set destinationIsEmpty to false when directory has contents', async () => {
-        mockFs.readdir.mockResolvedValue(['file1.txt', 'file2.txt']);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: false`
-        );
-        expect(mockLogger.error).not.toHaveBeenCalled();
-      });
-    
-      it('should handle errors when reading directory fails', async () => {
-        const error = new Error('Permission denied');
-        mockFs.readdir.mockRejectedValue(error);
-        
-        await executeCheckDestinationPath();
-        
-        expect(mockFs.readdir).toHaveBeenCalledWith(mountPath);
-        expect(PreCheckPathOutput.destinationIsEmpty).toBeUndefined();
-        expect(mockLogger.log).not.toHaveBeenCalled();
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          `Error while checking destination path empty status: Permission denied`
-        );
-      });
-    
-      it('should handle empty directories with hidden files', async () => {
-        mockFs.readdir.mockResolvedValue(['.hidden_file']);
-    
-        await executeCheckDestinationPath();
-        
-        expect(PreCheckPathOutput.destinationIsEmpty).toBe(false);
-        expect(mockLogger.log).toHaveBeenCalledWith(
-          `Destination path empty status: false`
-        );
-      });
-    
-      async function executeCheckDestinationPath() {
-        try {
-          const dirContents = await mockFs.readdir(mountPath);
-          PreCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
-          instance.logger.log(`Destination path empty status: ${PreCheckPathOutput?.destinationIsEmpty}`);
-        } catch (error) {
-          instance.logger.error(`Error while checking destination path empty status: ${error.message}`);
-        }
-      }
-    });
-
   });
 });
+
+
+
+
+
+
+
+
+

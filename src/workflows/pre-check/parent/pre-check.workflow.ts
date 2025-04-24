@@ -101,13 +101,13 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
         const sourceFailed = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId && path.status === PreCheckStatus.FAILED);
         if(sourceFailed) {
             response[i].status = PreCheckStatus.FAILED;
-            response[i].errors.push(sourceFailed.errorCode);
+            response[i].errors.push(...sourceFailed.errorCodes);
         }
         for(let j = 0; j < response[i].destination.length; j++) {
             const destinationFailed = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].destination[j].destinationPathId && path.status === PreCheckStatus.FAILED);
             if(destinationFailed) {
                 response[i].destination[j].status = PreCheckStatus.FAILED;
-                response[i].destination[j].errors.push(destinationFailed.errorCode);
+                response[i].destination[j].errors.push(...destinationFailed.errorCodes);
             }
 
             const sourceRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId);

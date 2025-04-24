@@ -262,7 +262,7 @@ describe('PreCheckValidationWorkflow', () => {
         );
 
         expect(result.paths[1].status).toBe(PreCheckStatus.FAILED);
-        expect(result.paths[1].errorCode).toBe(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
+        expect(result.paths[1].errorCodes).toBe(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
     });
 
     it('should fail if all workers in the destination are unhealthy', async () => {

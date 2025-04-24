@@ -3,7 +3,7 @@ import { PreCheckErrorCodes, PreCheckStatus } from "src/workflows/pre-check/pre-
 export interface PreCheckPathOutput{
     pathId: string;
     status: PreCheckStatus;
-    errorCode?: PreCheckErrorCodes;
+    errorCodes?: PreCheckErrorCodes[];
     workerId: string;
     destinationIsEmpty?: boolean;
     sourceDataSize?: number;
