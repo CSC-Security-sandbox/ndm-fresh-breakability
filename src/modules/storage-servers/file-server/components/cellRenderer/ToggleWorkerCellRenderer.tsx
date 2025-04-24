@@ -24,8 +24,8 @@ const ToggleWorkerCellRenderer = ({
 
   return (
     <Toggle
-      value={isOnline ? selectedWorkerIds.includes(value) : false}
-      disabled={!isOnline || validateConnectionLoader}
+      value={selectedWorkerIds.includes(value)}
+      disabled={validateConnectionLoader || (!selectedWorkerIds.includes(value) && !isOnline)}
       toggle={handleToggle}
     />
   );
