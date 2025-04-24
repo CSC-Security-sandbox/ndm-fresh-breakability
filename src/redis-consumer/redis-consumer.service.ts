@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DMError, JobContextFactory, JobType, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { DMError, GroupReaderType, JobContext, JobContextFactory, JobType, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { defaultDataConverter } from '@temporalio/common';
@@ -614,19 +614,19 @@ export class RedisConsumerService {
      * @returns The appropriate reader function.
      * @throws Error if the consumer type is invalid.
      */
-    private getReader(jobContext: any, speedTestJobContext:any, readerName: string, consumerType: string) {
+    private getReader(jobContext: JobContext, speedTestJobContext:any, readerName: string, consumerType: string) {
         if (!jobContext) {
             throw new Error("getReader: jobContext is null or undefined.");
         }
 
         const readerMap: Record<string, any> = {
-            [ConsumerType.files]: jobContext.groupReadFiles(readerName, 500),
-            [ConsumerType.directories]: jobContext.readDirs(readerName),
-            [ConsumerType.errors]: jobContext.groupReadErrors(readerName, 500),
-            [ConsumerType.tasks]: jobContext.readTasks(readerName),
-            [ConsumerType.migrationTask]: jobContext.readMigrationTask(readerName),
-            [ConsumerType.speedtestTask]: speedTestJobContext.speedTestReadWriteTask(readerName),
-            [ConsumerType.updatedTask]: jobContext.readUpdatedTaskInfo(readerName),
+            [ConsumerType.files]: jobContext.readFiles(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.directories]: jobContext.groupReadDirs(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.errors]: jobContext.groupReadErrors(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.tasks]: jobContext.groupReadTasks(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.migrationTask]: jobContext.groupReadMigrationTask(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.speedtestTask]: speedTestJobContext.speedTestReadWriteTask(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.updatedTask]: jobContext.readUpdatedTaskInfo(readerName, 500, GroupReaderType.DB_WRITER),
         };
 
         if (!(consumerType in readerMap)) {
