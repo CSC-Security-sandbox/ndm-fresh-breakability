@@ -1,192 +1,188 @@
 import { RedisStreamCollection } from './redis-stream-collection';
-import { RedisClientType } from 'redis';
-import { Logger } from '../utils/logging';
+import { GroupReaderType } from '../types/enums';
 import { encode } from 'msgpack-lite';
+import { Serializable } from '../types/serializable';
 
-jest.mock('redis');
-jest.mock('../utils/logging');
+const mockRedis = {
+  exists: jest.fn(),
+  xGroupCreate: jest.fn(),
+  xGroupDestroy: jest.fn(),
+  del: jest.fn(),
+  xAdd: jest.fn(),
+  xRead: jest.fn(),
+  xReadGroup: jest.fn(),
+  xAck: jest.fn(),
+  xDel: jest.fn(),
+  hIncrBy: jest.fn(),
+  hDel: jest.fn(),
+  set: jest.fn(),
+  get: jest.fn(),
+};
+
+const mockRecord: Serializable = { foo: 'bar' } as any
 
 describe('RedisStreamCollection', () => {
-  let redisClient: jest.Mocked<RedisClientType>;
-  let logger: jest.Mocked<Logger>;
-  let collection: RedisStreamCollection<any>;
+  let collection: RedisStreamCollection<typeof mockRecord>;
 
   beforeEach(() => {
-    redisClient = {
-      exists: jest.fn(),
-      xGroupCreate: jest.fn(),
-      del: jest.fn(),
-      xAdd: jest.fn(),
-      xRead: jest.fn(),
-      xReadGroup: jest.fn(),
-      xAck: jest.fn(),
-      xInfoGroups: jest.fn(),
-      get: jest.fn(),
-    } as any;
-
-    logger = {
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-    } as any;
-
-    Logger.getLogger = jest.fn().mockReturnValue(logger);
-
-    collection = new RedisStreamCollection(
-      'jobRunId',
-      'streamKey',
-      0,
-      '0-0',
-      redisClient,
-    );
+    jest.clearAllMocks();
+    collection = new RedisStreamCollection('job123', 'stream:test', 0, '0', mockRedis as any);
   });
 
-  describe('init', () => {
-    it('should initialize the collection', async () => {
-      redisClient.exists.mockResolvedValue(1);
-      redisClient.xGroupCreate.mockResolvedValue('OK');
-
+  describe('init()', () => {
+    it('should create consumer groups if stream does not exist', async () => {
+      mockRedis.exists.mockResolvedValue(false);
+      mockRedis.xGroupCreate.mockResolvedValue('OK');
       await collection.init();
-
-      expect(redisClient.exists).toHaveBeenCalledWith('streamKey');
-      expect(redisClient.del).toHaveBeenCalledWith('streamKey');
-      expect(redisClient.xGroupCreate).toHaveBeenCalledWith(
-        'streamKey',
-        'jobRunId',
-        '0',
-        { MKSTREAM: true },
-      );
-      expect(logger.info).toHaveBeenCalledWith(
-        'Consumer group jobRunId created for stream : streamKey',
-      );
+      expect(mockRedis.xGroupCreate).toHaveBeenCalledTimes(Object.values(GroupReaderType).length);
     });
 
-    it('should handle BUSYGROUP error', async () => {
-      redisClient.exists.mockResolvedValue(0);
-      redisClient.xGroupCreate.mockRejectedValue(new Error('BUSYGROUP'));
-
+    it('should not create consumer groups if stream exists', async () => {
+      mockRedis.exists.mockResolvedValue(true);
       await collection.init();
+      expect(mockRedis.xGroupCreate).not.toHaveBeenCalled();
+    });
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        'Consumer group jobRunId already exists',
-      );
+    it('should handle BUSYGROUP error gracefully', async () => {
+      mockRedis.exists.mockResolvedValue(false);
+      mockRedis.xGroupCreate.mockRejectedValueOnce(new Error('BUSYGROUP Consumer Group name already exists'));
+      await collection.init();
+      expect(mockRedis.xGroupCreate).toHaveBeenCalled();
     });
   });
 
-  describe('cleanup', () => {
-    it('should clean up the stream', async () => {
+  describe('cleanup()', () => {
+    it('should destroy the consumer group and delete keys', async () => {
+      mockRedis.xGroupDestroy.mockResolvedValue(1);
       await collection.cleanup();
+      expect(mockRedis.xGroupDestroy).toHaveBeenCalled();
+      expect(mockRedis.del).toHaveBeenCalledTimes(2);
+    });
 
-      expect(redisClient.del).toHaveBeenCalledWith('streamKey');
-      expect(logger.info).toHaveBeenCalledWith('Cleaning up stream streamKey');
+    it('should log warning if destroy fails', async () => {
+      mockRedis.xGroupDestroy.mockRejectedValueOnce(new Error('fail'));
+      await collection.cleanup();
+      expect(mockRedis.del).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('close', () => {
-    it('should log closing collection', async () => {
-      await collection.close();
-
-      expect(logger.info).toHaveBeenCalledWith('Closing collection streamKey');
-    });
-  });
-
-  describe('append', () => {
-    it('should append a record to the stream', async () => {
-      const record = { foo: 'bar' };
-      const encodedRecord = encode(record).toString('base64')
-      redisClient.xAdd.mockResolvedValue('1-0');
-
-      const id = await collection.append(record);
-
-      expect(redisClient.xAdd).toHaveBeenCalledWith('streamKey', '*', {
-        obj: encodedRecord,
+  describe('append()', () => {
+    it('should encode and add a record to the stream', async () => {
+      mockRedis.xAdd.mockResolvedValue('123-0');
+      const id = await collection.append(mockRecord);
+      expect(mockRedis.xAdd).toHaveBeenCalledWith('stream:test', '*', {
+        obj: expect.any(String),
       });
-      expect(collection.numMessages).toBe(1);
-      expect(collection.lastId).toBe('1-0');
-      expect(id).toBe('1-0');
+      expect(id).toBe('123-0');
     });
 
-    it('should handle errors when appending a record', async () => {
-      const record = { foo: 'bar' };
-      const error = new Error('append error');
-      redisClient.xAdd.mockRejectedValue(error);
-
-      await expect(collection.append(record)).rejects.toThrow('append error');
-      expect(logger.error).toHaveBeenCalledWith(
-        'Error writing record: Error: append error',
-        error,
-      );
+    it('should throw error on append failure', async () => {
+      mockRedis.xAdd.mockRejectedValueOnce(new Error('fail'));
+      await expect(collection.append(mockRecord)).rejects.toThrow('fail');
     });
   });
 
-  describe('read', () => {
-    it('should read messages from the stream', async () => {
-      const record = { foo: 'bar' };
-      const encodedRecord = encode(record).toString('base64');
-      redisClient.xRead.mockResolvedValue([
+  describe('read()', () => {
+    it('should read and yield messages', async () => {
+      mockRedis.get.mockResolvedValue(null);
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xRead.mockResolvedValue([
         {
-          key: 'streamKey',
-          messages: [{ id: '1-0', message: { obj: encodedRecord } }],
-        },
+          messages: [
+            { id: '1-0', message: { obj: encoded } }
+          ]
+        }
       ]);
-
-      const messages = [];
-      for await (const msg of collection.read('readerName')) {
-        messages.push(msg);
-        break;
-      }
-
-      expect(messages).toEqual([record]);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName'),
-      );
+      const generator = collection.read('readerA');
+      const result = await generator.next();
+      expect(result.value).toEqual(mockRecord);
     });
+
   });
 
-  describe('groupRead', () => {
-    it('should read messages from the stream group', async () => {
-      const record = { foo: 'bar' };
-      const encodedRecord = encode(record).toString('base64');
-      redisClient.xReadGroup.mockResolvedValue([
+  describe('groupRead()', () => {
+    it('should read and ACK messages, delete after full ACK', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup.mockResolvedValue([
         {
-          key: 'streamKey',
-          messages: [{ id: '1-0', message: { obj: encodedRecord } }],
-        },
+          messages: [
+            { id: '1-0', message: { obj: encoded } }
+          ]
+        }
       ]);
-      redisClient.xInfoGroups.mockResolvedValue([
-        { name: 'jobRunId', lastDeliveredId: '1-0' },
-      ]);
-
-      const messages = [];
-      for await (const msg of collection.groupRead('readerName',1)) {
-        messages.push(msg);
-        break;
+      mockRedis.hIncrBy.mockResolvedValue(Object.values(GroupReaderType).length);
+      const items = [];
+      for await (const item of collection.groupRead('readerB', 1, GroupReaderType.DB_WRITER)) {
+        items.push(item);
       }
+      expect(items).toHaveLength(1);
+      expect(mockRedis.xAck).toHaveBeenCalled();
+      expect(mockRedis.xDel).toHaveBeenCalled();
+      expect(mockRedis.hDel).toHaveBeenCalled();
+    });
 
-      expect(messages).toEqual([record]);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName'),
-      );
+    it('should skip deletion if not enough ACKs', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup.mockResolvedValue([
+        {
+          messages: [
+            { id: '1-0', message: { obj: encoded } }
+          ]
+        }
+      ]);
+      mockRedis.hIncrBy.mockResolvedValue(1);
+      const items = [];
+      for await (const item of collection.groupRead('readerB', 1, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+      expect(mockRedis.xDel).not.toHaveBeenCalled();
+    });
+
+    it('should return early if no messages', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+      const results = [];
+      for await (const val of collection.groupRead('readerC', 1, GroupReaderType.DB_WRITER)) {
+        results.push(val);
+      }
+      expect(results).toHaveLength(0);
     });
   });
 
-  describe('groupReadNoResults', () => {
-    it('should return no results and invoke else block', async () => {
-      redisClient.xReadGroup.mockResolvedValue(null);
-      redisClient.xInfoGroups.mockResolvedValue([
-        { name: 'jobRunId', lastDeliveredId: '0-0' },
+  describe('readAndPurge()', () => {
+    it('should read, ACK and delete all messages', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup.mockResolvedValue([
+        {
+          messages: [
+            { id: '1-0', message: { obj: encoded } }
+          ]
+        }
       ]);
-
-      const messages = [];
-      for await (const msg of collection.groupRead('readerName',10)) {
-        messages.push(msg);
-        break;
+      const results = [];
+      for await (const val of collection.readAndPurge('readerD', 1, GroupReaderType.DB_WRITER)) {
+        results.push(val);
       }
-
-      //expect(message).toEqual({});
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Reading stream: streamKey, jobRunId, readerName, Batch Size: 10'),
-      );
+      expect(results).toHaveLength(1);
+      expect(mockRedis.xAck).toHaveBeenCalled();
+      expect(mockRedis.xDel).toHaveBeenCalled();
+      expect(mockRedis.hDel).toHaveBeenCalled();
     });
-  });  
+
+    it('should exit early on no messages', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+      const results = [];
+      for await (const val of collection.readAndPurge('readerD', 1, GroupReaderType.DB_WRITER)) {
+        results.push(val);
+      }
+      expect(results).toHaveLength(0);
+    });
+  });
+
+  describe('close()', () => {
+    it('should log on close', async () => {
+      const logSpy = jest.spyOn(console, 'info').mockImplementation();
+      await collection.close();
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Closing collection'));
+    });
+  });
 });

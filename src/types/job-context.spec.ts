@@ -3,7 +3,7 @@ import { JobConfig } from './job-config';
 import { FileInfo, DMError, TaskStats, Task, Command, ErroredFile, ErrorType } from './metadata-types';
 import { FileServerDetails } from './file-server';
 import { NFS } from './protocols';
-import { OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from './enums';
+import { GroupReaderType, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from './enums';
 import { error } from 'winston';
 
 class TestJobContext extends JobContext {
@@ -20,6 +20,8 @@ class TestJobContext extends JobContext {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
     };
 
     this.dirsInfo =  {
@@ -33,6 +35,8 @@ class TestJobContext extends JobContext {
         append: jest.fn(),
         read: jest.fn(),
         groupRead: jest.fn(),
+        consumerGroupCount:2,
+        readAndPurge: jest.fn(),
     };
 
     this.errorsInfo =   {
@@ -46,6 +50,8 @@ class TestJobContext extends JobContext {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
     };
 
     this.tasksInfo =  {
@@ -59,6 +65,8 @@ class TestJobContext extends JobContext {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
     };
 
     this.migrateTask =  {
@@ -72,6 +80,8 @@ class TestJobContext extends JobContext {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
     };
 
     this.taskStats =  {
@@ -85,6 +95,8 @@ class TestJobContext extends JobContext {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
     };
 
     
@@ -256,9 +268,10 @@ describe('JobContext Class', () => {
         0,
         0,
         0,
-      );      jest.spyOn(jobContext.filesInfo, 'read').mockReturnValue((async function* () { yield fileInfo; })());
+      );      
+      jest.spyOn(jobContext.filesInfo, 'readAndPurge').mockReturnValue((async function* () { yield fileInfo; })());
       const files = [];
-      for await (const file of jobContext.readFiles('reader1')) {
+      for await (const file of jobContext.readFiles('reader1',10,GroupReaderType.DB_WRITER)) {
         files.push(file);
       }
       expect(files).toEqual([fileInfo]);
@@ -285,7 +298,7 @@ describe('JobContext Class', () => {
       );      
       jest.spyOn(jobContext.filesInfo, 'groupRead').mockReturnValue((async function* () { yield fileInfo; })());
       const files = [];
-      for await (const file of jobContext.groupReadFiles('reader1',10)) {
+      for await (const file of jobContext.groupReadFiles('reader1',10,  GroupReaderType.DB_WRITER)) {
         files.push(file);
       }
       expect(files).toEqual([fileInfo]);
@@ -310,9 +323,9 @@ describe('JobContext Class', () => {
         0,
         0,
       );      
-      jest.spyOn(jobContext.dirsInfo, 'read').mockReturnValue((async function* () { yield dirInfo; })());
+      jest.spyOn(jobContext.dirsInfo, 'readAndPurge').mockReturnValue((async function* () { yield dirInfo; })());
       const dirs = [];
-      for await (const dir of jobContext.readDirs('reader1')) {
+      for await (const dir of jobContext.readDirs('reader1',10,GroupReaderType.DB_WRITER)) {
         dirs.push(dir);
       }
       expect(dirs).toEqual([dirInfo]);
@@ -339,7 +352,7 @@ describe('JobContext Class', () => {
       );
       jest.spyOn(jobContext.dirsInfo, 'groupRead').mockReturnValue((async function* () { yield dirInfo; })());
       const dirs = [];
-      for await (const dir of jobContext.groupReadDirs('reader1',10)) {
+      for await (const dir of jobContext.groupReadDirs('reader1',10, GroupReaderType.DB_WRITER)) {
         dirs.push(dir);
       }
       expect(dirs).toEqual([dirInfo]);
@@ -360,9 +373,9 @@ describe('JobContext Class', () => {
         'tPathId',
         'excludeFilePatterns',
       )        
-      jest.spyOn(jobContext.tasksInfo, 'read').mockReturnValue((async function* () { yield task; })());
+      jest.spyOn(jobContext.tasksInfo, 'readAndPurge').mockReturnValue((async function* () { yield task; })());
       const tasks = [];
-      for await (const t of jobContext.readTasks('reader1')) {
+      for await (const t of jobContext.readTasks('reader1', 10,GroupReaderType.DB_WRITER)) {
         tasks.push(t);
       }
       expect(tasks).toEqual([task]);
@@ -385,7 +398,7 @@ describe('JobContext Class', () => {
       )        
       jest.spyOn(jobContext.tasksInfo, 'groupRead').mockReturnValue((async function* () { yield task; })());
       const tasks = [];
-      for await (const t of jobContext.groupReadTasks('reader1',10)) {
+      for await (const t of jobContext.groupReadTasks('reader1',10, GroupReaderType.DB_WRITER)) {
         tasks.push(t);
       }
       expect(tasks).toEqual([task]);
@@ -394,9 +407,9 @@ describe('JobContext Class', () => {
     it('should read task stats', async () => {
       const jobContext = new TestJobContext('job1');
       const taskStats = new TaskStats("taskStat1");
-      jest.spyOn(jobContext.taskStats, 'read').mockReturnValue((async function* () { yield taskStats; })());
+      jest.spyOn(jobContext.taskStats, 'readAndPurge').mockReturnValue((async function* () { yield taskStats; })());
       const stats = [];
-      for await (const stat of jobContext.readTaskStats('reader1')) {
+      for await (const stat of jobContext.readTaskStats('reader1',  10,GroupReaderType.DB_WRITER)) {
         stats.push(stat);
       }
       expect(stats).toEqual([taskStats]);
@@ -407,7 +420,7 @@ describe('JobContext Class', () => {
       const taskStats = new TaskStats("taskStat1");
       jest.spyOn(jobContext.taskStats, 'groupRead').mockReturnValue((async function* () { yield taskStats; })());
       const stats = [];
-      for await (const stat of jobContext.groupReadTaskStats('reader1',10)) {
+      for await (const stat of jobContext.groupReadTaskStats('reader1',10,GroupReaderType.DB_WRITER)) {
         stats.push(stat);
       }
       expect(stats).toEqual([taskStats]);
@@ -422,9 +435,9 @@ describe('JobContext Class', () => {
         errorType:ErrorType.FATAL_ERROR
       }
       const errorInfo: DMError = new DMError(taskError);
-      jest.spyOn(jobContext.errorsInfo, 'read').mockReturnValue((async function* () { yield errorInfo; })());
+      jest.spyOn(jobContext.errorsInfo, 'readAndPurge').mockReturnValue((async function* () { yield errorInfo; })());
       const errors = [];
-      for await (const error of jobContext.readErrors('reader1')) {
+      for await (const error of jobContext.readErrors('reader1',10,GroupReaderType.DB_WRITER)) {
         errors.push(error);
       }
       expect(errors).toEqual([errorInfo]);
@@ -448,7 +461,7 @@ describe('JobContext Class', () => {
       const errorInfo: DMError = new DMError(taskError,operationError);
       jest.spyOn(jobContext.errorsInfo, 'groupRead').mockReturnValue((async function* () { yield errorInfo; })());
       const errors = [];
-      for await (const error of jobContext.groupReadErrors('reader1',10)) {
+      for await (const error of jobContext.groupReadErrors('reader1',10,GroupReaderType.DB_WRITER)) {
         errors.push(error);
       }
       expect(errors).toEqual([errorInfo]);

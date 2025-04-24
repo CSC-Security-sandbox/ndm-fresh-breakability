@@ -1,5 +1,4 @@
-import { FileInfo, DMError, TaskStats, Task } from './metadata-types';
-import { StreamCollection, FileCollection, ErrorCollection, DirectoryCollection, TaskStatsCollection, TaskCollection } from './stream-collection';
+import { ErrorCollection, FileCollection } from './stream-collection';
 
 describe('StreamCollection Interfaces', () => {
   it('should create a FileCollection instance', () => {
@@ -14,6 +13,9 @@ describe('StreamCollection Interfaces', () => {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
+      
     };
     expect(fileCollection).toBeDefined();
   });
@@ -30,6 +32,9 @@ describe('StreamCollection Interfaces', () => {
       append: jest.fn(),
       read: jest.fn(),
       groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
+      
     };
     expect(errorCollection).toBeDefined();
   });

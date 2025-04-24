@@ -1,3 +1,4 @@
+import { GroupReaderType } from './enums';
 import { JobConfig } from './job-config';
 import { JobState } from './job-state';
 import { DMError, FileInfo, TaskStats, Task } from './metadata-types';
@@ -108,60 +109,60 @@ export abstract class JobContext {
     return await this.updatedTaskInfo.append(task);
   }
 
-  async *readFiles(readerName: string): AsyncGenerator<FileInfo> {
-    yield* this.filesInfo.read(readerName);
+  async *readFiles(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
+    yield* this.filesInfo.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadFiles(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
-    yield* this.filesInfo.groupRead(readerName,batchSize);
+  async *groupReadFiles(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
+    yield* this.filesInfo.groupRead(readerName,batchSize,groupType);
   }
 
-  async *readDirs(readerName: string): AsyncGenerator<FileInfo> {
-    yield* this.dirsInfo.read(readerName);
+  async *readDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
+    yield* this.dirsInfo.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadDirs(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
-    yield* this.dirsInfo.groupRead(readerName,batchSize);
+  async *groupReadDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
+    yield* this.dirsInfo.groupRead(readerName,batchSize,groupType);
   }
 
-  async *readTasks(readerName: string): AsyncGenerator<Task> {
-    yield* this.tasksInfo.read(readerName);
+  async *readTasks(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.tasksInfo.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadTasks(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    yield* this.tasksInfo.groupRead(readerName,batchSize);
+  async *groupReadTasks(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.tasksInfo.groupRead(readerName,batchSize,groupType);
   }
 
-  async *readTaskStats(readerName: string): AsyncGenerator<TaskStats> {
-    yield* this.taskStats.read(readerName);
+  async *readTaskStats(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<TaskStats> {
+    yield* this.taskStats.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadTaskStats(readerName: string,batchSize:number): AsyncGenerator<TaskStats> {
-    yield* this.taskStats.groupRead(readerName,batchSize);
+  async *groupReadTaskStats(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<TaskStats> {
+    yield* this.taskStats.groupRead(readerName,batchSize,groupType);
   }
 
-  async *groupReadMigrationTask(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    yield* this.migrateTask.groupRead(readerName,batchSize);
+  async *groupReadMigrationTask(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.migrateTask.groupRead(readerName,batchSize,groupType);
   }
 
-  async *readMigrationTask(readerName: string): AsyncGenerator<Task> {
-    yield* this.migrateTask.read(readerName);
+  async *readMigrationTask(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.migrateTask.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *readErrors(readerName: string): AsyncGenerator<DMError> {
-    yield* this.errorsInfo.read(readerName);
+  async *readErrors(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<DMError> {
+    yield* this.errorsInfo.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadErrors(readerName: string,batchSize:number): AsyncGenerator<DMError> {
-    yield* this.errorsInfo.groupRead(readerName,batchSize);
+  async *groupReadErrors(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<DMError> {
+    yield* this.errorsInfo.groupRead(readerName,batchSize,groupType);
   }
 
-  async *readUpdatedTaskInfo(readerName: string): AsyncGenerator<Task> {
-    yield* this.updatedTaskInfo.read(readerName);
+  async *readUpdatedTaskInfo(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.updatedTaskInfo.readAndPurge(readerName,batchSize,groupType);
   }
 
-  async *groupReadUpdatedTaskInfo(readerName: string,batchSize:number): AsyncGenerator<Task> {
-    yield* this.updatedTaskInfo.groupRead(readerName,batchSize);
+  async *groupReadUpdatedTaskInfo(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
+    yield* this.updatedTaskInfo.groupRead(readerName,batchSize,groupType);
   }
 
   serialize(): string {

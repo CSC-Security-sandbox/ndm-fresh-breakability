@@ -2,6 +2,7 @@ import { Serializable } from '../types/serializable';
 import { StreamCollection } from '../types/stream-collection';
 import { RedisClientType } from 'redis';
 import { encode, decode } from 'msgpack-lite';
+import { GroupReaderType } from '../types/enums';
 
 
 export class RedisStreamCollection<T extends Serializable>
@@ -12,7 +13,10 @@ export class RedisStreamCollection<T extends Serializable>
   streamKey: string;
   numMessages: number;
   lastId: string;
+  consumerGroupCount: number;
 
+
+  
   constructor(
     jobRunId: string,
     streamKey: string,
@@ -25,30 +29,39 @@ export class RedisStreamCollection<T extends Serializable>
     this.numMessages = numMessages;
     this.lastId = lastId;
     this.redisClient = redisClient;
+    this.consumerGroupCount = Object.values(GroupReaderType).length;
   }
 
   async init(): Promise<void> {
     if (await this.redisClient.exists(this.streamKey)) {
-      await this.cleanup();
+     return
     }
-
-    await this.redisClient.xGroupCreate(this.streamKey, this.jobRunId, '0', {
-      MKSTREAM: true,
-    }).catch(err => {
-      if (err.message.includes('BUSYGROUP')) {
-        console.warn(`Consumer group ${this.jobRunId} already exists`);
-      } else {
-        throw err;
-      }
-    })
-   
-    this.numMessages = 0;
-    this.lastId = '0-0';
+    for( const groupType of Object.values(GroupReaderType)) {
+      await this.redisClient.xGroupCreate(this.streamKey, `${this.jobRunId}-${groupType}`, '0', {
+        MKSTREAM: true,
+      }).catch(err => {
+        if (err.message.includes('BUSYGROUP')) {
+          console.warn(`Consumer group ${this.jobRunId} already exists`);
+        }
+      })
+    }
   }
 
   async cleanup(): Promise<void> {
-    console.info(`Cleaning up stream ${this.streamKey}`);
+    try {
+      for( const groupType of Object.values(GroupReaderType)) {
+      await this.redisClient.xGroupDestroy(this.streamKey, `${this.jobRunId}-${groupType}`);
+        console.info(`→ Consumer group ${this.jobRunId}-${groupType} destroyed`);
+      }
+    } catch (err) {
+        console.warn(`! Could not destroy group: ${err.message}`);
+    }
+    
     await this.redisClient.del(this.streamKey);
+    console.info(`→ Stream ${this.streamKey} deleted`);
+
+    await this.redisClient.del(`${this.streamKey}:ackCounter`);
+    console.info(`→ Ack‑counter hash deleted`);
   }
 
   async close(): Promise<void> {
@@ -72,9 +85,7 @@ export class RedisStreamCollection<T extends Serializable>
 
   async *read(readerName: string): AsyncGenerator<T> {
     const readerLastReadId = await this.redisClient.get(`${this.jobRunId}-${readerName}`);
-    // console.info(`Reader last read id: ${readerLastReadId}`);
     let lastReadId = readerLastReadId || '0';
-    //let numMessagesRead = 0;
     while (true) {
       const results = await this.redisClient.xRead(
         [{ key: this.streamKey, id: lastReadId }],
@@ -85,8 +96,6 @@ export class RedisStreamCollection<T extends Serializable>
           for (const message of result.messages) {
             lastReadId = message.id;
             this.lastId = lastReadId;
-            // console.info(`>> Reading message: ${lastReadId}`);
-            //numMessagesRead++;
             yield decode(Buffer.from(message.message.obj, 'base64'));
           }
         }
@@ -97,67 +106,58 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  async *groupRead(readerName: string, batchSize: number): AsyncGenerator<T> {
-    // console.info(
-    //   `Reading stream: ${this.streamKey}, ${this.jobRunId}, ${readerName}, Batch Size: ${batchSize}`,
-    // );
+  async *groupRead(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {
+    const ackCounterKey = `${this.streamKey}:ackCounter`;
   
-    let lastReadId = '0';
-    let messagesProcessed = 0;
-  
-    while (true) {
-      const results = await this.redisClient.xReadGroup(
-        this.jobRunId,
-        readerName,
-        [{ key: this.streamKey, id: '>' }],
-        { COUNT: 1, BLOCK: 500 },
-      );
-  
-      if (results) {
-        for (const result of results) {
-          for (const message of result.messages) {
-            lastReadId = message.id;
-            this.lastId = lastReadId;
-            // console.info(`>> Reading message: ${lastReadId}`);
-            yield decode(Buffer.from(message.message.obj, 'base64'));
-            messagesProcessed++;
-          }
+    const results = await this.redisClient.xReadGroup(
+      `${this.jobRunId}-${groupType}`,
+      readerName,
+      [{ key: this.streamKey, id: '>' }],
+      { COUNT: batchSize, BLOCK: 500 }
+    );
+    
+    if (!results) {
+      console.info(`>> No messages to read right now`);
+      return;
+    }
+
+
+    for (const { messages } of results) {
+      for (const { id, message } of messages) {
+        const data = decode(Buffer.from(message.obj, 'base64')) as T;
+        yield data;
+        await this.redisClient.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, id);
+        const ackCount = await this.redisClient.hIncrBy(ackCounterKey, id, 1);
+        if (ackCount >= (this.consumerGroupCount || 2)) { 
+          await this.redisClient.xDel(this.streamKey, id);
+          await this.redisClient.hDel(ackCounterKey, id);
+          console.log(`✓ Deleted message ${id} from stream (both consumers ACKed) for ${this.streamKey}`);
         }
-        if (messagesProcessed >= batchSize) {
-          console.info(`>> Batch size met (${messagesProcessed} messages). Acknowledging and exiting.`);
-          await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
-          break;
-        }
-      }else{
-        console.info(`>> No results, thus exiting`);
-        await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
-        break;
       }
+    }
+  }
   
-     
+  async *readAndPurge(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {
+    const results = await this.redisClient.xReadGroup(
+      `${this.jobRunId}-${groupType}`,
+      readerName,        
+      [{ key: this.streamKey, id: '>' }],
+      { COUNT: batchSize, BLOCK: 500 }
+    );
   
-      // console.info('>> No results');
-      // const groupInfo = await this.redisClient.xInfoGroups(this.streamKey);
-      // console.info(`Group info: ${JSON.stringify(groupInfo)}`);
+    if (!results) {
+      console.info(`>> No messages to purge right now`);
+      return;
+    }
   
-      // const consumerGroupInfo = groupInfo.find(
-      //   (group) => group.name === this.jobRunId,
-      // );
-  
-      // if (consumerGroupInfo) {
-      //   console.info(
-      //     `Consumer group ${this.jobRunId} has last delivered ${consumerGroupInfo.lastDeliveredId}`,
-      //   );
-      //   console.info(`Last collection id : ${this.lastId}`);
-  
-      //   if (consumerGroupInfo.lastDeliveredId === this.lastId) {
-      //     console.info(`>> Acking messages: ${lastReadId}`);
-      //     await this.redisClient.xAck(this.streamKey, this.jobRunId, lastReadId);
-      //     break;
-      //   }
-      // } else {
-      //   console.info(`Consumer group ${this.jobRunId} not found.`);
-      // }
+    for (const { messages } of results) {
+      for (const { id, message } of messages) {
+        const data = decode(Buffer.from(message.obj, 'base64')) as T;
+        yield data;
+        await this.redisClient.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, id);
+        await this.redisClient.xDel(this.streamKey, id);
+        await this.redisClient.hDel(`${this.streamKey}:ackCounter`, id);
+      }
     }
   }
 }
