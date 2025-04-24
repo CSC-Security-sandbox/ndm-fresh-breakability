@@ -32,6 +32,7 @@ import { RedisModule } from "src/redis/redis.module";
 import { JobRunService } from "src/jobrun/jobrun.service";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
+import { SyncEmailEntity } from "src/entities/sync-email.entity";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { SendMailService } from "src/utils/send-email";
       IdentityMappingEntity,
       IdentityConfigCrossMappingEntity,
       OperationErrorEntity,
+      SyncEmailEntity
     ]),
     RedisModule,
   ],
