@@ -49,7 +49,11 @@ export const getDestinationPaths = (errorData, destinationPathId) => {
   )?.destination;
 
   if (!destination) {
-    return null;
+    return {
+      truncateDestinationPath: "",
+      destinationPath: "",
+      destination: "",
+    };
   }
 
   return {
@@ -64,10 +68,8 @@ export const getSourcePaths = (errorData, sourcePathId) => {
     ({ source }) => source?.sourcePathId === sourcePathId
   )?.source;
 
-  return source
-    ? {
-        truncateSourcePath: getTruncatedPath(source.path),
-        sourcePath: source.path,
-      }
-    : null;
+  return {
+    truncateSourcePath: getTruncatedPath(source.path) || "",
+    sourcePath: source.path || "",
+  };
 };

@@ -47,7 +47,11 @@ const ActionButtons = ({
     <Box className="flex justify-end gap-3 ml-4">
       {showResumeButton && (
         <Button
-          disabled={isButtonDisabled.RUNNING}
+          disabled={
+            isButtonDisabled.RUNNING ||
+            loadingState[JOB_ACTION_STATUS_ENUM.PAUSE] ||
+            loadingState[JOB_ACTION_STATUS_ENUM.STOP]
+          }
           onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.RESUME)}
           className="w-[152px]"
           isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.RESUME]}
@@ -56,7 +60,11 @@ const ActionButtons = ({
         </Button>
       )}
       <Button
-        disabled={isButtonDisabled.PAUSED}
+        disabled={
+          isButtonDisabled.PAUSED ||
+          loadingState[JOB_ACTION_STATUS_ENUM.STOP] ||
+          loadingState[JOB_ACTION_STATUS_ENUM.RESUME]
+        }
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.PAUSE)}
         className="w-[152px]"
         isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.PAUSE]}
@@ -64,7 +72,11 @@ const ActionButtons = ({
         Pause
       </Button>
       <Button
-        disabled={isButtonDisabled.STOPPED}
+        disabled={
+          isButtonDisabled.STOPPED ||
+          loadingState[JOB_ACTION_STATUS_ENUM.PAUSE] ||
+          loadingState[JOB_ACTION_STATUS_ENUM.RESUME]
+        }
         onClick={() => handleUpdateStatus(JOB_ACTION_STATUS_ENUM.STOP)}
         className="w-[152px]"
         isSubmitting={loadingState[JOB_ACTION_STATUS_ENUM.STOP]}
