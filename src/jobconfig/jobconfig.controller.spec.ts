@@ -7,7 +7,7 @@ import {
   JobConfigDiscoverBulk,
   JobConfigPrecheck,
 } from "./dto/jobdicoverybulk.dto";
-import { JobConfigBulkMigrateRes } from "./jobconfig.types";
+import { JobConfigBulkMigrateFinalResponse } from "./jobconfig.types";
 import { Response } from "express";
 import {
   JobConfigBulkMigrateResStatus,
@@ -88,23 +88,27 @@ describe("JobConfigController", () => {
           sidMapping: undefined,
           gidMapping: undefined,
         };
-
-        const result: JobConfigBulkMigrateRes[] = [
-          {
-            id: "1",
-            jobType: JobType.MIGRATE,
-            status: JobConfigBulkMigrateResStatus.CREATED,
-            sourcePathId: bulkMigrate.migrateConfigs[0].sourcePathId,
-            targetPathId: bulkMigrate.migrateConfigs[0].destinationPathId[0],
-          },
-        ];
-
+      
+        const result: JobConfigBulkMigrateFinalResponse = {
+          jobs: [
+            {
+              id: "1",
+              jobType: JobType.MIGRATE,
+              status: JobConfigBulkMigrateResStatus.CREATED,
+              sourcePathId: bulkMigrate.migrateConfigs[0].sourcePathId,
+              targetPathId: bulkMigrate.migrateConfigs[0].destinationPathId[0],
+            },
+          ],
+        };
+      
         jest.spyOn(service, "createBulkMigrate").mockResolvedValue(result);
-
+      
         const response = await controller.createBulkMigrate(bulkMigrate);
+      
         expect(response).toEqual(result);
         expect(service.createBulkMigrate).toHaveBeenCalledWith(bulkMigrate);
       });
+      
 
       it("should throw BadRequestException if validation fails", async () => {
         const bulkMigrate: BulkMigrateJobConfig = {

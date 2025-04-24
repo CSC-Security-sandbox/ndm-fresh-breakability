@@ -769,7 +769,7 @@ export class JobConfigService {
           .join("");
       const payload = { body: mailBody };
       await this.sendMailService.sendMail(payload);
-      let savedJobConfigsmapData =  savedJobConfigs.map(
+      savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,
