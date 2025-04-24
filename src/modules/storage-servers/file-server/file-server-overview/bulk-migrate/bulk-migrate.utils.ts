@@ -331,3 +331,23 @@ export const handleDownloadTemplate = async (
     notify.error("Failed to downlod the template.");
   }
 };
+
+export const migratePathMapping = (
+  migrationDetails: MigrationDetailsTableConfigurationType[],
+  selectedMountPathsId: string[]
+) => {
+  const migrateConfigNames = [];
+
+  migrationDetails.forEach((detail) => {
+    if (!selectedMountPathsId.includes(String(detail?.id))) return;
+
+    migrateConfigNames.push({
+      sourcePathId: detail.sourcePath.sourcePathId,
+      destinationPathId: [detail.destinationPathDetails.destinationPathId],
+      sourcePathName: detail.sourcePath.sourcePathName,
+      destinationPathName: detail.destinationPathDetails.destinationPathName,
+    });
+  });
+
+  return migrateConfigNames;
+};

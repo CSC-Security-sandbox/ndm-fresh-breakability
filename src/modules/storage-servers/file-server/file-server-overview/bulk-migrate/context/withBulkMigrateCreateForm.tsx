@@ -43,6 +43,7 @@ import {
 import {
   createPathMapping,
   createSelectedMountPathsObject,
+  migratePathMapping,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { Button, useForm, useTable } from "@netapp/bxp-design-system-react";
@@ -395,14 +396,65 @@ export function withBulkMigrateCreateForm(
 
       createBulkMigrateApi(body)
         .unwrap()
-        .then(() => {
-          notify.success(successMessage, 15000);
-          onSuccessfulSubmit?.();
+        .then((migrateResponse) => {
+          const migrateConfigs = migratePathMapping(
+            mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
+            mappingStepForm?.values?.selectedMountPathsId
+          );
+
+          if (migrateResponse?.warnings) {
+            const erroredStatus = handleBulkMigrateWarning(
+              migrateConfigs,
+              migrateResponse
+            );
+            notify.error(erroredStatus);
+          } else {
+            notify.success(successMessage, 15000);
+            onSuccessfulSubmit?.();
+          }
         })
         .catch((err) => {
-          notify.error(err?.message || "Bulk Migrate failed.");
+          notify.error(err?.data?.message || "Bulk Migrate failed.");
           console.error(err);
         });
+    };
+
+    const handleBulkMigrateWarning = (migrateConfigs, migrateResponse) => {
+      const errorItems = [];
+
+      migrateConfigs.forEach(
+        ({
+          sourcePathId,
+          destinationPathId,
+          sourcePathName,
+          destinationPathName,
+        }) => {
+          destinationPathId.forEach((destId) => {
+            const warning = migrateResponse?.warnings.find(
+              ({ sourcePathId: srcId, targetPathId }) =>
+                srcId === sourcePathId && targetPathId === destId
+            );
+
+            if (warning) {
+              errorItems.push(
+                `Source Path: ${sourcePathName} & Destination Path: ${destinationPathName} are failed due to ${warning?.message}`
+              );
+            }
+          });
+        }
+      );
+
+      return formattedMessage(errorItems);
+    };
+
+    const formattedMessage = (errorItems: string[]) => {
+      return (
+        <ul className="list-disc pl-5 space-y-1">
+          {errorItems.map((error: string, index: number) => (
+            <li key={index}>{error}</li>
+          ))}
+        </ul>
+      );
     };
 
     // Migration Table
