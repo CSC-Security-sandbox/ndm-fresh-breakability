@@ -58,11 +58,13 @@ import { JobListingDTO } from "./dto/joblisting.dto";
 import {
   FlattenedCutoverConfig,
   JobConfigBulkCutoverRes,
+  JobConfigBulkMigrateFinalResponse,
   JobConfigBulkMigrateRes,
   PreChecks,
   PreCheckWorkflowOPayload,
   SpeedTestEntry,
   SpeedTestJobRun,
+  workerWithStatus,
 } from "./jobconfig.types";
 import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
@@ -561,16 +563,20 @@ export class JobConfigService {
 
   async createBulkMigrate(
     bulkMigrate: BulkMigrateJobConfig
-  ): Promise<JobConfigBulkMigrateRes[]> {
+  ): Promise<JobConfigBulkMigrateFinalResponse> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
     let parsedMappings: ParsedMapping[] = [];
     let templateType;
     const identityMap = uuidv4();
     const jobConfigIdsToUpdate: any[] = [];
+    const inactiveJobWarnings: {}[] = [];
+    let savedJobConfigsmapData: JobConfigBulkMigrateRes[] = [];
 
     if (!bulkMigrate?.migrateConfigs) {
-      return [];
+      return {
+        jobs: [],
+      };
     }
     if (typeof bulkMigrate?.sidMapping === "string") {
       templateType = TemplateType.SID;
@@ -605,6 +611,35 @@ export class JobConfigService {
           },
         });
 
+        // Check if any existing job is inactive then throw an error
+        if (existingJobConfigs.some(job => job.status === JobStatus.InActive)) {
+          for (const jobConfig of existingJobConfigs) {
+            if (jobConfig.status == JobStatus.InActive) {
+              const sourcePath = await this.volumeRepo.findOne({
+                where: { id: jobConfig.sourcePathId },
+                select: { volumePath: true },
+              });
+               console.log("sourcePath", sourcePath);
+              const targetPath = await this.volumeRepo.findOne({
+                where: { id: jobConfig.targetPathId },
+                select: { volumePath: true },
+              });
+              console.log("targetPath", targetPath);
+              inactiveJobWarnings.push({
+                sourcePathId: jobConfig.sourcePathId,
+                targetPathId: jobConfig.targetPathId,
+                sourcePath: sourcePath?.volumePath,
+                targetPath: targetPath?.volumePath,
+                status: jobConfig.status,
+                message: "Inactive job found. Please reactivate or remove the existing job.",
+              })
+            }
+          }
+          this.logger.warn(inactiveJobWarnings);
+          continue; 
+        }
+        
+        
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
@@ -735,7 +770,7 @@ export class JobConfigService {
           .join("");
       const payload = { body: mailBody };
       await this.sendMailService.sendMail(payload);
-      return savedJobConfigs.map(
+      savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,
@@ -744,8 +779,8 @@ export class JobConfigService {
           targetPathId,
         })
       );
-    } else {
-      if (jobConfigIdsToUpdate.length > 0) {
+    } 
+    if (jobConfigIdsToUpdate.length > 0) {
         await this.updateMappingsWithMap(
           jobConfigIdsToUpdate,
           parsedMappings,
@@ -753,8 +788,11 @@ export class JobConfigService {
           templateType
         );
       }
-      return [];
-    }
+      return {
+        jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
+        warnings: inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
+      };
+    
   }
 
   async createBulkCutover(
@@ -952,33 +990,31 @@ export class JobConfigService {
             pathName: sourceVolume.volumePath,
             destinations: [],
           };
-          const workerIds = new Set<string>(
+        
+          const workerWithStatusSet = new Set<workerWithStatus>(
             sourceVolume.fileServer.workers
-              .filter((worker) =>
-                filterUnhealthyWorkers(worker, helathCheckTimout)
-              )
-              .map((worker) => worker.workerId)
+              .map((worker) => ({
+                workerId: worker.workerId,
+                ishealthy:  filterUnhealthyWorkers(worker, helathCheckTimout), // or whatever the actual status is
+              }))
           );
           config.destinationPathId.forEach((destinationPathId) => {
             const destinationVolume = pathToWorkerMapping.find(
               (p) => p.id === destinationPathId
             );
             if (destinationVolume) {
-              const workers: string[] = [];
+              const workerWithStatus: workerWithStatus[] = [];
               destinationVolume.fileServer.workers
-                .filter((worker) =>
-                  filterUnhealthyWorkers(worker, helathCheckTimout)
-                )
                 .forEach((worker) => {
-                  if (workerIds.has(worker.workerId)) {
-                    workers.push(worker.workerId);
+                  if ([...workerWithStatusSet].some((w) => w.workerId === worker.workerId)) {
+                    workerWithStatus.push({workerId:worker.workerId, ishealthy:filterUnhealthyWorkers(worker, helathCheckTimout)});
                   }
                 });
               preChecks.destinations.push({
                 pathId: destinationPathId,
                 serverId: destinationVolume.fileServer.id,
                 pathName: destinationVolume.volumePath,
-                workers: workers,
+                workers: workerWithStatus,
               });
             }
           });
@@ -1013,123 +1049,6 @@ export class JobConfigService {
     }
   }
 
-  async precheck(data: JobConfigPrecheck) {
-    const traceId: string = uuidv4();
-    try {
-      const serverMappings = new Map();
-      for (const config of data.migrateConfigs) {
-        const pathIds = new Set<string>();
-        const destinationPathIds = config.destinationPathId;
-        pathIds.add(config.sourcePathId);
-        destinationPathIds.forEach((id) => pathIds.add(id));
-        const pathToWorkerMapping = await this.volumeRepo.find({
-          where: { id: In([...pathIds]) },
-          relations: {
-            fileServer: { workers: true },
-          },
-        });
-        const sourceVolume = pathToWorkerMapping.find(
-          (p) => p.id === config.sourcePathId
-        );
-
-        const sourceFileServer = sourceVolume.fileServer;
-
-        let sourceEntry = serverMappings.get(sourceFileServer.id);
-        if (!sourceEntry) {
-          sourceEntry = {
-            sourceServerCredentials: {
-              id: sourceFileServer.id,
-              host: sourceFileServer.host,
-              userName: sourceFileServer.userName,
-              password: sourceFileServer.password,
-              protocol: sourceFileServer.protocol,
-              protocolVersion: sourceFileServer.protocolVersion.replace(
-                /^v/,
-                ""
-              ),
-              serverType: sourceFileServer.serverType,
-            },
-            sourcePaths: [],
-          };
-          serverMappings.set(sourceFileServer.id, sourceEntry);
-        }
-
-        const sourcePathEntry = {
-          pathId: config.sourcePathId,
-          preserveAccessTime: data.preserveAccessTime,
-          mountBasePath: this.configService.get<string>(
-            "app.paths.mountBasePath"
-          ),
-          exportPathName: sourceVolume.volumePath,
-          destinations: [],
-          commonWorkers: [],
-        };
-        for (const destinationPathId of destinationPathIds) {
-          const destinationVolume = pathToWorkerMapping.find(
-            (p) => p.id === destinationPathId
-          );
-          if (!destinationVolume)
-            return {
-              status: "error",
-              erros: ["DESTINATION_PATH_NOT_FOUND"],
-              message: `Destination path ${destinationPathId} not found`,
-            };
-
-          const destinationFileServer = destinationVolume.fileServer;
-
-          sourcePathEntry.destinations.push({
-            destinationPathId,
-            destinationServerCredentials: {
-              id: destinationFileServer.id,
-              host: destinationFileServer.host,
-              userName: destinationFileServer.userName,
-              password: destinationFileServer.password,
-              protocol: destinationFileServer.protocol,
-              protocolVersion: destinationFileServer.protocolVersion.replace(
-                /^v/,
-                ""
-              ),
-              serverType: destinationFileServer.serverType,
-              mountBasePath: this.configService.get<string>(
-                "app.paths.mountBasePath"
-              ),
-              exportPathName: destinationVolume.volumePath,
-            },
-          });
-          sourcePathEntry.commonWorkers = [];
-        }
-        sourceEntry.sourcePaths.push(sourcePathEntry);
-      }
-      const finalResult = Array.from(serverMappings.values());
-
-      this.logger.debug(
-        `[${traceId}] Precheck payload: ${JSON.stringify(finalResult)}`
-      );
-      const startPrecheckWorkPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.PRECHECK + "-" + traceId,
-        taskQueue: "ParentWorkflow-TaskQueue",
-        args: [
-          {
-            traceId: traceId,
-            payload: finalResult,
-            options: new Options(),
-          },
-        ],
-      };
-      const workflow = await this.workFlowService.startWorkflow(
-        WorkFlows.PRECHECK,
-        startPrecheckWorkPayload
-      );
-      return { workflowId: workflow.workflowId };
-    } catch (error) {
-      this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
-      return {
-        status: "error",
-        erros: ["PRECHECK_FAILED"],
-        message: `Failed to perform the precheck: ${error}`,
-      };
-    }
-  }
 
   // ------------  update ---------------- //
   async updateJobConfig(
