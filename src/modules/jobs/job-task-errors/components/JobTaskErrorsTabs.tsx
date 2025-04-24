@@ -58,9 +58,9 @@ const JobTaskErrorsTabs = ({
     } else {
       defaultTab = JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR;
     }
-   
+    
     setCurrentErrorType(defaultTab);
-  },[]);
+  },[errorList]);
   
   return (
     <InnerTab>
