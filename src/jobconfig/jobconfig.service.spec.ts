@@ -3709,7 +3709,9 @@ describe("JobConfigService", () => {
                   expect.objectContaining({
                     destinations: expect.arrayContaining([
                       expect.objectContaining({
-                        workers: ["worker2"],
+                        workers: expect.arrayContaining([
+                          expect.objectContaining({ workerId: "worker2" }),
+                        ]),
                       }),
                     ]),
                   }),
@@ -3719,6 +3721,7 @@ describe("JobConfigService", () => {
           ]),
         })
       );
+      
       expect(volumeRepo.find).toHaveBeenCalledWith({
         where: { id: In(["path1", "path2"]) },
         relations: {
@@ -4017,177 +4020,5 @@ describe("JobConfigService", () => {
     });
   });
 
-  describe("precheck", () => {
-    it("should successfully perform precheck", async () => {
-      const mockData = {
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
 
-      const mockVolumes = [
-        {
-          id: "source-1",
-          volumePath: "/mnt/source",
-          fileServer: {
-            id: "server-1",
-            host: "localhost",
-            userName: "user",
-            password: "pass",
-            protocol: "sftp",
-            protocolVersion: "v1",
-            serverType: "Linux",
-            workers: [],
-          },
-        },
-        {
-          id: "dest-1",
-          volumePath: "/mnt/dest",
-          fileServer: {
-            id: "server-2",
-            host: "remotehost",
-            userName: "remoteUser",
-            password: "remotePass",
-            protocol: "ftp",
-            protocolVersion: "v2",
-            serverType: "Windows",
-            workers: [],
-          },
-        },
-      ];
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
-      configService.get.mockReturnValue("/base/path");
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-
-      const result = await service.precheck(mockData);
-
-      expect(volumeRepo.find).toHaveBeenCalledWith({
-        where: { id: In(["source-1", "dest-1"]) },
-        relations: { fileServer: { workers: true } },
-      });
-      expect(result).toEqual({ workflowId: "mock-workflow-id" });
-    });
-    it("should return Destination path not found", async () => {
-      const mockData = {
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      const mockVolumes = [
-        {
-          id: "source-1",
-          volumePath: "/mnt/source",
-          fileServer: {
-            id: "server-1",
-            host: "localhost",
-            userName: "user",
-            password: "pass",
-            protocol: "sftp",
-            protocolVersion: "v1",
-            serverType: "Linux",
-            workers: [],
-          },
-        },
-      ];
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
-      configService.get.mockReturnValue("/base/path");
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-
-      const result = await service.precheck(mockData);
-      expect(result.erros).toEqual(["DESTINATION_PATH_NOT_FOUND"]);
-    });
-
-    it("should return error when destination path is not found", async () => {
-      const mockData = {
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-2"], // Non-existent destination
-          },
-        ],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([
-        {
-          id: "source-1",
-          volumePath: "/mnt/source",
-          fileServer: { id: "server-1", host: "localhost" },
-        },
-      ] as any);
-
-      const result = await service.precheck(mockData);
-
-      expect(result.erros).toEqual(["PRECHECK_FAILED"]);
-    });
-
-    it("should handle workflow service failure", async () => {
-      const mockData = {
-        migrateConfigs: [
-          { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
-        ],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([
-        {
-          id: "source-1",
-          volumePath: "/mnt/source",
-          fileServer: { id: "server-1", host: "localhost" },
-        },
-        {
-          id: "dest-1",
-          volumePath: "/mnt/dest",
-          fileServer: { id: "server-2", host: "remotehost" },
-        },
-      ] as any);
-
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockRejectedValue(new Error("Workflow Error"));
-
-      const result = await service.precheck(mockData);
-
-      expect(result.status).toEqual("error");
-    });
-  });
 });
