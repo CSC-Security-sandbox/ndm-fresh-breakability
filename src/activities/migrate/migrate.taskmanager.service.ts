@@ -1,7 +1,7 @@
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, JobContext, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, GroupReaderType, JobContext, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
@@ -37,7 +37,7 @@ export class MigrationTaskService{
       const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
       let commands:Command[] = [], ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-      for await (const dir of jobContext.groupReadDirs(`${jobRunId}-worker`, this.pushTaskDirSize)) {
+      for await (const dir of jobContext.readDirs(this.workerId, this.pushTaskDirSize, GroupReaderType.WORKER)) {
         const command = new Command(dir.path, ops, uuid4(), 0);
         commands.push(command);
         if (commands && commands.length >= this.pushTaskDirSize) {
@@ -70,7 +70,7 @@ export class MigrationTaskService{
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadTasks('consumer-1', this.fetchTaskBatch);
+      const tasks = await jobContext.groupReadTasks(this.workerId, this.fetchTaskBatch, GroupReaderType.WORKER);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {
@@ -83,7 +83,7 @@ export class MigrationTaskService{
     const output: FetchScanTaskOutPut = { tasks: [] };
     try {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadMigrationTask('consumer-1', this.fetchTaskBatch);
+      const tasks = await jobContext.groupReadMigrationTask(this.workerId, this.fetchTaskBatch, GroupReaderType.WORKER);
       for await (const task of tasks) output.tasks.push(task);
       return output;
     } catch (error) {

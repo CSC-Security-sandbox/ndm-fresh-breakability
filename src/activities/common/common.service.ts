@@ -6,7 +6,7 @@ import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
 import axios from 'axios';
 import { JobRunStatus } from "../discovery/enums";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import { JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { HttpService } from "@nestjs/axios";
 import { AuthService } from "src/auth/auth.service";
 
@@ -128,13 +128,14 @@ export class CommonActivityService{
 
   async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {
     try {
-      const tasks = await jobContext.groupReadTasks('consumer-1', 1);
+      const tasks = await jobContext.groupReadTasks(this.workerId, 1, GroupReaderType.WORKER);
+      let returnTask = undefined;
       for await (const task of tasks) {
         if(task) {
-          return task;
+          returnTask = task;
         }
       }
-      return undefined;
+      return returnTask;
     } catch (error) {
       this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
       return undefined;
@@ -143,13 +144,14 @@ export class CommonActivityService{
 
   async fetchOneMigrationTask(jobContext: JobContext): Promise<Task | undefined> {
     try {
-      const tasks = await jobContext.groupReadMigrationTask('consumer-1', 1);
+      const tasks = await jobContext.groupReadMigrationTask(this.workerId, 1, GroupReaderType.WORKER);
+      let returnTask = undefined;
       for await (const task of tasks) {
         if(task) {
-          return task;
+          returnTask = task;
         }
       }
-      return undefined;
+      return returnTask;
     } catch (error) {
       this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
       return undefined;

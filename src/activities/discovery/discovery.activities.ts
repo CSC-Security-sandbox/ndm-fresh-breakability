@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, GroupReaderType, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
@@ -35,7 +35,7 @@ export class DiscoveryActivity {
     try {
       const batchSize = 10;
       const jobContext = await this.redisService.getJobContext(traceId);
-      const tasks = await jobContext.groupReadTasks('consumer-1', batchSize);
+      const tasks = await jobContext.groupReadTasks(this.workerId, batchSize, GroupReaderType.WORKER);
       const streamMessages = [];
       for await (const task of tasks) streamMessages.push(task);
       this.logger.log(`[${traceId}] Fetched ${streamMessages.length} tasks.`);
@@ -54,7 +54,7 @@ export class DiscoveryActivity {
       const jobState = await this.commonService.getJobState(traceId);
       const directoryBatchSize = 500;
       let commandsBatch: Command[] = [];
-      for await (const directory of jobContext.groupReadDirs(`${traceId}-worker`, directoryBatchSize)) {
+      for await (const directory of jobContext.readDirs(this.workerId, directoryBatchSize, GroupReaderType.WORKER)) {
         const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
         const command = new Command(directory.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
