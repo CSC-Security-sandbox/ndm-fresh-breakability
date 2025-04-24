@@ -70,7 +70,9 @@ const JobTasks = () => {
     Object.keys(currentFilters).forEach((key: string) => {
       if (currentFilters[key].length > 0) {
         payload[key] = currentFilters[key].map(
-          (row: { label: string; value: string }) => row.value
+          (row: { label: string; value: string }) => {
+            return key === "workerId" ? getWorkersId(row.label) : row.value;
+          }
         );
       }
     });
@@ -83,6 +85,10 @@ const JobTasks = () => {
       if (error?.name === "AbortError") return;
       setError(error);
     }
+  };
+
+  const getWorkersId = (workerName: string) => {
+    return workers?.find((row) => row.workerName === workerName)?.workerId;
   };
 
   useEffect(() => {
@@ -127,7 +133,7 @@ const JobTasks = () => {
       formatter: toTitleCase,
     },
     {
-      accessor: "workerName",
+      accessor: "workerId",
       label: "Worker",
       options: workers?.map((row) => row.workerName),
     },

@@ -106,6 +106,7 @@ export const jobsApi = createApi({
         limit = 10,
         sort,
         order = "asc",
+        workerId = [],
       }) => {
         let url = `tasks?jobRunId=${jobRunId}&limit=${limit}&page=${page}`;
 
@@ -115,6 +116,10 @@ export const jobsApi = createApi({
 
         status.forEach((value: string) => {
           url += `&status=${value}`;
+        });
+
+        workerId.forEach((value: string) => {
+          url += `&workerId=${value}`;
         });
 
         if (sort) {
