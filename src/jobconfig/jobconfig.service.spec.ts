@@ -976,15 +976,7 @@ describe("JobConfigService", () => {
 
     const result = await service.createBulkMigrate(mockBulkMigrate as any);
 
-    expect(result).toEqual([
-      {
-        id: "jobConfigId1",
-        jobType: JobType.MIGRATE,
-        status: "CREATED",
-        sourcePathId: result[0].sourcePathId,
-        targetPathId: result[0].targetPathId,
-      },
-    ]);
+    expect(result).toEqual({"jobs": [{"id": "jobConfigId1", "jobType": "MIGRATE", "sourcePathId": "sourcePath1", "status": "CREATED", "targetPathId": "destinationPath2"}], "warnings": undefined});
     expect(jobConfigRepo.find).toHaveBeenCalledWith({
       where: {
         jobType: JobType.MIGRATE,
@@ -1257,6 +1249,53 @@ describe("JobConfigService", () => {
     );
     expect(identityMappingRepo.save).toHaveBeenCalled();
   });
+  
+  it("should return warnings if inactive job exists", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: "source1",
+          destinationPathId: ["dest1"],
+        },
+      ],
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+        excludeOlderThan: new Date(),
+        skipFile: false,
+      },
+      firstRunAt: new Date(),
+      futureRunSchedule: "0 0 * * *",
+    };
+  
+    const mockExistingJobConfigs = [
+      {
+        id: "job1",
+        sourcePathId: "source1",
+        targetPathId: "dest1",
+        status: "IN_ACTIVE",
+        scheduler: "SCHEDULING",
+      },
+    ];
+  
+    jest.spyOn(jobConfigRepo, "find").mockResolvedValue(mockExistingJobConfigs as any);
+    jest.spyOn(volumeRepo, "findOne").mockResolvedValue(undefined); // since sourcePath and targetPath come as undefined
+  
+    await expect(service.createBulkMigrate(mockBulkMigrate as any)).resolves.toEqual({
+      jobs: [],
+      warnings: [
+        {
+          message: "Inactive job found. Please reactivate or remove the existing job.",
+          sourcePath: undefined,
+          sourcePathId: "source1",
+          status: "IN_ACTIVE",
+          targetPath: undefined,
+          targetPathId: "dest1",
+        },
+      ],
+    });
+  });
+  
 
   it("should delete Redis keys for job runs when keys exist", async () => {
     const mockJobRunIds = [{ id: "jobRunId1" }, { id: "jobRunId2" }];
@@ -1341,7 +1380,7 @@ describe("JobConfigService", () => {
 
     const result = await service.createBulkMigrate(mockBulkMigrate as any);
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({"jobs": [], "warnings": undefined});
     expect(jobConfigRepo.find).not.toHaveBeenCalled();
     expect(jobConfigRepo.update).not.toHaveBeenCalled();
     expect(jobConfigRepo.create).not.toHaveBeenCalled();
@@ -3258,7 +3297,7 @@ describe("JobConfigService", () => {
       } as any;
 
       const result = await service.createBulkMigrate(bulkMigrate);
-      expect(result).toEqual([]);
+      expect(result).toEqual({"jobs": []});
     });
 
     it("should update existing job configurations when found", async () => {
@@ -3319,15 +3358,7 @@ describe("JobConfigService", () => {
 
       expect(jobConfigRepo.create).toHaveBeenCalled();
       expect(jobConfigRepo.save).toHaveBeenCalled();
-      expect(result).toEqual([
-        {
-          id: "new_job1",
-          jobType: JobType.MIGRATE,
-          status: "CREATED",
-          sourcePathId: "src1",
-          targetPathId: "dest1",
-        },
-      ]);
+      expect(result).toEqual({"jobs": [{"id": "new_job1", "jobType": "MIGRATE", "sourcePathId": "src1", "status": "CREATED", "targetPathId": "dest1"}], "warnings": undefined});
     });
 
     it("should handle SID mapping", async () => {
@@ -3359,7 +3390,7 @@ describe("JobConfigService", () => {
     it("should continue when destinationPathId is missing", async () => {
       const bulkMigrate = { migrateConfigs: [{ sourcePathId: "source-1" }] };
       const result = await service.createBulkMigrate(bulkMigrate as any);
-      expect(result).toEqual([]);
+      expect(result).toEqual({"jobs": [], "warnings": undefined});
     });
   });
 

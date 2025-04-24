@@ -16,6 +16,11 @@ export interface JobConfigBulkMigrateRes {
   targetPathId: string;
 }
 
+export interface JobConfigBulkMigrateFinalResponse {
+  jobs: JobConfigBulkMigrateRes[];
+  warnings?: {}[];
+}
+
 export interface JobConfigBulkCutoverRes {
   id: string;
   jobType: JobType;

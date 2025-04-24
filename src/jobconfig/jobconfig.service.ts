@@ -58,6 +58,7 @@ import { JobListingDTO } from "./dto/joblisting.dto";
 import {
   FlattenedCutoverConfig,
   JobConfigBulkCutoverRes,
+  JobConfigBulkMigrateFinalResponse,
   JobConfigBulkMigrateRes,
   PreChecks,
   PreCheckWorkflowOPayload,
@@ -562,16 +563,20 @@ export class JobConfigService {
 
   async createBulkMigrate(
     bulkMigrate: BulkMigrateJobConfig
-  ): Promise<JobConfigBulkMigrateRes[]> {
+  ): Promise<JobConfigBulkMigrateFinalResponse> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
     let parsedMappings: ParsedMapping[] = [];
     let templateType;
     const identityMap = uuidv4();
     const jobConfigIdsToUpdate: any[] = [];
+    const inactiveJobWarnings: {}[] = [];
+    let savedJobConfigsmapData: JobConfigBulkMigrateRes[] = [];
 
     if (!bulkMigrate?.migrateConfigs) {
-      return [];
+      return {
+        jobs: [],
+      };
     }
     if (typeof bulkMigrate?.sidMapping === "string") {
       templateType = TemplateType.SID;
@@ -606,6 +611,35 @@ export class JobConfigService {
           },
         });
 
+        // Check if any existing job is inactive then throw an error
+        if (existingJobConfigs.some(job => job.status === JobStatus.InActive)) {
+          for (const jobConfig of existingJobConfigs) {
+            if (jobConfig.status == JobStatus.InActive) {
+              const sourcePath = await this.volumeRepo.findOne({
+                where: { id: jobConfig.sourcePathId },
+                select: { volumePath: true },
+              });
+               console.log("sourcePath", sourcePath);
+              const targetPath = await this.volumeRepo.findOne({
+                where: { id: jobConfig.targetPathId },
+                select: { volumePath: true },
+              });
+              console.log("targetPath", targetPath);
+              inactiveJobWarnings.push({
+                sourcePathId: jobConfig.sourcePathId,
+                targetPathId: jobConfig.targetPathId,
+                sourcePath: sourcePath?.volumePath,
+                targetPath: targetPath?.volumePath,
+                status: jobConfig.status,
+                message: "Inactive job found. Please reactivate or remove the existing job.",
+              })
+            }
+          }
+          this.logger.warn(inactiveJobWarnings);
+          continue; 
+        }
+        
+        
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
@@ -736,7 +770,7 @@ export class JobConfigService {
           .join("");
       const payload = { body: mailBody };
       await this.sendMailService.sendMail(payload);
-      return savedJobConfigs.map(
+      savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,
@@ -745,8 +779,8 @@ export class JobConfigService {
           targetPathId,
         })
       );
-    } else {
-      if (jobConfigIdsToUpdate.length > 0) {
+    } 
+    if (jobConfigIdsToUpdate.length > 0) {
         await this.updateMappingsWithMap(
           jobConfigIdsToUpdate,
           parsedMappings,
@@ -754,8 +788,11 @@ export class JobConfigService {
           templateType
         );
       }
-      return [];
-    }
+      return {
+        jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
+        warnings: inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
+      };
+    
   }
 
   async createBulkCutover(
