@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-unseal-check
+  namespace: openbao
+spec:
+  schedule: "*/5 * * * *"  
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: openbao-unsealer
+          containers:
+          - name: openbao-unseal
+            image: bitnami/kubectl:latest
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/bash
+            - -c
+            - "cp /scripts/unseal.sh /tmp && chmod +x /tmp/unseal.sh && /tmp/unseal.sh"
+            volumeMounts:
+            - name: unseal-script
+              mountPath: /scripts
+            - name: unseal-keys
+              mountPath: /unseal-keys
+          volumes:
+          - name: unseal-script
+            configMap:
+              name: openbao-unseal-script
+              defaultMode: 0755
+          - name: unseal-keys
+            hostPath:
+              path: /opt/datamigrator/openbao
+              type: Directory
+          restartPolicy: OnFailure

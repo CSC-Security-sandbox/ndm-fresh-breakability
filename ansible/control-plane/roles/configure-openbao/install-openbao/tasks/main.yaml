@@ -25,6 +25,18 @@
   become: yes
   template: src=./templates/openbao-ingress.j2 dest=$HOME/openbao/openbao-ingress.yaml
 
+- name: openbao-unseal-cronjob-configmap template
+  become: yes
+  template: src=./templates/openbao-unseal-cronjob-configmap.j2 dest=$HOME/openbao/openbao-unseal-cronjob-configmap.yaml
+
+- name: openbao-unseal-cronjob template
+  become: yes
+  template: src=./templates/openbao-unseal-cronjob.j2 dest=$HOME/openbao/openbao-unseal-cronjob.yaml
+
+- name: openbao-unseal-rbac template
+  become: yes
+  template: src=./templates/openbao-unseal-rbac.j2 dest=$HOME/openbao/openbao-unseal-rbac.yaml
+
 - name: remove previous installation
   become: yes
   shell: |
@@ -33,6 +45,9 @@
     kubectl delete -f $HOME/openbao/openbao-ingress.yaml
     kubectl delete -f $HOME/openbao/openbao-pv.yaml
     kubectl delete -f $HOME/openbao/openbao-storageclass.yaml
+    kubectl delete -f $HOME/openbao openbao-unseal-cronjob-configmap.yaml
+    kubectl delete -f $HOME/openbao/openbao-unseal-cronjob.yaml
+    kubectl delete -f $HOME/openbao/openbao-unseal-rbac.yaml
     kubectl delete -f $HOME/openbao/openbao-namespace.yaml
   when: openbao_uninstall is defined
   args:
@@ -130,3 +145,12 @@
     - 0
     - 1
     - 2
+
+- name: Deploy OpenBao unseal CronJob, ConfigMap and RBAC
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/openbao/openbao-unseal-rbac.yaml
+    kubectl apply -f $HOME/openbao/openbao-unseal-cronjob-configmap.yaml
+    kubectl apply -f $HOME/openbao/openbao-unseal-cronjob.yaml
+  args:
+    chdir: $HOME
