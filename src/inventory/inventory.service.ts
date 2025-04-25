@@ -99,10 +99,18 @@ export class InventoryService {
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize);
       try {
-        const mappedData = batch.map(item => this.mapSourceToTarget(item, jobRunId, pathId));
-        const inventoryRecords = this.inventoryRepo.create(mappedData);
-        await this.inventoryRepo.save(inventoryRecords);
-        this.logger.log(`Successfully inserted ${inventoryRecords.length} inventory records`);
+        const mappedData = Object.values(
+          batch
+            .map(item => this.mapSourceToTarget(item, jobRunId, pathId))
+            .reduce((acc, curr) => {
+              const key = `${curr.path}|${curr.jobRunId}|${curr.isDirectory}`;
+              acc[key] = curr;
+              return acc;
+            }, {} as Record<string, any>)
+        );
+        
+        const inventoryRecords = await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
+        this.logger.log(`Successfully inserted ${inventoryRecords.raw} inventory records`);
       } catch (err) {
         this.logger.error(`Failed to save inventory records in batch: ${err.message}`, err.stack);
         failedRecords.push(...batch);

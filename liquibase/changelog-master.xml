@@ -38,4 +38,8 @@
     <changeSet id="7009" author="vbikkad">
       <sqlFile path="liquibase/20250325_01_remove_constraint_on_task_errors.sql"/>
    </changeSet>
+    
+    <changeSet id="7010" author="dsseervi">
+      <sqlFile path="liquibase/20250424_01_unique_constrain_for_path_and_jobrunid_column_inventy_table.sql"/>
+   </changeSet>
 </databaseChangeLog>
