@@ -1,3 +1,4 @@
+import { RunningScanTaskCollection, RunningSyncTaskCollection } from 'src/redis/hmap-collection';
 import { JobConfig } from './job-config';
 import { JobState } from './job-state';
 import { DMError, FileInfo, TaskStats, Task } from './metadata-types';
@@ -25,6 +26,9 @@ export abstract class JobContext {
   tasksInfo: TaskCollection;
   updatedTaskInfo :UpdatedTaskCollection
   protected stats: Map<string, number>;
+  runningSyncTask: RunningSyncTaskCollection;
+  runningScanTask: RunningScanTaskCollection;;
+
 
   constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string, jobState?: JobState) {
     this.jobRunId = jobRunId;
@@ -162,6 +166,38 @@ export abstract class JobContext {
 
   async *groupReadUpdatedTaskInfo(readerName: string,batchSize:number): AsyncGenerator<Task> {
     yield* this.updatedTaskInfo.groupRead(readerName,batchSize);
+  }
+
+  async getSyncTask(key: string): Promise<RunningSyncTaskCollection> {
+    return this.runningSyncTask.getValue(key);
+  }
+
+  async getScanTask(key: string): Promise<RunningScanTaskCollection> {
+    return this.runningScanTask.getValue(key);
+  }
+
+  async setSyncTask(key: string, syncTask: RunningSyncTaskCollection): Promise<void> {
+    this.runningSyncTask.setValue(key, syncTask);
+  }
+
+  async setScanTask(key: string, scanTask: RunningScanTaskCollection): Promise<void> {
+    this.runningScanTask.setValue(key, scanTask);
+  }
+
+  async deleteSyncTask(key: string): Promise<void> {
+    await this.runningSyncTask.deleteValue(key);
+  }
+
+  async deleteScanTask(key: string): Promise<void> {
+    await this.runningScanTask.deleteValue(key);
+  }
+
+  async assignScanTaskToSelf(key): Promise<RunningScanTaskCollection | null> {
+    return await this.runningScanTask.assignToSelf(key);
+  }
+
+  async assignSyncTaskToSelf(key): Promise<RunningSyncTaskCollection | null> {
+    return await this.runningSyncTask.assignToSelf(key);
   }
 
   serialize(): string {
