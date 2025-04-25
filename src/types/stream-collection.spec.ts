@@ -15,7 +15,7 @@ describe('StreamCollection Interfaces', () => {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
-      
+      getLength: jest.fn(),
     };
     expect(fileCollection).toBeDefined();
   });
@@ -34,7 +34,7 @@ describe('StreamCollection Interfaces', () => {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
-      
+      getLength: jest.fn(),
     };
     expect(errorCollection).toBeDefined();
   });

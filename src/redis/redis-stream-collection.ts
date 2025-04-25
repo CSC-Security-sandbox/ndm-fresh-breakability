@@ -160,4 +160,13 @@ export class RedisStreamCollection<T extends Serializable>
       }
     }
   }
+
+  async getLength(): Promise<number> {
+    try{
+      return this.redisClient.xLen(this.streamKey);
+    } catch (err) {
+      console.error(`Error getting length of stream: ${err}`, err);
+      return -1;
+    }
+  }
 }

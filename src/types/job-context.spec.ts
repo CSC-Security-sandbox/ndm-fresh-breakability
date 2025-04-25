@@ -22,6 +22,7 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
+      getLength: jest.fn(),
     };
 
     this.dirsInfo =  {
@@ -37,6 +38,7 @@ class TestJobContext extends JobContext {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
     };
 
     this.errorsInfo =   {
@@ -52,6 +54,7 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
+      getLength: jest.fn(),
     };
 
     this.tasksInfo =  {
@@ -67,6 +70,7 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
+      getLength:  jest.fn(),
     };
 
     this.migrateTask =  {
@@ -82,6 +86,7 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
+      getLength:  jest.fn(),
     };
 
     this.taskStats =  {
@@ -97,10 +102,24 @@ class TestJobContext extends JobContext {
       groupRead: jest.fn(),
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
+      getLength:  jest.fn(),
     };
 
-    
-
+    this.updatedTaskInfo =  {
+      jobRunId: 'job1',
+      streamKey: 'stream1',
+      numMessages: 0,
+      lastId: '0-0',
+      init: jest.fn(),
+      cleanup: jest.fn(),
+      close: jest.fn(),
+      append: jest.fn(),
+      read: jest.fn(),
+      groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
+      getLength:  jest.fn(),
+    };
   }
   async init() {}
   async close() {}
@@ -467,4 +486,53 @@ describe('JobContext Class', () => {
       expect(errors).toEqual([errorInfo]);
     });
   });
+
+  describe('Stream Length Test' ,()=>{
+    it('get File stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.filesInfo, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getFilesLength();
+      expect(result).toEqual(0);
+    });
+    it('get Dir stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.dirsInfo, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getDirsLength();
+      expect(result).toEqual(0);
+    });
+    it('get Error stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.errorsInfo, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getErrorsLength();
+      expect(result).toEqual(0);
+    });
+    it('get Task stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.tasksInfo, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getTasksLength();
+      expect(result).toEqual(0);
+    });
+
+    it('get TaskStats stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.taskStats, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getTaskStatsLength();
+      expect(result).toEqual(0);
+    });
+
+    it('get Migration stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.migrateTask, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getMigrationTaskLength();
+      expect(result).toEqual(0);
+    });
+
+    it('get Update Task stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jest.spyOn(jobContext.updatedTaskInfo, 'getLength').mockResolvedValue(0);
+      const result = await jobContext.getUpdatedTaskLength();
+      expect(result).toEqual(0);
+    });
+  });
+
 });

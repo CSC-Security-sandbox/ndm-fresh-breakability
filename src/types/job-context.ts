@@ -165,6 +165,29 @@ export abstract class JobContext {
     yield* this.updatedTaskInfo.groupRead(readerName,batchSize,groupType);
   }
 
+  async getFilesLength(): Promise<number> {
+    return await this.filesInfo.getLength();
+  }
+  async getDirsLength(): Promise<number> {
+    return await this.dirsInfo.getLength();
+  }
+  async getErrorsLength(): Promise<number> {
+    return await this.errorsInfo.getLength();
+  }
+  async getTasksLength(): Promise<number> {
+    return await this.tasksInfo.getLength();
+  }
+  async getTaskStatsLength(): Promise<number> {
+    return await this.taskStats.getLength();
+  }
+  async getMigrationTaskLength(): Promise<number> {
+    return await this.migrateTask.getLength();
+  }
+  async getUpdatedTaskLength(): Promise<number> {
+    return await this.updatedTaskInfo.getLength();
+  }
+
+
   serialize(): string {
     const info = {
       jobRunId: this.jobRunId,

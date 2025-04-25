@@ -1,3 +1,4 @@
+
 import { GroupReaderType } from './enums';
 import { FileInfo, DMError, TaskStats, Task, SpeedTestReadWriteInfo } from './metadata-types';
 import { Serializable } from './serializable';
@@ -21,7 +22,7 @@ export interface StreamCollection<T extends Serializable> {
   read(readerName: string): AsyncGenerator<T>;
   groupRead(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;
   readAndPurge(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;
-
+  getLength(): Promise<number>;
 }
 
 export interface FileCollection extends StreamCollection<FileInfo> {}
