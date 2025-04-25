@@ -457,15 +457,13 @@ customAlertingRules:
           summary: "datamigrator pod is not running"
           description: "A pod in the 'datamigrator' namespace has been in a non-running state (Pending, Failed, or Unknown) for at least 5 minutes."
       - alert: DataMigratorPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="datamigrator"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="datamigrator"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="datamigrator", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="datamigrator", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "datamigrator pod has high CPU usage"
-          description: "A pod in the 'datamigrator' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'datamigrator' namespace is using more than 80% of its CPU request."
       - alert: DataMigratorPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="datamigrator"}[5m])) > 3
         for: 1m
@@ -474,6 +472,14 @@ customAlertingRules:
         annotations:
           summary: "datamigrator pod restarting frequently"
           description: "A pod in the 'datamigrator' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: DataMigratorPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="datamigrator", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="datamigrator", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "datamigrator pod has high memory usage"
+          description: "A pod in the 'datamigrator' namespace is using more than 80% of its memory request."
 
   - name: keycloak-alerts
     rules:
@@ -486,15 +492,13 @@ customAlertingRules:
           summary: "Keycloak pod is not running"
           description: "A pod in the 'keycloak' namespace has been in a non-running state for at least 5 minutes."
       - alert: KeycloakPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="keycloak"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="keycloak"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="keycloak", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="keycloak", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Keycloak pod has high CPU usage"
-          description: "A pod in the 'keycloak' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'keycloak' namespace is using more than 80% of its CPU request."
       - alert: KeycloakPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="keycloak"}[5m])) > 3
         for: 1m
@@ -503,6 +507,14 @@ customAlertingRules:
         annotations:
           summary: "Keycloak pod restarting frequently"
           description: "A pod in the 'keycloak' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: KeycloakPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="keycloak", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="keycloak", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Keycloak pod has high memory usage"
+          description: "A pod in the 'keycloak' namespace is using more than 80% of its memory request."
 
   - name: redis-alerts
     rules:
@@ -515,15 +527,13 @@ customAlertingRules:
           summary: "Redis pod is not running"
           description: "A pod in the 'redis' namespace has been in a non-running state for at least 5 minutes."
       - alert: RedisPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="redis"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="redis"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="redis", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="redis", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Redis pod has high CPU usage"
-          description: "A pod in the 'redis' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'redis' namespace is using more than 80% of its CPU request."
       - alert: RedisPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="redis"}[5m])) > 3
         for: 1m
@@ -532,6 +542,14 @@ customAlertingRules:
         annotations:
           summary: "Redis pod restarting frequently"
           description: "A pod in the 'redis' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: RedisPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="redis", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="redis", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis pod has high memory usage"
+          description: "A pod in the 'redis' namespace is using more than 80% of its memory request."
 
   - name: temporal-alerts
     rules:
@@ -544,15 +562,13 @@ customAlertingRules:
           summary: "Temporal pod is not running"
           description: "A pod in the 'temporal' namespace has been in a non-running state for at least 5 minutes."
       - alert: TemporalPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="temporal"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="temporal"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="temporal", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="temporal", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Temporal pod has high CPU usage"
-          description: "A pod in the 'temporal' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'temporal' namespace is using more than 80% of its CPU request."
       - alert: TemporalPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="temporal"}[5m])) > 3
         for: 1m
@@ -561,6 +577,14 @@ customAlertingRules:
         annotations:
           summary: "Temporal pod restarting frequently"
           description: "A pod in the 'temporal' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: TemporalPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="temporal", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="temporal", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Temporal pod has high memory usage"
+          description: "A pod in the 'temporal' namespace is using more than 80% of its memory request."
 
   - name: grafana-alerts
     rules:
@@ -573,15 +597,13 @@ customAlertingRules:
           summary: "Grafana pod is not running"
           description: "A pod in the 'grafana' namespace has been in a non-running state for at least 5 minutes."
       - alert: GrafanaPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="grafana"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="grafana"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="grafana", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="grafana", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Grafana pod has high CPU usage"
-          description: "A pod in the 'grafana' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'grafana' namespace is using more than 80% of its CPU request."
       - alert: GrafanaPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="grafana"}[5m])) > 3
         for: 1m
@@ -590,6 +612,14 @@ customAlertingRules:
         annotations:
           summary: "Grafana pod restarting frequently"
           description: "A pod in the 'grafana' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: GrafanaPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="grafana", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="grafana", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Grafana pod has high memory usage"
+          description: "A pod in the 'grafana' namespace is using more than 80% of its memory request."
 
   - name: prometheus-alerts
     rules:
@@ -602,15 +632,13 @@ customAlertingRules:
           summary: "Prometheus pod is not running"
           description: "A pod in the 'prometheus' namespace has been in a non-running state for at least 5 minutes."
       - alert: PrometheusPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="prometheus"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="prometheus"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="prometheus", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="prometheus", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Prometheus pod has high CPU usage"
-          description: "A pod in the 'prometheus' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'prometheus' namespace is using more than 80% of its CPU request."
       - alert: PrometheusPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="prometheus"}[5m])) > 3
         for: 1m
@@ -619,6 +647,14 @@ customAlertingRules:
         annotations:
           summary: "Prometheus pod restarting frequently"
           description: "A pod in the 'prometheus' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: PrometheusPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="prometheus", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="prometheus", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus pod has high memory usage"
+          description: "A pod in the 'prometheus' namespace is using more than 80% of its memory request."
 
   - name: fluentbit-alerts
     rules:
@@ -631,15 +667,13 @@ customAlertingRules:
           summary: "Fluentbit pod is not running"
           description: "A pod in the 'fluentbit' namespace has been in a non-running state for at least 5 minutes."
       - alert: FluentbitPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="fluentbit"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="fluentbit"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="fluentbit", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="fluentbit", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Fluentbit pod has high CPU usage"
-          description: "A pod in the 'fluentbit' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'fluentbit' namespace is using more than 80% of its CPU request."
       - alert: FluentbitPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="fluentbit"}[5m])) > 3
         for: 1m
@@ -648,6 +682,14 @@ customAlertingRules:
         annotations:
           summary: "Fluentbit pod restarting frequently"
           description: "A pod in the 'fluentbit' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: FluentbitPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="fluentbit", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="fluentbit", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fluentbit pod has high memory usage"
+          description: "A pod in the 'fluentbit' namespace is using more than 80% of its memory request."
 
   - name: default-alerts
     rules:
@@ -660,15 +702,13 @@ customAlertingRules:
           summary: "Default namespace pod is not running"
           description: "A pod in the 'default' namespace has been in a non-running state for at least 5 minutes."
       - alert: DefaultPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="default"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="default"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="default", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="default", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Default namespace pod has high CPU usage"
-          description: "A pod in the 'default' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'default' namespace is using more than 80% of its CPU request."
       - alert: DefaultPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="default"}[5m])) > 3
         for: 1m
@@ -677,6 +717,14 @@ customAlertingRules:
         annotations:
           summary: "Default namespace pod restarting frequently"
           description: "A pod in the 'default' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: DefaultPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="default", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="default", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Default namespace pod has high memory usage"
+          description: "A pod in the 'default' namespace is using more than 80% of its memory request."
 
   - name: kube-system-alerts
     rules:
@@ -689,15 +737,13 @@ customAlertingRules:
           summary: "kube-system pod is not running"
           description: "A pod in the 'kube-system' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubeSystemPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-system"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-system"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="kube-system", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-system", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "kube-system pod has high CPU usage"
-          description: "A pod in the 'kube-system' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'kube-system' namespace is using more than 80% of its CPU request."
       - alert: KubeSystemPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="kube-system"}[5m])) > 3
         for: 1m
@@ -706,6 +752,14 @@ customAlertingRules:
         annotations:
           summary: "kube-system pod restarting frequently"
           description: "A pod in the 'kube-system' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: KubeSystemPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="kube-system", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-system", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "kube-system pod has high memory usage"
+          description: "A pod in the 'kube-system' namespace is using more than 80% of its memory request."
 
   - name: kube-public-alerts
     rules:
@@ -718,15 +772,13 @@ customAlertingRules:
           summary: "kube-public pod is not running"
           description: "A pod in the 'kube-public' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubePublicPodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-public"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-public"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="kube-public", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-public", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "kube-public pod has high CPU usage"
-          description: "A pod in the 'kube-public' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'kube-public' namespace is using more than 80% of its CPU request."
       - alert: KubePublicPodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="kube-public"}[5m])) > 3
         for: 1m
@@ -735,6 +787,14 @@ customAlertingRules:
         annotations:
           summary: "kube-public pod restarting frequently"
           description: "A pod in the 'kube-public' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: KubePublicPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="kube-public", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-public", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "kube-public pod has high memory usage"
+          description: "A pod in the 'kube-public' namespace is using more than 80% of its memory request."
 
   - name: kube-node-lease-alerts
     rules:
@@ -747,15 +807,21 @@ customAlertingRules:
           summary: "kube-node-lease pod is not running"
           description: "A pod in the 'kube-node-lease' namespace has been in a non-running state for at least 5 minutes."
       - alert: KubeNodeLeasePodHighCPUUsage
-        expr:
-          (100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="kube-node-lease"}[5m]))
-          / sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores{namespace="kube-node-lease"})) > 80
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="kube-node-lease", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-node-lease", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "kube-node-lease pod has high CPU usage"
-          description: "A pod in the 'kube-node-lease' namespace is using more than 80% of its CPU limit."
+          description: "A pod in the 'kube-node-lease' namespace is using more than 80% of its CPU request."
+      - alert: KubeNodeLeasePodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="kube-node-lease", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="kube-node-lease", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "kube-node-lease pod has high memory usage"
+          description: "A pod in the 'kube-node-lease' namespace is using more than 80% of its memory request."
       - alert: KubeNodeLeasePodRestartingTooOften
         expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="kube-node-lease"}[5m])) > 3
         for: 1m
