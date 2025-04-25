@@ -102,6 +102,7 @@ export class WorkerOptionsService {
           updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
           getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
           setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
+          getJobStateWithStreamLoad: this.commonActivityService.getJobStateWithStreamLoad.bind(this.commonActivityService),
         });
       default:
         return undefined;

@@ -17,6 +17,7 @@ export class CommonActivityService{
   readonly pushTaskDirSize: number;
   readonly workerJobServiceUrl: string;
   readonly reportServiceUrl: string;
+  readonly migrationTaskLimit: number;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -28,6 +29,7 @@ export class CommonActivityService{
     this.workerId = this.configService.get('worker.workerId');
     this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
     this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
+    this.migrationTaskLimit = this.configService.get('worker.migrationTaskLimit');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
   }
 
@@ -124,6 +126,13 @@ export class CommonActivityService{
       jobState.isScanCompleted ?? false,
     );
     await this.redisService.setJobContext(traceId, jobContext);
+  }
+
+  async getJobStateWithStreamLoad(traceId: string): Promise<{jobState: JobState, isStreamOverloaded: boolean}> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    const jobState = await jobContext.getJobState();
+    const isStreamOverloaded = await jobContext.getMigrationTaskLength() > this.migrationTaskLimit;
+    return { jobState, isStreamOverloaded };
   }
 
   async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {

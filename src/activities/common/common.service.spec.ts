@@ -39,6 +39,7 @@ describe('CommonActivityService', () => {
     groupReadTasks: jest.fn().mockResolvedValue((async function* () { yield { id: 't1' }; })()),
     groupReadMigrationTask: jest.fn().mockResolvedValue((async function* () { yield { id: 'm1' }; })()),
     jobRunId: jobRunId,
+    getMigrationTaskLength: jest.fn().mockResolvedValue(1),
   });
 
   beforeEach(async () => {
@@ -202,7 +203,14 @@ describe('CommonActivityService', () => {
     });
   });
 
-  describe('setJobState', () => {
+
+  describe('getJobStateWithStreamLoad', () => {
+    it('should return job state with isStreamOverloaded', async () => {
+      await service.getJobStateWithStreamLoad(traceId);
+      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
+    });
+  });
+
 
   describe('fetchOneTask / fetchOneMigrationTask', () => {
     it('should fetch one task successfully', async () => {
@@ -262,5 +270,4 @@ describe('CommonActivityService', () => {
     });
   });
 
-  })
 })

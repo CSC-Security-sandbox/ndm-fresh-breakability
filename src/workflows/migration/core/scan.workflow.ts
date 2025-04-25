@@ -5,6 +5,7 @@ import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { ScanPathOutput } from "src/activities/migrate/migrate.type";
+import { sleep } from '@temporalio/workflow';
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
@@ -24,7 +25,8 @@ const {
     getJobState: getJobStateActivity,
     updateStatus: updateStatusActivity,
     setJobState: setJobStateActivity,
-    updateLastEntry: updateLastEntryActivity
+    updateLastEntry: updateLastEntryActivity,
+    getJobStateWithStreamLoad: getJobStateWithStreamLoadActivity,
 } = wf.proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
  });
@@ -45,7 +47,7 @@ interface ScanWorkflowOutput{
 
 export const syncWorkerListSignal = wf.defineSignal<[string[]]>('syncWorkerList');
 
-export const ScanWorkflow = async ({jobRunId, workers, failedWorkers } : ScanWorkflowInput): Promise<ScanWorkflowOutput> => {
+export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWorkflowInput): Promise<ScanWorkflowOutput> => {
   console.log('Starting MigrateScan ', jobRunId)
   // signal handler for syncWorkerList
   wf.setHandler(syncWorkerListSignal, (workerList: string[]) => {
@@ -56,6 +58,8 @@ export const ScanWorkflow = async ({jobRunId, workers, failedWorkers } : ScanWor
   });
 
   let iteration = 0;
+  let waitingTimeSec = 5;
+  let backoffCoefficient = 1.5;
   
   try {
     await updateStatusActivity({jobRunId, status :JobRunStatus.Running})
@@ -66,18 +70,26 @@ export const ScanWorkflow = async ({jobRunId, workers, failedWorkers } : ScanWor
       iteration++;
 
       log(jobRunId,`Iteration number ${iteration} for scan`)
-      const jobState = await getJobStateActivity(jobRunId)
+      const {jobState, isStreamOverloaded} = await getJobStateWithStreamLoadActivity(jobRunId)
 
-      if(jobState.status === JobRunStatus.Stopped) {
+      if(jobState.status.toString() === JobRunStatus.Stopped) {
         log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
         return { jobRunId, workers, failedWorkers, status: JobRunStatus.Stopped };
       }
 
-      if(jobState.status === JobRunStatus.Paused) {
+      if(jobState.status.toString() === JobRunStatus.Paused) {
         log(jobRunId, `JobRun ${jobRunId} is Paused. Exiting scan workflow.`);
         return { jobRunId, workers, failedWorkers, status: JobRunStatus.Paused };
       }
 
+      if(isStreamOverloaded) {
+        log(jobRunId, `Stream is overloaded. Sleeping ...`);
+        await sleep(1000*waitingTimeSec);
+        waitingTimeSec = Math.min(waitingTimeSec * backoffCoefficient, 100);
+        continue;
+      } 
+
+      waitingTimeSec = 5;
       const outputs: ScanPathOutput[] = await Promise.all(
         workers.map(async() => { 
           return await scanActivity({ jobRunId , failedWorkers})

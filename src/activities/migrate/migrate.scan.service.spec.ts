@@ -74,6 +74,7 @@ describe('MigrationScanService', () => {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
       };
   
       this.dirsInfo =  {
@@ -89,6 +90,7 @@ describe('MigrationScanService', () => {
           groupRead: jest.fn(),
           consumerGroupCount:2,
           readAndPurge: jest.fn(),
+          getLength: jest.fn(),
       };
   
       this.errorsInfo =   {
@@ -104,6 +106,7 @@ describe('MigrationScanService', () => {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
       };
 
       this.appendToErrorList = jest.fn(); // Mock appendToErrorList
@@ -121,6 +124,7 @@ describe('MigrationScanService', () => {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
       };
   
       this.migrateTask =  {
@@ -136,6 +140,7 @@ describe('MigrationScanService', () => {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
       };
   
       this.taskStats =  {
@@ -151,6 +156,7 @@ describe('MigrationScanService', () => {
         groupRead: jest.fn(),
         consumerGroupCount:2,
         readAndPurge: jest.fn(),
+        getLength: jest.fn(),
       };
   
       
