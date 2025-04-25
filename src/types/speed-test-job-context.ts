@@ -12,6 +12,7 @@ import {
   SpeedTestReadWriteCollection,
 
 } from './stream-collection';
+import { GroupReaderType } from './enums';
 
 export abstract class SpeedTestJobContext {
   jobRunId: string;
@@ -127,26 +128,26 @@ export abstract class SpeedTestJobContext {
     yield* this.speedTestReadWritesData.read(readerName);
   }
 
-  async *groupReadFiles(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
-    yield* this.filesInfo.groupRead(readerName,batchSize);
+  async *groupReadFiles(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
+    yield* this.filesInfo.groupRead(readerName,batchSize,groupType);
   }
 
   async *readDirs(readerName: string): AsyncGenerator<FileInfo> {
     yield* this.dirsInfo.read(readerName);
   }
 
-  async *groupReadDirs(readerName: string,batchSize:number): AsyncGenerator<FileInfo> {
+  async *groupReadDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<FileInfo> {
     console.log('[Jobs Lib] Group read dirs -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.dirsInfo.groupRead(readerName,batchSize);
+    yield* this.dirsInfo.groupRead(readerName,batchSize,groupType);
   }
 
   async *readTasks(readerName: string): AsyncGenerator<Task> {
     yield* this.tasksInfo.read(readerName);
   }
 
-  async *groupReadTasks(readerName: string,batchSize:number): AsyncGenerator<Task> {
+  async *groupReadTasks(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
     console.log('[Jobs Lib] Group read tasks -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.tasksInfo.groupRead(readerName,batchSize);
+    yield* this.tasksInfo.groupRead(readerName,batchSize,groupType);
   }
 
 
@@ -155,14 +156,14 @@ export abstract class SpeedTestJobContext {
     yield* this.taskStats.read(readerName);
   }
 
-  async *groupReadTaskStats(readerName: string,batchSize:number): AsyncGenerator<TaskStats> {
+  async *groupReadTaskStats(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<TaskStats> {
     console.log('[Jobs Lib] Group read task stats -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.taskStats.groupRead(readerName,batchSize);
+    yield* this.taskStats.groupRead(readerName,batchSize,groupType);
   }
 
-  async *groupReadMigrationTask(readerName: string,batchSize:number): AsyncGenerator<Task> {
+  async *groupReadMigrationTask(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
     console.log('[Jobs Lib] Group read migration task -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.migrateTask.groupRead(readerName,batchSize);
+    yield* this.migrateTask.groupRead(readerName,batchSize,groupType);
   }
 
   async *readMigrationTask(readerName: string): AsyncGenerator<Task> {
@@ -174,9 +175,9 @@ export abstract class SpeedTestJobContext {
     yield* this.errorsInfo.read(readerName);
   }
 
-  async *groupReadErrors(readerName: string,batchSize:number): AsyncGenerator<DMError> {
+  async *groupReadErrors(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<DMError> {
     console.log('[Jobs Lib] Group read errors -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.errorsInfo.groupRead(readerName,batchSize);
+    yield* this.errorsInfo.groupRead(readerName,batchSize,groupType);
   }
 
   async *readUpdatedTaskInfo(readerName: string): AsyncGenerator<Task> {
@@ -184,9 +185,9 @@ export abstract class SpeedTestJobContext {
     yield* this.updatedTaskInfo.read(readerName);
   }
 
-  async *groupReadUpdatedTaskInfo(readerName: string,batchSize:number): AsyncGenerator<Task> {
+  async *groupReadUpdatedTaskInfo(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<Task> {
     console.log('[Jobs Lib] Group read updated task info -> ', JSON.stringify(readerName), JSON.stringify(batchSize));
-    yield* this.updatedTaskInfo.groupRead(readerName,batchSize);
+    yield* this.updatedTaskInfo.groupRead(readerName,batchSize,groupType);
   }
 
   serialize(): string {

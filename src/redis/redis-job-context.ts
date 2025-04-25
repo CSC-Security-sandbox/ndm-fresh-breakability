@@ -9,12 +9,14 @@ import {
   RedisMigrationTasksCollection,
   RedisTaskCollection,
   RedisTaskStatsCollection,
-  RedisSpeedTestReadWriteCollection
+  RedisSpeedTestReadWriteCollection,
+  RedisUpdatedTasksCollection
 } from './redis-collections';
 import { Logger } from '../utils/logging';
 import { SpeedTestJobContext } from '../types/speed-test-job-context';
 import { SpeedTestJobConfig } from '../types/speed-test-job-config';
 import { RedisHMapCollection } from './redis-hmap-collection';
+
 
 export class RedisJobContext extends JobContext {
   redisClient: RedisClientType;
@@ -37,9 +39,9 @@ export class RedisJobContext extends JobContext {
     this.migrateTask = new RedisMigrationTasksCollection(jobRunId, 0, '0-0', redisClient);
     this.taskStats = new RedisTaskStatsCollection(jobRunId, 0, '0-0', redisClient);
     this.errorsInfo = new RedisErrorCollection(jobRunId, 0, '0-0', redisClient);
-    this.updatedTaskInfo = new RedisTaskCollection(jobRunId, 0, '0-0', redisClient);
     this.runningSyncTask = new RedisHMapCollection(jobRunId, 'runningSyncTask', redisClient);
     this.runningScanTask = new RedisHMapCollection(jobRunId, 'runningScanTask', redisClient);
+    this.updatedTaskInfo = new RedisUpdatedTasksCollection(jobRunId, 0, '0-0', redisClient);
   }
 
   async init(): Promise<void> {

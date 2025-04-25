@@ -6,7 +6,8 @@ import {
   TaskCollection,
   TaskStatsCollection,
   UpdatedTaskCollection,
-  SpeedTestReadWriteCollection
+  SpeedTestReadWriteCollection,
+  MigrationTaskCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
@@ -154,7 +155,7 @@ export class RedisUpdatedTasksCollection
 
 export class RedisMigrationTasksCollection
   extends RedisStreamCollection<Task>
-  implements UpdatedTaskCollection
+  implements MigrationTaskCollection
 {
   constructor(
     jobRunId: string,

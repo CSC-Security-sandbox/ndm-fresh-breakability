@@ -58,3 +58,8 @@ export enum IdentityTypes {
   UID = 'UID',
   GID = 'GID'
 }
+
+export enum GroupReaderType {
+  WORKER = 'worker',
+  DB_WRITER = 'db-writer',
+}
