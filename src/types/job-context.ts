@@ -169,19 +169,19 @@ export abstract class JobContext {
     yield* this.updatedTaskInfo.groupRead(readerName,batchSize,groupType);
   }
 
-  async getSyncTask(key: string): Promise<RunningSyncTaskCollection> {
+  async getSyncTask(key: string): Promise<Task> {
     return this.runningSyncTask.getValue(key);
   }
 
-  async getScanTask(key: string): Promise<RunningScanTaskCollection> {
+  async getScanTask(key: string): Promise<Task> {
     return this.runningScanTask.getValue(key);
   }
 
-  async setSyncTask(key: string, syncTask: RunningSyncTaskCollection): Promise<void> {
+  async setSyncTask(key: string, syncTask: Task): Promise<void> {
     this.runningSyncTask.setValue(key, syncTask);
   }
 
-  async setScanTask(key: string, scanTask: RunningScanTaskCollection): Promise<void> {
+  async setScanTask(key: string, scanTask: Task): Promise<void> {
     this.runningScanTask.setValue(key, scanTask);
   }
 
@@ -193,12 +193,28 @@ export abstract class JobContext {
     await this.runningScanTask.deleteValue(key);
   }
 
-  async assignScanTaskToSelf(key: string): Promise<RunningScanTaskCollection | null> {
+  async assignScanTaskToSelf(key: string): Promise<Task | null> {
     return await this.runningScanTask.assignToSelf(key);
   }
 
-  async assignSyncTaskToSelf(key: string): Promise<RunningSyncTaskCollection | null> {
+  async assignSyncTaskToSelf(key: string): Promise<Task | null> {
     return await this.runningSyncTask.assignToSelf(key);
+  }
+
+  async getAllRunningScanTasks(): Promise<Task[]> {
+    return await this.runningScanTask.getAll();
+  }
+
+  async getAllRunningSyncTasks(): Promise<Task[]> {
+    return await this.runningSyncTask.getAll();
+  }
+
+  async deleteAllScanTasks(): Promise<void> {
+    await this.runningScanTask.deleteAll();
+  }
+
+  async deleteAllSyncTasks(): Promise<void> {
+    await this.runningSyncTask.deleteAll();
   }
 
   async getFilesLength(): Promise<number> {
