@@ -1,0 +1,22 @@
+import { RedisClientType } from "redis";
+import { Serializable } from "src/types/serializable";
+
+export interface WorkerRunningTaskMapCollection<T extends Serializable> {
+    jobRunId: string;
+    mapType: string;
+    redisMapKey: string;
+
+    init(): Promise<void>;
+    cleanup(): Promise<void>;
+    close(): Promise<void>;
+
+    setValue(key: string, value: T): Promise<void>;
+    getAll(): Promise<any>;
+    getValue(key: string): Promise<T | null>;
+    deleteValue(key: string): Promise<void>;
+    deleteAll(): Promise<void>;
+    assignToSelf(key: string): Promise<T | null>;
+}
+
+export interface RunningScanTaskCollection extends WorkerRunningTaskMapCollection<any> {}
+export interface RunningSyncTaskCollection extends WorkerRunningTaskMapCollection<any> {}
