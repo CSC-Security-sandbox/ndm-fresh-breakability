@@ -218,7 +218,7 @@ main() {
     
     setup_metallb
     retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"
-    touch /var/run/boot-microk8s.done
+    touch /var/lib/boot-microk8s.done
     log "MicroK8s cloud init setup completed successfully"
 }
 

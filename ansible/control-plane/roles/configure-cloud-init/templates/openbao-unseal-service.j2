@@ -1,7 +1,7 @@
 [Unit]
 Description=Unseal OpenBao on boot
 After=network-online.target
-ConditionPathExists=/var/run/boot-microk8s.done
+ConditionPathExists=/var/lib/boot-microk8s.done
 
 [Service]
 Type=oneshot
