@@ -1055,6 +1055,8 @@ export class ConfigurationService {
           },
         },
       });
+      const fileServersIds = config.fileServers.map(it=>it.id)
+      await this.volumes.update({fileServerId: In(fileServersIds)}, {reachableCount: 0})     
       for (let fileServer of config.fileServers) {
         await this.volumes.update(
           {
