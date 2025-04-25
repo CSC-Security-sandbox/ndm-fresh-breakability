@@ -193,11 +193,11 @@ export abstract class JobContext {
     await this.runningScanTask.deleteValue(key);
   }
 
-  async assignScanTaskToSelf(key): Promise<RunningScanTaskCollection | null> {
+  async assignScanTaskToSelf(key: string): Promise<RunningScanTaskCollection | null> {
     return await this.runningScanTask.assignToSelf(key);
   }
 
-  async assignSyncTaskToSelf(key): Promise<RunningSyncTaskCollection | null> {
+  async assignSyncTaskToSelf(key: string): Promise<RunningSyncTaskCollection | null> {
     return await this.runningSyncTask.assignToSelf(key);
   }
 
