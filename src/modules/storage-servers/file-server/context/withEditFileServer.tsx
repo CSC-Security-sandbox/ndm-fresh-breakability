@@ -183,7 +183,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
             console.error({ err, level: "Updating config" });
           });
       } catch {
-        notify.error("Failed to save configuration");
+        notify.error("Failed to save configuration.");
       }
     };
 

@@ -41,7 +41,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
         setTableRows(_errorDetails.data);
         setTotalCount(_errorDetails.total || 0);
       } catch (error) {
-        notify.error("Something went wrong");
+        notify.error("Something went wrong.");
         console.error({ error, level: "error listing" });
       }
     })();

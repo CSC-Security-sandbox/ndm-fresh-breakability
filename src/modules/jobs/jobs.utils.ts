@@ -28,6 +28,6 @@ export const handleDownloadReport = async (
     URL.revokeObjectURL(link.href);
   } catch (error) {
     console.error("Failed to download the report:", error);
-    notify.error("Report not generated yet, please try again after some time");
+    notify.error("Report not generated yet, please try again after some time.");
   }
 };

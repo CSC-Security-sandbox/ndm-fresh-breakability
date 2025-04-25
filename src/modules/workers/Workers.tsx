@@ -19,7 +19,7 @@ const Workers = () => {
   };
 
   if (error) {
-    notify.error("Failed to fetch workers");
+    notify.error("Failed to fetch workers.");
     console.error({ error, level: "workers" });
   }
 

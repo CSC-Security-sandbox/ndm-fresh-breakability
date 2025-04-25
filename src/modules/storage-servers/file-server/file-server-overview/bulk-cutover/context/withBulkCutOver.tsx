@@ -118,7 +118,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         notify.success("Bulk Cut Over Job Created Successfully");
         navigate(-1);
       } catch (error) {
-        notify.error("Something went wrong");
+        notify.error("Something went wrong.");
         console.error("ERROR -->", error);
       }
     };
