@@ -1,5 +1,5 @@
 import { CsvService } from "./../csv/csv_export.service";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -19,6 +19,7 @@ import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 
 @Injectable()
 export class JobRunService {
+  private readonly logger = new Logger(JobRunService.name);
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
@@ -49,14 +50,19 @@ export class JobRunService {
       where: { id: id },
       select: ["isReportReady"],
     });
+
+    if (!getLatestReportStatus) {
+      throw new NotFoundException(`Job run not found for id ${id}`);
+    }
+
     const saved = await this.reportsRepo.findOne({
       where: { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
       select: { reportData: true },
     });
     if (saved) {
       const parsedReport = JSON.parse(saved.reportData);
-      if (parsedReport.isReportReady !== getLatestReportStatus.isReportReady) {
-        parsedReport.isReportReady = getLatestReportStatus.isReportReady;
+      if (parsedReport.isReportReady !== getLatestReportStatus?.isReportReady) {
+        parsedReport.isReportReady = getLatestReportStatus?.isReportReady;
         saved.reportData = JSON.stringify(parsedReport);
         await this.reportsRepo.update(
           { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
@@ -73,6 +79,24 @@ export class JobRunService {
         config: { configName: true },
       },
     };
+
+    const reportTypes = await this.reportsRepo
+      .createQueryBuilder('report')
+      .innerJoin('jobrun', 'jobrun', 'jobrun.id = report.job_run_id')
+      .innerJoin('jobconfig', 'jobconfig', 'jobconfig.id = jobrun.job_config_id')
+      .where('report.job_run_id = :jobRunId', { jobRunId: id })
+      .andWhere('jobconfig.job_type = :jobType', { jobType: JobType.CutOver })
+      .andWhere('report.report_type IN (:...types)', {
+        types: [ReportType.COC, ReportType.JOBS_RREPORT],
+      })
+      .select('report.report_type', 'report_type')
+      .groupBy('report.report_type')
+      .getRawMany();
+
+    if (reportTypes.length === 2) {
+      this.logger.log("Both COC & JOBS_REPORT are completed for cutover job");
+      await this.jobRunRepo.update({ id: id }, { isReportReady: true });
+    }
 
     const jobRun: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id },
@@ -104,12 +128,12 @@ export class JobRunService {
     let response: JobRunDetailsResponseDto = {
       ...jobRun,
       jobConfig: {
-        id: jobRun.jobConfig.id,
-        jobType: jobRun.jobConfig.jobType,
+        id: jobRun.jobConfig?.id,
+        jobType: jobRun.jobConfig?.jobType,
         sourceServer: {
-          protocol: jobRun.jobConfig.sourcePath.fileServer.protocol,
-          path: jobRun.jobConfig.sourcePath.volumePath,
-          serverName: jobRun.jobConfig.sourcePath.fileServer.config.configName,
+          protocol: jobRun?.jobConfig?.sourcePath?.fileServer?.protocol,
+          path: jobRun?.jobConfig?.sourcePath?.volumePath,
+          serverName: jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
         },
         destinationServer: {
           protocol: jobRun?.jobConfig?.destinationPath?.fileServer?.protocol,
@@ -118,7 +142,7 @@ export class JobRunService {
             jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,
         },
       },
-      worker: jobRun.worker.length ?? 0,
+      worker: jobRun?.worker?.length ?? 0,
     };
 
     const inventorySummary: InventoryStatusSummary[] = await this.inventoryRepo
@@ -133,20 +157,20 @@ export class JobRunService {
     const jobRunStatus = new JobRunStats();
     for (let i = 0; i < inventorySummary.length; i++) {
       if (inventorySummary[i].isDirectory)
-        jobRunStatus.directories = inventorySummary[i].counts.toString();
+        jobRunStatus.directories = inventorySummary[i].counts?.toString();
       else {
-        jobRunStatus.fileCount = inventorySummary[i].counts.toString();
+        jobRunStatus.fileCount = inventorySummary[i].counts?.toString();
         jobRunStatus.totalSize = formatBytes(
           Number(inventorySummary[i].totalFileSize)
         ).toString();
       }
     }
 
-    if (jobRun.jobConfig.jobType === JobType.Discover)
+    if (jobRun?.jobConfig?.jobType === JobType.Discover)
       response["discovery"] = jobRunStatus;
-    if (jobRun.jobConfig.jobType === JobType.Migrate)
+    if (jobRun?.jobConfig?.jobType === JobType.Migrate)
       response["migrate"] = jobRunStatus;
-    if (jobRun.jobConfig.jobType === JobType.CutOver)
+    if (jobRun?.jobConfig?.jobType === JobType.CutOver)
       response["cutOver"] = jobRunStatus;
 
     const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
@@ -195,7 +219,10 @@ export class JobRunService {
       if (fs.existsSync(filePath)) return filePath;
       await this.csvService.generateCsv(filePath, jobRunId);
 
-      await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+      if (jobRun.jobConfig.jobType !== JobType.CutOver) {
+        this.logger.log("Updating report status for job other than cutover");
+        await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+      }
 
       if (!fs.existsSync(filePath))
         throw new Error(`File not found: ${filePath}`);

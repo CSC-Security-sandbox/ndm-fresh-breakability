@@ -9,14 +9,61 @@ import { ReportsEntity } from 'src/entities/reports.entity';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { CsvService } from 'src/csv/csv_export.service';
 import * as fs from "fs";
+import { Repository } from 'typeorm';
 
 describe('JobRunService', () => {
   let service: JobRunService;
   let mockJobRunRepo;
   let mockInventoryRepo;
   let mockTaskRepo;
-  let mockReportsRepo;
   let mockCsvService;
+
+  const mockCreateQueryBuilder = {
+    innerJoin: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn().mockResolvedValue([
+      { report_type: ReportType.COC },
+      { report_type: ReportType.JOBS_RREPORT },
+    ])
+  };
+
+  const mockReportsRepo = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    update: jest.fn(),
+    createQueryBuilder: jest.fn(() => ({
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          job_run_id: 'run123',
+          report_type: 'JOBS_REPORT',
+          report_data: {
+            stats: { total: 100 },
+          },
+        },
+        {
+          job_run_id: 'run123',
+          report_type: 'COC',
+          report_data: {
+            summary: 'some summary',
+          },
+        },
+      ]),
+      getRawMany: jest.fn().mockResolvedValue([
+        { report_type: ReportType.COC },
+        { report_type: ReportType.JOBS_RREPORT },
+      ])
+    })),
+  };
+
 
   beforeEach(async () => {
     const mockQueryBuilder = {
@@ -24,7 +71,12 @@ describe('JobRunService', () => {
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([]),
+      getRawMany: jest.fn().mockResolvedValue([
+        { report_type: ReportType.COC },
+        { report_type: ReportType.JOBS_RREPORT },
+      ]),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({}),
     };
 
     mockJobRunRepo = {
@@ -40,17 +92,10 @@ describe('JobRunService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
     };
 
-    mockReportsRepo = {
-      findOne: jest.fn(),
-      create: jest.fn(),
-      save: jest.fn(),
-      update: jest.fn(),
-    };
 
     mockCsvService = {
       generateCsv: jest.fn(),
     };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobRunService,
@@ -59,6 +104,10 @@ describe('JobRunService', () => {
         { provide: getRepositoryToken(TaskEntity), useValue: mockTaskRepo },
         { provide: getRepositoryToken(ReportsEntity), useValue: mockReportsRepo },
         { provide: CsvService, useValue: mockCsvService },
+        {
+          provide: getRepositoryToken(ReportsEntity),
+          useValue: mockReportsRepo,
+        },
       ],
     }).compile();
 
@@ -79,7 +128,7 @@ describe('JobRunService', () => {
       const result = await service.jobRunReportByJobRunId(jobRunId, "");
 
       expect(mockReportsRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId , reportType:""},
+        where: { jobRunId, reportType: "" },
         order: { createdAt: "DESC" },
         select: ["reportData"],
       });
@@ -111,19 +160,19 @@ describe('JobRunService', () => {
         jobConfig: {
           id: 'configId',
           jobType: JobType.Discover,
-          sourcePath: { 
-            fileServer: { 
-              protocol: 'http', 
-              config: { configName: 'sourceServer' } 
-            }, 
-            volumePath: '/source' 
+          sourcePath: {
+            fileServer: {
+              protocol: 'http',
+              config: { configName: 'sourceServer' }
+            },
+            volumePath: '/source'
           },
-          destinationPath: { 
-            fileServer: { 
-              protocol: 'ftp', 
-              config: { configName: 'destServer' } 
-            }, 
-            volumePath: '/destination' 
+          destinationPath: {
+            fileServer: {
+              protocol: 'ftp',
+              config: { configName: 'destServer' }
+            },
+            volumePath: '/destination'
           },
         },
         worker: { workerId: 'worker1' },
@@ -158,6 +207,14 @@ describe('JobRunService', () => {
         },
         worker: { workerId: 'worker1' },
       };
+      const mockGetRawMany = [{ count: "1" }]
+      mockInventoryRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockGetRawMany),
+      });
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       const result = await service.getJobStatsId(jobId);
@@ -229,19 +286,33 @@ describe('JobRunService', () => {
 
     it('should throw NotFoundException if job run does not exist', async () => {
       mockJobRunRepo.findOne.mockResolvedValue(null);
-
+    
       await expect(service.getJobStatsId('non-existent-id'))
-        .rejects.toThrow(NotFoundException);
+        .rejects
+        .toThrow(NotFoundException);
     });
+    
+
+    it('should update isReportReady to true if both COC & JOBS_REPORT exist', async () => {
+      mockJobRunRepo.findOne.mockResolvedValue({ ...mockJobRunRepo, isReportReady: false });
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockJobRunRepo.update = jest.fn();
+
+      await service.getJobStatsId(jobId);
+
+      expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobId }, { isReportReady: true });
+    });
+
+
   });
 
   describe('getJobStatsId - Inventory Summary Processing', () => {
     const jobId = '12345';
-  
+
     beforeEach(() => {
       jest.clearAllMocks();
     });
-  
+
     it('should correctly process inventory summary for directories and files', async () => {
       const mockJobRun = {
         id: jobId,
@@ -255,12 +326,12 @@ describe('JobRunService', () => {
         },
         worker: { workerId: 'worker1' },
       };
-  
+
       const mockInventorySummary = [
         { isDirectory: true, counts: '10' },
         { isDirectory: false, counts: '50', totalFileSize: '500000' },
       ];
-  
+
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       mockInventoryRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
@@ -269,7 +340,7 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockInventorySummary),
       });
-  
+
       mockTaskRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
@@ -277,13 +348,13 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
-  
+
       const result = await service.getJobStatsId(jobId);
-  
+
       expect(result.discovery.directories).toBe('10');
       expect(result.discovery.fileCount).toBe('50');
     });
-  
+
     it('should handle case when there are no files or directories', async () => {
       const mockJobRun = {
         id: jobId,
@@ -297,7 +368,7 @@ describe('JobRunService', () => {
         },
         worker: { workerId: 'worker1' },
       };
-  
+
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       mockInventoryRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
@@ -306,7 +377,7 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
-  
+
       mockTaskRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
@@ -314,9 +385,9 @@ describe('JobRunService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
-  
+
       const result = await service.getJobStatsId(jobId);
-  
+
       expect(result.discovery).toBeDefined();
       expect(result.discovery.totalSize).toBe("0");
     });
