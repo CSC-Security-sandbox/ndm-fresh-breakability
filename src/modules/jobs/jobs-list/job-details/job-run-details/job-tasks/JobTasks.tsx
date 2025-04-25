@@ -2,21 +2,23 @@ import { TASK_STATUS_TYPE_ENUM, TASK_TYPE_TYPE_ENUM } from "@/types/app.type";
 import { getGrafanaLogUrl, toTitleCase } from "@/utils/common.utils";
 import { useLazyGetJobTasksQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
+import useFetchWorkers from "@hooks/useFetchWorkers";
+import TaskFilters from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/TaskFilters";
+import { TASKS_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/tasks.constants";
 import {
   Breadcrumbs,
-  Button,
   Notification,
   Table,
   TablePager,
   useTable,
-  Text,
 } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import TaskFilters from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/TaskFilters";
-import { TASKS_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/tasks.constants";
-import { BreadcrumbsArrowIcon } from "@netapp/bxp-style/react-icons/Navigation";
-import useFetchWorkers from "@hooks/useFetchWorkers";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 const JobTasks = () => {
   const [searchParams] = useSearchParams();
@@ -155,25 +157,14 @@ const JobTasks = () => {
   return (
     <Box className="flex flex-col gap-6">
       <Breadcrumbs>
-        <Button onClick={() => navigate("/jobs-list")} variant="text">
-          Jobs
-        </Button>
-        <Button
-          onClick={() => navigate(`/job-details/${jobId}`)}
-          variant="text"
-        >
-          Job Details
-        </Button>
-        <Box className="flex gap-1">
-          <Text>Job Run Details</Text>
-          <BreadcrumbsArrowIcon
-            color="text"
-            size="22"
-            className="relative top-0.5"
-          />
-          <Text>Task Details</Text>
-        </Box>
+        <Link to="/jobs-list">Jobs</Link>
+        <Link to={`/job-details/${jobId}`}>Job Details</Link>
+        <Link to={`/job-details/${jobId}/run/${jobRunId}`}>
+          Job Run Details
+        </Link>
+        <Box>Task Details</Box>
       </Breadcrumbs>
+
       <Box>
         <TaskFilters
           columnsToFilter={columnsToFilter}
