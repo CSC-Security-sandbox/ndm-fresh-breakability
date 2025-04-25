@@ -1220,6 +1220,7 @@ export class JobConfigService {
             volumes: {
               id: true,
               volumePath: true,
+              reachableCount: true,
             },
           },
         },
