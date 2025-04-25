@@ -80,9 +80,16 @@ export class OverviewService {
 
     this.logger.log(`totalFileServers - ${totalFileServers}`);
 
-    let totalDiscoverJobs = 0;
-
     const scanRunDetailsStart = Date.now();
+
+    const totalDiscoverJobs =
+      projectDetails
+        .flatMap((project) => project.configs || [])
+        .flatMap((config) => config.fileServers || [])
+        .flatMap((server) => server.volumes || [])
+        .flatMap((volume) => volume.sourceConfig || [])
+        .find((source) => source.jobType === JobType.Discover)?.jobRuns
+        ?.length || 0;
 
     const scanRunDetails = projectDetails
       ?.flatMap((project) =>
@@ -116,8 +123,6 @@ export class OverviewService {
       `scanRunDetails query took ${scanRunDetailsEnd - scanRunDetailsStart} ms`
     );
     this.logger.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
-
-    totalDiscoverJobs = scanRunDetails?.length ?? 0;
 
     const completedJobRunDetails = scanRunDetails?.filter(
       (jobRun) => jobRun.status === JobRunStatus.Completed
@@ -230,7 +235,7 @@ export class OverviewService {
         totalPendingSize: totalPendingSize,
       },
       jobDetails: {
-        totalDiscoverJobs: totalDiscoverJobs,
+        totalDiscoverJobs,
         totalMigrateJobs: {
           baseLineJob: migrateRun?.length > 0 ? 1 : 0,
           incrementalJob: migrateRun?.length > 1 ? migrateRun.length - 1 : 0,
@@ -242,6 +247,7 @@ export class OverviewService {
     this.logger.log(
       `getStorageAndJobsOverview whole logic took time to execute: ${getStorageAndJobsOverviewEnd - getStorageAndJobsOverviewStart} ms`
     );
+    this.logger.log(`OVERVIEW DATA: ${overViewData} ms`);
     return overViewData;
   }
 }
