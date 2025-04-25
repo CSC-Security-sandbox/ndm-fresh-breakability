@@ -8,6 +8,7 @@ import { CommonActivityService } from '../common/common.service';
 import { basePrefix, dmError, getFileInfo, isFatalError, removePrefix, shouldExcludeOrSkip } from '../utils/utils';
 import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
+import { Context } from '@temporalio/activity';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -33,7 +34,7 @@ export class DiscoveryScanActivity {
         return await fs.promises.readdir(directoryPath);
     }
 
-    async scanActivity({ jobRunId, failedWorkers }: DiscoverPathInput): Promise<DiscoverPathOutput> {
+    async scanTaskActivity({ jobRunId, failedWorkers }: DiscoverPathInput): Promise<DiscoverPathOutput> {
 
         const scanActivityOutput: DiscoverPathOutput = { isFatalErrored: false, noTaskFound: false, taskId: undefined, files: 0, folders: 0 , workerId: this.workerId};
         this.logger.log(`[${jobRunId}] Starting Discovery Scan Activity`);
@@ -46,12 +47,16 @@ export class DiscoveryScanActivity {
             return scanActivityOutput
         }
         
-        const task = await this.commonService.fetchOneTask(jobContext)
+        let task = await jobContext.getScanTask(this.workerId);
+        if(!task) task = await this.commonService.fetchOneTask(jobContext);
+
         this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
         if (!task) {
             scanActivityOutput.noTaskFound = true;
             return scanActivityOutput;
         }
+        await jobContext.setScanTask(this.workerId, task);
+        
         scanActivityOutput.taskId = task.id;
 
         task.workerId = this.workerId;
@@ -78,6 +83,8 @@ export class DiscoveryScanActivity {
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
         this.logger.debug(`[${jobRunId}] Discovery Scan Activity Completed ${JSON.stringify(scanActivityOutput)}`);
+
+        await jobContext.deleteScanTask(this.workerId);
         return scanActivityOutput
     }
 
@@ -108,6 +115,7 @@ export class DiscoveryScanActivity {
                     };
 
                     const scanOutput = await this.scanDirCommand(scanInput);
+
                     scanPath.files += scanOutput.files;
                     scanPath.folders += scanOutput.directory;
                     this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
@@ -120,6 +128,7 @@ export class DiscoveryScanActivity {
                     } else {
                         scanPath.success++;
                         command.status = CommandStatus.COMPLETED;
+                        await jobContext.setScanTask(this.workerId, task);
                     }
                     scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
                 })
@@ -209,5 +218,15 @@ export class DiscoveryScanActivity {
             scanDirOutput.error = error?.code || '';
         }
         return scanDirOutput
+    }
+
+    async scanActivity({ jobRunId, failedWorkers }) {
+        const ctx = Context.current();
+        const interval = setInterval(() => { ctx.heartbeat({ workerId: this.workerId }) }, 10000);
+        try {
+            return this.scanTaskActivity({ jobRunId, failedWorkers });
+        } finally {
+            clearInterval(interval);
+        }
     }
 }

@@ -5,6 +5,7 @@ import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.a
 import { DiscoverPathOutput } from 'src/activities/discovery/discovery.type';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import * as wf from '@temporalio/workflow';
+import { ActivityFailure } from '@temporalio/workflow';
 
 interface DiscoveryWorkflowInput {
   jobRunId: string;
@@ -26,6 +27,7 @@ async function log(traceId: string, message: string) {
 
 const { scanActivity } = proxyActivities<DiscoveryScanActivity>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
 });
 
 const { 
@@ -33,6 +35,7 @@ const {
   discoveryStatusUpdate: updateDiscoveryStatus,
 } = proxyActivities<DiscoveryActivity>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
  });
 
 const { 
@@ -40,8 +43,10 @@ const {
   getJobState: getJobStateActivity,
   updateStatus: updateStatusActivity,
   setJobState: setJobStateActivity,
+  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
 } = proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
  });
 
  export const syncWorkerListSignal = wf.defineSignal<[string[]]>('syncWorkerList');
@@ -63,7 +68,7 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
     await setJobStateActivity(jobRunId, updatedJobState)
     while (true) {
       iteration++;
-      const jobState = await getJobStateActivity(jobRunId);
+      const jobState = await getJobStateAndUpdateTaskList(jobRunId, 'SCAN');
 
       log(jobRunId,`Iteration number ${iteration} for scan | status: ${jobState.status} | workers_agreed: ${jobState.workers_agreed} | isScanCompleted: ${jobState?.isScanCompleted} `);
 
@@ -78,11 +83,15 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
       }
       
       const outputs:DiscoverPathOutput[] = await Promise.all(
-        workers.map(
-          async() => { 
-            return await scanActivity({ jobRunId , failedWorkers})
-          })
-      );
+      workers.map(async(_, index) => {
+        try {
+          return await scanActivity({ jobRunId , failedWorkers })
+        } catch (error) {
+          if (error instanceof ActivityFailure) {
+            console.error('Activity failed.', error);
+          }
+        }
+      }));
 
       // TODO: handle the offline workers 
       let taskNotFoundCount:number = 0;

@@ -128,10 +128,11 @@ export class CommonActivityService{
     await this.redisService.setJobContext(traceId, jobContext);
   }
 
-  async getJobStateWithStreamLoad(traceId: string): Promise<{jobState: JobState, isStreamOverloaded: boolean}> {
+  async getJobStateWithStreamLoad(traceId: string, jobType: 'SCAN' | 'SYNC'): Promise<{jobState: JobState, isStreamOverloaded: boolean}> {
     const jobContext = await this.redisService.getJobContext(traceId);
     const jobState = await jobContext.getJobState();
     const isStreamOverloaded = await jobContext.getMigrationTaskLength() > this.migrationTaskLimit;
+    await this.publishPendingTasksToStream(jobContext, jobType);
     return { jobState, isStreamOverloaded };
   }
 
@@ -167,4 +168,26 @@ export class CommonActivityService{
     }
   }
 
+  async getJobStateAndUpdateTaskList(traceId: string, jobType: 'SCAN' | 'SYNC'): Promise<any> {
+    const jobContext = await this.redisService.getJobContext(traceId);
+    await this.publishPendingTasksToStream(jobContext, jobType);
+    return await jobContext.getJobState();
+  }
+
+  async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
+    if(jobType === 'SCAN') {
+      const runningScanTasks = await jobContext.getAllRunningScanTasks();
+      if(!!runningScanTasks && runningScanTasks.length > 0) {
+        for (const task of runningScanTasks) if(!task) await jobContext.appendToTaskList(task);
+        await jobContext.deleteAllScanTasks();
+      }
+    }
+    if(jobType === 'SYNC') {
+      const runningSyncTasks = await jobContext.getAllRunningSyncTasks();
+      if(!!runningSyncTasks && runningSyncTasks.length > 0) {
+        for (const task of runningSyncTasks) if(!task) await jobContext.appendToMigrationTask(task);
+        await jobContext.deleteAllSyncTasks();
+      }
+    }
+  }
 }

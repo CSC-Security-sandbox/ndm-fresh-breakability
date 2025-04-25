@@ -9,6 +9,7 @@ import { CommonActivityService } from "../common/common.service";
 import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { Operation, Origin } from "../utils/utils.types";
 import { PublishMigrationTaskInput, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
+import { Context } from '@temporalio/activity';
 
 
 @Injectable()
@@ -120,7 +121,7 @@ export class MigrationScanService {
         return syncContentOutput;
     }
 
-    async scanPath({ jobRunId, failedWorkers }: ScanPathInput): Promise<ScanPathOutput> {
+    async scanPathActivity({ jobRunId, failedWorkers }: ScanPathInput): Promise<ScanPathOutput> {
         const scanPath: ScanPathOutput = { workerId: this.workerId, isTaskCreated: false, errors: new Set<string>(), success: 0, error: 0, retryCount : 0 , isFatal: false, noTaskFound: false, files: 0, folders: 0 };
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
         if(failedWorkers.includes(this.workerId)) {
@@ -129,13 +130,15 @@ export class MigrationScanService {
             this.logger.debug(`[${jobRunId}] Worker already failed => ${this.workerId}`);
             return scanPath
         }
-        const task  = await this.commonService.fetchOneTask(jobContext) 
+        let task = await jobContext.getScanTask(this.workerId);
+        if(!task) task = await this.commonService.fetchOneTask(jobContext);
        
         if(!task) {
             scanPath.noTaskFound = true;
             this.logger.debug(`[${jobRunId}] No task found`);
             return scanPath;
         }
+        await jobContext.setScanTask(this.workerId, task);
 
         this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
@@ -198,6 +201,7 @@ export class MigrationScanService {
                     } else {
                         scanPath.success++;
                         command.status = CommandStatus.COMPLETED;
+                        await jobContext.setScanTask(this.workerId, task);
                     }
                     scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
                 })
@@ -243,6 +247,7 @@ export class MigrationScanService {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
         await this.redisService.setJobContext(task.jobRunId, jobContext);
+        await jobContext.deleteScanTask(this.workerId);
         return scanPath;
     }
 
@@ -272,5 +277,13 @@ export class MigrationScanService {
         return undefined;
     }
 
-   
+    async scanPath({ jobRunId, failedWorkers }: ScanPathInput): Promise<ScanPathOutput> {
+        const ctx = Context.current();
+        const interval = setInterval(() => { ctx.heartbeat({ workerId: this.workerId }) }, 10000);
+        try {
+            return this.scanPathActivity({ jobRunId, failedWorkers });
+        } finally {
+            clearInterval(interval);
+        }
+    }
 }

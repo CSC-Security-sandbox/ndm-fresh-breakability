@@ -23,7 +23,7 @@ interface SyncWorkflowOutput{
 
 const {
     syncTask: SyncContentActivity
-} = proxyActivities<MigrationSyncService>({ startToCloseTimeout: '5h' });
+} = proxyActivities<MigrationSyncService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
 
 
 const {
@@ -31,7 +31,8 @@ const {
     updateLastEntry: updateLastEntryActivity,
     getJobState: getJobStateActivity,
     setJobState: setJobStateActivity,
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', });
+    getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m',});
   
 
 async function log(traceId: string, message: string) {
@@ -63,7 +64,7 @@ export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanComp
     try {
         while (true) {
             iteration++;
-            const jobState = await getJobStateActivity(jobRunId)
+            const jobState = await getJobStateAndUpdateTaskList(jobRunId, 'SYNC')
 
             log(jobRunId,`Iteration number ${iteration} for scan | status: ${jobState.status} | workers_agreed: ${workers} | isScanCompleted: ${jobState?.isScanCompleted} `);
 
@@ -79,7 +80,13 @@ export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanComp
         
             const outputs:SyncTaskOutput[] = await Promise.all(
                 workers.map(async() => { 
-                    return await SyncContentActivity({ jobRunId , failedWorkers})
+                    try {
+                        return await SyncContentActivity({ jobRunId , failedWorkers})
+                    } catch (error) {
+                        if (error instanceof wf.ActivityFailure) {
+                            console.error('Activity failed.', error);
+                        }
+                    }
                 })
             );
 

@@ -58,7 +58,7 @@ export class DiscoveryActivity {
         const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
         const command = new Command(directory.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
-        this.logger.log(`[${traceId}] Task created for publishing.`)
+        // this.logger.log(`[${traceId}] Task created for publishing.`)
         if (commandsBatch && commandsBatch.length >= directoryBatchSize) {
           const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
           const id = await jobContext.appendToTaskList(task);

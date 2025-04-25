@@ -80,6 +80,7 @@ export class WorkerOptionsService {
             networkPerformanceActivity: this.speedTestReadActivity.networkPerformanceActivity.bind(this.speedTestReadActivity),
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
+            getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -103,6 +104,7 @@ export class WorkerOptionsService {
           getJobState: this.commonActivityService.getJobState.bind(this.commonActivityService),
           setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
           getJobStateWithStreamLoad: this.commonActivityService.getJobStateWithStreamLoad.bind(this.commonActivityService),
+          getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
         });
       default:
         return undefined;

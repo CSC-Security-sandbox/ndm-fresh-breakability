@@ -12,6 +12,7 @@ import { ShellService } from '../common/shell.service';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
 import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
+import { Context } from '@temporalio/activity';
 
 
 @Injectable()
@@ -256,7 +257,7 @@ export class MigrationSyncService {
     return syncOperation ;
   }
 
-  async syncTask({ jobRunId , failedWorkers}: SyncTaskInput): Promise<SyncTaskOutput> {
+  async syncTaskActivity({ jobRunId , failedWorkers}: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncTask: SyncTaskOutput = { errors: new Set<string>(), success: 0, error: 0, retryCount : 0, isFatal: false, noTaskFound: false, workerId: this.workerId };
     const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
     
@@ -267,11 +268,13 @@ export class MigrationSyncService {
       return syncTask
     }
     
-    const task  = await this.commonService.fetchOneMigrationTask(jobContext) 
+    let task  = await jobContext.getSyncTask(this.workerId);
+    if(!task) task = await await this.commonService.fetchOneMigrationTask(jobContext);
     if(!task) {
       syncTask.noTaskFound = true;
       return syncTask;
     }
+    await jobContext.setSyncTask(this.workerId, task);
   
     this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
@@ -279,6 +282,7 @@ export class MigrationSyncService {
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
         task.commands[i].status = CommandStatus.IN_PROCESS
+
 
     this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
     
@@ -324,6 +328,7 @@ export class MigrationSyncService {
                   jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);
                   jobContext.filesInfo.numMessages++;
                   command.status = CommandStatus.COMPLETED;
+                  await jobContext.setSyncTask(this.workerId, task);
                   syncTask.success++;
   
                   await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -368,6 +373,7 @@ export class MigrationSyncService {
       jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
     }
     await this.redisService.setJobContext(task.jobRunId, jobContext);
+    await jobContext.deleteSyncTask(this.workerId);
     return syncTask;
   }
 
@@ -403,5 +409,14 @@ export class MigrationSyncService {
     const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
     return await this.shellService.runCommand(getSIDCommand);
   }
-  
+
+  async syncTask({ jobRunId , failedWorkers}: SyncTaskInput): Promise<SyncTaskOutput> {
+    const ctx = Context.current();
+    const interval = setInterval(() => { ctx.heartbeat({ workerId: this.workerId }) }, 10000);
+    try {
+        return this.syncTaskActivity({ jobRunId, failedWorkers });
+    } finally {
+        clearInterval(interval);
+    }
+  }
 }

@@ -13,12 +13,14 @@ async function log(traceId: string, message: string) {
 
 const { scanPath: scanActivity } = proxyActivities<MigrationScanService>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
  });
 
 const {
     publishScanTask: publishTaskActivity,  
 } = proxyActivities<MigrationTaskService>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
  });
 
 const {
@@ -27,8 +29,10 @@ const {
     setJobState: setJobStateActivity,
     updateLastEntry: updateLastEntryActivity,
     getJobStateWithStreamLoad: getJobStateWithStreamLoadActivity,
+    getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
 } = wf.proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
+  heartbeatTimeout: '2m',
  });
    
 interface ScanWorkflowInput {
@@ -70,7 +74,7 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
       iteration++;
 
       log(jobRunId,`Iteration number ${iteration} for scan`)
-      const {jobState, isStreamOverloaded} = await getJobStateWithStreamLoadActivity(jobRunId)
+      const {jobState, isStreamOverloaded} = await getJobStateWithStreamLoadActivity(jobRunId, 'SCAN')
 
       if(jobState.status.toString() === JobRunStatus.Stopped) {
         log(jobRunId, `JobRun ${jobRunId} is stopped. Exiting scan workflow.`);
@@ -92,7 +96,13 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
       waitingTimeSec = 5;
       const outputs: ScanPathOutput[] = await Promise.all(
         workers.map(async() => { 
-          return await scanActivity({ jobRunId , failedWorkers})
+          try {
+            return await scanActivity({ jobRunId , failedWorkers })
+          } catch (error) {
+            if (error instanceof wf.ActivityFailure) {
+              console.error('Activity failed.', error);
+            }
+          }
         })
       );
       
