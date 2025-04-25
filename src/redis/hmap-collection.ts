@@ -1,7 +1,7 @@
 import { RedisClientType } from "redis";
 import { Serializable } from "src/types/serializable";
 
-export interface HMapCollection<T extends Serializable> {
+export interface WorkerRunningTaskMapCollection<T extends Serializable> {
     jobRunId: string;
     mapType: string;
     redisMapKey: string;
@@ -18,5 +18,5 @@ export interface HMapCollection<T extends Serializable> {
     assignToSelf(key: string): Promise<T | null>;
 }
 
-export interface RunningScanTaskCollection extends HMapCollection<any> {}
-export interface RunningSyncTaskCollection extends HMapCollection<any> {}
+export interface RunningScanTaskCollection extends WorkerRunningTaskMapCollection<any> {}
+export interface RunningSyncTaskCollection extends WorkerRunningTaskMapCollection<any> {}
