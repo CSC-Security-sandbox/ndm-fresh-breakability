@@ -1,0 +1,1 @@
+ALTER TABLE inventory ADD CONSTRAINT uq_path_job_run_id_is_directory UNIQUE (path, job_run_id, is_directory);
