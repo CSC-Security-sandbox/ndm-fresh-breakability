@@ -52,7 +52,7 @@ const Legends = ({
       <MetricItemAdvance
         label={title}
         value={value || 0}
-        unit={unit && unit.toUpperCase()}
+        unit={unit === "Bytes" ? unit : (unit || "").toUpperCase()}
         valueTooltip={valueTooltip}
       />
     </Box>
