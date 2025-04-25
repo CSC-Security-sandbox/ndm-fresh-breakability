@@ -56,7 +56,7 @@ export class DiscoveryService {
         throw new Error("No report data found");
       }
 
-      const reportData = JSON.parse(latestReport[0].reportData);
+      const reportData = JSON.parse(latestReport[0]?.reportData);
 
       const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
       const csvFilePath = path.join(this.reportsDirectory, csvFileName);
@@ -80,13 +80,15 @@ export class DiscoveryService {
 
   generateHtmlTable(data: any[]): string {
     const categories: { [key: string]: any[] } = {};
-    data.forEach((entry) => {
-      const category = entry.category;
-      if (!categories[category]) {
-        categories[category] = [];
-      }
-      categories[category].push(entry);
-    });
+    if (data && data.length > 0) {
+      data.forEach((entry) => {
+          const category = entry.category;
+          if (!categories[category]) {
+            categories[category] = [];
+          }
+          categories[category].push(entry);
+      });
+    }
     let htmlString = `
       <html>
       <head>
@@ -186,19 +188,21 @@ export class DiscoveryService {
  formatAndWriteToFile(reportData: any[], filePath: string) {
   const predefinedHeaders = Object.values(ReportHeaders);
   const dynamicHeaders = new Set<string>();
-
-  reportData.forEach((entry) => {
-      const subCategory = entry.sub_category;
-      if (subCategory && !predefinedHeaders.includes(subCategory)) {
-          dynamicHeaders.add(subCategory);
-      }
-  });
+      if (reportData && reportData.length > 0) {
+      reportData.forEach((entry) => {
+          const subCategory = entry.sub_category;
+          if (subCategory && !predefinedHeaders.includes(subCategory)) {
+              dynamicHeaders.add(subCategory);
+          }
+      });
+    }
 
   const allHeaders = [...predefinedHeaders, ...Array.from(dynamicHeaders)];
 
   const row: string[] = [];
   allHeaders.forEach((header) => {
       let value = "";
+      if (reportData && reportData.length > 0) {
       reportData?.forEach((entry) => {
           if (header in entry) {
               value = entry[header] !== undefined ? entry[header]?.toString() : "";
@@ -206,6 +210,7 @@ export class DiscoveryService {
               value = entry?.value !== undefined ? entry?.value?.toString() : "";
           }
       });
+    }
       row.push(value);
   });
 
@@ -226,7 +231,6 @@ export class DiscoveryService {
         `Reports directory does not exist: ${this.reportsDirectory}`
       );
     }
-
     for (const jobRunId of jobRunIds) {
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
       const filePath = path.join(this.reportsDirectory, fileName);
