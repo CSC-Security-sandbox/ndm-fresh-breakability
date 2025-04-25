@@ -2,9 +2,9 @@
 
 import { RedisClientType } from "redis";
 import { Serializable } from "src/types/serializable";
-import { HMapCollection } from "./hmap-collection";
+import { WorkerRunningTaskMapCollection } from "./hmap-collection";
 
-export class RedisHMapCollection<T extends Serializable> implements HMapCollection<T> {
+export class RedisHMapCollection<T extends Serializable> implements WorkerRunningTaskMapCollection<T> {
     jobRunId: string;
     mapType: string;
     redisClient: RedisClientType;
