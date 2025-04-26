@@ -10,14 +10,12 @@ const fs = require('fs').promises;
 export class PrecheckActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
-  readonly checkAvailableDiskSpace: boolean;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
-    this.checkAvailableDiskSpace = this.configService.get('worker.checkAvailableDiskSpace');
   }
 
   async preCheckPath(settings: Settings, serverCredentials: ServerCredential, serverPaths: WorkerTaskPaths, traceId): Promise<PreCheckPathOutput> {
@@ -139,7 +137,7 @@ export class PrecheckActivity {
         );
       }
 
-      if (!serverPaths.isSource && this.checkAvailableDiskSpace) {
+      if (!serverPaths.isSource) {
         const spacePayload = {
           ...protocolPayload,
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`

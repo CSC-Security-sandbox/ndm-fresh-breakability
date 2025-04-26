@@ -68,8 +68,6 @@ describe('PrecheckActivity', () => {
             return 'test-worker-id';
           case 'worker.baseWorkingPath':
             return '/base/working/path';
-          case 'worker.checkAvailableDiskSpace':
-            return 'true';
           default:
             return null;
         }

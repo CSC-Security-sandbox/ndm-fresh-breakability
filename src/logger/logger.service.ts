@@ -45,13 +45,13 @@ export class Logger implements LoggerService {
       host: process.env.FLUENT_HOST || '192.168.64.189',
       port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
       timeout: 3.0,
-      reconnectInterval: 6000,
+      reconnectInterval: 60000,
       security: {
         clientHostname: process.env.FLUENT_CLIENT_HOST || 'worker-client',
         sharedKey:
           process.env.FLUENT_SHARED_KEY || 'secure_communication_is_awesome',
       },
-      requireAckResponse: true,
+      requireAckResponse: false,
     };
 
     const fluentTransport = fluentSupport.winstonTransport();
