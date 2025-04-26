@@ -3151,8 +3151,24 @@ describe("JobConfigService", () => {
       it("should return correct counts for different job statuses", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
         const mockSeverityMessages = [
-          { id: 1, incidentStatus: 'OPEN' },
-          { id: 2, incidentStatus: 'OPEN' }
+          {
+            mailContent: {
+              alerts: [
+                {
+                  annotations: { description: 'Pod crash in default namespace' },
+                },
+              ],
+            },
+          },
+          {
+            mailContent: {
+              alerts: [
+                {
+                  annotations: { description: 'DB connection failure' },
+                },
+              ],
+            },
+          },
         ];
 
         jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
@@ -3181,6 +3197,7 @@ describe("JobConfigService", () => {
 
         (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
           return {
+            select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
             getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
           } as any;
@@ -3193,7 +3210,10 @@ describe("JobConfigService", () => {
           countBlockedCutoverJobRuns: 5,
           countRecentJobConfigs: 4,
           countCompletedJobRuns: 5,
-          severityMessages: mockSeverityMessages,
+          severityMessages: [
+            "Pod crash in default namespace",
+            "DB connection failure",
+          ],
         });
     
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
@@ -3227,6 +3247,7 @@ describe("JobConfigService", () => {
     
         (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
           return {
+            select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
             getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
           } as any;
