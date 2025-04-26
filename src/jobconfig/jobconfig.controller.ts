@@ -8,7 +8,7 @@ import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
-import { JobConfigBulkCutoverRes, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
+import { JobConfigBulkCutoverRes, JobConfigBulkMigrateFinalResponse, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
@@ -70,7 +70,7 @@ export class JobConfigController {
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/bulk-migrate')
-  async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateRes[]> {
+  async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateFinalResponse> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
   }
 
