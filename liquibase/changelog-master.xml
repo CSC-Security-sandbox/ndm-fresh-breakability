@@ -74,4 +74,8 @@
       <sqlFile path="liquibase/20250410_proc_updated_for_capacity_job_report.sql" splitStatements="false"/>
    </changeSet>
 
+     <changeSet id="9017" author="singhlalit">
+      <sqlFile path="liquibase/20250427_proc_updated_for_capacity_job_report_with_db_mb.sql" splitStatements="false"/>
+   </changeSet>
+
 </databaseChangeLog>
