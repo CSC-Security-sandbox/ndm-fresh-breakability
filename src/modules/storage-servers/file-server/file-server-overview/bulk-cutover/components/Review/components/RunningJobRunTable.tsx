@@ -18,7 +18,7 @@ const RunningJobRunTable = () => {
   } = useContext(BulkCutOverContext);
 
   return (
-    <Box className="px-8 mt-3">
+    <Box className="mt-3">
       <ActionButtons selectedRowIds={reviewStepSelectedIds} rows={jobRunList} />
 
       <TableWrapperWithoutFilter

@@ -104,6 +104,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         isRowSelecting: true,
         isSorting: true,
         pageSize: 10,
+        defaultSortState: { sortOrder: "desc", column: "startTime" },
       });
 
     // CONFORMATION FORM (BOTH STEP)
