@@ -29,7 +29,8 @@
         "fieldConfig": {
           "defaults": {
             "color": {
-              "mode": "continuous-RdYlGr"
+              "fixedColor": "dark-orange",
+              "mode": "shades"
             },
             "custom": {
               "axisBorderShow": false,
