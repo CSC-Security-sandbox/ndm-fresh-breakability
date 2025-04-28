@@ -26,7 +26,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- 2. Then create the jobs_report_data_v2 procedure
 
 CREATE OR REPLACE PROCEDURE jobs_report_data_v2(
     IN job_run_id_param UUID,
@@ -48,10 +47,9 @@ DECLARE
     cutover_jobs_data JSONB;
     scan_iterations JSONB;
 BEGIN
-    -- Set dynamic schema
     EXECUTE format('SET search_path TO %I', schema_name);
 
-    -- Collect volume IDs
+    -- Collect volume IDs related to the given job_run_id
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
         'source_path_id', jc.source_path_id,
         'target_path_id', jc.target_path_id
@@ -59,36 +57,34 @@ BEGIN
     INTO volumeIds
     FROM jobrun jr
     LEFT JOIN jobconfig jc ON jc.id = jr.job_config_id
-    WHERE jr.id = job_run_id_param AND jc.job_type IN ('MIGRATE', 'CUT_OVER');
+    WHERE jr.id = job_run_id_param and jc.job_type in ('MIGRATE', 'CUT_OVER');
 
-    -- Collect related config IDs
+    -- Collect related config IDs, ensuring correct UUID casting
     SELECT COALESCE(jsonb_agg(jc.id), '[]'::JSONB)
     INTO configIds
     FROM jobconfig jc
-    WHERE (
-        jc.source_path_id IN (
-            SELECT (value->>'source_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
-        ) 
-        OR jc.source_path_id IN (
-            SELECT (value->>'target_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
-        ) 
-        OR jc.target_path_id IN (
-            SELECT (value->>'source_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
-        ) 
-        OR jc.target_path_id IN (
-            SELECT (value->>'target_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
-        )
+    WHERE jc.source_path_id IN (
+        SELECT (value->>'source_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
     ) 
+    OR jc.source_path_id IN (
+        SELECT (value->>'target_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
+    ) 
+    OR jc.target_path_id IN (
+        SELECT (value->>'source_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
+    ) 
+    OR jc.target_path_id IN (
+        SELECT (value->>'target_path_id')::UUID FROM jsonb_array_elements(volumeIds) AS value
+    )
     AND jc.job_type IN ('MIGRATE', 'CUT_OVER');
 
-    -- Fetch config IDs
+    -- Fetch jobconfig_id, source_path_id, and target_path_id for the given job_run_id
     SELECT jr.job_config_id, jc.source_path_id, jc.target_path_id
     INTO cut_over_config_id, var_source_path_id, var_target_path_id
     FROM jobrun jr
     LEFT JOIN jobconfig jc ON jc.id = jr.job_config_id
     WHERE jr.id = job_run_id_param;
 
-    -- Fetch last job run
+    -- Fetch last job run details
     SELECT jsonb_build_object('id', last_jr.id)
     INTO last_job_run
     FROM jobrun last_jr
@@ -156,7 +152,7 @@ BEGIN
             'path_id', a.volume_target_path_id,  
             'path', a.target_path,
             'file_server', a.file_server_target,
-            'capacity', format_bytes(a.capacity),
+            'capacity', format_bytes(a.target_capacity),
             'protocol', a.protocol,
             'protocol_version', a.protocol_version
         ),
@@ -212,9 +208,7 @@ BEGIN
         'source_path_id', var_source_path_id,
         'target_path_id', var_target_path_id,
         'summary', summary_data,
-        'scan_iterations', scan_iterations,
-        'volume_ids', volumeIds,
-        'config_ids', configIds
+        'scan_iterations', scan_iterations
     )
     WHERE job_run_id = job_run_id_param AND report_type = job_type_const;
 
@@ -231,5 +225,6 @@ BEGIN
             'config_ids', configIds
         ));
     END IF;
+
 END;
 $procedure$;
