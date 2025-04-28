@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, Long, ManyToOne, PrimaryGeneratedColumn, Timestamp, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
 @Entity({name:'inventory'})
 @Index('idx_id', ['id'])
 @Index('idx_path', ['path'])
 @Index('idx_file_server_path_id', ['pathId'])
 @Index('idx_inventory_job_run_id', ['jobRunId'])
+@Unique('uq_path_job_run_id_is_directory', ['path', 'jobRunId', 'isDirectory'])
 export class InventoryEntity {
     @ApiProperty({ description: 'UUID of the inventory' })
     @PrimaryGeneratedColumn('uuid')

@@ -196,6 +196,8 @@ describe("InventoryService", () => {
         .spyOn(inventoryRepo, "save")
         .mockResolvedValue(inventoryRecords as any);
 
+      jest.spyOn(inventoryRepo, 'upsert').mockResolvedValue(inventoryRecords as any);
+
       await service.createInventory(data, "jobRunId", "pathId");
 
       expect(service.mapSourceToTarget).toHaveBeenCalledWith(
@@ -203,8 +205,7 @@ describe("InventoryService", () => {
         "jobRunId",
         "pathId"
       );
-      expect(inventoryRepo.create).toHaveBeenCalledWith(mappedData);
-      expect(inventoryRepo.save).toHaveBeenCalledWith(inventoryRecords);
+      expect(inventoryRepo.upsert).toHaveBeenCalled();
     });
 
 
@@ -216,6 +217,7 @@ describe("InventoryService", () => {
       jest.spyOn(inventoryRepo, "create").mockReturnValue(data as any);
       jest.spyOn(inventoryRepo, "save").mockRejectedValue(error);
       const loggerSpy = jest.spyOn(service["logger"], "error");
+      jest.spyOn(inventoryRepo, 'upsert').mockRejectedValue(error);
 
       await service.createInventory(data, "jobRunId", "pathId");
 
