@@ -1296,7 +1296,23 @@ export class JobConfigService {
     );
 
     this.logger.debug(
-      `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}, severityMessages - ${severityMessagesDescriptions?.length}`
+      `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}`
+    );
+
+    this.logger.debug(
+      `countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}`
+    );
+
+    this.logger.debug(
+      `countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}`
+    );
+
+    this.logger.debug(
+      `countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
+    );
+
+    this.logger.debug(
+      `severityMessages - ${severityMessagesDescriptions?.length}`
     );
 
     return {
