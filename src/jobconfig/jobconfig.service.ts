@@ -1295,7 +1295,7 @@ export class JobConfigService {
       (entry?.mailContent?.alerts ?? []).map(alert => alert?.annotations?.description).filter(Boolean) || []
     );
 
-    this.logger.log(
+    this.logger.debug(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}, severityMessages - ${severityMessagesDescriptions?.length}`
     );
 
