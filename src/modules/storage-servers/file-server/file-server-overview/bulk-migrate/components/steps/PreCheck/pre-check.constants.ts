@@ -9,4 +9,7 @@ export const PRECHECK_ERROR_STATUS = {
   NO_COMMON_WORKERS: "There are no common workers available.",
   DESTINATION_PATH_NOT_FOUND: "The destination path was not found.",
   SOURCE_PATH_NOT_FOUND: "The source path was not found.",
+  SOURCE_DATA_SIZE_CALCULATION_FAILED:
+    "The calculation of the source data size failed.",
+  SOURCE_PATH_UNMOUNT_FAILED: "The source path failed to unmount.",
 };
