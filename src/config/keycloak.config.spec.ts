@@ -1,9 +1,7 @@
-import keycloakAdminConfig, { KeycloakAdminConfig } from "./keycloak.config";
-
+import keycloakAdminConfig, { KeycloakAdminConfig } from './keycloak.config';
 
 describe('Keycloak Admin Configuration', () => {
   beforeEach(() => {
-
     process.env.KEYCLOAK_BASE_URL = '';
     process.env.KEYCLOAK_REALM = '';
     process.env.KEYCLOAK_ADMIN_CLIENT = '';
@@ -13,7 +11,7 @@ describe('Keycloak Admin Configuration', () => {
 
   it('should return default config when environment variables are not set', () => {
     const config: KeycloakAdminConfig = keycloakAdminConfig();
-    
+
     expect(config.keycloakUrl).toBe('http://localhost:8080');
     expect(config.keycloakRealm).toBe('netapp');
     expect(config.keycloakAdminClient).toBe('admin');

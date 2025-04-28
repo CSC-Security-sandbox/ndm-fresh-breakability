@@ -9,12 +9,14 @@ import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
-import { UserRoleMappingDto, UserRoleMappingResponseDto, UserRoleRelationDto } from './dto/user-role.dto';
+import {
+  UserRoleMappingResponseDto,
+  UserRoleRelationDto,
+} from './dto/user-role.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @Injectable()
 export class UserRoleService {
- 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -28,79 +30,88 @@ export class UserRoleService {
     private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
-
   async batchCreate(userRoleRelationDto: UserRoleRelationDto) {
     //  --------------- validate Details -------------/
     const project = await this.projectRepository.findOne({
-      where: {id: userRoleRelationDto.project_id}
-    })
-    if(!project) 
-    throw new NotFoundException(
-      `project with ID ${userRoleRelationDto.project_id} not found`,
-    );
+      where: { id: userRoleRelationDto.project_id },
+    });
+    if (!project)
+      throw new NotFoundException(
+        `project with ID ${userRoleRelationDto.project_id} not found`,
+      );
 
     const account = await this.accountRepository.findOne({
-      where: {id: userRoleRelationDto.account_id}
-    })
-    if(!account) 
-    throw new NotFoundException(
-      `Account with ID ${userRoleRelationDto.account_id} not found`,
-    );
+      where: { id: userRoleRelationDto.account_id },
+    });
+    if (!account)
+      throw new NotFoundException(
+        `Account with ID ${userRoleRelationDto.account_id} not found`,
+      );
 
-    const users = new Map<string, number>(), roles = new Map<string, number>();
+    const users = new Map<string, number>(),
+      roles = new Map<string, number>();
 
-    userRoleRelationDto.users.forEach(userMap=>{
-      users.set(userMap.user_id, 1), roles.set(userMap.role_id, 1)
-    })
+    userRoleRelationDto.users.forEach((userMap) => {
+      users.set(userMap.user_id, 1);
+      roles.set(userMap.role_id, 1);
+    });
 
     const usersStoreList = await this.userRepository.find({
-      where: {id: In(userRoleRelationDto.users.map(user=> user.user_id))},
-      select: {id: true}
-    })
+      where: { id: In(userRoleRelationDto.users.map((user) => user.user_id)) },
+      select: { id: true },
+    });
 
-    if(usersStoreList.length !== users.size) {
-      usersStoreList.forEach(user=> [
-        users.set(user.id, users.get(user.id)+1)
-      ])
-      const invalidUsers: string[] = []
-      users.forEach((v, k)=>{if(v===1) invalidUsers.push(k)})
+    if (usersStoreList.length !== users.size) {
+      usersStoreList.forEach((user) => [
+        users.set(user.id, users.get(user.id) + 1),
+      ]);
+      const invalidUsers: string[] = [];
+      users.forEach((v, k) => {
+        if (v === 1) invalidUsers.push(k);
+      });
       throw new NotFoundException(
         `User with ID ${invalidUsers.join(', ')} not found`,
       );
     }
 
     const roleStoreList = await this.roleRepository.find({
-      where: {id: In(userRoleRelationDto.users.map(user=> user.role_id))},
-      select: {id: true}
-    })
+      where: { id: In(userRoleRelationDto.users.map((user) => user.role_id)) },
+      select: { id: true },
+    });
 
-    if(roleStoreList.length !== roles.size) {
-      roleStoreList.forEach(user=> [
-        roles.set(user.id, roles.get(user.id)+1)
-      ])
-      const invalidRoles: string[] = []
-      roles.forEach((v, k)=>{if(v===1) invalidRoles.push(k)})
+    if (roleStoreList.length !== roles.size) {
+      roleStoreList.forEach((user) => [
+        roles.set(user.id, roles.get(user.id) + 1),
+      ]);
+      const invalidRoles: string[] = [];
+      roles.forEach((v, k) => {
+        if (v === 1) invalidRoles.push(k);
+      });
       throw new NotFoundException(
         `Role with ID ${invalidRoles.join(', ')} not found`,
       );
     }
 
     await this.userRoleRepository.delete({
-      projectId: project.id, accountId: account.id
-    })
-
-    const update: UserRole[] = userRoleRelationDto.users.map(userMap=>
-      this.userRoleRepository.create({
       projectId: project.id,
       accountId: account.id,
-      roleId: userMap.role_id,
-      userId: userMap.user_id,
-    }))
-    return await this.userRoleRepository.save(update)
-  } 
+    });
 
+    const update: UserRole[] = userRoleRelationDto.users.map((userMap) =>
+      this.userRoleRepository.create({
+        projectId: project.id,
+        accountId: account.id,
+        roleId: userMap.role_id,
+        userId: userMap.user_id,
+      }),
+    );
+    return await this.userRoleRepository.save(update);
+  }
 
-  async create(createUserRoleDto: CreateUserRoleDto, userPermissionResponse:UserPermissionResponse): Promise<UserRole> {
+  async create(
+    createUserRoleDto: CreateUserRoleDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<UserRole> {
     const user = await this.userRepository.findOneBy({
       id: createUserRoleDto.user_id,
     });
@@ -150,7 +161,7 @@ export class UserRoleService {
   async update(
     id: string,
     updateUserRoleDto: UpdateUserRoleDto,
-    userPermissionResponse:UserPermissionResponse
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
     const userRole = await this.userRoleRepository.findOneBy({ id });
 
@@ -229,7 +240,7 @@ export class UserRoleService {
     filter: Partial<CreateUserRoleDto> = {},
   ): Promise<UserRole[]> {
     const where: FindOptionsWhere<UserRole> = {};
- 
+
     if (filter.user_id) {
       where.user = { id: filter.user_id };
     }
@@ -256,7 +267,13 @@ export class UserRoleService {
     return this.userRoleRepository.find(options);
   }
 
- async fetchUsersAndRoles(page: number, limit: number, sortField: string, sortOrder: string, filter: Partial<CreateUserRoleDto>={}): Promise<UserRoleMappingResponseDto> {
+  async fetchUsersAndRoles(
+    page: number,
+    limit: number,
+    sortField: string,
+    sortOrder: string,
+    filter: Partial<CreateUserRoleDto> = {},
+  ): Promise<UserRoleMappingResponseDto> {
     const where: FindOptionsWhere<UserRole> = {};
     if (filter.user_id) {
       where.id = filter.user_id;
@@ -270,7 +287,7 @@ export class UserRoleService {
       where,
       relations: ['user_roles', 'user_roles.role'],
     };
-    const [users,total] =  await this.userRepository.findAndCount(options);
+    const [users, total] = await this.userRepository.findAndCount(options);
 
     const userRoleMapping = users.map((user) => ({
       userId: user.id,
@@ -284,6 +301,6 @@ export class UserRoleService {
       })),
     }));
 
-    return {total,page,limit,data:userRoleMapping};
-}
+    return { total, page, limit, data: userRoleMapping };
+  }
 }

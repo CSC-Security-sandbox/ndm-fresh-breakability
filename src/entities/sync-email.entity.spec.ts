@@ -23,7 +23,10 @@ describe('SyncEmail Entity', () => {
       syncEmail.alertName = 'Test Alert Name';
 
       expect(syncEmail.id).toBe('11111111-1111-1111-1111-111111111111');
-      expect(syncEmail.mailContent).toEqual({ subject: 'Test Subject', body: 'Test Body' });
+      expect(syncEmail.mailContent).toEqual({
+        subject: 'Test Subject',
+        body: 'Test Body',
+      });
       expect(syncEmail.incidentStatus).toBe(IncidentStatus.OPEN);
       expect(syncEmail.description).toBe('Test Description');
       expect(syncEmail.summary).toBe('Test Summary');
@@ -36,7 +39,7 @@ describe('SyncEmail Entity', () => {
     it('should accept valid IncidentStatus values', () => {
       syncEmail.incidentStatus = IncidentStatus.OPEN;
       expect(syncEmail.incidentStatus).toBe(IncidentStatus.OPEN);
-      
+
       syncEmail.incidentStatus = IncidentStatus.CLOSED;
       expect(syncEmail.incidentStatus).toBe(IncidentStatus.CLOSED);
     });
@@ -49,15 +52,13 @@ describe('SyncEmail Entity', () => {
         sender: 'alerts@company.com',
         recipients: ['admin@company.com', 'support@company.com'],
         body: 'The server is experiencing issues',
-        attachments: [
-          { name: 'logs.txt', size: 1024 }
-        ],
+        attachments: [{ name: 'logs.txt', size: 1024 }],
         metadata: {
           severity: 'high',
-          category: 'infrastructure'
-        }
+          category: 'infrastructure',
+        },
       };
-      
+
       syncEmail.mailContent = complexData;
       expect(syncEmail.mailContent).toEqual(complexData);
     });
@@ -67,11 +68,11 @@ describe('SyncEmail Entity', () => {
     it('should populate who columns correctly', () => {
       expect(syncEmail.created_by).toBeUndefined();
       expect(syncEmail.updated_by).toBeUndefined();
-      
+
       syncEmail.populateWhoColumns(testUserId);
       expect(syncEmail.created_by).toBe(testUserId);
       expect(syncEmail.updated_by).toBe(testUserId);
-      
+
       const newUserId = '87654321-8765-4321-8765-432109876543';
       syncEmail.populateWhoColumns(newUserId);
       expect(syncEmail.created_by).toBe(testUserId);
@@ -84,7 +85,7 @@ describe('SyncEmail Entity', () => {
       syncEmail.id = '11111111-1111-1111-1111-111111111111';
       syncEmail.mailContent = { subject: 'Test Subject' };
       syncEmail.incidentStatus = IncidentStatus.OPEN;
-      
+
       expect(syncEmail.description).toBeUndefined();
       expect(syncEmail.summary).toBeUndefined();
       expect(syncEmail.alertSource).toBeUndefined();

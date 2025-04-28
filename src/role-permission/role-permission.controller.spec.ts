@@ -71,14 +71,14 @@ describe('RolePermissionController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -96,7 +96,9 @@ describe('RolePermissionController', () => {
     jest
       .spyOn(service, 'create')
       .mockImplementation(async () => rolePermission as any);
-    expect(await controller.create(rolePermission, userPermissionResponseMock)).toBe(rolePermission);
+    expect(
+      await controller.create(rolePermission, userPermissionResponseMock),
+    ).toBe(rolePermission);
   });
 
   it('should find all role-permissions with pagination', async () => {
@@ -120,7 +122,15 @@ describe('RolePermissionController', () => {
     jest
       .spyOn(service, 'findAll')
       .mockImplementation(async () => [rolePermission] as any);
-    expect(await controller.findAll(undefined, undefined, undefined, undefined, '{}')).toStrictEqual([rolePermission]);
+    expect(
+      await controller.findAll(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        '{}',
+      ),
+    ).toStrictEqual([rolePermission]);
   });
 
   it('should find a role-permission by ID', async () => {
@@ -154,7 +164,9 @@ describe('RolePermissionController', () => {
       permission_id: '1',
     };
     jest.spyOn(service, 'update').mockRejectedValue(new Error('Update failed'));
-    await expect(controller.update('1', rolePermission)).rejects.toThrow('Update failed');
+    await expect(controller.update('1', rolePermission)).rejects.toThrow(
+      'Update failed',
+    );
   });
 
   it('should delete a role-permission', async () => {
@@ -168,7 +180,11 @@ describe('RolePermissionController', () => {
   });
 
   it('should return 404 when deleting a non-existent role-permission', async () => {
-    jest.spyOn(service, 'delete').mockRejectedValue(new Error('Role permission not found'));
-    await expect(controller.delete('999')).rejects.toThrow('Role permission not found');
+    jest
+      .spyOn(service, 'delete')
+      .mockRejectedValue(new Error('Role permission not found'));
+    await expect(controller.delete('999')).rejects.toThrow(
+      'Role permission not found',
+    );
   });
 });

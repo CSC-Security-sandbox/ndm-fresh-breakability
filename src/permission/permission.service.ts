@@ -13,7 +13,10 @@ export class PermissionService {
     private permissionRepository: Repository<Permission>,
   ) {}
 
-  create(createPermissionDto: CreatePermissionDto, userPermissionResponse:UserPermissionResponse): Promise<Permission> {
+  create(
+    createPermissionDto: CreatePermissionDto,
+    userPermissionResponse: UserPermissionResponse,
+  ): Promise<Permission> {
     const permission = this.permissionRepository.create({
       ...createPermissionDto,
       permission_status: 'active',
@@ -37,7 +40,7 @@ export class PermissionService {
   async update(
     id: string,
     updatePermissionDto: UpdatePermissionDto,
-    userPermissionResponse:UserPermissionResponse
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
     await this.permissionRepository.update(id, {
       ...updatePermissionDto,

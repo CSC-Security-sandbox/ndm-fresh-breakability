@@ -1,45 +1,50 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from '../utils/axios-request-utils';
- 
+
 @Injectable()
 export class AuthService {
- 
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
   ) {}
- 
+
   public async getKeycloakToken() {
     try {
       const data = await makeAxiosRequest<{ access_token: string }>({
-        method: "POST",
+        method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/realms/master/protocol/openid-connect/token`,
         data: new URLSearchParams({
           client_id: process.env.KEYCLOAK_ADMIN_CLIENT,
           username: process.env.KEYCLOAK_ADMIN_USERNAME,
           password: process.env.KEYCLOAK_ADMIN_PASSWORD,
-          grant_type: "password",
+          grant_type: 'password',
         }),
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
-  
+
       return data.access_token;
     } catch (error) {
-      throw new InternalServerErrorException("Failed to get Keycloak token");
+      throw new InternalServerErrorException(
+        `Failed to get Keycloak token, error: ${error.message}`,
+      );
     }
   }
 
   private generateRandomPassword(length: number): string {
     const charSet = {
-      lowerCase: "abcdefghijklmnopqrstuvwxyz",
-      upperCase: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      digits: "0123456789",
-      specialCharacters: "!@#$%^&*()-_=+[]{}|;:,.<>?",
+      lowerCase: 'abcdefghijklmnopqrstuvwxyz',
+      upperCase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      digits: '0123456789',
+      specialCharacters: '!@#$%^&*()-_=+[]{}|;:,.<>?',
     };
     const allCharacters = Object.values(charSet).join('');
 
@@ -51,7 +56,7 @@ export class AuthService {
     };
 
     // Ensure at least one char of each required type is included
-    let password = [
+    const password = [
       getRandomChar(charSet.lowerCase),
       getRandomChar(charSet.upperCase),
       getRandomChar(charSet.digits),
@@ -70,14 +75,14 @@ export class AuthService {
     username: string,
     firstName: string,
     lastName: string,
-    userPermissionResponse: UserPermissionResponse
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
     const tempPassword = this.generateRandomPassword(12);
     const token = await this.getKeycloakToken();
 
     try {
       await makeAxiosRequest({
-        method: "POST",
+        method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
         data: {
           username,
@@ -87,22 +92,22 @@ export class AuthService {
           email: username,
           credentials: [
             {
-              type: "password",
+              type: 'password',
               value: tempPassword,
               temporary: true,
             },
           ],
-          requiredActions: ["UPDATE_PASSWORD"],
+          requiredActions: ['UPDATE_PASSWORD'],
         },
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
 
       const user = this.userRepository.create({
         email: username,
-        user_status: "active",
+        user_status: 'active',
         first_name: firstName,
         last_name: lastName,
       });
@@ -112,97 +117,101 @@ export class AuthService {
 
       return { user: savedUser, tempPassword };
     } catch (error) {
-      throw new InternalServerErrorException("Failed to create user in Keycloak");
+      throw new InternalServerErrorException(
+        `Failed to create user in Keycloak, error: ${error.message}`,
+      );
     }
   }
-
 
   async resetPassword(email: string): Promise<string> {
     const newPassword = this.generateRandomPassword(12);
     const token = await this.getKeycloakToken();
-  
+
     try {
       const users = await makeAxiosRequest<any[]>({
-        method: "GET",
+        method: 'GET',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
         headers: { Authorization: `Bearer ${token}` },
         params: { email },
       });
-  
+
       const keycloakUser = users[0];
       if (!keycloakUser) {
-        throw new NotFoundException("User not found in Keycloak");
+        throw new NotFoundException('User not found in Keycloak');
       }
-  
+
       await makeAxiosRequest({
-        method: "PUT",
+        method: 'PUT',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users/${keycloakUser.id}/reset-password`,
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         data: {
-          type: "password",
+          type: 'password',
           value: newPassword,
           temporary: true,
         },
       });
-  
+
       return newPassword;
     } catch (error) {
-      throw new InternalServerErrorException("Failed to reset password in Keycloak, : error", error.message);
+      throw new InternalServerErrorException(
+        'Failed to reset password in Keycloak, : error',
+        error.message,
+      );
     }
   }
- 
+
   async setUserStatus(email: string, enable: boolean): Promise<User> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException("User not found");
+      throw new NotFoundException('User not found');
     }
-  
-    user.user_status = enable ? "active" : "inactive";
+
+    user.user_status = enable ? 'active' : 'inactive';
     await this.userRepository.save(user);
-  
+
     const token = await this.getKeycloakToken();
-  
+
     try {
       const users = await makeAxiosRequest<any[]>({
-        method: "GET",
+        method: 'GET',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
         headers: { Authorization: `Bearer ${token}` },
         params: { email },
       });
-  
+
       if (users.length === 0) {
-        throw new NotFoundException("User not found in Keycloak");
+        throw new NotFoundException('User not found in Keycloak');
       }
-  
+
       const keycloakUser = users[0];
-      
+
       await makeAxiosRequest({
-        method: "PUT",
+        method: 'PUT',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users/${keycloakUser.id}`,
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         data: { enabled: enable },
       });
-  
+
       if (!enable) {
         await makeAxiosRequest({
-          method: "OPTIONS",
-          url: `${process.env.KEYCLOAK_BASE_URL}/${process.env.KEYCLOAK_REALM}/users/${(keycloakUser.id).toString().trim()}/logout`,
+          method: 'OPTIONS',
+          url: `${process.env.KEYCLOAK_BASE_URL}/${process.env.KEYCLOAK_REALM}/users/${keycloakUser.id.toString().trim()}/logout`,
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
       }
-  
+
       return user;
     } catch (error) {
       throw new InternalServerErrorException(
-        `Failed to update user status in Keycloak, error: ${error.message}`
+        `Failed to update user status in Keycloak, error: ${error.message}`,
       );
     }
   }

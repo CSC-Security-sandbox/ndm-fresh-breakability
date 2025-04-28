@@ -17,44 +17,44 @@ export class ClientConfig {
   clientAuthenticatorType: string;
   secret: string;
   fullScopeAllowed: boolean;
-  serviceAccountsEnabled:boolean
+  serviceAccountsEnabled: boolean;
   protocolMappers: ProtocolMapper[];
 
   constructor(projectId: string | undefined) {
     this.clientId = uuidv4();
     this.enabled = true;
     this.name = `worker-${this.clientId}`;
-    this.clientAuthenticatorType = "client-secret";
+    this.clientAuthenticatorType = 'client-secret';
     this.secret = uuidv4();
     this.fullScopeAllowed = false;
     this.serviceAccountsEnabled = true;
     this.protocolMappers = [
       {
-        name: "worker-project-claim",
-        protocol: "openid-connect",
-        protocolMapper: "oidc-hardcoded-claim-mapper",
+        name: 'worker-project-claim',
+        protocol: 'openid-connect',
+        protocolMapper: 'oidc-hardcoded-claim-mapper',
         consentRequired: false,
         config: {
-          "claim.name": "project_id",
-          "claim.value": projectId,
-          "id.token.claim": true,
-          "access.token.claim": true,
-          "jsonType.label": "String",
-        }
+          'claim.name': 'project_id',
+          'claim.value': projectId,
+          'id.token.claim': true,
+          'access.token.claim': true,
+          'jsonType.label': 'String',
+        },
       },
     ];
   }
 
   setClientId(clientId: string): void {
     if (!clientId) {
-      throw new Error("Client ID cannot be empty");
+      throw new Error('Client ID cannot be empty');
     }
     this.clientId = clientId;
   }
 
   setSecret(secret: string): void {
     if (!secret) {
-      throw new Error("Secret cannot be empty");
+      throw new Error('Secret cannot be empty');
     }
     this.secret = secret;
   }
@@ -65,10 +65,10 @@ export class ClientConfig {
 
   setProjectId(projectId: string): void {
     const protocolMapper = this.protocolMappers.find(
-      (mapper) => mapper.name === "custom-client-claim"
+      (mapper) => mapper.name === 'custom-client-claim',
     );
     if (protocolMapper) {
-      protocolMapper.config["claim.value"] = projectId;
+      protocolMapper.config['claim.value'] = projectId;
     }
   }
 
@@ -81,7 +81,7 @@ export class ClientConfig {
       secret: this.secret,
       fullScopeAllowed: this.fullScopeAllowed,
       serviceAccountsEnabled: this.serviceAccountsEnabled,
-      protocolMappers: this.protocolMappers
+      protocolMappers: this.protocolMappers,
     };
   }
 }

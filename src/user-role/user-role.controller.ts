@@ -7,13 +7,19 @@ import {
   Delete,
   Get,
   Query,
-  Request
+  Request,
 } from '@nestjs/common';
 import { UserRoleService } from './user-role.service';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UserRole } from '../entities/user-role.entity';
-import { ApiQuery, ApiTags, ApiOperation, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiQuery,
+  ApiTags,
+  ApiOperation,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';

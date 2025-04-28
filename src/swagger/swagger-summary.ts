@@ -209,8 +209,7 @@ export enum UserDescriptions {
     '- If no `projectId` is provided, the API returns all associated projects along with the roles and permissions for each project.\n' +
     '- If the user is not found, or if there are any issues with the provided data, a 400 Bad Request error is returned.\n' +
     '- In case of any internal errors, the API responds with a 500 Internal Server Error.\n\n' +
-    'This endpoint allows retrieval of user permissions for specific projects or across all projects they are associated with.'
-
+    'This endpoint allows retrieval of user permissions for specific projects or across all projects they are associated with.',
 }
 
 export enum AccountDescription {
@@ -492,8 +491,8 @@ export enum UserRoleDescription {
     '- On success, the API returns a JSON object with detailed information about the user-role association.\n' +
     '- If the association is not found, a 404 Not Found error is returned.\n\n' +
     'This endpoint is crucial for auditing and verifying user-role associations within the system.',
-    
-    GetAllUserAndTheirRolesDescription = 'This endpoint retrieves a paginated list of all user and their role associations stored in the system. ' +
+
+  GetAllUserAndTheirRolesDescription = 'This endpoint retrieves a paginated list of all user and their role associations stored in the system. ' +
     'You can filter the results based on various parameters, allowing you to manage and view user roles effectively.\n\n' +
     '**Response Details**:\n' +
     '- The API returns a JSON object containing a list of user-role associations along with pagination metadata (total count, current page, etc.).\n' +

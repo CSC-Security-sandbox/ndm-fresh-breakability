@@ -1,4 +1,3 @@
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { SettingController } from './setting.controller';
 import { SettingService } from './setting.service';
@@ -12,7 +11,6 @@ import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 describe('SettingController', () => {
   let controller: SettingController;
   let service: SettingService;
-  let settingsRepo: Repository<GlobalSettings>;
 
   const mockJwtService = {
     verifyToken: jest.fn().mockResolvedValue({
@@ -30,35 +28,41 @@ describe('SettingController', () => {
     logger: jest.fn(),
     getKey: jest.fn(),
   };
-  
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SettingController],
-      providers: [SettingService
-        ,{
+      providers: [
+        SettingService,
+        {
           provide: getRepositoryToken(GlobalSettings),
           useClass: Repository,
         },
         {
           provide: JwtService,
           useValue: mockJwtService,
-        }
+        },
       ],
-      
     }).compile();
 
     controller = module.get<SettingController>(SettingController);
     service = module.get<SettingService>(SettingService);
-    settingsRepo = module.get<Repository<GlobalSettings>>(getRepositoryToken(GlobalSettings));
   });
 
   describe('create', () => {
     it('should create global settings', async () => {
       const createSettingDto: CreateSettingDto[] = [
-       { settingKey: 'Setting 1', settingValue: 'Value 1', description: 'Description 1', settingType: SettingType.SMTP},
+        {
+          settingKey: 'Setting 1',
+          settingValue: 'Value 1',
+          description: 'Description 1',
+          settingType: SettingType.SMTP,
+        },
       ];
 
-      jest.spyOn(service, 'create').mockResolvedValueOnce({ message: '', statusCode: HttpStatus.OK });
+      jest
+        .spyOn(service, 'create')
+        .mockResolvedValueOnce({ message: '', statusCode: HttpStatus.OK });
 
       const result = await controller.create(createSettingDto);
 
@@ -66,8 +70,6 @@ describe('SettingController', () => {
       expect(result).toEqual({ message: '', statusCode: HttpStatus.OK });
     });
   });
-
-  
 
   describe('findOne', () => {
     it('should get a global setting by setting type', async () => {

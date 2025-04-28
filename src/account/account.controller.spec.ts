@@ -53,14 +53,14 @@ describe('AccountController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -82,7 +82,9 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'create').mockResolvedValue(account);
 
-    expect(await controller.create(createAccountDto, userPermissionResponseMock)).toEqual(account);
+    expect(
+      await controller.create(createAccountDto, userPermissionResponseMock),
+    ).toEqual(account);
   });
 
   it('should find all accounts', async () => {
@@ -113,7 +115,9 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'findAll').mockResolvedValue(accounts);
 
-    expect(await controller.findAll(1, 10, 'id', 'ASC', '{}')).toEqual(accounts);
+    expect(await controller.findAll(1, 10, 'id', 'ASC', '{}')).toEqual(
+      accounts,
+    );
   });
 
   it('should find one account by id', async () => {
@@ -139,24 +143,38 @@ describe('AccountController', () => {
 
     jest.spyOn(service, 'update').mockResolvedValue();
 
-    expect(await controller.update('1', updateAccountDto, userPermissionResponseMock)).toBeUndefined();
+    expect(
+      await controller.update(
+        '1',
+        updateAccountDto,
+        userPermissionResponseMock,
+      ),
+    ).toBeUndefined();
   });
 
   it('should throw NotFoundException when updating a non-existent account', async () => {
     const updateAccountDto = { account_name: 'updated test' };
     const id = 'non-existent-id';
 
-    jest.spyOn(service, 'update').mockRejectedValue(new NotFoundException('Account not found'));
+    jest
+      .spyOn(service, 'update')
+      .mockRejectedValue(new NotFoundException('Account not found'));
 
-    await expect(controller.update(id, updateAccountDto, userPermissionResponseMock)).rejects.toThrow(NotFoundException);
+    await expect(
+      controller.update(id, updateAccountDto, userPermissionResponseMock),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('should throw BadRequestException if input data is invalid', async () => {
-    const invalidAccountDto = {} as Account; 
+    const invalidAccountDto = {} as Account;
 
-    jest.spyOn(service, 'create').mockRejectedValue(new BadRequestException('Invalid input'));
+    jest
+      .spyOn(service, 'create')
+      .mockRejectedValue(new BadRequestException('Invalid input'));
 
-    await expect(controller.create(invalidAccountDto, userPermissionResponseMock)).rejects.toThrow(BadRequestException);
+    await expect(
+      controller.create(invalidAccountDto, userPermissionResponseMock),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('should delete an account', async () => {
@@ -167,7 +185,9 @@ describe('AccountController', () => {
 
   it('should throw NotFoundException when deleting a non-existent account', async () => {
     const id = 'non-existent-id';
-    jest.spyOn(service, 'delete').mockRejectedValue(new NotFoundException('Account not found'));
+    jest
+      .spyOn(service, 'delete')
+      .mockRejectedValue(new NotFoundException('Account not found'));
 
     await expect(controller.delete(id)).rejects.toThrow(NotFoundException);
   });
@@ -176,37 +196,69 @@ describe('AccountController', () => {
     const accounts = [];
     jest.spyOn(service, 'findAll').mockResolvedValue(accounts);
 
-
-    expect(await controller.findAll(1, 10, 'id', 'ASC', '{}')).toEqual(accounts);
-    expect(await controller.findAll(undefined, 10, 'id', 'ASC', '{}')).toEqual(accounts);
-    expect(await controller.findAll(undefined, undefined, 'id', 'ASC', '{}')).toEqual(accounts);
-    expect(await controller.findAll(undefined, undefined, undefined, 'ASC', '{}')).toEqual(accounts);
-    expect(await controller.findAll(undefined, undefined, undefined, undefined, '{}')).toEqual(accounts);
-    expect(await controller.findAll(undefined, undefined, undefined, undefined, undefined)).toEqual(accounts);
-
+    expect(await controller.findAll(1, 10, 'id', 'ASC', '{}')).toEqual(
+      accounts,
+    );
+    expect(await controller.findAll(undefined, 10, 'id', 'ASC', '{}')).toEqual(
+      accounts,
+    );
+    expect(
+      await controller.findAll(undefined, undefined, 'id', 'ASC', '{}'),
+    ).toEqual(accounts);
+    expect(
+      await controller.findAll(undefined, undefined, undefined, 'ASC', '{}'),
+    ).toEqual(accounts);
+    expect(
+      await controller.findAll(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        '{}',
+      ),
+    ).toEqual(accounts);
+    expect(
+      await controller.findAll(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ),
+    ).toEqual(accounts);
 
     expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {});
   });
-   
+
   it('should accept query parameters and pass them to the service', async () => {
     const accounts = [];
     jest.spyOn(service, 'findAll').mockResolvedValue(accounts);
-   
+
     const page = 2;
     const limit = 5;
     const sortField = 'account_name';
     const sortOrder = 'DESC';
     const filter = JSON.stringify({ key: 'value' });
-   
-    expect(await controller.findAll(page, limit, sortField, sortOrder, filter)).toEqual(accounts);
-    expect(service.findAll).toHaveBeenCalledWith(page, limit, sortField, sortOrder, { key: 'value' });
+
+    expect(
+      await controller.findAll(page, limit, sortField, sortOrder, filter),
+    ).toEqual(accounts);
+    expect(service.findAll).toHaveBeenCalledWith(
+      page,
+      limit,
+      sortField,
+      sortOrder,
+      { key: 'value' },
+    );
   });
-   
+
   it('should handle null filter gracefully', async () => {
     const accounts = [];
     jest.spyOn(service, 'findAll').mockResolvedValue(accounts);
-   
-    expect(await controller.findAll(1, 10, 'id', 'ASC', null)).toEqual(accounts);
+
+    expect(await controller.findAll(1, 10, 'id', 'ASC', null)).toEqual(
+      accounts,
+    );
     expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {});
   });
 });

@@ -173,4 +173,3 @@ export class UserService {
     return rolePermissions.map((rp) => rp.permission.permission_name);
   }
 }
-

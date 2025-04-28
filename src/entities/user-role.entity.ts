@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Column } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  Column,
+} from 'typeorm';
 import { Base } from './base.entity';
 import { User } from './user.entity';
 import { Role } from './role.entity';
@@ -10,9 +16,12 @@ export class UserRole extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, (user) => user.user_roles, { onDelete:'CASCADE', nullable: false })
+  @ManyToOne(() => User, (user) => user.user_roles, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
   @JoinColumn({ name: 'user_id' })
-  user: User; 
+  user: User;
 
   @ManyToOne(() => Role, (role) => role.user_roles, { nullable: false })
   @JoinColumn({ name: 'role_id' })
@@ -27,16 +36,16 @@ export class UserRole extends Base {
   })
   @JoinColumn({ name: 'account_id' })
   account: Account;
-  
-  @Column({name: 'user_id'})
-  userId:string
 
-  @Column({name: 'project_id'})
-  projectId:string
+  @Column({ name: 'user_id' })
+  userId: string;
 
-  @Column({name: 'role_id'})
-  roleId:string
+  @Column({ name: 'project_id' })
+  projectId: string;
 
-  @Column({name: 'account_id'})
-  accountId:string
+  @Column({ name: 'role_id' })
+  roleId: string;
+
+  @Column({ name: 'account_id' })
+  accountId: string;
 }

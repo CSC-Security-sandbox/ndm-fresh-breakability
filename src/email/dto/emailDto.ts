@@ -1,3 +1,3 @@
 export class EmailDto {
- body: any;
+  body: any;
 }

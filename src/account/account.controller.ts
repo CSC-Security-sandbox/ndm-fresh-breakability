@@ -12,9 +12,15 @@ import {
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AccountDescription } from '../swagger/swagger-summary';
-import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 
 @ApiTags('accounts')
@@ -30,7 +36,10 @@ export class AccountController {
     summary: 'Create Account',
     description: AccountDescription.CreateAccountDescription,
   })
-  create(@Body() createAccountDto: CreateAccountDto, @Request() userPermissions:UserPermissionResponse) {
+  create(
+    @Body() createAccountDto: CreateAccountDto,
+    @Request() userPermissions: UserPermissionResponse,
+  ) {
     return this.accountService.create(createAccountDto, userPermissions);
   }
 
@@ -105,8 +114,16 @@ export class AccountController {
     summary: 'Update Account',
     description: AccountDescription.UpdateAccountDescription,
   })
-  update(@Param('id') id: string, @Body() updateAccountDto: UpdateAccountDto, @Request() userPermissionResponse: UserPermissionResponse) {
-    return this.accountService.update(id, updateAccountDto, userPermissionResponse);
+  update(
+    @Param('id') id: string,
+    @Body() updateAccountDto: UpdateAccountDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
+    return this.accountService.update(
+      id,
+      updateAccountDto,
+      userPermissionResponse,
+    );
   }
 
   @Auth()

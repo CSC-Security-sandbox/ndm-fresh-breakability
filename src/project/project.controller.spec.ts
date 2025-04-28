@@ -32,7 +32,6 @@ describe('ProjectController', () => {
     getKey: jest.fn(),
   };
 
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProjectController],
@@ -68,14 +67,14 @@ describe('ProjectController', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
@@ -111,9 +110,16 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'create').mockResolvedValue(project);
 
-      const result = await controller.create(createProjectDto,  userPermissionResponseMock);
+      const result = await controller.create(
+        createProjectDto,
+        userPermissionResponseMock,
+      );
       expect(result).toEqual(project);
-      expect(service.create).toHaveBeenCalledWith(createProjectDto.account_id, createProjectDto, userPermissionResponseMock);
+      expect(service.create).toHaveBeenCalledWith(
+        createProjectDto.account_id,
+        createProjectDto,
+        userPermissionResponseMock,
+      );
     });
 
     it('should handle errors during project creation', async () => {
@@ -124,9 +130,13 @@ describe('ProjectController', () => {
         start_date: new Date(),
       };
 
-      jest.spyOn(service, 'create').mockRejectedValue(new Error('Failed to create project'));
+      jest
+        .spyOn(service, 'create')
+        .mockRejectedValue(new Error('Failed to create project'));
 
-      await expect(controller.create(createProjectDto,  userPermissionResponseMock)).rejects.toThrow('Failed to create project');
+      await expect(
+        controller.create(createProjectDto, userPermissionResponseMock),
+      ).rejects.toThrow('Failed to create project');
     });
   });
 
@@ -135,15 +145,39 @@ describe('ProjectController', () => {
       jest.spyOn(service, 'findAll').mockResolvedValue([]);
 
       const result = await controller.findAll(1, 10, 'id', 'ASC', '{}');
-      const result2 = await controller.findAll(undefined, undefined, undefined, undefined, undefined);
-      const result3 = await controller.findAll(1, undefined, undefined, undefined, undefined);
-      const result4 = await controller.findAll(1, 10, undefined, undefined, undefined);
-      const result5 = await controller.findAll(1, 10, 'id', undefined, undefined);
+      const result2 = await controller.findAll(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      const result3 = await controller.findAll(
+        1,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      const result4 = await controller.findAll(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+      );
+      const result5 = await controller.findAll(
+        1,
+        10,
+        'id',
+        undefined,
+        undefined,
+      );
       const result6 = await controller.findAll(1, 10, 'id', 'ASC', undefined);
-      expect( result ).toEqual([]);
-      expect( result2 ).toEqual([]);      
-      expect( result3 ).toEqual([]);
-      expect( result4 ).toEqual([]);
+      expect(result).toEqual([]);
+      expect(result2).toEqual([]);
+      expect(result3).toEqual([]);
+      expect(result4).toEqual([]);
       expect(result5).toEqual([]);
       expect(result6).toEqual([]);
       expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {});
@@ -157,16 +191,14 @@ describe('ProjectController', () => {
           project_name: 'Project 1',
           project_description: 'Description for Project 1',
           start_date: new Date(),
-          account: {} as Account,  
-          user_roles: [], 
+          account: {} as Account,
+          user_roles: [],
           created_at: new Date(),
-          updated_at:new Date(),
-          updated_by:'user1',
-          created_by: 'user1', 
+          updated_at: new Date(),
+          updated_by: 'user1',
+          created_by: 'user1',
           populateWhoColumns: jest.fn(),
-          
         },
-        
       ];
       jest.spyOn(service, 'findAll').mockResolvedValue(projects);
 
@@ -176,9 +208,13 @@ describe('ProjectController', () => {
     });
 
     it('should handle errors during findAll', async () => {
-      jest.spyOn(service, 'findAll').mockRejectedValue(new Error('Failed to fetch projects'));
+      jest
+        .spyOn(service, 'findAll')
+        .mockRejectedValue(new Error('Failed to fetch projects'));
 
-      await expect(controller.findAll(1, 10, 'id', 'ASC', '{}')).rejects.toThrow('Failed to fetch projects');
+      await expect(
+        controller.findAll(1, 10, 'id', 'ASC', '{}'),
+      ).rejects.toThrow('Failed to fetch projects');
     });
   });
 
@@ -186,11 +222,27 @@ describe('ProjectController', () => {
     it('should return an empty list when no projects exist for an account', async () => {
       jest.spyOn(service, 'findByAccount').mockResolvedValue([]);
 
-      const result = await controller.findByAccountId(userPermissionResponseMock, '1', 1, 10, 'id', 'ASC', '{}');
+      const result = await controller.findByAccountId(
+        userPermissionResponseMock,
+        '1',
+        1,
+        10,
+        'id',
+        'ASC',
+        '{}',
+      );
 
-      expect( result ).toEqual([]);
       expect(result).toEqual([]);
-      expect(service.findByAccount).toHaveBeenCalledWith('1', 1, 10, 'id', 'ASC', {}, userPermissionResponseMock);
+      expect(result).toEqual([]);
+      expect(service.findByAccount).toHaveBeenCalledWith(
+        '1',
+        1,
+        10,
+        'id',
+        'ASC',
+        {},
+        userPermissionResponseMock,
+      );
     });
 
     it('should return projects for an account', async () => {
@@ -210,9 +262,9 @@ describe('ProjectController', () => {
           populateWhoColumns: jest.fn(),
         },
       ];
-     
+
       jest.spyOn(service, 'findByAccount').mockResolvedValue(projects);
-     
+
       const userPermissionResponseMock = {
         user: {
           id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca',
@@ -225,7 +277,7 @@ describe('ProjectController', () => {
           ],
         },
       };
-     
+
       const result = await controller.findByAccountId(
         userPermissionResponseMock,
         '1',
@@ -235,7 +287,7 @@ describe('ProjectController', () => {
         'ASC',
         '{}',
       );
-     
+
       expect(result).toEqual(projects);
       expect(service.findByAccount).toHaveBeenCalledWith(
         '1',
@@ -244,14 +296,26 @@ describe('ProjectController', () => {
         'id',
         'ASC',
         {},
-        userPermissionResponseMock
+        userPermissionResponseMock,
       );
     });
 
     it('should handle errors during findByAccountId', async () => {
-      jest.spyOn(service, 'findByAccount').mockRejectedValue(new Error('Account not found'));
+      jest
+        .spyOn(service, 'findByAccount')
+        .mockRejectedValue(new Error('Account not found'));
 
-      await expect(controller.findByAccountId(userPermissionResponseMock, 'invalid-id', 1, 10, 'id', 'ASC', '{}')).rejects.toThrow('Account not found');
+      await expect(
+        controller.findByAccountId(
+          userPermissionResponseMock,
+          'invalid-id',
+          1,
+          10,
+          'id',
+          'ASC',
+          '{}',
+        ),
+      ).rejects.toThrow('Account not found');
     });
   });
 
@@ -265,9 +329,13 @@ describe('ProjectController', () => {
     });
 
     it('should handle errors during findOne', async () => {
-      jest.spyOn(service, 'findOne').mockRejectedValue(new Error('Failed to fetch project'));
+      jest
+        .spyOn(service, 'findOne')
+        .mockRejectedValue(new Error('Failed to fetch project'));
 
-      await expect(controller.findOne('1')).rejects.toThrow('Failed to fetch project');
+      await expect(controller.findOne('1')).rejects.toThrow(
+        'Failed to fetch project',
+      );
     });
   });
 
@@ -277,16 +345,24 @@ describe('ProjectController', () => {
 
       jest.spyOn(service, 'update').mockResolvedValue();
 
-      await controller.update('1', updateDto,  userPermissionResponseMock);
-      expect(service.update).toHaveBeenCalledWith('1', updateDto, userPermissionResponseMock);
+      await controller.update('1', updateDto, userPermissionResponseMock);
+      expect(service.update).toHaveBeenCalledWith(
+        '1',
+        updateDto,
+        userPermissionResponseMock,
+      );
     });
 
     it('should handle errors during update', async () => {
       const updateDto = { project_name: 'updated test' } as any;
 
-      jest.spyOn(service, 'update').mockRejectedValue(new Error('Failed to update project'));
+      jest
+        .spyOn(service, 'update')
+        .mockRejectedValue(new Error('Failed to update project'));
 
-      await expect(controller.update('1', updateDto,  userPermissionResponseMock)).rejects.toThrow('Failed to update project');
+      await expect(
+        controller.update('1', updateDto, userPermissionResponseMock),
+      ).rejects.toThrow('Failed to update project');
     });
   });
 
@@ -299,9 +375,13 @@ describe('ProjectController', () => {
     });
 
     it('should handle errors during delete', async () => {
-      jest.spyOn(service, 'delete').mockRejectedValue(new Error('Failed to delete project'));
+      jest
+        .spyOn(service, 'delete')
+        .mockRejectedValue(new Error('Failed to delete project'));
 
-      await expect(controller.delete('1')).rejects.toThrow('Failed to delete project');
+      await expect(controller.delete('1')).rejects.toThrow(
+        'Failed to delete project',
+      );
     });
   });
 });

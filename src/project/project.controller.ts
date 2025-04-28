@@ -7,12 +7,18 @@ import {
   Param,
   Delete,
   Query,
-  Request
+  Request,
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ProjectDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
@@ -30,11 +36,14 @@ export class ProjectController {
     description: ProjectDescriptions.CreateProjectsDescription,
   })
   @ApiBody({ type: CreateProjectDto })
-  create(@Body() createProjectDto: CreateProjectDto, @Request() userPermissionResponse: UserPermissionResponse) {
+  create(
+    @Body() createProjectDto: CreateProjectDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
     return this.projectService.create(
       createProjectDto.account_id,
       createProjectDto,
-      userPermissionResponse
+      userPermissionResponse,
     );
   }
 
@@ -167,8 +176,16 @@ export class ProjectController {
     summary: 'Update Project',
     description: ProjectDescriptions.UpdateProjectById,
   })
-  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto, @Request() userPermissionResponse:UserPermissionResponse) {
-    return this.projectService.update(id, updateProjectDto, userPermissionResponse);
+  update(
+    @Param('id') id: string,
+    @Body() updateProjectDto: UpdateProjectDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
+    return this.projectService.update(
+      id,
+      updateProjectDto,
+      userPermissionResponse,
+    );
   }
 
   @Auth(Permission.DeleteProject)

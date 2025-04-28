@@ -6,7 +6,7 @@ import {
   Patch,
   Param,
   Delete,
-  Request
+  Request,
 } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -29,7 +29,10 @@ export class RoleController {
     description: RoleDescription.CreateRoleDescription,
   })
   @ApiBody({ type: CreateRoleDto })
-  create(@Body() createRoleDto: CreateRoleDto, @Request() userPermissionResponse:UserPermissionResponse) {
+  create(
+    @Body() createRoleDto: CreateRoleDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
     return this.roleService.create(createRoleDto, userPermissionResponse);
   }
 
@@ -62,7 +65,11 @@ export class RoleController {
     summary: 'Update Role by ID',
     description: RoleDescription.UpdateRoleDescription,
   })
-  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto, @Request() userPermissionResponse:UserPermissionResponse) {
+  update(
+    @Param('id') id: string,
+    @Body() updateRoleDto: UpdateRoleDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
     return this.roleService.update(id, updateRoleDto, userPermissionResponse);
   }
 

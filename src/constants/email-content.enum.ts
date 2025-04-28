@@ -1,4 +1,4 @@
 export enum EmailContentStatus {
-    FIRING = 'firing',
-    RESOLVED = 'resolved'
+  FIRING = 'firing',
+  RESOLVED = 'resolved',
 }

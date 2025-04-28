@@ -4,21 +4,20 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
-import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
- 
+
 describe('RolePermissionService', () => {
   let service: RolePermissionService;
   let roleRepository: Repository<Role>;
   let permissionRepository: Repository<Permission>;
   let rolePermissionRepository: Repository<RolePermission>;
- 
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -42,26 +41,30 @@ describe('RolePermissionService', () => {
         { provide: getRepositoryToken(UserRole), useClass: Repository },
       ],
     }).compile();
- 
+
     service = module.get<RolePermissionService>(RolePermissionService);
     roleRepository = module.get<Repository<Role>>(getRepositoryToken(Role));
-    permissionRepository = module.get<Repository<Permission>>(getRepositoryToken(Permission));
-    rolePermissionRepository = module.get<Repository<RolePermission>>(getRepositoryToken(RolePermission));
+    permissionRepository = module.get<Repository<Permission>>(
+      getRepositoryToken(Permission),
+    );
+    rolePermissionRepository = module.get<Repository<RolePermission>>(
+      getRepositoryToken(RolePermission),
+    );
   });
 
   const userPermissionResponseMock = {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
- 
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
+
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
@@ -69,42 +72,57 @@ describe('RolePermissionService', () => {
   describe('findAll', () => {
     it('should return an array of role permissions', async () => {
       const mockRolePermissions = [
-        { id: '1', role: { id: 'role-id-1' }, permission: { id: 'permission-id-1' } } as RolePermission,
-        { id: '2', role: { id: 'role-id-2' }, permission: { id: 'permission-id-2' } } as RolePermission,
+        {
+          id: '1',
+          role: { id: 'role-id-1' },
+          permission: { id: 'permission-id-1' },
+        } as RolePermission,
+        {
+          id: '2',
+          role: { id: 'role-id-2' },
+          permission: { id: 'permission-id-2' },
+        } as RolePermission,
       ];
-   
+
       jest
         .spyOn(rolePermissionRepository, 'find')
         .mockResolvedValue(mockRolePermissions);
-   
-      const result = await service.findAll(1,1,'','ASC', undefined);
-   
+
+      const result = await service.findAll(1, 1, '', 'ASC', undefined);
+
       expect(result).toEqual(mockRolePermissions);
-      expect(rolePermissionRepository.find).toHaveBeenCalledWith({"order": {"": "ASC"}, "relations": ["role", "permission"], "skip": 0, "take": 1, "where": {}});
+      expect(rolePermissionRepository.find).toHaveBeenCalledWith({
+        order: { '': 'ASC' },
+        relations: ['role', 'permission'],
+        skip: 0,
+        take: 1,
+        where: {},
+      });
     });
-   
+
     it('should return an empty array if no role permissions are found', async () => {
       jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
-     
-      const options = {}; 
+
       const result = await service.findAll(1, 1, '', 'ASC', undefined);
-     
-      expect(result).toEqual([]); 
+
+      expect(result).toEqual([]);
       expect(rolePermissionRepository.find).toHaveBeenCalledWith({
         where: {},
         take: 1,
         skip: 0,
         order: { '': 'ASC' },
         relations: ['role', 'permission'],
-      }); 
+      });
     });
 
     it('should filter by role_id when provided', async () => {
       const mockFilter = { role_id: '1' };
-      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
-   
+      const findSpy = jest
+        .spyOn(rolePermissionRepository, 'find')
+        .mockResolvedValue([]);
+
       await service.findAll(1, 10, 'id', 'ASC', mockFilter);
-   
+
       expect(findSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -113,13 +131,15 @@ describe('RolePermissionService', () => {
         }),
       );
     });
-   
+
     it('should filter by permission_id when provided', async () => {
       const mockFilter = { permission_id: '2' };
-      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
-   
+      const findSpy = jest
+        .spyOn(rolePermissionRepository, 'find')
+        .mockResolvedValue([]);
+
       await service.findAll(1, 10, 'id', 'ASC', mockFilter);
-   
+
       expect(findSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -128,13 +148,15 @@ describe('RolePermissionService', () => {
         }),
       );
     });
-   
+
     it('should filter by both role_id and permission_id when both are provided', async () => {
       const mockFilter = { role_id: '1', permission_id: '2' };
-      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
-   
+      const findSpy = jest
+        .spyOn(rolePermissionRepository, 'find')
+        .mockResolvedValue([]);
+
       await service.findAll(1, 10, 'id', 'ASC', mockFilter);
-   
+
       expect(findSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -144,12 +166,14 @@ describe('RolePermissionService', () => {
         }),
       );
     });
-   
+
     it('should not filter when no filter is provided', async () => {
-      const findSpy = jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([]);
-   
+      const findSpy = jest
+        .spyOn(rolePermissionRepository, 'find')
+        .mockResolvedValue([]);
+
       await service.findAll(1, 10);
-   
+
       expect(findSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {},
@@ -157,7 +181,7 @@ describe('RolePermissionService', () => {
       );
     });
   });
- 
+
   describe('create', () => {
     it('should create a new role permission', async () => {
       const roleId = 'role-id';
@@ -170,31 +194,49 @@ describe('RolePermissionService', () => {
         id: 'role-permission-id',
         role,
       } as RolePermission;
- 
+
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
-      jest.spyOn(rolePermissionRepository, 'create').mockReturnValue(rolePermission);
-      jest.spyOn(rolePermissionRepository, 'save').mockResolvedValue(rolePermission);
- 
-      const result = await service.create(roleId, createRolePermissionDto, userPermissionResponseMock);
- 
+      jest
+        .spyOn(rolePermissionRepository, 'create')
+        .mockReturnValue(rolePermission);
+      jest
+        .spyOn(rolePermissionRepository, 'save')
+        .mockResolvedValue(rolePermission);
+
+      const result = await service.create(
+        roleId,
+        createRolePermissionDto,
+        userPermissionResponseMock,
+      );
+
       expect(result).toEqual(rolePermission);
       expect(roleRepository.findOneBy).toHaveBeenCalledWith({ id: roleId });
-      expect(rolePermissionRepository.create).toHaveBeenCalledWith(expect.objectContaining({ role }));
-      expect(rolePermissionRepository.save).toHaveBeenCalledWith(rolePermission);
+      expect(rolePermissionRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ role }),
+      );
+      expect(rolePermissionRepository.save).toHaveBeenCalledWith(
+        rolePermission,
+      );
     });
- 
+
     it('should throw NotFoundException if role not found', async () => {
       const roleId = 'role-id';
       const createRolePermissionDto = {
         role_id: roleId,
         permission_id: 'permission-id',
       };
- 
+
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(null);
- 
-      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(NotFoundException);
+
+      await expect(
+        service.create(
+          roleId,
+          createRolePermissionDto,
+          userPermissionResponseMock,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
- 
+
     it('should throw TypeError if the role permission already exists', async () => {
       const roleId = 'role-id';
       const createRolePermissionDto = {
@@ -206,23 +248,37 @@ describe('RolePermissionService', () => {
         id: 'existing-role-permission-id',
         role,
       } as RolePermission;
- 
+
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
-      jest.spyOn(rolePermissionRepository, 'findOne').mockResolvedValue(existingRolePermission);
- 
-      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
+      jest
+        .spyOn(rolePermissionRepository, 'findOne')
+        .mockResolvedValue(existingRolePermission);
+
+      await expect(
+        service.create(
+          roleId,
+          createRolePermissionDto,
+          userPermissionResponseMock,
+        ),
+      ).rejects.toThrow(TypeError);
     });
- 
+
     it('should throw BadRequestException if permission_id is missing', async () => {
       const roleId = 'role-id';
       const createRolePermissionDto = {
-        permission_id:'',
+        permission_id: '',
         role_id: roleId,
       };
- 
-      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
+
+      await expect(
+        service.create(
+          roleId,
+          createRolePermissionDto,
+          userPermissionResponseMock,
+        ),
+      ).rejects.toThrow(TypeError);
     });
- 
+
     it('should throw NotFoundException if permission not found', async () => {
       const roleId = 'role-id';
       const createRolePermissionDto = {
@@ -230,14 +286,20 @@ describe('RolePermissionService', () => {
         permission_id: 'permission-id',
       };
       const role = { id: roleId } as Role;
- 
+
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
       jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue(null);
- 
-      await expect(service.create(roleId, createRolePermissionDto, userPermissionResponseMock)).rejects.toThrow(TypeError);
+
+      await expect(
+        service.create(
+          roleId,
+          createRolePermissionDto,
+          userPermissionResponseMock,
+        ),
+      ).rejects.toThrow(TypeError);
     });
   });
- 
+
   describe('update', () => {
     it('should update an existing role permission', async () => {
       const id = 'role-permission-id';
@@ -251,33 +313,49 @@ describe('RolePermissionService', () => {
         permission: {} as Permission,
       } as RolePermission;
       const role = { id: updateRolePermissionDto.role_id } as Role;
-      const permission = { id: updateRolePermissionDto.permission_id } as Permission;
- 
-      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(rolePermission);
+      const permission = {
+        id: updateRolePermissionDto.permission_id,
+      } as Permission;
+
+      jest
+        .spyOn(rolePermissionRepository, 'findOneBy')
+        .mockResolvedValue(rolePermission);
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
-      jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue(permission);
-      jest.spyOn(rolePermissionRepository, 'save').mockResolvedValue(rolePermission);
- 
+      jest
+        .spyOn(permissionRepository, 'findOneBy')
+        .mockResolvedValue(permission);
+      jest
+        .spyOn(rolePermissionRepository, 'save')
+        .mockResolvedValue(rolePermission);
+
       await service.update(id, updateRolePermissionDto);
- 
+
       expect(rolePermissionRepository.findOneBy).toHaveBeenCalledWith({ id });
-      expect(roleRepository.findOneBy).toHaveBeenCalledWith({ id: updateRolePermissionDto.role_id });
-      expect(permissionRepository.findOneBy).toHaveBeenCalledWith({ id: updateRolePermissionDto.permission_id });
-      expect(rolePermissionRepository.save).toHaveBeenCalledWith(rolePermission);
+      expect(roleRepository.findOneBy).toHaveBeenCalledWith({
+        id: updateRolePermissionDto.role_id,
+      });
+      expect(permissionRepository.findOneBy).toHaveBeenCalledWith({
+        id: updateRolePermissionDto.permission_id,
+      });
+      expect(rolePermissionRepository.save).toHaveBeenCalledWith(
+        rolePermission,
+      );
     });
- 
+
     it('should throw NotFoundException if role permission not found', async () => {
       const id = 'role-permission-id';
       const updateRolePermissionDto = {
         role_id: 'role-id',
         permission_id: 'permission-id',
       };
- 
+
       jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(null);
- 
-      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(NotFoundException);
+
+      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
- 
+
     it('should throw NotFoundException if role not found', async () => {
       const id = 'role-permission-id';
       const updateRolePermissionDto = {
@@ -285,13 +363,17 @@ describe('RolePermissionService', () => {
         permission_id: 'permission-id',
       };
       const rolePermission = { id } as RolePermission;
- 
-      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(rolePermission);
+
+      jest
+        .spyOn(rolePermissionRepository, 'findOneBy')
+        .mockResolvedValue(rolePermission);
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(null);
- 
-      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(NotFoundException);
+
+      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
- 
+
     it('should throw NotFoundException if permission not found', async () => {
       const id = 'role-permission-id';
       const updateRolePermissionDto = {
@@ -300,15 +382,19 @@ describe('RolePermissionService', () => {
       };
       const rolePermission = { id } as RolePermission;
       const role = { id: updateRolePermissionDto.role_id } as Role;
- 
-      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(rolePermission);
+
+      jest
+        .spyOn(rolePermissionRepository, 'findOneBy')
+        .mockResolvedValue(rolePermission);
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(role);
       jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue(null);
- 
-      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(NotFoundException);
+
+      await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
- 
+
   describe('delete', () => {
     it('should delete a role permission', async () => {
       const id = 'role-permission-id';
@@ -364,9 +450,7 @@ describe('RolePermissionService', () => {
     it('should throw NotFoundException if role permission not found', async () => {
       const id = 'role-permission-id';
 
-      jest
-        .spyOn(rolePermissionRepository, 'findOne')
-        .mockResolvedValue(null);
+      jest.spyOn(rolePermissionRepository, 'findOne').mockResolvedValue(null);
 
       await expect(service.findOne(id)).rejects.toThrow(NotFoundException);
     });

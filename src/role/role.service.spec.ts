@@ -36,14 +36,14 @@ describe('RoleService', () => {
     user: {
       roles: [
         {
-          role_name: "",
+          role_name: '',
           projects: [],
-          permissions: []
-        }
+          permissions: [],
+        },
       ],
-      id: "6d4657c8-b19a-47b4-bb2e-bcef5865d4ca" // can be replaced with any string
-    }
-  } as UserPermissionResponse
+      id: '6d4657c8-b19a-47b4-bb2e-bcef5865d4ca', // can be replaced with any string
+    },
+  } as UserPermissionResponse;
 
   it('should create an role', async () => {
     const createRoleDto: CreateRoleDto = {
@@ -66,7 +66,9 @@ describe('RoleService', () => {
     jest.spyOn(repository, 'create').mockReturnValue(role);
     jest.spyOn(repository, 'save').mockResolvedValue(role);
 
-    expect(await service.create(createRoleDto, userPermissionResponseMock)).toEqual(role);
+    expect(
+      await service.create(createRoleDto, userPermissionResponseMock),
+    ).toEqual(role);
     expect(repository.create).toHaveBeenCalledWith({
       ...createRoleDto,
       role_status: 'active',

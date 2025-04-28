@@ -22,7 +22,7 @@ export class RolePermissionService {
   async create(
     roleId: string,
     createRolePermissionDto: CreateRolePermissionDto,
-    userPermissionResponse:UserPermissionResponse
+    userPermissionResponse: UserPermissionResponse,
   ): Promise<RolePermission> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {

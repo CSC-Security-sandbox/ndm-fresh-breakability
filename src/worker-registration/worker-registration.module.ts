@@ -4,8 +4,8 @@ import { WorkerRegistrationService } from './worker-registration.service';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 
 @Module({
-  imports:[AuthKeycloakModule],
+  imports: [AuthKeycloakModule],
   controllers: [WorkerRegistrationController],
-  providers: [WorkerRegistrationService]
+  providers: [WorkerRegistrationService],
 })
 export class WorkerRegistrationModule {}

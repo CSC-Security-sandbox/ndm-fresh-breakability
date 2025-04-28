@@ -1,8 +1,7 @@
-import { Controller, Get, Post, Body, Request, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { User } from '../entities/user.entity';
 import { UserPermissionResponse } from './user-permission-response-type';
 
 class InviteUserDto {
@@ -12,15 +11,15 @@ class InviteUserDto {
 }
 
 class UserStatusDto {
-    email: string;
-    enable: boolean;
+  email: string;
+  enable: boolean;
 }
- 
+
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
- 
+
   @Auth()
   @ApiBearerAuth()
   @Get('user-permissions')
@@ -30,12 +29,13 @@ export class AuthController {
   getPermissions(@Request() req: any) {
     return req.user;
   }
- 
+
   @Auth(Permission.InviteUser, Permission.CreateUser)
   @ApiBearerAuth()
   @Post('create-user')
   @ApiOperation({
-    summary: 'Invite a new user without permissions roles or project for keycloak entry',
+    summary:
+      'Invite a new user without permissions roles or project for keycloak entry',
   })
   @ApiBody({
     description: 'Invite a user with their username and name',
@@ -50,11 +50,18 @@ export class AuthController {
       },
     },
   })
-  async inviteUser(@Body() inviteUserDto: InviteUserDto, @Request() userPermissionResponse:UserPermissionResponse) {
+  async inviteUser(
+    @Body() inviteUserDto: InviteUserDto,
+    @Request() userPermissionResponse: UserPermissionResponse,
+  ) {
     const { username, firstName, lastName } = inviteUserDto;
-    return this.authService.inviteUser(username, firstName, lastName, userPermissionResponse);
+    return this.authService.inviteUser(
+      username,
+      firstName,
+      lastName,
+      userPermissionResponse,
+    );
   }
-
 
   @Auth(Permission.InviteUser, Permission.CreateUser)
   @ApiBearerAuth()
@@ -77,7 +84,7 @@ export class AuthController {
     const newPassword = await this.authService.resetPassword(email);
     return { email, newPassword };
   }
- 
+
   @Auth(Permission.InviteUser, Permission.CreateUser)
   @ApiBearerAuth()
   @Post('user-status')
@@ -91,7 +98,7 @@ export class AuthController {
       'application/json': {
         value: {
           email: 'testUser@email.com',
-          enable: true
+          enable: true,
         },
       },
     },
@@ -99,6 +106,9 @@ export class AuthController {
   async setUserStatus(@Body() userStatusDto: UserStatusDto) {
     const { email, enable } = userStatusDto;
     const user = await this.authService.setUserStatus(email, enable);
-    return { message: `User ${enable ? 'enabled' : 'disabled'} successfully`, user };
+    return {
+      message: `User ${enable ? 'enabled' : 'disabled'} successfully`,
+      user,
+    };
   }
 }

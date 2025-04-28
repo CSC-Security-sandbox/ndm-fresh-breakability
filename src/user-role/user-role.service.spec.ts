@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserRoleService } from './user-role.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DeepPartial, DeleteResult, In, Repository } from 'typeorm';
+import { DeleteResult, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 import { Project } from '../entities/project.entity';
@@ -10,7 +10,6 @@ import { UserRole } from '../entities/user-role.entity';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
-import { first, last } from 'rxjs';
 import { UserRoleMap, UserRoleRelationDto } from './dto/user-role.dto';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 
@@ -952,7 +951,7 @@ describe('UserRoleService', () => {
       {
         id: '1',
         user_roles: [{ role: { id: '1', role_name: 'App Admin' } }],
-        email:'test@test.com',
+        email: 'test@test.com',
         user_status: 'active',
         created_at: new Date(),
         created_by: randomUUID(),
@@ -963,7 +962,7 @@ describe('UserRoleService', () => {
         name: 'Test User',
       } as User,
     ];
-  
+
     const expected = {
       total: 1,
       page: 1,
@@ -972,7 +971,7 @@ describe('UserRoleService', () => {
         {
           userId: '1',
           userName: 'Test User',
-          email:'test@test.com',
+          email: 'test@test.com',
           userStatus: 'active',
           roles: [
             {
@@ -984,20 +983,22 @@ describe('UserRoleService', () => {
         },
       ],
     };
-    jest.spyOn(userRepository, 'findAndCount').mockResolvedValue([user_roles, user_roles.length]);
-    jest.spyOn(userRoleRepository, 'findAndCount').mockResolvedValue([User[0], 1]);
+    jest
+      .spyOn(userRepository, 'findAndCount')
+      .mockResolvedValue([user_roles, user_roles.length]);
+    jest
+      .spyOn(userRoleRepository, 'findAndCount')
+      .mockResolvedValue([User[0], 1]);
     const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', {});
     expect(result).toEqual(expected);
     expect(userRepository.findAndCount).toHaveBeenCalledTimes(1);
   });
-  
 
   it('should find the user and his roles by user_id', async () => {
-
     const user_roles = [
       {
         id: '1',
-        user_roles: [{role: {id: '1', role_name: 'App Admin'}}],
+        user_roles: [{ role: { id: '1', role_name: 'App Admin' } }],
         email: 'test@test.com',
         user_status: 'active',
         created_at: new Date(),
@@ -1008,30 +1009,35 @@ describe('UserRoleService', () => {
         last_name: 'User',
         name: 'Test User',
       } as User,
-  ];
-  const expected = {
-    total: 1,
-    page: 1,
-    limit: 10,
-    data:[
-    {
-      userId: '1',
-      userName: 'Test User',
-      email: 'test@test.com',
-      userStatus: 'active', 
-      roles: [
+    ];
+    const expected = {
+      total: 1,
+      page: 1,
+      limit: 10,
+      data: [
         {
-          roleId: '1',
-          roleName: 'App Admin',
-          projectId: null,
+          userId: '1',
+          userName: 'Test User',
+          email: 'test@test.com',
+          userStatus: 'active',
+          roles: [
+            {
+              roleId: '1',
+              roleName: 'App Admin',
+              projectId: null,
+            },
+          ],
         },
       ],
-    },
-  ]};
+    };
 
-    jest.spyOn(userRepository, 'findAndCount').mockResolvedValue([user_roles, user_roles.length]);
+    jest
+      .spyOn(userRepository, 'findAndCount')
+      .mockResolvedValue([user_roles, user_roles.length]);
 
-    const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', { user_id: '1' });
+    const result = await service.fetchUsersAndRoles(1, 10, 'id', 'ASC', {
+      user_id: '1',
+    });
 
     expect(result).toEqual(expected);
     expect(userRepository.findAndCount).toHaveBeenCalled();
