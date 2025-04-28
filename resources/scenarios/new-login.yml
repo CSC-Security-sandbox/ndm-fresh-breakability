@@ -3,7 +3,7 @@ scenarios:
     method: post
     data:
       username: admin@datamigrator.local
-      password: welcome
+      password: Welcome@123
     response:
       - status_code: 201
     parse: {}

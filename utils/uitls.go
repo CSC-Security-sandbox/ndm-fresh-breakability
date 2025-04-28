@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,9 +13,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/joho/godotenv"
 )
@@ -22,6 +26,14 @@ import (
 var isDebug = true
 var tr = &http.Transport{
 	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+}
+
+// SSHConfig holds the configuration for the SSH connection.
+type SSHConfig struct {
+	Username string
+	Host     string
+	Port     int
+	Password string
 }
 
 const (
@@ -113,6 +125,209 @@ func GetBearerToken(userN, pass string) (string, error) {
 	}
 }
 
+// SSHRunScript connects to a VM via SSH and runs the given script.
+func SSHRunScript(config SSHConfig, script string) (string, error) {
+
+	// Create the SSH client configuration
+	sshConfig := &ssh.ClientConfig{
+		User: config.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(config.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // NOTE: Use a proper host key callback in production
+	}
+
+	// Connect to the SSH server
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	defer client.Close()
+
+	// Create a session
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	// Run the script
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+
+	err = session.Run(script)
+	if err != nil {
+		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
+
+// Example function to create the script
+func CreateWorkerScript(resp *http.Response) (string, string, error) {
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		return "", "", err
+	}
+	// Define a struct to parse the response
+	type WorkerResponse struct {
+		WorkerId       string `json:"workerId"`
+		WorkerSecret   string `json:"workerSecret"`
+		ControlPlaneIp string `json:"controlPlaneIp"`
+	}
+
+	// Parse the JSON response
+	var workerResp WorkerResponse
+	err = json.Unmarshal(respBody, &workerResp)
+	if err != nil {
+		return "", "", fmt.Errorf("error parsing response: %w", err)
+	}
+
+	// Construct the script
+	script := fmt.Sprintf(`
+	sudo su -c '
+    export WORKER_ID=%s
+    export WORKER_SECRET=%s
+    export CONTROL_PLANE_IP=%s
+    sh /opt/datamigrator/bin/worker_register.sh
+	'
+    `, workerResp.WorkerId, workerResp.WorkerSecret, workerResp.ControlPlaneIp)
+
+	return script, workerResp.WorkerId, nil
+}
+
+func sendPostAPIRequest(url string, data map[string]string, authToken string) (map[string]interface{}, error) {
+	// Marshal the data into JSON
+	reqBody, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshaling JSON: %v", err)
+		return nil, err
+	}
+	resp, err := SendAPIRequest("post", url, reqBody, authToken)
+	if err != nil {
+		log.Printf("Error sending API request: %v", err)
+		return nil, err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		return nil, err
+	}
+
+	var jsonResponse map[string]interface{}
+	if err = json.Unmarshal(respBody, &jsonResponse); err != nil {
+		log.Printf("Error parsing JSON response: %v", err)
+		return nil, err
+	}
+	return jsonResponse, nil
+}
+
+func createAccount(authToken string) (string, error) {
+	// var fullURL = os.Getenv("ADMIN_SERVICE_URL") + "/api/v1/accounts"
+	// data := map[string]string{
+	// 	"account_name": os.Getenv("BASE_ACCOUNT_NAME"),
+	// }
+
+	// jsonResponse, err := sendPostAPIRequest(fullURL, data, authToken)
+	// if err != nil {
+	// 	log.Printf("Error sending API request: %v", err)
+	// 	return "", err
+	// }
+	// accountId, ok := jsonResponse["id"].(string)
+	// if !ok {
+	// 	return "", errors.New("id not found in response in createAccount")
+	// }
+
+	// return accountId, nil
+	return os.Getenv("DEFFAULT_ACCOUNT_ID"), nil
+}
+
+func createProject(authToken string, account_id string) (string, error) {
+	var fullURL = os.Getenv("ADMIN_SERVICE_URL") + "/api/v1/projects"
+	data := map[string]string{
+		"account_id":          account_id,
+		"project_name":        os.Getenv("BASE_PROJECT_NAME"),
+		"project_description": os.Getenv("BASE_PROJECT_DESCRIPTION"),
+		"start_date":          os.Getenv("BASE_PROJECT_START_DATE"),
+	}
+
+	jsonResponse, err := sendPostAPIRequest(fullURL, data, authToken)
+	if err != nil {
+		log.Printf("error while sending API request: %v", err)
+		return "", err
+	}
+	projectId, ok := jsonResponse["id"].(string)
+	if !ok {
+		return "", errors.New("id not found in response in createProject")
+	}
+
+	return projectId, nil
+}
+
+func AttachWorker(authToken string) (string, string, string, error) {
+	port, err := strconv.Atoi(os.Getenv("NDM_VM_PORT"))
+	if err != nil {
+		log.Printf("Invalid port value: %v", err)
+		return "", "", "", err
+	}
+	config := SSHConfig{
+		Username: os.Getenv("NDM_VM_USER_NAME"),
+		Host:     os.Getenv("NDM_VM_HOST"),
+		Port:     port,
+		Password: os.Getenv("NDM_VM_PASSWORD"),
+	}
+	accountId, err := createAccount(authToken)
+	if err != nil {
+		log.Printf("Error creating account: %v", err)
+		return accountId, "", "", err
+	}
+	projectId, err := createProject(authToken, accountId)
+	if err != nil {
+		log.Printf("Error creating Project: %v", err)
+		return accountId, projectId, "", err
+	}
+	var fullURL = os.Getenv("CONFIG_SERVICE_URL") + "/api/v1/worker-registration"
+	data := map[string]string{
+		"projectId": projectId,
+	}
+
+	// Marshal the data into JSON
+	reqBody, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshaling JSON: %v", err)
+		return accountId, projectId, "", err
+
+	}
+	resp, err := SendAPIRequest("post", fullURL, reqBody, authToken)
+	if err != nil {
+		log.Printf("Error sending API request: %v", err)
+		return accountId, projectId, "", err
+	}
+
+	script, workerId, err := CreateWorkerScript(resp)
+	if err != nil {
+		log.Printf("Error creating the script: %v", err)
+		return accountId, projectId, workerId, err
+	}
+	fmt.Printf("Running scripts: %s ", script)
+
+	// Run the script
+	output, err := SSHRunScript(config, script)
+	if err != nil {
+		log.Printf("Error running script: %v", err)
+		return accountId, projectId, workerId, err
+	}
+
+	// Print the output
+	fmt.Println("Script Output:")
+	fmt.Println(output)
+	return accountId, projectId, workerId, nil
+}
+
 // buildRequestBody builds the JSON payload directly from the YAML "data" field.
 // Only keys defined in the YAML data are included; values that start with "$" are replaced
 // using sharedVars.
@@ -175,11 +390,11 @@ func SendAPIRequest(method, url string, body []byte, authToken string) (*http.Re
 
 // handleResponse validates the response by checking the status code, verifying expected fields,
 // and extracting any parsed fields into sharedVars.
-func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) error {
+func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return sharedVars, err
 	}
 	responseLog := fmt.Sprintf("Response for '%s' -- Status Code: %d\nResponse Body: %s\n", callKey, resp.StatusCode, string(bodyBytes))
 	logDebug(responseLog)
@@ -191,11 +406,11 @@ func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sh
 	if len(s.Response) > 0 {
 		if expectedCode, found := getExpectedStatusCode(s.Response); found {
 			if resp.StatusCode != expectedCode {
-				return fmt.Errorf("status code mismatch for '%s': expected %d, got %d", callKey, expectedCode, resp.StatusCode)
+				return sharedVars, fmt.Errorf("status code mismatch for '%s': expected %d, got %d", callKey, expectedCode, resp.StatusCode)
 			}
 		} else {
 			if resp.StatusCode != 200 && resp.StatusCode != 201 {
-				return fmt.Errorf("status code mismatch for '%s': got %d", callKey, resp.StatusCode)
+				return sharedVars, fmt.Errorf("status code mismatch for '%s': got %d", callKey, resp.StatusCode)
 			}
 		}
 	}
@@ -211,10 +426,10 @@ func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sh
 				}
 				actualVal, err := extractJSONValue(bodyBytes, key)
 				if err != nil {
-					return fmt.Errorf("expected field '%s' not found in response for '%s'", key, callKey)
+					return sharedVars, fmt.Errorf("expected field '%s' not found in response for '%s'", key, callKey)
 				}
 				if fmt.Sprintf("%v", actualVal) != fmt.Sprintf("%v", expVal) {
-					return fmt.Errorf("value mismatch for field '%s' in '%s': expected %v, got %v", key, callKey, expVal, actualVal)
+					return sharedVars, fmt.Errorf("value mismatch for field '%s' in '%s': expected %v, got %v", key, callKey, expVal, actualVal)
 				}
 			}
 		}
@@ -227,13 +442,13 @@ func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sh
 			}
 			value, err := extractJSONValue(bodyBytes, targetVar)
 			if err != nil {
-				return fmt.Errorf("error extracting field '%s': %w", jsonField, err)
+				return sharedVars, fmt.Errorf("error extracting field '%s': %w", jsonField, err)
 			}
-			sharedVars[targetVar] = value
+			sharedVars[jsonField] = value
 			logDebug(fmt.Sprintf("Parsed variable '%s' set to %v from JSON field '%s'\n", targetVar, value, jsonField))
 		}
 	}
-	return nil
+	return sharedVars, nil
 }
 
 // extractJSONValue extracts a value from JSON data using a dotted field path.
@@ -243,21 +458,48 @@ func extractJSONValue(data []byte, fieldPath string) (interface{}, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
+
+	// Regular expression to match a field name and optional indices.
+	// For example, it will match "configs", "0" in "configs[0]"
+	re := regexp.MustCompile(`([^\[\]]+)|\[(\d+)\]`)
+
 	// Split the field path by dot.
 	parts := strings.Split(fieldPath, ".")
 	current := result
+
 	for _, part := range parts {
-		// Assert that the current value is a map.
-		m, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("cannot access field '%s'; unexpected type", part)
+		// Find all field names and indices in the part (e.g., "configs[0]" will become [ "configs", "0" ])
+		tokens := re.FindAllStringSubmatch(part, -1)
+
+		for _, token := range tokens {
+			// token[1] is non-empty for a field name, token[2] is non-empty for an index.
+			if token[1] != "" {
+				// Access a field in a map.
+				m, ok := current.(map[string]interface{})
+				if !ok {
+					return nil, fmt.Errorf("expected JSON object when accessing field '%s'", token[1])
+				}
+				val, exists := m[token[1]]
+				if !exists {
+					return nil, fmt.Errorf("field '%s' not found in path '%s'", token[1], fieldPath)
+				}
+				current = val
+			} else if token[2] != "" {
+				// Access an array index.
+				arr, ok := current.([]interface{})
+				if !ok {
+					return nil, fmt.Errorf("expected JSON array but found different type when accessing index [%s]", token[2])
+				}
+				index, err := strconv.Atoi(token[2])
+				if err != nil {
+					return nil, fmt.Errorf("invalid array index '%s': %v", token[2], err)
+				}
+				if index < 0 || index >= len(arr) {
+					return nil, fmt.Errorf("index [%d] out of bounds", index)
+				}
+				current = arr[index]
+			}
 		}
-		// Lookup the next part.
-		val, exists := m[part]
-		if !exists {
-			return nil, fmt.Errorf("field '%s' not found", fieldPath)
-		}
-		current = val
 	}
 	return current, nil
 }

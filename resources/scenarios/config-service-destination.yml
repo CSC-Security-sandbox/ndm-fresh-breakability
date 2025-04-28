@@ -42,7 +42,7 @@ scenarios:
     data:
       configName: "Lalit-Test-Destination"
       configType: "FILE"
-      projectId: "15bcd258-23c7-4773-a8e3-92694fe50729"
+      projectId: "$projectId"
       fileServers:
         - serverType: "OtherNAS"
           userName: "root"
@@ -52,7 +52,7 @@ scenarios:
           host: "192.168.64.11"
           volumes: []
           workers:
-            - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+            - "$workerId"
       workingDirectory:
         workingDirectory: ""
         pathId: "null"

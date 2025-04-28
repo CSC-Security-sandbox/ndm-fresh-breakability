@@ -9,7 +9,8 @@ scenarios:
       - account_name: account1
       - status_code: 201
     parse:
-      account_id: id
+      api_account_id: id
+
 
   - name: get-list-of-accounts
     url: /api/v1/accounts
@@ -19,6 +20,7 @@ scenarios:
     response:
       - status_code: 200
     parse: {}
+    
 
   - name: get-account-by-account_id
     url: /api/v1/accounts/{id}
@@ -28,7 +30,7 @@ scenarios:
     response:
       - status_code: 200
     params:
-      id: account_id
+      id: api_account_id
 
   - name: update-account
     url: /api/v1/accounts/{id}
@@ -40,7 +42,7 @@ scenarios:
       - account_name: "account2"
       - status_code: 200
     params:
-      id: account_id
+      id: api_account_id
 
   - name: delete-account
     url: /api/v1/accounts/{id}
@@ -50,4 +52,4 @@ scenarios:
     response:
       - status_code: 200
     params:
-      id: account_id
+      id: api_account_id

@@ -82,14 +82,20 @@ func TestAPIScenarios(t *testing.T) {
 
 // Main Describe block: iterate over each YAML file and execute its scenarios sequentially.
 var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
+	var projectId, accountId, workerId string
+	It("Should Attach a worker successfully", func() {
+		var err error
+		accountId, projectId, workerId, err = utils.AttachWorker(authToken)
+		Expect(err).To(BeNil(), "Failed to Attach a worker")
+	})
 	for _, filePath := range scenarioFiles {
 		fp := filePath
 		It(fmt.Sprintf("should execute scenario from file: %s", filepath.Base(fp)), func() {
 			// Initialize sharedVars with default values.
 			sharedVars = map[string]interface{}{
-				"account_id": "048e2ea8-d751-48a1-8deb-727d30f0be5d",
-				"project_id": "15bcd258-23c7-4773-a8e3-92694fe50729",
-				"workerId":   "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad",
+				"account_id": accountId,
+				"project_id": projectId,
+				"workerId":   workerId,
 			}
 			sd, err := scenario.ParseScenarioDefinition(fp)
 			Expect(err).To(BeNil(), "Failed to parse scenario file: %s", fp)
@@ -131,7 +137,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 				}
 				resp, err := utils.SendAPIRequest(scData.Method, fullURL, reqBody, authToken)
 				Expect(err).To(BeNil(), "Error sending API request for '%s'", scData.Name)
-				err = utils.HandleResponse(resp, scData, scData.Name, sharedVars)
+				sharedVars, err = utils.HandleResponse(resp, scData, scData.Name, sharedVars)
 				Expect(err).To(BeNil(), "Error handling response for '%s'", scData.Name)
 			}
 		})
