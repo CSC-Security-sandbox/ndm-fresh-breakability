@@ -51,7 +51,8 @@ const CreateProjectForm = ({
   const [associatedUsers, setAssociatedUsers] = useState<
     AssociatedUsersOptionsType[]
   >([]);
-  const [failedToFetchAssociateUsers, setFailedToFetchAssociateUsers] = useState<boolean>(false);
+  const [failedToFetchAssociateUsers, setFailedToFetchAssociateUsers] =
+    useState<boolean>(false);
 
   useEffect(() => {
     createProjectForm.resetForm({
@@ -62,7 +63,9 @@ const CreateProjectForm = ({
     if (editMode) {
       (async () => {
         try {
-          const res = await getAllAssociatedUser({ project_id: editSelectedProject?.id }).unwrap();
+          const res = await getAllAssociatedUser({
+            project_id: editSelectedProject?.id,
+          }).unwrap();
           const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
             (userRoles: any) => ({
               user: {
@@ -216,6 +219,12 @@ const CreateProjectForm = ({
               label="Project Name"
               placeholder="Project Name"
               name="project_name"
+              onChange={(e: any) => {
+                createProjectForm.resetForm({
+                  ...createProjectForm?.formState,
+                  project_name: e.target.value.trimStart(),
+                });
+              }}
               onBlur={(e: any) => {
                 createProjectForm.resetForm({
                   ...createProjectForm?.formState,
@@ -278,15 +287,19 @@ const CreateProjectForm = ({
             onClick={createProjectForm.handleFormSubmit(
               editMode ? handleSubmitUpdateProject : handleSubmitCreateProject
             )}
-            disabled={!(createProjectForm.isValid && createProjectForm.dirty) || failedToFetchAssociateUsers}
+            disabled={
+              !(createProjectForm.isValid && createProjectForm.dirty) ||
+              failedToFetchAssociateUsers
+            }
             isSubmitting={isLoading}
           >
             Submit
             <Show.When isTrue={failedToFetchAssociateUsers}>
               <Tooltip>
                 <Text>
-                  Please note: There was an issue while fetching the list of associated users for this project.
-                  As a result, you won't be able to update the project at this time.
+                  Please note: There was an issue while fetching the list of
+                  associated users for this project. As a result, you won't be
+                  able to update the project at this time.
                 </Text>
               </Tooltip>
             </Show.When>
