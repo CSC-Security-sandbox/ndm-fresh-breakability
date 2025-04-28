@@ -7,8 +7,12 @@ const ToggleWorkerCellRenderer = ({
   value,
   row,
 }: BlueXpTableRowType<any, string>) => {
-  const { selectedWorkerIds, setSelectedWorkerIds, validateConnectionLoader } =
-    useContext(CommonFileServerContext);
+  const {
+    selectedWorkerIds,
+    setSelectedWorkerIds,
+    validateConnectionLoader,
+    isJobRunning,
+  } = useContext(CommonFileServerContext);
 
   const handleToggle = useCallback(() => {
     setSelectedWorkerIds((prevIds: string[]) => {
@@ -25,7 +29,11 @@ const ToggleWorkerCellRenderer = ({
   return (
     <Toggle
       value={selectedWorkerIds.includes(value)}
-      disabled={validateConnectionLoader || (!selectedWorkerIds.includes(value) && !isOnline)}
+      disabled={
+        validateConnectionLoader ||
+        isJobRunning ||
+        (!selectedWorkerIds.includes(value) && !isOnline)
+      }
       toggle={handleToggle}
     />
   );
