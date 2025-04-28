@@ -1292,7 +1292,7 @@ export class JobConfigService {
         .getMany();
 
     const severityMessagesDescriptions = severityMessages.flatMap(entry =>
-      entry.mailContent.alerts?.map(alert => alert.annotations?.description).filter(Boolean) || []
+      entry?.mailContent.alerts?.map(alert => alert?.annotations?.description).filter(Boolean) || []
     );
 
     this.logger.log(
