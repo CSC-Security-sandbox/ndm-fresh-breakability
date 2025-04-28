@@ -1291,8 +1291,8 @@ export class JobConfigService {
         .where('syncEmail.incidentStatus = :status', { status: IncidentStatus.OPEN })
         .getMany();
 
-    const severityMessagesDescriptions = severityMessages.flatMap(entry =>
-      entry?.mailContent?.alerts.map(alert => alert?.annotations?.description).filter(Boolean) || []
+    const severityMessagesDescriptions = severityMessages?.flatMap(entry =>
+      (entry?.mailContent?.alerts ?? []).map(alert => alert?.annotations?.description).filter(Boolean) || []
     );
 
     this.logger.log(
