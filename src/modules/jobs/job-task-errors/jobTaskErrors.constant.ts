@@ -1,6 +1,7 @@
 import React from "react";
 import JobTaskErrorsCellRenderer from "@modules/jobs/job-task-errors/components/JobTaskErrorsCellRenderer";
 import { BlueXpTableRowType, JobErrorType } from "@/types/app.type";
+import ValueCellRenderer from "@modules/jobs/job-task-errors/components/ValueCellRenderer";
 export const ERROR_COLUMN_DEF = [
   {
     header: "File",
@@ -11,11 +12,15 @@ export const ERROR_COLUMN_DEF = [
     header: "Operation",
     accessor: "operationType",
     id: "2",
+    Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
+      React.createElement(ValueCellRenderer, { ...props }),
   },
   {
     header: "Occurrence",
     accessor: "occurrence",
     id: "3",
+    Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
+      React.createElement(ValueCellRenderer, { ...props }),
   },
   {
     header: "Code",
@@ -26,6 +31,8 @@ export const ERROR_COLUMN_DEF = [
     header: "Origin",
     accessor: "origin",
     id: "5",
+    Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
+      React.createElement(ValueCellRenderer, { ...props }),
   },
   {
     header: "Error Details",
