@@ -94,7 +94,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["errors"]>) =>
       React.createElement(ErrorNumberCellRenderer, {
-        value: value.length,
+        value: value,
       }),
   },
 ];

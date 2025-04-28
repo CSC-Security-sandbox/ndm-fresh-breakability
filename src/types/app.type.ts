@@ -765,3 +765,12 @@ export interface TooltipRendererProps {
   children: React.ReactNode;
   show?: boolean;
 }
+
+type ErrorType = {
+  count: number;
+  errortype: string;
+};
+
+export interface ErrorNumberCellRendererProps {
+  value: ErrorType[];
+}
