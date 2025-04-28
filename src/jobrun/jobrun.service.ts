@@ -913,16 +913,14 @@ export class JobRunService {
     this.logger.log(`Checking the health of workers`);
     try {
       const runningJobRuns = await this.jobRunRepo.find({
-        where: {
-          status: In([JobRunStatus.Running, JobRunStatus.Paused]),
-          pausedReason: PausedReason.SYSTEM_PAUSED,
-        },
+        where: [{ status: JobRunStatus.Running }, { status: JobRunStatus.Paused, pausedReason: PausedReason.SYSTEM_PAUSED}],
         relations: {
           workerMap: {
             worker: { stats: true },
           },
         },
       });
+      if(!runningJobRuns.length) return;
       for (const jobRun of runningJobRuns) {
         const jobRunId = jobRun.id;
         const workerMap = jobRun.workerMap;
