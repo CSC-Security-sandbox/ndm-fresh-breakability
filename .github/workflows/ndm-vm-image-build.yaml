@@ -1,0 +1,297 @@
+name: NDM Packer VM Image Build Workflow
+
+env:
+  PACKER_GITHUB_API_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  HELM_VERSION: 3.17.3
+  PACKER_VERSION: 1.12.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to build (control-plane or worker)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - control-plane
+          - worker
+      provider:
+        description: 'Cloud provider'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - azure
+          - aws
+          - vsphere
+  schedule:
+    - cron: '30 18 * * *'
+
+jobs:
+  determine-matrix:
+    runs-on: openlab
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          # Set components based on input
+          if [[ "${{ github.event.inputs.component }}" == "all" || "${{ github.event.inputs.component }}" == "" ]]; then
+            COMPONENTS='["control-plane", "worker"]'
+          else
+            COMPONENTS='["${{ github.event.inputs.component }}"]'
+          fi
+
+          # Set providers based on input
+          if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
+            PROVIDERS='["azure", "aws", "vsphere"]'
+          else
+            PROVIDERS='["${{ github.event.inputs.provider }}"]'
+          fi
+
+          # Create the matrix JSON
+          echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
+
+  packer:
+    needs: determine-matrix
+    name: Build ${{ matrix.component }} on ${{ matrix.provider }}
+    runs-on: openlab
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@1aa358be5cf73883762b302a3a03abd66e75b232
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Determine packer path
+        id: packer-path
+        run: |
+          # Dynamically generate the path for each component-provider combination
+          PROVIDER_PATH="${{ matrix.provider }}"
+
+          PACKER_PATH="packer/${PROVIDER_PATH}/${{ matrix.component }}"
+          echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
+          echo "Using packer configuration path: $PACKER_PATH"
+
+      - name: Export ACR pull secret
+        if: ${{ matrix.component == 'control-plane' }}
+        run: |
+          echo "Exporting ACR pull secret..."
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Configure cloud provider credentials
+        id: credentials
+        run: |
+          # Create credentials directory
+          mkdir -p $GITHUB_WORKSPACE/credentials
+
+          echo "Setting up credentials for provider: ${{ matrix.provider }}"
+          case "${{ matrix.provider }}" in
+            azure)
+              echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+              echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+              echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+              echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+              ;;
+            aws)
+              echo "PKR_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+              echo "PKR_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+              ;;
+            vsphere)
+              echo "Decoding and exporting vSphere credentials..."
+              echo "PKR_VAR_vsphere_endpoint=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_vsphere_username=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_username=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_password=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_password_encrypted=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD_ENCRYPTED }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_key=$(echo "${{ secrets.VSPHERE_BUILD_KEY }}" | base64 --decode)" >> $GITHUB_ENV
+              ;;
+            gcp)
+              echo "${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}" | base64 --decode > $GITHUB_WORKSPACE/gcp-key.json
+              echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Download Worker Binary
+        if: ${{ matrix.component == 'worker' }}
+        id: worker-binary
+        run: |
+          REPO="NetApp-Cloud-DataMigrate/worker"
+          API_URL="https://api.github.com/repos/$REPO/releases"
+
+          LATEST_RELEASE=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$API_URL" | jq -r '.[0].tag_name')
+
+          if [[ "$LATEST_RELEASE" == "null" || -z "$LATEST_RELEASE" ]]; then
+            echo "Error: Unable to fetch latest release tag."
+            exit 1
+          fi
+
+          echo "Latest release tag: $LATEST_RELEASE"
+          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+
+          # Get release by tag
+          WORKER_BINARY_URL="https://api.github.com/repos/NetApp-Cloud-DataMigrate/worker/releases/tags/$LATEST_RELEASE"
+
+          ASSET_URL=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$LATEST_RELEASE'-worker.zip") | .url')
+
+          echo "Asset URL: $ASSET_URL"
+
+          echo "Downloading asset using GitHub API..."
+          curl -L -o "worker.zip" \
+            -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" \
+            "$ASSET_URL"
+          
+          echo "Worker binary downloaded successfully."
+      
+          # Create directory in the workspace
+          mkdir -p $GITHUB_WORKSPACE/worker_bin
+          unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
+      
+          if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
+            echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
+          else
+            echo "Binary not found!" && exit 1
+          fi
+          echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" >> $GITHUB_OUTPUT
+
+      - name: Packer Init
+        run: |
+          cd ${{ steps.packer-path.outputs.path }}
+          packer init .
+
+      - name: Packer Validate
+        id: validate
+        run: |
+          cd ${{ steps.packer-path.outputs.path }}
+
+          if [ "${{ matrix.component }}" == "worker" ]; then
+            echo "Validating worker configuration with binary path..."
+            packer validate \
+              -var "worker_binary_path=${{ steps.worker-binary.outputs.worker_binary_path }}" \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl
+          else
+            echo "Validating control-plane configuration..."
+            packer validate \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl
+          fi
+
+          if [ $? -ne 0 ]; then
+            echo "Packer validation failed"
+            exit 1
+          fi
+
+          echo "Packer validation completed successfully"
+
+      - name: Packer Build
+        id: build
+        run: |
+          cd ${{ steps.packer-path.outputs.path }}
+
+          # Set build-specific variables
+          BUILD_ID=$(date -u +'%Y%m%dT%H%M%SZ')-${{ github.sha }}
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+
+          # Run packer build with appropriate parameters based on component
+          if [ "${{ matrix.component }}" == "worker" ]; then
+            echo "Building worker image with binary path..."
+            packer build \
+              -var "worker_binary_path=${{ steps.worker-binary.outputs.worker_binary_path }}" \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+          else
+            echo "Building control-plane image..."
+            packer build \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+          fi
+
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "Packer build failed"
+            exit 1
+          fi
+
+          echo "Packer build completed successfully"
+
+      - name: Extract Image Info
+        id: image-info
+        run: |
+          # Extract image information based on provider
+          case "${{ matrix.provider }}" in
+          azure)
+            echo "Capturing image details for Azure..."
+      
+            IMAGE_RESOURCE_GROUP=$(grep 'ManagedImageResourceGroupName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_NAME=$(grep 'ManagedImageName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_ID=$(grep 'ManagedImageId' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_LOCATION=$(grep 'ManagedImageLocation' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+      
+            echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+            echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            echo "resource_group=$IMAGE_RESOURCE_GROUP" >> $GITHUB_OUTPUT
+            echo "location=$IMAGE_LOCATION" >> $GITHUB_OUTPUT
+      
+            # Output summary
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "Image ID: $IMAGE_ID"
+            echo "Image Name: $IMAGE_NAME"
+            echo "Resource Group: $IMAGE_RESOURCE_GROUP"
+            echo "Location: $IMAGE_LOCATION"
+            ;;
+          aws)
+            echo "Capturing image details for AWS..."
+      
+            # Process the packer log to extract AMI ID using your pattern
+            tail -2 $GITHUB_WORKSPACE/packer.log | head -2 | awk 'match($0, /ami-.*/) { print substr($0, RSTART, RLENGTH) }' > $GITHUB_WORKSPACE/ami.txt
+            
+            # Read the AMI ID from the file
+            IMAGE_ID=$(cat $GITHUB_WORKSPACE/ami.txt)
+            
+            echo "aws_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+      
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "AMI ID: $IMAGE_ID"
+            ;;
+          vsphere)
+            echo "Capturing image details for vSphere..."
+            IMAGE_NAME=$(grep -A 3 'Builds finished' $GITHUB_WORKSPACE/packer.log | grep 'vsphere-iso.linux-ubuntu:' | tail -1 | awk '{print $NF}')
+      
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "OVF Template Name: $IMAGE_NAME"
+            echo "vsphere_image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            ;;
+          gcp)
+            echo "Capturing image details for GCP..."
+            ;;
+          esac
+
+      - name: Clean Up
+        if: always()
+        run: |
+          # Clean up temporary files
+          rm -rf $GITHUB_WORKSPACE/bin 2>/dev/null || true
+          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+          rm -f $GITHUB_WORKSPACE/packer.log 2>/dev/null || true
+
+          echo "Cleanup completed"

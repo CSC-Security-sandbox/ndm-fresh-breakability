@@ -1,4 +1,5 @@
 packer {
+  required_version = ">= 1.12.0"
   required_plugins {
     ansible = {
       version = ">= 1.1.2"
@@ -38,22 +39,6 @@ variable "gcp_zone" {
   description = "GCP Zone"
 }
 
-variable "bastion_host_ip" {
-  type = string
-  description = "IP Address of Bastion host"
-}
-
-variable "bastion_host_username" {
-  type = string
-  description = "Bastion host username"
-  default = "root"
-}
-
-variable "bastion_host_private_key" {
-  type = string
-  description = "Path to bastion host private key file"
-}
-
 variable "gcp_packer_machine_type" {
   type = string
   description = "Packer machine type"  
@@ -87,11 +72,6 @@ variable "ssh_username" {
 variable "temporary_key_pair_type" {
   type = string
   description = "Temporary key pair type"
-}
-
-variable "bastion_host_port" {
-  type = number
-  description = "Bastion host port"
 }
 
 // Local binary path
@@ -136,10 +116,6 @@ source "googlecompute" "gcp_ubuntu" {
   }
 
   temporary_key_pair_type      = var.temporary_key_pair_type
-  ssh_bastion_host             = var.bastion_host_ip
-  ssh_bastion_port             = var.bastion_host_port
-  ssh_bastion_username         = var.bastion_host_username
-  ssh_bastion_private_key_file = var.bastion_host_private_key
 }
 
 build {

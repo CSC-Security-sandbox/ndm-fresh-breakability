@@ -1,4 +1,5 @@
 packer {
+  required_version = ">= 1.12.0"
   required_plugins {
     ansible = {
       version = ">= 1.1.2"
@@ -20,27 +21,6 @@ variable "project_name" {
 variable "component_name" {
   type        = string
   description = "The name of the component."
-}
-
-// Bastion Host Configuration
-variable "bastion_host_ip" {
-  description = "IP address of the bastion host"
-  type        = string
-}
-
-variable "bastion_host_username" {
-  description = "Username for the bastion host"
-  type        = string
-}
-
-variable "bastion_host_private_key" {
-  description = "Private key file for the bastion host"
-  type        = string
-}
-
-variable "bastion_host_port" {
-  description = "Port for the bastion host"
-  type        = number
 }
 
 variable "ssh_file_transfer_method" {
@@ -160,8 +140,6 @@ source "amazon-ebs" "aws_ubuntu" {
   vpc_id                       = var.vpc_id
   subnet_id                    = var.subnet_id
   ssh_username                 = var.ssh_username
-  ssh_keypair_name             = "datamigrator-aws-key"
-  ssh_private_key_file         = "~/Downloads/datamigrator-aws-key.pem"
 
   launch_block_device_mappings {
     device_name           = var.aws_block_device_name
@@ -181,10 +159,6 @@ source "amazon-ebs" "aws_ubuntu" {
   }
 
   communicator                 = var.ssh_communicator
-  ssh_bastion_host             = var.bastion_host_ip
-  ssh_bastion_port             = var.bastion_host_port
-  ssh_bastion_username         = var.bastion_host_username
-  ssh_bastion_private_key_file = var.bastion_host_private_key
   ssh_file_transfer_method     = var.ssh_file_transfer_method
 
   tags = {

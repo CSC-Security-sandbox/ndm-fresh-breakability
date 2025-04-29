@@ -1,6 +1,7 @@
 // Project Settings
 project_name                 = "datamigrator"
 component_name               = "worker"
+ssh_file_transfer_method     = "scp"
 
 // AWS Configuration
 aws_region                   = "us-east-1"
@@ -24,10 +25,3 @@ aws_block_device_name                  = "/dev/sda1"
 aws_block_device_volume_size           = 100
 aws_block_device_volume_type           = "gp2"
 aws_block_device_delete_on_termination = true
-
-// Openlab Bastion Host Values
-bastion_host_ip              = "10.195.82.18"
-bastion_host_username        = "root"
-bastion_host_private_key     = "~/.ssh/id_rsa"
-bastion_host_port            = 22
-ssh_file_transfer_method     = "scp"

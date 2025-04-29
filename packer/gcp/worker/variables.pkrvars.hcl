@@ -13,9 +13,3 @@ gcp_source_image             = "ubuntu-2404-noble-amd64-v20250228"
 gcp_disk_size                = 100
 gcp_network                  = "appmicro-vpc1"
 gcp_subnetwork               = "appmicro-vpc-subnet-01"
-
-// GCP Bastion Host Values
-bastion_host_ip              = "10.195.82.18"
-bastion_host_username        = "root"
-bastion_host_private_key     = "~/.ssh/id_rsa"
-bastion_host_port            = 22
