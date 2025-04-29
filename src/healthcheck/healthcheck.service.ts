@@ -78,9 +78,6 @@ export class HealthcheckService implements OnModuleInit {
     try {
       const payload: HealthcheckPayload = await this.getHealthcheckPayload();
       const accessToken = await this.authService.getAccessToken();
-      this.logger.debug(
-        `Posting healthcheck payload: ${JSON.stringify(payload)}`,
-      );
       if (!accessToken) throw new Error('Failed to get access token');
       return { payload, accessToken };
     } catch (error) {
