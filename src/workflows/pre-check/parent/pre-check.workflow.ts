@@ -49,7 +49,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.NO_COMMON_WORKERS);
             }
 
-            if (destination.workers.every(worker => worker.ishealthy === false)) {
+            if (destination?.workers?.length > 0 && destination?.workers?.every(worker => worker.ishealthy === false)) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
                 preCheckDestinationStatus.errors.push(PreCheckErrorCodes.ALL_WORKERS_UNHEALTHY);
             }

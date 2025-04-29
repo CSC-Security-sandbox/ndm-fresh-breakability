@@ -55,7 +55,8 @@ export default registerAs(
                 versionDetails: process.env.NFS_WIN_VERSION_DETAIL_CMD,
                 mountPath:  process.env.NFS_WIN_MOUNT_PATH_CMD,
                 unmountPath:  process.env.NFS_WIN_UNMOUNT_PATH_CMD,
-                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD,
+                mountedFolderSize: process.env.WIN_USED_DISK_SPACE
             },
             linux: {
                 listPath: process.env.NFS_LINUX_LIST_PATH_CMD,
@@ -63,7 +64,8 @@ export default registerAs(
                 checkMountPath: process.env.NFS_LINUX_CHECK_MOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_LINUX_UNMOUNT_PATH_CMD,
-                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD,
+                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE
             },
             darwin: {
                 listPath: process.env.NFS_UNIX_LIST_PATH_CMD,
@@ -71,7 +73,8 @@ export default registerAs(
                 checkMountPath: process.env.NFS_UNIX_CHECK_MOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_UNIX_UNMOUNT_PATH_CMD,
-                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD,
+                mountedFolderSize: process.env.UNIX_USED_DISK_SPACE
             },
         },
         smb: {
@@ -86,7 +89,7 @@ export default registerAs(
                 disconnectSession: process.env.SMB_WIN_DISCONNECT_SESSION_CMD,
                 getSIDforObject: process.env.SMB_WIN_GET_SID_FOR_OBJECT_CMD,
                 serSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
-                mountedFolderSize: process.env.WIN_MOUNTED_FOLDER_SIZE_CMD,
+                mountedFolderSize: process.env.WIN_USED_DISK_SPACE,
                 availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
             },
             linux: {
@@ -94,14 +97,16 @@ export default registerAs(
                 mountPath:  process.env.SMB_LINUX_MOUNT_PATH_CMD,
                 versionDetails: process.env.SMB_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
-                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD,
+                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE
             },
             darwin: {
                 listPath: process.env.SMB_UNIX_LIST_PATH_CMD,
                 mountPath:  process.env.SMB_UNIX_MOUNT_PATH_CMD,
                 unmountPath:  process.env.SMB_UNIX_UNMOUNT_PATH_CMD,
                 versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
-                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD,
+                mountedFolderSize: process.env.UNIX_USED_DISK_SPACE
             },
         }
     })

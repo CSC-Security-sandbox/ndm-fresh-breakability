@@ -8,7 +8,7 @@ import { CommandConfig } from 'src/config/command.config';
 import { Logger, Runtime, RuntimeOptions } from '@temporalio/worker';
 import { ProtocolTypes } from '../protocols';
 import { CommandPattern } from 'src/config/command.config';
-import * as ffs from 'fast-folder-size';
+import * as os from 'os';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
@@ -282,86 +282,61 @@ describe('NFSProtocol', () => {
     });
   });
 
-  describe('getTotalSizeLinux', () => {
-    const mockTraceId = 'test-trace-id';
-    const mockPayload: ProtocolPayload = {
-      hostname: 'test-host',
-      username: 'test-user',
-      protocolVersion: '4.2',
-      path: '/test/path'
+describe('getTotalUsedMemory', () => {
+  const mockTraceId = 'test-trace-id';
+  const mockPayload: ProtocolPayload = {
+    hostname: 'test-host',
+    username: 'test-user',
+    protocolVersion: '4.2',
+    path: '/test/path',
+  };
+
+  let nfsProtocol: NFSProtocol;
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol();
+    (nfsProtocol as any).logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+      info: jest.fn(),
     };
-
-    beforeEach(() => {
-      (nfsProtocol as any).logger = {
-        log: jest.fn(),
-        error: jest.fn(),
-        info: jest.fn()
-      };
-    });
-
-    it('should return correct folder size', async () => {
-      const expectedSize = 1024000;
-      
-      (ffs as any).mockImplementation((path, callback) => {
-        callback(null, expectedSize);
-      });
-
-      const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-      
-      expect(result).toBe(expectedSize);
-      expect(ffs).toHaveBeenCalledWith('/test/path', expect.any(Function));
-      expect((nfsProtocol as any).logger.log).toHaveBeenCalledWith(
-        `[${mockTraceId}] Calculated data size for ${mockPayload.path}: ${expectedSize} bytes`
-      );
-    });
-
-    it('should return 0 when bytes is null', async () => {
-      (ffs as any).mockImplementation((path, callback) => {
-        callback(null, null);
-      });
-
-      const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-      
-      expect(result).toBe(0);
-      expect(ffs).toHaveBeenCalledWith('/test/path', expect.any(Function));
-    });
-
-    it('should throw error when fast-folder-size fails', async () => {
-      const errorMsg = 'Failed to calculate folder size';
-      
-      (ffs as any).mockImplementation((path, callback) => {
-        callback(new Error(errorMsg), null);
-      });
-
-      await expect(nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload)).rejects.toThrow(
-        `Size calculation failed: ${errorMsg}`
-      );
-      
-      expect(ffs).toHaveBeenCalledWith('/test/path', expect.any(Function));
-      expect((nfsProtocol as any).logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(`Error calculating size for ${mockPayload.path}`)
-      );
-    });
-
-    it('should handle payload with different path value', async () => {
-      const customPath = '/custom/path';
-      const customPayload = {
-        ...mockPayload,
-        path: customPath
-      };
-      const expectedSize = 5000000;
-      
-      (ffs as any).mockImplementation((path, callback) => {
-        callback(null, expectedSize);
-      });
-
-      const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, customPayload);
-      
-      expect(result).toBe(expectedSize);
-      expect(ffs).toHaveBeenCalledWith(customPath, expect.any(Function));
-      expect((nfsProtocol as any).logger.log).toHaveBeenCalledWith(
-        `[${mockTraceId}] Calculated data size for ${customPath}: ${expectedSize} bytes`
-      );
-    });
   });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should return correct size on Linux platform', async () => {
+    jest.spyOn(os, 'platform').mockReturnValue('linux');
+    const mockResponse = { message: '/dev/nfs 1000 512 488 50% /mnt/nfs' };
+    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+  
+    const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+    expect(result).toBe(512);
+  });
+  
+
+  it('should multiply used bytes by 1024 for darwin platform', async () => {
+    jest.spyOn(os, 'platform').mockReturnValue('darwin');
+    const mockResponse = { message: '/dev/nfs 1000 256 744 25% /Volumes/nfs' };
+    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+  
+    const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+    expect(result).toBe(256 * 1024);
+  });
+  
+
+  it('should throw error on unexpected df output', async () => {
+    jest.spyOn(os, 'platform').mockReturnValue('linux');
+    const mockResponse = { message: 'InvalidOutput' };
+    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+
+    await expect(nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload)).rejects.toThrow(
+      /Unexpected df output/
+    );
+  });
+});
+
+  
+
 });

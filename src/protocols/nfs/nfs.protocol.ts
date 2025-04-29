@@ -1,14 +1,10 @@
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
-import * as ffs from 'fast-folder-size';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
-
-const fastFolderSize = ffs as unknown as (path: string, callback: (err: Error | null, bytes: number | null) => void) => void;
-
 export class NFSProtocol extends Protocol {
  
 
@@ -107,21 +103,39 @@ export class NFSProtocol extends Protocol {
     }
   }
 
+  // --------------------------- Get total size of a mounted path -------------------------- //
   async getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<number> {
-    this.logger.log("inside getTotalSizeLinux method in NFS file");
-    
+    this.logger.log(`[${traceId}] Checking total size of a mounted path: ${payload?.path}`);
     try {
-      const size = await new Promise<number>((resolve, reject) => {
-        fastFolderSize(payload.path, (err, bytes) => {
-          if (err) reject(err);
-          else resolve(bytes || 0);
-        });
+      return this.executeCommand(
+        traceId,
+        ProtocolTypes.NFS,
+        payload,
+        this.getCommandPattern(CommandPattern.MOUNTED_FOLDER_SIZE),
+        'NFS Mounted Folder size',
+      ).then((response) => {
+        this.logger.log(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(response)}`);
+        this.logger.info(`[${traceId}] ${response.message}`);
+
+        let usedBytes: number;
+
+        if (this.platform === 'linux' || this.platform === 'darwin') {
+          const parts = response.message.trim().split(/\s+/);
+          if (parts.length < 3) {
+            throw new Error(`Unexpected df output: ${response.message}`);
+          }
+
+          usedBytes = parseInt(parts[2], 10);
+          if (this.platform === 'darwin') {
+            usedBytes *= 1024;
+          }
+        }
+        this.logger.log(`[${traceId}] Calculated data size for ${payload?.path}: ${usedBytes} bytes`);
+        return usedBytes;
       });
-      this.logger.log(`[${traceId}] Calculated data size for ${payload.path}: ${size} bytes`);
-      return size;
     } catch (error) {
-      this.logger.error(`Error calculating size for ${payload.path} - ${error.stack}`);
-      throw new Error(`Size calculation failed: ${error.message}`);
+      this.logger.error(`[${traceId}] Error checking total data size for ${payload.path} : ${error.message}`);
+      throw new Error(`Failed to calculate size: ${error.message}`);
     }
   }
 
