@@ -3,7 +3,6 @@ import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-li
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { createClient, RedisClientType } from 'redis';
 
-
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
@@ -102,5 +101,29 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async getOwnerIdentity(jobContext: JobContext, id: string, type: 'SID' | 'UID' | 'GID') {
     return this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
+  }
+
+  async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number }> {
+    await this.ensureClient();
+    const memoryInfo = await this.client.info('memory');
+    const parsedInfo = this.parseMemoryStats(memoryInfo);
+    return parsedInfo;
+  }
+
+  parseMemoryStats(stats: string): { used_memory: number; total_system_memory: number } {
+    let usedMemory = 0;
+    let totalSystemMemory = 0;
+  
+    stats.split('\n').forEach((line) => {
+      if (line.startsWith('used_memory:')) {
+        usedMemory = parseInt(line.split(':')[1], 10);
+      } else if (line.startsWith('total_system_memory:')) {
+        totalSystemMemory = parseInt(line.split(':')[1], 10);
+      }
+    });
+    return {
+      used_memory: usedMemory,
+      total_system_memory: totalSystemMemory,
+    };
   }
 }

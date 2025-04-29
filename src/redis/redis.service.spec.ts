@@ -31,6 +31,7 @@ describe('RedisService', () => {
     (service as any).client = client; // Mock the client
   });
 
+  // check service is defined
   it('should be defined', () => {
     expect(service).toBeDefined();
   });

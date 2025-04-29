@@ -30,6 +30,8 @@ export default registerAs(
     speedTestTimeout: process.env.SPEED_TEST_TIMEOUT || 120000,
     healthCheckInterval: process.env.HEALTH_CHECK_INTERVAL || 5,
     migrationTaskLimit: process.env.MIGRATION_TASK_LIMIT || 100,
+    checkAvailableDiskSpace: process.env.CHECK_AVAILABLE_DISK_SPACE === 'true',
+    redisMemoryUsageThreshold: process.env.REDIS_MEM_USAGE_THRESHOLD || 90,
   }),
 );
 

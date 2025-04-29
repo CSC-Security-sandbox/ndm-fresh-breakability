@@ -1,3 +1,4 @@
+import { RedisMemoryCheckWorkflow } from 'src/workflows/redis/redis.memorycheck.workflow';
 export {ValidateConnectionsWorkflow} from './validate-connection/validate-connection.workflow';
 export {ValidateWorkerConnectionWorkflow} from './validate-connection/validate-worker-connection.workflow';
 
@@ -26,3 +27,5 @@ export {ReportingWorkflow} from '../workflows/reporting/reporting.workflow'
 
 export {SpeedTestJobWorkflow} from '../workflows/speed-test/speed-test-job-workflow'
 export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
+
+export {RedisMemoryCheckWorkflow} from '../workflows/redis/redis.memorycheck.workflow'

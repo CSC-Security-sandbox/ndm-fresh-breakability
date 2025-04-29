@@ -7,6 +7,7 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { CleanupWorkerWorkflow, ReportingWorkflow } from "src/workflows/workflows";
 import { DiscoveryJobRequest } from "./discovery-workflow.type";
+import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 
 interface DiscoveryWorkflowOutput {
     traceId: string;
@@ -104,6 +105,8 @@ export async function DiscoveryWorkflow({traceId, payload, options}:DiscoveryJob
     }
 
     await wf.condition(() => workFlowStatus.setupCompletedWorkers.length > 0);
+    
+    await waitUntilRedisMemoryOk(traceId)
 
     // scan workflow
     scanWorkflow = await wf.startChild('DiscoveryJobWorkflow', {

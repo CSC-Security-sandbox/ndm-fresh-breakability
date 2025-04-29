@@ -84,7 +84,7 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
       if(jobState.status.toString() === JobRunStatus.Paused) {
         log(jobRunId, `JobRun ${jobRunId} is Paused. Exiting scan workflow.`);
         return { jobRunId, workers, failedWorkers, status: JobRunStatus.Paused };
-      }
+      }      
 
       if(isStreamOverloaded) {
         log(jobRunId, `Stream is overloaded. Sleeping ...`);
@@ -105,7 +105,6 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
           }
         })
       );
-      
        // TODO: handle the offline workers scenario 
       let taskNotFoundCount:number = 0;
       for(const output of outputs) {

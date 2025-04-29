@@ -3,6 +3,7 @@ import { ChildWorkflowCancellationType, ParentClosePolicy } from "@temporalio/wo
 import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
+import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { CleanupWorkerWorkflow } from "src/workflows/workflows";
 interface MigrationWorkflowInput {
   traceId: string;
@@ -118,6 +119,9 @@ export const MigrationWorkflow = async ({
   }
 
   await wf.condition(() => workFlowStatus.setupCompletedWorkers.length > 0);
+  
+  // wait until redis has enough memory
+  await waitUntilRedisMemoryOk(traceId);
 
   // scan workflow
   scanWorkflow = await wf.startChild('ScanWorkflow', {

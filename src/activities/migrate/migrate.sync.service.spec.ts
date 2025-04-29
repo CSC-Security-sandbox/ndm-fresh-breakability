@@ -47,7 +47,8 @@ describe('MigrationSyncService', () => {
                     provide: RedisService,
                     useValue: {
                         getJobContext: jest.fn(),
-                        setJobContext: jest.fn()
+                        setJobContext: jest.fn(),
+                        getMemoryInfo: jest.fn(),
                     }
                 },
                 {
@@ -512,9 +513,14 @@ describe('MigrationSyncService', () => {
                     retryCount: 0
                 }],
             }
+            const mockRedisMemoryInfo = {
+                used_memory: 50,
+                total_system_memory: 100,
+            }
             jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockJobContext);
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
             jest.spyOn(commonService, 'fetchOneMigrationTask').mockReturnValue(mockedTask);
+            jest.spyOn(redisService, 'getMemoryInfo').mockResolvedValue(mockRedisMemoryInfo);
             jest.spyOn(service, 'syncOperation').mockResolvedValue({
                 status: OPS_STATUS.COMPLETED,
                 ops: {

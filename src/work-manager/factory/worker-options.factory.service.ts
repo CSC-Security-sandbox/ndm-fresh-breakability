@@ -15,6 +15,7 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 import { CommonActivityService } from "src/activities/common/common.service";
 import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
+import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -31,6 +32,7 @@ export class WorkerOptionsService {
     private readonly precheckActivity:PrecheckActivity,
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
+    private readonly  redismeorycheck: RedisMemoryCheckActivity
     
   ) {}
 
@@ -48,6 +50,7 @@ export class WorkerOptionsService {
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
           generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.commonActivityService),
           updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
+          checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -105,6 +108,7 @@ export class WorkerOptionsService {
           setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
           getJobStateWithStreamLoad: this.commonActivityService.getJobStateWithStreamLoad.bind(this.commonActivityService),
           getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
+          checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
         });
       default:
         return undefined;
