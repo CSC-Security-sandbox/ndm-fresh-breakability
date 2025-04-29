@@ -39,10 +39,6 @@ const JobChart = ({
 }) => {
   const totalMigrateJobs = baseLineJob + incrementalJob;
 
-  const totalNonMigrationJobs = totalMigrateJobs
-    ? totalDiscoverJobs + totalCutoverJobs
-    : 0;
-
   const totalSize = useMemo(() => {
     return calculateTotal([
       totalMigrateJobs,
@@ -62,12 +58,12 @@ const JobChart = ({
           label="Total Jobs"
           colors={[
             ["chart-4", "chart-6", "chart-9"],
-            ["chart-1", "chart-2"],
+            ["chart-1", "chart-2", "chart-6", "chart-9"],
           ]}
           valueFormatter={formattedTotal}
           data={[
             [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs],
-            [baseLineJob, incrementalJob],
+            [baseLineJob, incrementalJob, totalDiscoverJobs, totalCutoverJobs],
           ]}
         />
       </Box>
@@ -84,22 +80,26 @@ const JobChart = ({
           color="bg-purple-500"
           unit=""
         />
-        <LegendWrapper
-          title="Migration Jobs"
-          value={baseLineJob + incrementalJob}
-          color="bg-teal-500"
-          unit=""
-        />
-        <Box className="w-full flex ml-[5rem] h-1/3 items-baseline">
+        <Box className="w-4.5/12 h-1/3 flex items-baseline">
           <Box
-            className={`rounded-md mx-2 bg-blue-800 w-6 h-6`}
+            className={`w-6 h-6 rounded-md mx-2 bg-teal-500`}
           />
-          <MetricItemAdvance className="" label="Baseline" value={baseLineJob} />
-          <Divider orientation="vertical" flexItem style={{ marginRight: '2rem', height: '2.5rem'}}/>
+          <MetricItemAdvance
+            label="Migration Jobs"
+            value={baseLineJob + incrementalJob}
+            unit=""
+          />
+        </Box>
+        <Box className="w-5.5/12 h-1/3 flex items-baseline">
+          <Box
+            className={`w-6 h-6 rounded-md mx-2 bg-blue-800`}
+          />
+          <MetricItemAdvance className="w-2/12" label="Baseline" value={baseLineJob} />
+          <Divider orientation="vertical" flexItem style={{ margin: '0.5rem 0.5rem' }}/>
           <Box
             className={`rounded-md mx-2 bg-blue-400 w-6 h-6`}
           />
-          <MetricItemAdvance className="" label="Incremental" value={incrementalJob} />
+          <MetricItemAdvance className="w-2/12" label="Incremental" value={incrementalJob} />
         </Box>
       </Box>
     </>
