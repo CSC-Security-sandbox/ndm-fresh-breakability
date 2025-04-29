@@ -62,12 +62,12 @@ const JobChart = ({
           label="Total Jobs"
           colors={[
             ["chart-4", "chart-6", "chart-9"],
-            ["chart-1", "chart-2", "chart-disabled"],
+            ["chart-1", "chart-2"],
           ]}
           valueFormatter={formattedTotal}
           data={[
             [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs],
-            [baseLineJob, incrementalJob, totalNonMigrationJobs],
+            [baseLineJob, incrementalJob],
           ]}
         />
       </Box>
@@ -90,10 +90,16 @@ const JobChart = ({
           color="bg-teal-500"
           unit=""
         />
-        <Box className="w-5/12 h-1/3 flex gap-4 items-center">
-          <MetricItemAdvance label="Baseline" value={baseLineJob} />
-          <Divider orientation="vertical" flexItem />
-          <MetricItemAdvance label="Incremental" value={incrementalJob} />
+        <Box className="w-full flex ml-[5rem] h-1/3 items-baseline">
+          <Box
+            className={`rounded-md mx-2 bg-blue-800 w-6 h-6`}
+          />
+          <MetricItemAdvance className="" label="Baseline" value={baseLineJob} />
+          <Divider orientation="vertical" flexItem style={{ marginRight: '2rem', height: '2.5rem'}}/>
+          <Box
+            className={`rounded-md mx-2 bg-blue-400 w-6 h-6`}
+          />
+          <MetricItemAdvance className="" label="Incremental" value={incrementalJob} />
         </Box>
       </Box>
     </>
