@@ -6,7 +6,7 @@ import {
   JobRunApiType,
 } from "@/types/app.type";
 import { useLazyGetAllCutOverPathsQuery } from "@api/configApi";
-import { useBulkCutOverMutation, useLazyGetJobRunsQuery } from "@api/jobsApi";
+import { useBulkCutOverMutation, useGetJobRunsQuery } from "@api/jobsApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
@@ -40,7 +40,13 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const [getJobRunsApi, { isFetching }] = useLazyGetJobRunsQuery();
+    const {
+      data: jobRunListData,
+      isFetching,
+      refetch,
+    } = useGetJobRunsQuery({
+      projectId,
+    });
     const { fileServerDetails } = useFileServerDetails();
     const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
     const [allCutOverPaths, setAllCutOverPaths] = useState<
@@ -64,27 +70,20 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       })();
     }, [fileServerDetails]);
 
-    const fetchJobRuns = async () => {
-      try {
-        const _jobRunList: JobRunApiType[] = await getJobRunsApi({
-          projectId,
-        }).unwrap();
-        const _JobRunListWithId = _jobRunList
-          .map((jobRun) => ({
-            ...jobRun,
-            id: jobRun.jobRunId,
-          }))
-          .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING);
-        setJobRunList(_JobRunListWithId);
-      } catch (error) {
-        notify?.error("Something went wrong");
-        console.error("Failed to fetch job runs:", error);
-      }
+    const getRunningStatusJobRunId = () => {
+      const _JobRunListWithId = jobRunListData
+        .map((jobRun) => ({
+          ...jobRun,
+          id: jobRun.jobRunId,
+        }))
+        .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING);
+      setJobRunList(_JobRunListWithId);
     };
 
     useEffect(() => {
-      fetchJobRuns();
-    }, [projectId, getJobRunsApi]);
+      if (!jobRunListData) return;
+      getRunningStatusJobRunId();
+    }, [jobRunListData]);
 
     // SELECT PATH (STEP 1)
     const selectPathTableState: BlueXpTableStateType<GetAllCutOverPathsApiType> =
@@ -138,7 +137,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       handleCreateJobCutOverApi,
       isSubmittingBulkCutover,
       isFetching,
-      refetch: fetchJobRuns,
+      refetch,
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };
