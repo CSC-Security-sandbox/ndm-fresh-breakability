@@ -30,7 +30,6 @@ const INIT_VALUE: bulkCutOverFormType = {
 export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
   return function WithBulkCutOverComponent(props: any) {
     const navigate = useNavigate();
-    const [jobRunList, setJobRunList] = useState<JobRunApiType[]>([]);
     const [cutOverSelectedIds, setCutOverSelectedIds] = useState<string[]>([]);
     const [reviewStepSelectedIds, setReviewStepSelectedIds] = useState<
       string[]
@@ -40,13 +39,22 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const {
-      data: jobRunListData,
-      isFetching,
-      refetch,
-    } = useGetJobRunsQuery({
-      projectId,
-    });
+    const { jobRunList, refetch, isFetching } = useGetJobRunsQuery(
+      {
+        projectId,
+      },
+      {
+        selectFromResult: ({ data, isFetching }) => ({
+          jobRunList: data
+            ?.map((jobRun) => ({
+              ...jobRun,
+              id: jobRun.jobRunId,
+            }))
+            .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING),
+          isFetching,
+        }),
+      }
+    );
     const { fileServerDetails } = useFileServerDetails();
     const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
     const [allCutOverPaths, setAllCutOverPaths] = useState<
@@ -69,21 +77,6 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         }
       })();
     }, [fileServerDetails]);
-
-    const getRunningStatusJobRunId = () => {
-      const _JobRunListWithId = jobRunListData
-        .map((jobRun) => ({
-          ...jobRun,
-          id: jobRun.jobRunId,
-        }))
-        .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING);
-      setJobRunList(_JobRunListWithId);
-    };
-
-    useEffect(() => {
-      if (!jobRunListData) return;
-      getRunningStatusJobRunId();
-    }, [jobRunListData]);
 
     // SELECT PATH (STEP 1)
     const selectPathTableState: BlueXpTableStateType<GetAllCutOverPathsApiType> =
