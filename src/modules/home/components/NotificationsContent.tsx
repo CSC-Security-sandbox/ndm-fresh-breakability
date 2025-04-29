@@ -11,6 +11,7 @@ import {
   InfoIcon,
   LightBulbIcon,
   SuccessIcon,
+  NoticeIcon,
 } from "@netapp/bxp-style/react-icons/Notification";
 import { useEffect, useMemo, useState } from "react";
 import NotificationsTile from "@modules/home/components/NotificationsTile";
@@ -45,6 +46,14 @@ const NotificationsContent = ({
     return total;
   }, [noticeBoardDetails, selectedProjectId]);
 
+  const getSecurityNotifications = useMemo(() => {
+    return noticeBoardDetails?.severityMessages.map((message, index) => (
+      <Text key={index} className="text-sm">
+        {message}
+      </Text>
+    ));
+  }, [noticeBoardDetails?.severityMessages]);
+
   return (
     <CardContent className="flex gap-4 flex-col">
       <Box className="overflow-y-scroll px-3 h-[510px]">
@@ -54,7 +63,6 @@ const NotificationsContent = ({
               <Text className="text-gray-500">No Data Available</Text>
             </Box>
           </Show.When>
-
           <Show.Else>
             <Box className="flex flex-col gap-4">
               {noticeBoardDetails?.countErroredJobRuns > 0 && (
@@ -83,6 +91,13 @@ const NotificationsContent = ({
                   title={`Recently Completed Jobs(${noticeBoardDetails?.countCompletedJobRuns})`}
                   content="Jobs has been completed successfully."
                   Icon={<SuccessIcon color="success" />}
+                />
+              )}
+               {noticeBoardDetails?.severityMessages.length > 0 && (
+                <NotificationsTile
+                  title={`System Alerts (${noticeBoardDetails?.severityMessages.length})`}
+                  content={<>{getSecurityNotifications}</>}
+                  Icon={<NoticeIcon color="error" />}
                 />
               )}
             </Box>
