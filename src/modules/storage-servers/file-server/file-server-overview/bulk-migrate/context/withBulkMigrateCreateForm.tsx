@@ -346,7 +346,7 @@ export function withBulkMigrateCreateForm(
           mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
           mappingStepForm?.values?.selectedMountPathsId
         ),
-        sid_mapping:
+        sidMapping:
           protocolForm.formState.protocol.value === ProtocolType.SMB &&
           sid_mapping
             ? await convertFileToBase64(
@@ -355,7 +355,7 @@ export function withBulkMigrateCreateForm(
                 })
               )
             : undefined,
-        gid_mapping:
+        gidMapping:
           protocolForm.formState.protocol.value === ProtocolType.NFS &&
           uid_mapping
             ? await convertFileToBase64(
