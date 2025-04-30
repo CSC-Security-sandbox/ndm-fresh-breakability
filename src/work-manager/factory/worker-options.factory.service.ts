@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { NativeConnection } from "@temporalio/worker";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
@@ -16,9 +16,11 @@ import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
 import { CommonActivityService } from "src/activities/common/common.service";
 import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
 import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class WorkerOptionsService {
+  readonly jobTaskActivityConcurrency : number;
   constructor(
     private readonly listPathActivityService: ListPathActivity,
     private readonly validateConnectionService: ValidateConnectionActivity,
@@ -32,9 +34,11 @@ export class WorkerOptionsService {
     private readonly precheckActivity:PrecheckActivity,
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
-    private readonly  redismeorycheck: RedisMemoryCheckActivity
-    
-  ) {}
+    private readonly  redismeorycheck: RedisMemoryCheckActivity,
+    @Inject(ConfigService) private readonly configService: ConfigService,
+  ) {
+    this.jobTaskActivityConcurrency = this.configService.get<number>('worker.jobTaskActivityConcurrency') || 1;
+  }
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
     switch (config.configName) {
@@ -109,7 +113,7 @@ export class WorkerOptionsService {
           getJobStateWithStreamLoad: this.commonActivityService.getJobStateWithStreamLoad.bind(this.commonActivityService),
           getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
-        });
+        }, this.jobTaskActivityConcurrency);
       default:
         return undefined;
     }

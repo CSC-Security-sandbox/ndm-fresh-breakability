@@ -279,6 +279,7 @@ export class MigrationSyncService {
     this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
     task.status = TaskStatus.RUNNING
+    task.workerId = this.workerId
     for (let i = 0;  i < task.commands.length; i++) 
       if(task.commands[i].status !== CommandStatus.COMPLETED)
         task.commands[i].status = CommandStatus.IN_PROCESS
