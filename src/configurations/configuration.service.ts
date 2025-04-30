@@ -15,6 +15,7 @@ import {
   ConfigErrorMsg,
   ConfigStatus,
   ProtocolVersionError,
+  WorkerStatus,
   WorkFlows,
 } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
@@ -45,6 +46,7 @@ import {
 import { ProjectEntity } from 'src/entities/project.entity';
 import { SendMailService } from 'src/util/send-email';
 import { ConfigService } from '@nestjs/config';
+import { isWorkerHealthy } from 'src/utils/transformers';
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -68,9 +70,7 @@ export class ConfigurationService {
     private readonly configService: ConfigService,
   ) {
     this.logger = this.loggerFactory.create(ConfigurationService.name);
-    this.timeout = this.configService.get<number>(
-      'app.worker.healthCheckStatusTimout',
-    );
+    this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
   }
 
   async getAllFileServers(): Promise<any[]> {
@@ -206,6 +206,14 @@ export class ConfigurationService {
             password: true,
             isRefreshed: true,
             protocolVersion: true,
+            workers: {
+              workerId: true,
+              workerName: true,
+              ipAddress: true,
+              stats: {
+                updatedAt: true,
+              },
+            },
             volumes: {
               id: true,
               volumePath: true,
@@ -224,7 +232,9 @@ export class ConfigurationService {
         relations: {
           project: true,
           fileServers: {
-            workers: true,
+            workers: {
+              stats: true,
+            },
             volumes: {
               jobConfig: {
                 jobRunDetails: true,
@@ -235,8 +245,19 @@ export class ConfigurationService {
         },
       });
 
+
       if (!config)
         throw new NotFoundException(`Config for id ${id} not found.`);
+
+      if(config?.fileServers){
+        config.fileServers = config.fileServers.map((fileServer) => ({
+          ...fileServer,
+          workers: fileServer.workers.map((worker) => ({
+            ...worker,
+            status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
+          }))
+        }))
+      }
 
       if (
         config.errorMessage &&
@@ -271,7 +292,6 @@ export class ConfigurationService {
     if (!isUUID(configId)) {
       throw new BadRequestException('Invalid configId');
     }
-
     try {
       const config = await this.fetchConfigWithRelations(configId);
       const validJobConfigs = this.extractValidJobConfigs(config);
@@ -569,7 +589,7 @@ export class ConfigurationService {
         where: { workerId: In(createConfig?.fileServers[0].workers) },
         relations: { stats: true },
       });
-      const hasPathName = createConfig?.workingDirectory?.pathName?.length > 0;
+      
       const hasWorkers = createConfig?.fileServers?.some(
         (fs) => fs?.workers?.length > 0,
       );
@@ -708,7 +728,6 @@ export class ConfigurationService {
                 relations: { stats: true },
               })
             : [];
-            console.log("ye dekh bhai : ",workersWithStats)
 
 
           if (
