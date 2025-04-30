@@ -10,7 +10,7 @@ export class RedisMemoryCheckActivity {
     private readonly logger: Logger,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
-    this.memoryUsageThreshold = this.configService.get<number>('redis.memoryUsageThreshold', 90);
+    this.memoryUsageThreshold = this.configService.get<number>('worker.redisMemoryUsageThreshold', 90);
   }
 
     /**
