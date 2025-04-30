@@ -1089,7 +1089,6 @@ export class JobConfigService {
     });
 
     if (!jobConfig) throw new Error(`Job with id ${id} not found`);
-     console.log(jobConfig);
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
         const partialPayload = {
