@@ -174,6 +174,6 @@ export interface bulkMigrateCreateApiType {
     preserveAccessTime: boolean;
     skipFile: string;
   };
-  sid_mapping?: any;
-  gid_mapping?: any;
+  sidMapping?: any;
+  gidMapping?: any;
 }
