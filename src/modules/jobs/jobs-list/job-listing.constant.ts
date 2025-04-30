@@ -1,20 +1,20 @@
-import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
-// import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
-import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRenderer";
-import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 import {
   BlueXpTableRowType,
   ColumnFilterType,
   JOB_CONFIG_STATUS_ENUM,
   JobRowType,
 } from "@/types/app.type";
+import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
+import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRenderer";
+import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 
-import React from "react";
 import {
   formatLength,
   getJobStatusFormat,
   getJobType,
 } from "@/utils/common.utils";
+import { Span } from "@netapp/bxp-design-system-react";
+import React from "react";
 
 export const JOB_LIST_COLUMN_DEFS = [
   {
@@ -83,13 +83,13 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Protocol",
     accessor: "sourceServer.protocol",
     id: "protocol",
-    width: 80,
+    width: 150,
   },
   {
     header: "Next Schedule",
     accessor: "nextScheduleDate",
     id: "nextSchedule",
-    width: 150,
+    width: 170,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["nextScheduleDate"]>) =>
@@ -101,7 +101,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Runs",
     accessor: "totalRuns",
     id: "jobRuns",
-    width: 80,
+    width: 100,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["totalRuns"]>) =>
@@ -130,19 +130,18 @@ export const JOB_LIST_COLUMN_DEFS = [
         active: value === JOB_CONFIG_STATUS_ENUM["ACTIVE"],
       }),
   },
-  // todo: API not sending this data in response
-  // {
-  //   header: "Errors",
-  //   accessor: "errors",
-  //   id: "errors",
-  //   width: 80,
-  //   Renderer: ({
-  //     value,
-  //   }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
-  //     React.createElement(ErrorNumberCellRenderer, {
-  //       value,
-  //     }),
-  // },
+  {
+    header: "Errors",
+    accessor: "errors",
+    id: "errors",
+    width: 80,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
+      value > 0
+        ? React.createElement(Span, { color: "error" }, value)
+        : React.createElement(Span, null, "-"),
+  },
   {
     header: "Created On",
     accessor: "createdAt",
@@ -157,7 +156,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Updated On",
     accessor: "updatedAt",
     id: "updatedAt",
-    width: 90,
+    width: 150,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["updatedAt"]>) =>
@@ -177,6 +176,7 @@ export const defaultColumnState = {
   destinationServerName: { isHidden: true },
   destinationPath: { isHidden: true },
   createdAt: { isHidden: true },
+  updatedAt: { isHidden: true },
 };
 
 export const COLUMNS_TO_FILTER_DEFS: ColumnFilterType[] = [
