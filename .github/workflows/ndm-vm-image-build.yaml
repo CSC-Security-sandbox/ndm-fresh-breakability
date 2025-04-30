@@ -26,7 +26,6 @@ on:
         options:
           - all
           - azure
-          - aws
           - vsphere
   schedule:
     - cron: '30 18 * * *'
@@ -48,7 +47,7 @@ jobs:
 
           # Set providers based on input
           if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
-            PROVIDERS='["azure", "aws", "vsphere"]'
+            PROVIDERS='["azure", "vsphere"]'
           else
             PROVIDERS='["${{ github.event.inputs.provider }}"]'
           fi
