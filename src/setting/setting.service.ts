@@ -32,6 +32,25 @@ export class SettingService {
         }
       }
 
+      const createdSettings = await Promise.all(
+        createSettingDto.map(async (setting) => {
+          const existingSetting = await this.settingsRepo.find({
+            where: { settingKey: setting.settingKey },
+          });
+          if (existingSetting.length > 0) {
+            throw new HttpException(
+              {
+                message: `Setting with key ${setting.settingKey} already exists`,
+                statusCode: HttpStatus.BAD_REQUEST,
+              },
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const settingEntity = this.settingsRepo.create(setting);
+          return await this.settingsRepo.save(settingEntity);
+        }),
+      );
+
       return {
         message: 'Settings created successfully',
         statusCode: HttpStatus.CREATED,
