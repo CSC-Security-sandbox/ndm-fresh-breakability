@@ -3,12 +3,13 @@ export interface NoticeBoardDetailsType {
   countBlockedCutoverJobRuns: number;
   countRecentJobConfigs: number;
   countCompletedJobRuns: number;
+  severityMessages: string[];
 }
 
 export interface NotificationsTileType {
   title: string;
   Icon: any;
-  content: string;
+  content: string | React.ReactElement;
 }
 
 export interface NotificationsContentProps {
