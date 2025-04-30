@@ -45,7 +45,7 @@ const ManageUsers = () => {
         );
       })
       .catch((err) => {
-        notify.error(`Failed to update status of user ${body.email}`);
+        notify.error(`Failed to update status of user ${body.email}.`);
         console.error(err);
       });
   };
@@ -121,7 +121,10 @@ const ManageUsers = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
             >
-              <Button onClick={() => setIsCreateFormVisible(true)} className="ml-4">
+              <Button
+                onClick={() => setIsCreateFormVisible(true)}
+                className="ml-4"
+              >
                 Add User
               </Button>
             </PermissionAuth>

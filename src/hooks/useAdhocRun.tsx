@@ -23,7 +23,7 @@ const useAdhocRun = () => {
         <Box className="flex flex-col">
           <Text>{errorMessage}</Text>
           <Text className="italic">
-            {err?.message || err?.data?.message || "Unknown error"}
+            {err?.message || err?.data?.message || "Unknown error."}
           </Text>
         </Box>
       );

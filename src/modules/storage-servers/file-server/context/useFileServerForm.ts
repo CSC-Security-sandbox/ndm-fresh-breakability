@@ -158,7 +158,7 @@ export const useFileServerForm = () => {
     }
 
     notify.error(
-      `Failed to perform validaton, reason - ${error?.message || "unknown"}`
+      `Failed to perform validaton, reason - ${error?.message || "unknown."}`
     );
     console.error({ level: "File Server - Validate connection.", error });
   };

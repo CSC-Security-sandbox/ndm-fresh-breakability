@@ -163,7 +163,7 @@ const CreateProjectForm = ({
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || "Failed to update Project"}
+          message={err?.message || "Failed to update Project."}
         />
       );
       console.error({ err, level: "Update Project" });

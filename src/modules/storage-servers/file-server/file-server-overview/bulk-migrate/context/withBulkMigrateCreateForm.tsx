@@ -268,7 +268,7 @@ export function withBulkMigrateCreateForm(
       }
 
       notify.error(
-        `Failed to perform precheck, reason - ${error?.message || "unknown"}`
+        `Failed to perform precheck, reason - ${error?.message || "unknown."}`
       );
       console.error({ level: "Bulk Migrate - Precheck.", error });
     };

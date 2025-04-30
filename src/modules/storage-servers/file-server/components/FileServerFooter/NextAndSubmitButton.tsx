@@ -109,7 +109,7 @@ const NextAndSubmitButton = () => {
         handleNextClick();
       } catch (err) {
         console.log(err?.data?.message || "File Server creation error");
-        notify.error("File Server Name already exists");
+        notify.error("File Server Name already exists.");
       }
     }
   };

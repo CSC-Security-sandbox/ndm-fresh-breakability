@@ -65,7 +65,7 @@ const JobsList = () => {
             notify.success("Successfully updated the job status.");
           })
           .catch((err) => {
-            notify.error(err.message || "Failed to change the status");
+            notify.error(err.message || "Failed to change the status.");
           });
       },
       disabled: !canManageJob,

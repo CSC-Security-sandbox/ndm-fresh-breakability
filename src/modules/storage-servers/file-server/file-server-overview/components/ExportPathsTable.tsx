@@ -45,7 +45,7 @@ const ExportPathsTable = ({
     }
 
     notify.error(
-      `Failed to refresh the list, reason - ${error?.message || "unknown"}`
+      `Failed to refresh the list, reason - ${error?.message || "unknown."}`
     );
     console.error({ level: "File server overview - refresh list.", error });
   };

@@ -36,7 +36,7 @@ const Home = () => {
       getProjectOverviewApi({ projectId: selectedProjectId })
         .unwrap()
         .catch((err) => {
-          notify.error("Failed to fetch overview data");
+          notify.error("Failed to fetch overview data.");
           console.error({ err, level: "Dashboard/Project Overview API" });
         });
     }

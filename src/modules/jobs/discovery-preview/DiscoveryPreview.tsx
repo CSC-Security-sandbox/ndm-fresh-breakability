@@ -66,7 +66,7 @@ const DiscoveryPreview = () => {
 
   useEffect(() => {
     if (isError) {
-      notify.error("Failed to fetch the discovery report");
+      notify.error("Failed to fetch the discovery report.");
     }
   }, [isError]);
 
