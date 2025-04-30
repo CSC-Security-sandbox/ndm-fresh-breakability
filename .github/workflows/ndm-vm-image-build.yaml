@@ -136,7 +136,7 @@ jobs:
 
           LATEST_RELEASE=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "$API_URL" | jq -r '.[0].tag_name')
+            "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
 
           if [[ "$LATEST_RELEASE" == "null" || -z "$LATEST_RELEASE" ]]; then
             echo "Error: Unable to fetch latest release tag."
