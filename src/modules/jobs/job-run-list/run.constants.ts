@@ -19,7 +19,8 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     width: 100,
     Renderer: ({
       value,
-    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) => TooltipCopyCellRenderer(value),
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) =>
+      TooltipCopyCellRenderer(value),
   },
   {
     header: "Job Type",
@@ -123,7 +124,10 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Size",
     accessor: "totalScannedSize",
     id: "size",
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      row.jobType === JOBS_TYPE.DISCOVERY
+        ? row.totalScannedSize
+        : row.totalMigratedSize,
     width: 80,
   },
   {
@@ -136,7 +140,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Status",
     accessor: "status",
     id: "status",
-    width: 100,
+    width: 120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["status"]>) =>
