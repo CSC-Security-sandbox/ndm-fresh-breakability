@@ -38,6 +38,7 @@ export class WorkerOptionsService {
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.jobTaskActivityConcurrency') || 1;
+    Logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
   }
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
