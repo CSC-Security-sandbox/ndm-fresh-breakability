@@ -849,13 +849,13 @@ export class JobRunService {
     const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
     if (setupFailedErrors.length > 0) {
       const fatalError = errorTypeCounts.find(
-        (error) => error.errorType === "FATAL_ERROR"
+        (error) => error.errortype === "FATAL_ERROR"
       );
       if (fatalError) {
         fatalError.count += setupFailedErrors.length;
       } else {
         errorTypeCounts.push({
-          errorType: "FATAL_ERROR",
+          errortype: "FATAL_ERROR",
           count: setupFailedErrors.length,
         });
       }
