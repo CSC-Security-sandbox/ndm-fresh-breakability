@@ -13,6 +13,7 @@ import {
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
   ApiBadRequestResponse,
+  ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -155,5 +156,23 @@ export class JobRunController {
   @Cron(CronExpression.EVERY_10_SECONDS)
   async checkWorkerHealthCron() {
     await this.jobRunService.checkWorkerHealth();
+  }
+
+  @ApiOperation({ summary: "Update worker response" })
+  @ApiResponse({
+    status: 200,
+    description: "The worker response updated successfully.",
+  })
+  @Put("/worker-response/:jobRunId/:workerId")
+  @ApiBody({
+    description: "The response data returned by the worker (can include status, message, code, etc.)",
+    type: Object,
+  })
+  async updateWorkerResponse(
+    @Param("jobRunId") jobRunId: string,
+    @Param("workerId") workerId: string,
+    @Body() workerResponse: Record<string, any>
+  ) {
+    return this.jobRunService.updateWorkerResponse(jobRunId, workerId, workerResponse);
   }
 }

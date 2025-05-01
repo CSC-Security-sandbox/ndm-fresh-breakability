@@ -1,0 +1,1 @@
+ALTER TABLE worker_jobrun_mapping ADD COLUMN IF NOT EXISTS worker_response JSONB;

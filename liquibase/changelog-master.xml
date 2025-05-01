@@ -62,5 +62,9 @@
     <changeSet id="5026" author="anarvekar">
       <sqlFile path="liquibase/20250410_01_alter_jobrun_add_column_paused_reason.sql"/>
    </changeSet>
+    
+   <changeSet id="5027" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250429_01_alter_table_workerjobrunmapping_ad_column_errorreason.sql"/>
+   </changeSet>
    
 </databaseChangeLog>

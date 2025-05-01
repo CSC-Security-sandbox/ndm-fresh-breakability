@@ -24,7 +24,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { FindManyOptions, In, Repository } from "typeorm";
+import { FindManyOptions, In, IsNull, Not, Raw, Repository, UpdateResult } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
 import {
@@ -804,7 +804,28 @@ export class JobRunService {
       .offset((parseInt(page) - 1) * parseInt(limit));
 
     const [data, total] = await queryBuilder.getManyAndCount();
-    return { data, total };
+
+    const setupFailedErrors = await this.workerJobRunMapRepo.find({
+      where: {
+        jobRunId,
+        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
+      },
+    });
+    if (setupFailedErrors.length > 0) {
+      const setupFailedError = setupFailedErrors.map((error): any => {
+        return {
+          errorMessage: error.workerResponse.message,
+          errorType: "FATAL_ERROR",
+          createdAt: error.workerResponse.createdAt,
+          operationType: error.workerResponse.operation,
+          errorCode: error.workerResponse.code,
+        }
+      });
+      data.push(...setupFailedError);
+    }
+    // sort the data array by errorType so that it keep FATAL_ERROR at the top
+    data.sort((a, b) => { if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") return -1 });
+    return { data, total: total + setupFailedErrors.length };
   }
 
   async getErrorOverview(jobRunId: string) {
@@ -827,6 +848,20 @@ export class JobRunService {
         error
       );
       errorTypeCounts = [];
+    }
+    const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
+    if (setupFailedErrors.length > 0) {
+      const fatalError = errorTypeCounts.find(
+        (error) => error.errorType === "FATAL_ERROR"
+      );
+      if (fatalError) {
+        fatalError.count += setupFailedErrors.length;
+      } else {
+        errorTypeCounts.push({
+          errorType: "FATAL_ERROR",
+          count: setupFailedErrors.length,
+        });
+      }
     }
     return errorTypeCounts;
   }
@@ -959,5 +994,23 @@ export class JobRunService {
         `Error occurred while checking worker health: ${error}`
       );
     }
+  }
+
+  async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>): Promise<UpdateResult> {
+    try {
+      return await this.workerJobRunMapRepo.update({ jobRunId, workerId }, { workerResponse });
+    } catch (error) {
+      this.logger.error(`Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`);
+      throw new Error(`Failed to update worker response: ${error}`);
+    }
+  }
+
+  async getWorkerSetupErrors(jobRunId: string): Promise<any[]> {
+    return await this.workerJobRunMapRepo.find({
+      where: {
+        jobRunId,
+        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
+      },
+    });
   }
 }
