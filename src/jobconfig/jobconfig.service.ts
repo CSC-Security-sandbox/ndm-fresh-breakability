@@ -862,10 +862,10 @@ export class JobConfigService {
                   targetPathId: destinationPathId,
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
-                  futureScheduleAt: config.futureScheduleAt,
+                  futureScheduleAt: null,
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
-                  firstRunAt: config.firstRunAt,
+                  firstRunAt: new Date(),
                 })
               );
             } else {
@@ -877,13 +877,13 @@ export class JobConfigService {
                   jobType: JobType.CUT_OVER,
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
-                  futureScheduleAt: config.futureScheduleAt,
+                  futureScheduleAt: null,
                   status:
                     config.status === JobStatus.InActive
                       ? JobStatus.Active
                       : config.status,
                   preserveAccessTime: config.preserveAccessTime,
-                  firstRunAt: config.firstRunAt,
+                  firstRunAt: new Date(),
                 });
                 updatedCutoverJobs.push({ ...existingCutover, ...config });
               } else {
