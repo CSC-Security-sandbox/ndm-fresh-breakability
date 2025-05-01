@@ -866,10 +866,10 @@ export class JobConfigService {
                   targetPathId: destinationPathId,
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
-                  futureScheduleAt: config.futureScheduleAt,
+                  futureScheduleAt: null,
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
-                  firstRunAt: config.firstRunAt,
+                  firstRunAt: new Date(),
                 })
               );
             } else {
@@ -881,13 +881,13 @@ export class JobConfigService {
                   jobType: JobType.CUT_OVER,
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
-                  futureScheduleAt: config.futureScheduleAt,
+                  futureScheduleAt: null,
                   status:
                     config.status === JobStatus.InActive
                       ? JobStatus.Active
                       : config.status,
                   preserveAccessTime: config.preserveAccessTime,
-                  firstRunAt: config.firstRunAt,
+                  firstRunAt: new Date(),
                 });
                 updatedCutoverJobs.push({ ...existingCutover, ...config });
               } else {
@@ -1093,7 +1093,6 @@ export class JobConfigService {
     });
 
     if (!jobConfig) throw new Error(`Job with id ${id} not found`);
-
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
         const partialPayload = {
@@ -1107,7 +1106,7 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const jobRunStats = jobRun.jobStats;
+        const jobRunStats = await this.getErrorCounts(jobRun.id);        
         if (jobRun.status === JobRunStatus.Completed) {
           this.logger.log(
             `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
@@ -1910,7 +1909,7 @@ export class JobConfigService {
         workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
       },
     });
-    if (setupFailedErrors.length > 0) {
+    if (setupFailedErrors?.length > 0) {
       const fatalError = errorTypeCounts.find(
         (error) => error.errorType === "FATAL_ERROR"
       );
