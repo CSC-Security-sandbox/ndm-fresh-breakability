@@ -29,7 +29,7 @@ import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
-import { In, Repository } from "typeorm";
+import { In, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import {
@@ -81,6 +81,7 @@ import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -125,7 +126,10 @@ export class JobConfigService {
     private identityCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
-    private sendMailService: SendMailService
+    private sendMailService: SendMailService,
+
+    @InjectRepository(WorkerJobRunMap)
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
   ) {}
 
   // ------------ Bulk Discovery ---------------- //
@@ -1898,6 +1902,26 @@ export class JobConfigService {
         error
       );
       errorTypeCounts = [];
+    }
+
+    const setupFailedErrors = await this.workerJobRunMapRepo.find({
+      where: {
+        jobRunId,
+        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
+      },
+    });
+    if (setupFailedErrors.length > 0) {
+      const fatalError = errorTypeCounts.find(
+        (error) => error.errorType === "FATAL_ERROR"
+      );
+      if (fatalError) {
+        fatalError.count += setupFailedErrors.length;
+      } else {
+        errorTypeCounts.push({
+          errorType: "FATAL_ERROR",
+          count: setupFailedErrors.length,
+        });
+      }
     }
     return errorTypeCounts;
   }
