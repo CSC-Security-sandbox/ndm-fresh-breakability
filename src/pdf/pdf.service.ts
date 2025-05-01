@@ -109,7 +109,7 @@ export class PdfService {
           });
           const page = await browser.newPage();
           await page.setContent(html, { waitUntil: 'networkidle0' });
-          const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, scale: 1, landscape: false });
+          const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, scale: 0.6, landscape: true });
           return Buffer.from(pdfBuffer);
         }finally {
           if (browser) await browser.close();
