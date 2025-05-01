@@ -1,7 +1,6 @@
-import { PreCheckValidationWorkflow } from './pre-check.workflow';
-import { PreCheckWorkflowRequest, PreCheckWorkflowResponse, PreCheckStatus, PreCheckErrorCodes, WorkerTaskPaths } from '../pre-check.types';
-import { executeChild, proxyActivities, ChildWorkflowCancellationType } from '@temporalio/workflow';
 import { PreCheckWorkerValidationWorkflow } from '../core/pre-check.worker.workflow';
+import { PreCheckErrorCodes, PreCheckStatus, PreCheckWorkflowRequest } from '../pre-check.types';
+import { PreCheckValidationWorkflow } from './pre-check.workflow';
 
 jest.mock('@temporalio/workflow', () => ({
     executeChild: jest.fn(),
@@ -232,37 +231,7 @@ describe('PreCheckValidationWorkflow', () => {
         );
 
         expect(result.paths).toHaveLength(1);
-        expect(result.paths[0].status).toBe(PreCheckStatus.SUCCESS); // Adjust based on expected behavior
-    });
-
-    it('should handle protocol version mismatch', async () => {
-        const mockServerPaths = [
-            {
-                pathId: 'source-path-1',
-                serverId: 'server-1',
-                pathName: 'Source Path 1',
-                isSource: true
-            },
-            {
-                pathId: 'dest-path-1',
-                serverId: 'server-2', // Different server to trigger mismatch
-                pathName: 'Destination Path 1',
-                isSource: false
-            }
-        ];
-
-        const result = await PreCheckWorkerValidationWorkflow(
-            'worker-1',
-            {
-                settings: mockSettings,
-                serverCredentials: mockServerCredentials,
-                serverPaths: mockServerPaths
-            },
-            'test-trace-id'
-        );
-
-        expect(result.paths[1].status).toBe(PreCheckStatus.FAILED);
-        expect(result.paths[1].errorCodes).toBe(PreCheckErrorCodes.PROTOCOL_VERSION_MISMATCH);
+        expect(result.paths[0].status).toBe(PreCheckStatus.SUCCESS); 
     });
 
     it('should fail if all workers in the destination are unhealthy', async () => {

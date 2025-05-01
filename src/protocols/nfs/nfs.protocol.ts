@@ -6,7 +6,6 @@ import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
 export class NFSProtocol extends Protocol {
- 
 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getNFSCommand(this.platform, key)

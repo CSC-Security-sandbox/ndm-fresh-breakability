@@ -7,7 +7,15 @@ import { CommonActivityService } from '../common/common.service';
 import * as utils from '../utils/utils';
 import { DiscoveryScanActivity } from './discovery.core.activity';
 
-// Mock dependencies
+
+jest.mock('@temporalio/activity', () => ({
+  Context: {
+      current: jest.fn().mockResolvedValue(()=>({
+          heartbeat: jest.fn(),
+      }))
+  },
+}))
+
 const mockLogger = { log: jest.fn(), debug: jest.fn(), error: jest.fn() } as any as Logger;
 const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
 const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
@@ -41,7 +49,10 @@ describe('DiscoveryScanActivity', () => {
 
   describe('scanActivity - no task found', () => {
     it('should return noTaskFound when no task is fetched', async () => {
-      mockRedis.getJobContext = jest.fn().mockResolvedValue({ getJobState: () => ({ failedWorkers: [] }), updatedTaskInfo: {}, appendToUpdatedTaskList: jest.fn(), jobConfig: {} });
+      mockRedis.getJobContext = jest.fn().mockResolvedValue({ 
+        getJobState: () => ({ failedWorkers: [] }), updatedTaskInfo: {}, appendToUpdatedTaskList: jest.fn(), jobConfig: {},
+        getScanTask: jest.fn()
+      });
       mockCommon.fetchOneTask = jest.fn().mockResolvedValue(null);
 
       const result = await service.scanActivity({ jobRunId: 'job1' , failedWorkers: []});
@@ -61,6 +72,9 @@ describe('DiscoveryScanActivity', () => {
         appendToTaskList: jest.fn(),
         setJobConfig: {} as any,
         jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} },
+        getScanTask: jest.fn(),
+        setScanTask: jest.fn(),
+        deleteScanTask: jest.fn(),
       };
       mockRedis.getJobContext = jest.fn().mockResolvedValue(jobContext);
       mockCommon.fetchOneTask = jest.fn().mockResolvedValue(fakeTask);
@@ -83,6 +97,9 @@ describe('DiscoveryScanActivity', () => {
         appendToUpdatedTaskList: jest.fn().mockResolvedValue('upd1'),
         appendToTaskList: jest.fn(),
         jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} },
+        getScanTask: jest.fn(),
+        setScanTask: jest.fn(),
+        deleteScanTask: jest.fn(),
       };
       mockRedis.getJobContext = jest.fn().mockResolvedValue(jobContext);
       mockCommon.fetchOneTask = jest.fn().mockResolvedValue(fakeTask);

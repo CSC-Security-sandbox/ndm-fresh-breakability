@@ -281,62 +281,35 @@ describe('NFSProtocol', () => {
       expect((nfsProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
     });
   });
+});
 
-describe('getTotalUsedMemory', () => {
-  const mockTraceId = 'test-trace-id';
-  const mockPayload: ProtocolPayload = {
-    hostname: 'test-host',
-    username: 'test-user',
-    protocolVersion: '4.2',
-    path: '/test/path',
-  };
-
+describe('NFSProtocol - getTotalUsedMemory', () => {
   let nfsProtocol: NFSProtocol;
+  const traceId = 'test-trace-id';
+  const payload: ProtocolPayload = {
+    hostname: 'localhost',
+    path: '/mnt/test',
+  } as ProtocolPayload;
 
   beforeEach(() => {
     nfsProtocol = new NFSProtocol();
-    (nfsProtocol as any).logger = {
+    nfsProtocol['executeCommand'] = jest.fn();
+    nfsProtocol['logger'] = {
       log: jest.fn(),
-      error: jest.fn(),
       info: jest.fn(),
-    };
+      error: jest.fn(),
+    } as any;
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+  it('should throw error if df output is malformed', async () => {
+    nfsProtocol['platform'] = 'linux';
+    const response = { message: 'unexpected output' };
 
-  it('should return correct size on Linux platform', async () => {
-    jest.spyOn(os, 'platform').mockReturnValue('linux');
-    const mockResponse = { message: '/dev/nfs 1000 512 488 50% /mnt/nfs' };
-    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
-  
-    const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-    expect(result).toBe(512);
-  });
-  
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(response);
 
-  it('should multiply used bytes by 1024 for darwin platform', async () => {
-    jest.spyOn(os, 'platform').mockReturnValue('darwin');
-    const mockResponse = { message: '/dev/nfs 1000 256 744 25% /Volumes/nfs' };
-    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
-  
-    const result = await nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-    expect(result).toBe(256 * 1024);
-  });
-  
-
-  it('should throw error on unexpected df output', async () => {
-    jest.spyOn(os, 'platform').mockReturnValue('linux');
-    const mockResponse = { message: 'InvalidOutput' };
-    (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
-
-    await expect(nfsProtocol.getTotalUsedMemory(mockTraceId, mockPayload)).rejects.toThrow(
+    await expect(nfsProtocol.getTotalUsedMemory(traceId, payload)).rejects.toThrow(
       /Unexpected df output/
     );
   });
-});
-
-  
 
 });

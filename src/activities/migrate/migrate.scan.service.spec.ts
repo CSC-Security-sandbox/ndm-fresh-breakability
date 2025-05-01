@@ -9,6 +9,14 @@ import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
 
+jest.mock('@temporalio/activity', () => ({
+  Context: {
+      current: jest.fn().mockResolvedValue(()=>({
+          heartbeat: jest.fn(),
+      }))
+  },
+}))
+
 jest.mock('winston-daily-rotate-file', () => {
   const DailyRotateFile = jest.fn();
   return { default: DailyRotateFile };
@@ -32,6 +40,22 @@ jest.mock('winston', () => {
 
 jest.mock('src/redis/redis.service');
 jest.mock('../common/common.service');
+
+const stream = {
+  jobRunId: 'job1',
+  streamKey: 'stream1',
+  numMessages: 0,
+  lastId: '0-0',
+  init: jest.fn(),
+  cleanup: jest.fn(),
+  close: jest.fn(),
+  append: jest.fn(),
+  read: jest.fn(),
+  groupRead: jest.fn(),
+  consumerGroupCount:2,
+  readAndPurge: jest.fn(),
+  getLength: jest.fn(),
+}
 
 describe('MigrationScanService', () => {
   let redisClient: RedisClientType;
@@ -61,106 +85,20 @@ describe('MigrationScanService', () => {
   class TestJobContext extends JobContext {
     constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
       super(jobRunId, jobConfig, jobRunStatus);
-      this.filesInfo =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
-      };
-  
-      this.dirsInfo =  {
-          jobRunId: 'job1',
-          streamKey: 'stream1',
-          numMessages: 0,
-          lastId: '0-0',
-          init: jest.fn(),
-          cleanup: jest.fn(),
-          close: jest.fn(),
-          append: jest.fn(),
-          read: jest.fn(),
-          groupRead: jest.fn(),
-          consumerGroupCount:2,
-          readAndPurge: jest.fn(),
-          getLength: jest.fn(),
-      };
-  
-      this.errorsInfo =   {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
-      };
-
-      this.appendToErrorList = jest.fn(); // Mock appendToErrorList
-  
-      this.tasksInfo =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
-      };
-  
-      this.migrateTask =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
-      };
-  
-      this.taskStats =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
-      };
-  
-      
-  
+      this.filesInfo = stream;
+      this.dirsInfo = stream;
+      this.errorsInfo = stream;
+      this.tasksInfo = stream;
+      this.migrateTask = stream;
+      this.updatedTaskInfo = stream;
+      this.taskStats = stream;
+      this.setScanTask = jest.fn();
+      this.getScanTask = jest.fn();
+      this.deleteAllScanTasks = jest.fn();
+      this.appendToErrorList = jest.fn();
+      this.runningScanTask = {
+        deleteValue: jest.fn()
+      }
     }
     async init() {}
     async close() {}
@@ -386,21 +324,15 @@ describe('MigrationScanService', () => {
     });
 
     it('should handle errors during task processing', async () => {
-      const jobRunId = 'job-1';
-      const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn(), updatedTaskInfo: { lastId: '0-0' }, appendToErrorList: jest.fn() ,  getJobState: jest.fn().mockReturnValue({
-        workers: [],
-        tasks_completed: 1,
-        tasks_total: 2,
-        workers_agreed: [],
-        status: 'RUNNING',
-        failedWorkers: []
-    })};
+      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
+      const jobContext = new TestJobContext('job1', jobConfig, 'running');;
       const task = { commands: [{ status: CommandStatus.IN_PROCESS, fPath: 'file.txt' }] };
       mockRedisService.getJobContext = jest.fn().mockResolvedValue(jobContext);
       mockCommonService.fetchOneTask = jest.fn().mockResolvedValue(task);
       jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'some-error' });
 
-      const result = await service.scanPath({ jobRunId , failedWorkers: [] });
+      const result = await service.scanPath({ jobRunId: 'job1', failedWorkers: [] });
       expect(result.error).toBe(1);
       expect(result.errors.size).toBe(1);
     });

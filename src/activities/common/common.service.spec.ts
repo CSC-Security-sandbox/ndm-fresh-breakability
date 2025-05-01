@@ -204,14 +204,6 @@ describe('CommonActivityService', () => {
   });
 
 
-  describe('getJobStateWithStreamLoad', () => {
-    it('should return job state with isStreamOverloaded', async () => {
-      await service.getJobStateWithStreamLoad(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-    });
-  });
-
-
   describe('fetchOneTask / fetchOneMigrationTask', () => {
     it('should fetch one task successfully', async () => {
       const fakeCtx = createJobContext();

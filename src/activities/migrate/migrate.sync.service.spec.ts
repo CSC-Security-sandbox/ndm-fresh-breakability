@@ -12,6 +12,13 @@ import { CommandStatus, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskT
 import { WorkerThreadService } from '../../thread/worker.thread.service';
 
 
+jest.mock('@temporalio/activity', () => ({
+    Context: {
+        current: jest.fn().mockResolvedValue(()=>({
+            heartbeat: jest.fn(),
+        }))
+    },
+}))
 describe('MigrationSyncService', () => {
     let service: MigrationSyncService;
     let redisService: RedisService;
@@ -475,6 +482,9 @@ describe('MigrationSyncService', () => {
                 setJobConfig: jest.fn(),
                 getJobRunStatus: jest.fn(),
                 setJobRunStatus: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
                 errorsInfo: [],
                 filesInfo: {
                     lastId: 'file-id',
@@ -486,9 +496,6 @@ describe('MigrationSyncService', () => {
                     lastId: 'task-id'
                 }
             } as unknown as JobContext
-            const mockInput = {
-                jobContext: mockJobContext,
-            }
             const mockedTask: any = {
                 id: 'task-id',
                 jobRunId: '1234',
@@ -553,10 +560,10 @@ describe('MigrationSyncService', () => {
                     workers_agreed: [],
                     status: 'RUNNING',
                     failedWorkers: []
-                  })
-            }
-            const mockInput = {
-                jobContext: mockedJobContext,
+                  }),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             }
             const mockedTask: any = null;
             jest.spyOn(redisService, 'getJobContext').mockResolvedValue(mockedJobContext as any);
