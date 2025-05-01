@@ -107,6 +107,7 @@ describe('PrecheckActivity', () => {
       fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
+      (service as any).checkSizeFlag = true;
 
       const result = await service.preCheckPath(
         mockSettings,
@@ -132,6 +133,7 @@ describe('PrecheckActivity', () => {
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
       fs.readdir.mockResolvedValue([]);
+      (service as any).checkSizeFlag = true;
 
       const result = await service.preCheckPath(
         mockSettings,
@@ -238,6 +240,7 @@ describe('PrecheckActivity', () => {
       fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
+      (service as any).checkSizeFlag = true;
 
       const result = await service.preCheckPath(
         mockSettings,
@@ -264,6 +267,7 @@ describe('PrecheckActivity', () => {
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
       fs.readdir.mockResolvedValue([]);
+      (service as any).checkSizeFlag = true;
 
       const result = await service.preCheckPath(
         mockSettings,

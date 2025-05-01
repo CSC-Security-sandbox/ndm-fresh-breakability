@@ -10,12 +10,15 @@ const fs = require('fs').promises;
 export class PrecheckActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
+  readonly checkSizeFlag: boolean = false;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
+    this.checkSizeFlag = this.configService.get<boolean>('worker.checkSpaceForPreCheck');
+
   }
 
   async preCheckPath(settings: Settings, serverCredentials: ServerCredential, serverPaths: WorkerTaskPaths, traceId): Promise<PreCheckPathOutput> {
@@ -121,20 +124,21 @@ export class PrecheckActivity {
           ...protocolPayload,
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`
         };
-
-        checkPromises.push(
-          protocol.getTotalUsedMemory(traceId, sizePayload)
-            .then(totalSizeInBytes => {
-              this.logger.log(`SourceDataSize : ${totalSizeInBytes} bytes`);
-              preCheckPathOutput.sourceDataSize = totalSizeInBytes;
-            })
-            .catch(error => {
-              this.logger.error(`Error while calculating source data size on server ${serverCredentials.host} : ${error}`);
-              preCheckPathOutput.errorCodes.push(
-                PreCheckErrorCodes.SOURCE_DATA_SIZE_CALCULATION_FAILED
-              );
-            })
-        );
+        if(this.checkSizeFlag){
+          checkPromises.push(
+            protocol.getTotalUsedMemory(traceId, sizePayload)
+              .then(totalSizeInBytes => {
+                this.logger.log(`SourceDataSize : ${totalSizeInBytes} bytes`);
+                preCheckPathOutput.sourceDataSize = totalSizeInBytes;
+              })
+              .catch(error => {
+                this.logger.error(`Error while calculating source data size on server ${serverCredentials.host} : ${error}`);
+                preCheckPathOutput.errorCodes.push(
+                  PreCheckErrorCodes.SOURCE_DATA_SIZE_CALCULATION_FAILED
+                );
+              })
+            );
+        }
       }
 
       if (!serverPaths.isSource) {
@@ -142,7 +146,7 @@ export class PrecheckActivity {
           ...protocolPayload,
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`
         };
-
+        if(this.checkSizeFlag){
         checkPromises.push(
           protocol.getAvailableDiskSpace(traceId, spacePayload)
             .then(availableBytes => {
@@ -156,10 +160,12 @@ export class PrecheckActivity {
               );
             })
         );
+      }
 
         try {
           const dirContents = await fs.readdir(`${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`);
-          preCheckPathOutput.destinationIsEmpty = dirContents.length === 0;
+          const onlyExpectedFile = dirContents.length === 1 && dirContents[0] === `test-${traceId}-${this.workerId}.txt`;
+          preCheckPathOutput.destinationIsEmpty = dirContents.length === 0 || onlyExpectedFile;
           this.logger.log(`Destination path empty status: ${preCheckPathOutput?.destinationIsEmpty}`);
         } catch (error) {
           this.logger.error(`Error while checking destination path empty status: ${error.message}`);
