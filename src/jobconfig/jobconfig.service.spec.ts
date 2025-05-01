@@ -1727,11 +1727,12 @@ describe("JobConfigService", () => {
       });
     });
 
+
     it("should return job config by id successfully", async () => {
       const mockJobConfigId = "jobConfigId";
       const startTime = new Date("2025-03-27T00:00:00Z");
       const endTime = new Date("2025-03-27T00:00:01Z");
-
+    
       const mockJobConfig = {
         id: mockJobConfigId,
         jobType: JobType.MIGRATE,
@@ -1743,12 +1744,6 @@ describe("JobConfigService", () => {
             subStatus: null,
             startTime,
             endTime,
-            jobStats: {
-              fileCount: "10",
-              directories: "5",
-              totalSize: "5000",
-              errors: [],
-            },
           },
         ],
         sourcePath: {
@@ -1768,11 +1763,20 @@ describe("JobConfigService", () => {
         status: "Active",
         createdAt: startTime,
       };
-
+    
       jest
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
-
+    
+      jest
+        .spyOn(service as any, 'getErrorCounts')
+        .mockResolvedValue({
+          fileCount: "10",
+          directories: "5",
+          totalSize: "5000",
+          errors: [],
+        });
+    
       const createQueryBuilderMock = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -1780,14 +1784,27 @@ describe("JobConfigService", () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       };
-
+    
       const operationErrorRepoMock = {
         createQueryBuilder: jest.fn(() => createQueryBuilderMock),
       };
-
+      jest
+      .spyOn(service, 'calculateJobRunStats')
+      .mockImplementation(async (jobRunId: string) => {
+        if (jobRunId === "jobRunId1") {
+          return {
+            fileCount: "10",
+            directories: "5",
+            totalSize: "5000",
+            errors: [],
+          };
+        }
+        throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      });
       (service as any).operationErrorRepo = operationErrorRepoMock;
+    
       const result = await service.getJobConfigById(mockJobConfigId);
-
+    
       expect(result).toEqual({
         jobConfigId: mockJobConfigId,
         jobType: "MIGRATE",
@@ -1812,22 +1829,22 @@ describe("JobConfigService", () => {
             endTime,
             jobType: "MIGRATE",
             timeElapsed: 1000,
-            scannedFilesCount: "0",
-            scannedDirectoriesCount: "0",
-            totalScannedSize: "0 Bytes",
-            errors: undefined,
+            scannedFilesCount: "10",
+            scannedDirectoriesCount: "5",
+            totalScannedSize: "4.88 KB",
+            errors: [],
           },
         ],
         aggregateData: {
           timeElapsed: 1000,
-          scannedFilesCount: "0",
-          scannedDirectoriesCount: "0",
-          totalScannedSize: "0 Bytes",
+          scannedFilesCount: "10",
+          scannedDirectoriesCount: "5",
+          totalScannedSize: "4.88 KB",
         },
         errors: [],
       });
     });
-
+    
     it("should handle job runs with no stats", async () => {
       const mockJobConfig = {
         id: "job1",
@@ -1988,15 +2005,36 @@ describe("JobConfigService", () => {
       const operationErrorRepoMock = {
         createQueryBuilder: jest.fn(() => createQueryBuilderMock),
       };
-    
+      
       (service as any).operationErrorRepo = operationErrorRepoMock;
+      jest
+      .spyOn(service, 'calculateJobRunStats')
+      .mockImplementation(async (jobRunId: string) => {
+        if (jobRunId === "jobRunId1") {
+          return {
+            fileCount: "10",
+            directories: "5",
+            totalSize: "1000",
+            errors: [],
+          };
+        }
+        if (jobRunId === "jobRunId2") {
+          return {
+            fileCount: "20",
+            directories: "10",
+            totalSize: "2000",
+            errors: [],
+          };
+        }
+        throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      });
     
       const result = await service.getJobConfigById("jobConfigId");
     
       expect(result.aggregateData).toEqual({
         timeElapsed: 2000,
-        scannedFilesCount: "0",
-        scannedDirectoriesCount: "0",
+        scannedFilesCount: "30",
+        scannedDirectoriesCount: "15",
         totalScannedSize: "0 Bytes", 
       });
     });

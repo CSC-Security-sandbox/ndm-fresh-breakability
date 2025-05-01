@@ -1106,7 +1106,8 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const jobRunStats = await this.getErrorCounts(jobRun.id);        
+        const jobRunStats = await this.calculateJobRunStats(jobRun.id); 
+      
         if (jobRun.status === JobRunStatus.Completed) {
           this.logger.log(
             `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
@@ -1118,7 +1119,7 @@ export class JobConfigService {
               jobRunStats.directories || "0"
             )?.toString(),
             totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
-            errors: jobRunStats.errors,
+            errors: jobRunStats.errors || [] ,
           };
         }
         this.logger.log(
