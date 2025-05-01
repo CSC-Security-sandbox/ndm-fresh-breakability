@@ -152,7 +152,17 @@ const JobDetails = () => {
   };
 
   const latestJobRunId = useMemo(() => {
-    return jobConfigDetails?.jobRuns?.[0]?.jobRunId;
+    if (!jobConfigDetails?.jobRuns || jobConfigDetails.jobRuns.length === 0) {
+      return undefined;
+    }
+
+    const sortedJobRuns = jobConfigDetails?.jobRuns?.slice().sort((a, b) => {
+      const dateA = new Date(a.startTime).getTime();
+      const dateB = new Date(b.startTime).getTime();
+      return dateB - dateA;
+    });
+    
+    return sortedJobRuns[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
   return (
