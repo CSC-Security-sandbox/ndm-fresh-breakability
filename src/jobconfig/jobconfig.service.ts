@@ -1287,11 +1287,32 @@ export class JobConfigService {
     const severityMessages =
       await this.syncEmailRepo
         .createQueryBuilder('syncEmail')
+        .select("syncEmail.mailContent")
         .where('syncEmail.incidentStatus = :status', { status: IncidentStatus.OPEN })
         .getMany();
 
-    this.logger.log(
-      `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}, countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}, countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}, countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
+    const severityMessagesDescriptions = severityMessages?.flatMap(entry =>
+      (entry?.mailContent?.alerts ?? []).map(alert => alert?.annotations?.description).filter(Boolean) || []
+    );
+
+    this.logger.debug(
+      `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}`
+    );
+
+    this.logger.debug(
+      `countBlockedCutoverJobRuns -  ${JSON.stringify(countBlockedCutoverJobRuns)}`
+    );
+
+    this.logger.debug(
+      `countRecentJobConfigs -  ${JSON.stringify(countRecentJobConfigs)}`
+    );
+
+    this.logger.debug(
+      `countCompletedJobRuns -  ${JSON.stringify(countCompletedJobRuns)}`
+    );
+
+    this.logger.debug(
+      `severityMessages - ${severityMessagesDescriptions?.length}`
     );
 
     return {
@@ -1299,7 +1320,7 @@ export class JobConfigService {
       countBlockedCutoverJobRuns,
       countRecentJobConfigs,
       countCompletedJobRuns,
-      severityMessages
+      severityMessages: severityMessagesDescriptions
     };
   }
 

@@ -2797,5 +2797,42 @@ describe("JobRunService", () => {
       } as any);
       await service.checkWorkerHealth();
     });
+
+    it('should log error if anything goes wrong', async () => {
+      const error = new Error('Test error');
+      jest.spyOn(jobRunRepo, 'find').mockRejectedValue(error);
+      const loggerSpy = jest.spyOn(service['logger'], 'error');
+
+      try {
+        await service.checkWorkerHealth();
+      } catch (error) {
+        expect(loggerSpy).toHaveBeenCalledWith('Error occurred while checking worker health:', error);
+      }
+    })
+
+    it('should resume the job if all workers are online', async () => {
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue([
+        {
+          id: "job1",
+          status: JobRunStatus.Paused,
+          pausedReason: PausedReason.SYSTEM_PAUSED,
+          workerMap: [
+            { worker: { status: WorkerStatus.Online, workerName: "w1" } },
+          ],
+        },
+      ] as any);
+      const loggerSpy = jest.spyOn(service['logger'], 'log');
+      const updateWorkerStatusMock = jest.fn(
+        (workers: WorkerEntity[]) => workers
+      );
+      jest
+        .spyOn(workerService, "updateWorkerStatus")
+        .mockImplementationOnce(updateWorkerStatusMock);
+
+      jest.spyOn(service, "resumeJobRuns").mockResolvedValue(undefined);
+      await service.checkWorkerHealth();
+      expect(service.resumeJobRuns).toHaveBeenCalled();
+      expect(service.resumeJobRuns).toHaveBeenCalledWith(["job1"]);
+    })
   });
 });
