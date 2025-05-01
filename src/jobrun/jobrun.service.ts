@@ -805,22 +805,24 @@ export class JobRunService {
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
-    const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
-    if (setupFailedErrors.length > 0) {
-      const setupFailedError = setupFailedErrors.map((error): any => {
-        return {
-          errorMessage: error.workerResponse.message,
-          errorType: "FATAL_ERROR",
-          createdAt: error.workerResponse.createdAt,
-          operationType: error.workerResponse.operation,
-          errorCode: error.workerResponse.code,
-        }
-      });
-      data.push(...setupFailedError);
+    if(errorType && errorType === "FATAL_ERROR") {
+      const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
+      if (setupFailedErrors.length > 0) {
+        const setupFailedError = setupFailedErrors.map((error): any => {
+          return {
+            errorMessage: error.workerResponse.message,
+            errorType: "FATAL_ERROR",
+            createdAt: error.workerResponse.createdAt,
+            operationType: error.workerResponse.operation,
+            errorCode: error.workerResponse.code,
+          }
+        });
+        data.push(...setupFailedError);
+      }
+      data.sort((a, b) => { if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") return -1 });
+      return { data, total: total + setupFailedErrors.length };
     }
-    // sort the data array by errorType so that it keep FATAL_ERROR at the top
-    data.sort((a, b) => { if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") return -1 });
-    return { data, total: total + setupFailedErrors.length };
+    return { data, total: total };
   }
 
   async getErrorOverview(jobRunId: string) {
