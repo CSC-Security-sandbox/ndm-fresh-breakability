@@ -11,6 +11,12 @@ import * as crypto from 'crypto';
 import { CommandStatus, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { WorkerThreadService } from '../../thread/worker.thread.service';
 
+jest.mock('@temporalio/activity', () => ({
+    Context: {
+      current: jest.fn(),
+    },
+}));
+
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
@@ -494,7 +500,10 @@ describe('MigrationSyncService', () => {
                 taskStats: {},
                 migrateTask: {
                     lastId: 'task-id'
-                }
+                },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
             } as unknown as JobContext
             const mockedTask: any = {
                 id: 'task-id',
@@ -561,6 +570,15 @@ describe('MigrationSyncService', () => {
                     status: 'RUNNING',
                     failedWorkers: []
                   }),
+                  getScanTask: jest.fn(),
+                  setScanTask: jest.fn(),
+                  deleteScanTask: jest.fn(),
+                  getSyncTask: jest.fn(),
+                  setSyncTask: jest.fn(),
+                  deleteSyncTask: jest.fn(),
+            }
+            const mockInput = {
+                jobContext: mockedJobContext,
                 getSyncTask: jest.fn(),
                 setSyncTask: jest.fn(),
                 deleteSyncTask: jest.fn(),
@@ -676,6 +694,12 @@ describe('MigrationSyncService', () => {
             const mockJobContext = {
                 appendToErrorList: jest.fn(),
                 jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
@@ -694,6 +718,12 @@ describe('MigrationSyncService', () => {
             const mockJobContext = {
                 appendToErrorList: jest.fn(),
                 jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
@@ -713,6 +743,12 @@ describe('MigrationSyncService', () => {
             const mockJobContext = {
                 appendToErrorList: jest.fn(),
                 jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
 
@@ -734,6 +770,12 @@ describe('MigrationSyncService', () => {
             const mockJobContext = {
                 appendToErrorList: jest.fn(),
                 jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
             jest.spyOn(fs.promises, 'utimes').mockResolvedValue();

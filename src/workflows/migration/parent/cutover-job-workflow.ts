@@ -44,6 +44,7 @@ const {
 
 const {
    updateJobErrorStatus: updateJobErrorActivity,
+   updateWorkerResponse: updateWorkerResponse
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -91,6 +92,7 @@ export const CutOverWorkFlow = async ({
       }
       else {
         workFlowStatus.setupFailedWorkerCount++;
+        await updateWorkerResponse(traceId, id, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
         console.error(`[${traceId}] Failed to setup worker: ${id}`);
       }
     })
@@ -115,21 +117,23 @@ export const CutOverWorkFlow = async ({
           await syncWorkflow.signal('syncWorkerList', workFlowStatus.setupCompletedWorkers);
       else {
         workFlowStatus.setupFailedWorkerCount++;
+        await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
         console.error(`[${traceId}] Failed to setup worker: ${worker}`);
       }
     }catch(error) {
       workFlowStatus.setupFailedWorkerCount++;
+      await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: error.message, createdAt: new Date() });
       console.error(`[${traceId}] Error in SetupWorkerWorkflow: ${error}`);
     }
   })
 
+  
+  await wf.condition(() => (workFlowStatus.setupCompletedWorkers.length > 0) || (workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)));
+  
   if(workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)) {
     console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
     await updateJobErrorActivity(traceId)
   }
-
-  await wf.condition(() => workFlowStatus.setupCompletedWorkers.length > 0);
-
   // wait until redis has enough memory
   await waitUntilRedisMemoryOk(traceId);
 

@@ -190,4 +190,18 @@ export class CommonActivityService{
       }
     }
   }
+
+  async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>) {
+    try {
+      this.logger.log(`[${jobRunId}] Updating worker response to URL ${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`);
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) throw new Error('Failed to get access token');
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`, workerResponse, { headers: { Authorization: `Bearer ${accessToken}` } });
+      this.logger.log(`[${jobRunId}] Worker response updated successfully`);
+      return { message: 'Worker response updated successfully for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to update worker response: ${error}`);
+      return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
+    }
+  }
 }

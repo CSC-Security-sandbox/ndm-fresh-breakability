@@ -21,6 +21,12 @@ const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any 
 const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
 const mockConfig = { get: jest.fn() } as any as ConfigService;
 
+jest.mock('@temporalio/activity', () => ({
+  Context: {
+    current: jest.fn(),
+  },
+}));
+
 describe('DiscoveryScanActivity', () => {
   let service: DiscoveryScanActivity;
   let basePrefixSpy: jest.SpyInstance;
@@ -50,8 +56,12 @@ describe('DiscoveryScanActivity', () => {
   describe('scanActivity - no task found', () => {
     it('should return noTaskFound when no task is fetched', async () => {
       mockRedis.getJobContext = jest.fn().mockResolvedValue({ 
-        getJobState: () => ({ failedWorkers: [] }), updatedTaskInfo: {}, appendToUpdatedTaskList: jest.fn(), jobConfig: {},
-        getScanTask: jest.fn()
+        appendToUpdatedTaskList: jest.fn(),
+        jobConfig: {},
+        getScanTask: jest.fn(),
+        setScanTask: jest.fn(),
+        deleteScanTask: jest.fn(),
+        getJobState: () => ({ failedWorkers: [] }), updatedTaskInfo: {},
       });
       mockCommon.fetchOneTask = jest.fn().mockResolvedValue(null);
 
@@ -115,7 +125,19 @@ describe('DiscoveryScanActivity', () => {
   describe('discover', () => {
     it('should mark task completed when no errors', async () => {
       const task: any = { id: 't1', commands: [{ fPath: '/a', status: CommandStatus.IN_PROCESS, retryCount: 0, commandId: 'c1' }], jobRunId: 'job1' };
-      const jobContext: any = { jobRunId: 'job1', jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} },updatedTaskInfo: {lastId:'1'}, dirsInfo: { lastId: '', numMessages: 0 }, appendToDirList: jest.fn(), appendToFileList: jest.fn(), appendToErrorList: jest.fn(), errorsInfo: { lastId: '' } , appendToUpdatedTaskList: jest.fn(), appendToTaskList: jest.fn() };
+      const jobContext: any = { 
+        jobRunId: 'job1',
+        jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} },updatedTaskInfo: {lastId:'1'}, dirsInfo: { lastId: '', numMessages: 0 },
+        appendToDirList: jest.fn(),
+        appendToFileList: jest.fn(),
+        appendToErrorList: jest.fn(),
+        errorsInfo: { lastId: '' } ,
+        appendToUpdatedTaskList: jest.fn(),
+        appendToTaskList: jest.fn(),
+        getScanTask: jest.fn(),
+        setScanTask: jest.fn(),
+        deleteScanTask: jest.fn()
+      };
       // Mock scanDirCommand success
       jest.spyOn(service, 'scanDirCommand').mockResolvedValue({ files: 1, directory: 1, error: undefined } as any);
 
@@ -127,7 +149,19 @@ describe('DiscoveryScanActivity', () => {
 
     it('should retry and record errors', async () => {
       const task: any = { id: 't2', commands: [{ fPath: '/b', status: CommandStatus.IN_PROCESS, retryCount: 1, commandId: 'c2' }], jobRunId: 'job2' };
-      const jobContext: any = { jobRunId: 'job2', jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} }, dirsInfo: { lastId: '', numMessages: 0 }, appendToDirList: jest.fn(), appendToFileList: jest.fn(), appendToErrorList: jest.fn(), errorsInfo: { lastId: '' }, appendToTaskList: jest.fn(), appendToUpdatedTaskList: jest.fn() };
+      const jobContext: any = { 
+        jobRunId: 'job2',
+        jobConfig: { sourceFileServer: { pathId: 'p1' }, options: {} }, dirsInfo: { lastId: '', numMessages: 0 },
+        appendToDirList: jest.fn(),
+        appendToFileList: jest.fn(),
+        appendToErrorList: jest.fn(),
+        errorsInfo: { lastId: '' },
+        appendToTaskList: jest.fn(),
+        appendToUpdatedTaskList: jest.fn(),
+        getScanTask: jest.fn(),
+        setScanTask: jest.fn(),
+        deleteScanTask: jest.fn()
+      };
       // First scanDirCommand returns error
       jest.spyOn(service, 'scanDirCommand').mockResolvedValue({ files: 0, directory: 0, error: 'ERR' } as any);
 

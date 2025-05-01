@@ -55,6 +55,7 @@ export class WorkerOptionsService {
           generateCOCReport: this.migrationTaskService.generateCOCReport.bind(this.migrationTaskService),
           generateJobsReport: this.commonActivityService.generateJobsReport.bind(this.commonActivityService),
           updateJobErrorStatus: this.commonActivityService.updateJobErrorStatus.bind(this.commonActivityService),
+          updateWorkerResponse: this.commonActivityService.updateWorkerResponse.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
@@ -113,6 +114,7 @@ export class WorkerOptionsService {
           setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
           getJobStateWithStreamLoad: this.commonActivityService.getJobStateWithStreamLoad.bind(this.commonActivityService),
           getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
+          updateWorkerResponse: this.commonActivityService.updateWorkerResponse.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
         }, this.jobTaskActivityConcurrency);
       default:

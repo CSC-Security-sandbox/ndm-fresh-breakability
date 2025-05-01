@@ -27,7 +27,8 @@ export const registerNewWorkerSignal = defineSignal<[WorkerConfig]>('registerNew
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
-  updateJobErrorStatus: updateJobErrorActivity
+  updateJobErrorStatus: updateJobErrorActivity,
+  updateWorkerResponse: updateWorkerResponse
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -68,6 +69,7 @@ export async function DiscoveryWorkflow({traceId, payload, options}:DiscoveryJob
         }
         else {
             workFlowStatus.setupFailedWorkerCount++;
+            await updateWorkerResponse(traceId, id, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
             console.error(`[${traceId}] Failed to setup worker: ${id}`);
         }
         })
@@ -91,20 +93,24 @@ export async function DiscoveryWorkflow({traceId, payload, options}:DiscoveryJob
             }
             else {
                 workFlowStatus.setupFailedWorkerCount++;
+                await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
                 console.error(`[${traceId}] Failed to setup worker: ${worker}`);
             }}
             catch(error) {
                 workFlowStatus.setupFailedWorkerCount++;
+                await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: error.message, createdAt: new Date() });
                 console.error(`[${traceId}] Error in SetupWorkerWorkflow: ${error}`);
         }
     })
 
-    if(workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)) {
-        console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
-        await updateJobErrorActivity(traceId)
-    }
+    console.log(`[${traceId}] Setup completed for ${workFlowStatus.setupFailedWorkerCount}, ${payload.workers.length}, ${workFlowStatus.newAddedWorkerCount}`);
+    
+    await wf.condition(() => (workFlowStatus.setupCompletedWorkers.length > 0) || (workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)));
 
-    await wf.condition(() => workFlowStatus.setupCompletedWorkers.length > 0);
+    if(workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)) {
+      console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
+      await updateJobErrorActivity(traceId)
+    }
     
     await waitUntilRedisMemoryOk(traceId)
 

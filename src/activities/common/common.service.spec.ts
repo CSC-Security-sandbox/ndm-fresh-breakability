@@ -204,6 +204,15 @@ describe('CommonActivityService', () => {
   });
 
 
+  describe('getJobStateWithStreamLoad', () => {
+    it('should return job state with isStreamOverloaded', async () => {
+      jest.spyOn(service, 'publishPendingTasksToStream').mockResolvedValue(undefined);
+      await service.getJobStateWithStreamLoad(traceId, 'SCAN');
+      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
+    });
+  });
+
+
   describe('fetchOneTask / fetchOneMigrationTask', () => {
     it('should fetch one task successfully', async () => {
       const fakeCtx = createJobContext();

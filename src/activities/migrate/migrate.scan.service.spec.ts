@@ -22,6 +22,12 @@ jest.mock('winston-daily-rotate-file', () => {
   return { default: DailyRotateFile };
 });
 
+jest.mock('@temporalio/activity', () => ({
+  Context: {
+    current: jest.fn(),
+  },
+}));
+
 jest.mock('winston', () => {
   const actualWinston = jest.requireActual('winston');
   return {
@@ -279,6 +285,9 @@ describe('MigrationScanService', () => {
 
       jest.spyOn(mockRedisService, 'getJobContext').mockResolvedValue(jobContext);
       jest.spyOn(mockCommonService, 'fetchOneTask').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'getScanTask').mockReturnValue(null);
+      jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
       
       const result = await service.scanPath({ jobRunId , failedWorkers: [] });
       expect(result.noTaskFound).toBe(true);
@@ -316,6 +325,9 @@ describe('MigrationScanService', () => {
       jest.spyOn(jobContext, 'appendToErrorList').mockResolvedValue(null);
       jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 1, directory: 0, command: [], isGeneratedTask: false, error: null });
       jobContext.updatedTaskInfo = { lastId: '0-0' };
+      jest.spyOn(jobContext, 'getScanTask').mockReturnValue(null);
+      jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
 
       const result = await service.scanPath({ jobRunId,  failedWorkers: [] });
       expect(result.success).toBe(1);
@@ -324,13 +336,22 @@ describe('MigrationScanService', () => {
     });
 
     it('should handle errors during task processing', async () => {
+      const jobRunId = 'job-1';
+      const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn(), updatedTaskInfo: { lastId: '0-0' }, appendToErrorList: jest.fn() ,  getJobState: jest.fn().mockReturnValue({
+        workers: [],
+        tasks_completed: 1,
+        tasks_total: 2,
+        workers_agreed: [],
+        status: 'RUNNING',
+        failedWorkers: []
+    }), getScanTask: jest.fn(), setScanTask: jest.fn(), deleteScanTask: jest.fn() } as unknown as JobContext;
       const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
-      const jobContext = new TestJobContext('job1', jobConfig, 'running');;
       const task = { commands: [{ status: CommandStatus.IN_PROCESS, fPath: 'file.txt' }] };
       mockRedisService.getJobContext = jest.fn().mockResolvedValue(jobContext);
       mockCommonService.fetchOneTask = jest.fn().mockResolvedValue(task);
       jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'some-error' });
+      jest.spyOn(jobContext, 'getScanTask').mockReturnValue(null);
 
       const result = await service.scanPath({ jobRunId: 'job1', failedWorkers: [] });
       expect(result.error).toBe(1);
