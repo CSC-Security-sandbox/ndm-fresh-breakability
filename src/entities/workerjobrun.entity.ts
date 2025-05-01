@@ -28,5 +28,7 @@ export class WorkerJobRunMap {
     @ManyToOne(() => JobRunEntity, jonRun => jonRun.workerMap, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'job_run_id' }) 
     jobRun: JobRunEntity;
-  
+    
+    @Column({ name: 'worker_response', type: 'jsonb', nullable: true, default: null })
+    workerResponse?: Record<string, any>;
 }

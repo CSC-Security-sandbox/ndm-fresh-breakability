@@ -33,6 +33,7 @@ import { JobRunService } from "src/jobrun/jobrun.service";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Module({
   imports: [
@@ -56,7 +57,8 @@ import { SyncEmailEntity } from "src/entities/sync-email.entity";
       IdentityMappingEntity,
       IdentityConfigCrossMappingEntity,
       OperationErrorEntity,
-      SyncEmailEntity
+      SyncEmailEntity,
+      WorkerJobRunMap
     ]),
     RedisModule,
   ],
