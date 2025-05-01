@@ -54,6 +54,7 @@ import { v4 as uuid } from "uuid";
 import { SendMailService } from "src/utils/send-email";
 import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 describe("JobConfigService", () => {
   let service: JobConfigService;
@@ -80,6 +81,8 @@ describe("JobConfigService", () => {
   let redisService: RedisService;
   let workFlowService: WorkflowService;
   let sendMailService: SendMailService;
+
+  let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
 
   beforeEach(async () => {
     configService = {
@@ -110,6 +113,18 @@ describe("JobConfigService", () => {
         { provide: "winston", useValue: winston },
         {
           provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(WorkerJobRunMap),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
@@ -369,6 +384,10 @@ describe("JobConfigService", () => {
       getRepositoryToken(OperationErrorEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
+
+    workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
+      getRepositoryToken(WorkerJobRunMap)
+    );
   });
 
   it("should create a speed test job successfully", async () => {
@@ -1487,7 +1506,7 @@ describe("JobConfigService", () => {
       targetPathId: "destinationPath1",
       excludeFilePatterns: "*.tmp",
       scheduler: ScheduleStatus.SCHEDULING,
-      futureScheduleAt: "0 0 * * *",
+      futureScheduleAt: null,
       status: JobStatus.Active,
       preserveAccessTime: true,
       firstRunAt: expect.any(Date),
@@ -1499,7 +1518,7 @@ describe("JobConfigService", () => {
         targetPathId: "destinationPath1",
         excludeFilePatterns: "*.tmp",
         scheduler: ScheduleStatus.SCHEDULING,
-        futureScheduleAt: "0 0 * * *",
+        futureScheduleAt: null,
         status: JobStatus.Active,
         preserveAccessTime: true,
         firstRunAt: expect.any(Date),
@@ -1882,6 +1901,8 @@ describe("JobConfigService", () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       } as any);
+
+      jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
 
       const result = await service.getJobConfigById("job1");
 
@@ -4045,8 +4066,8 @@ describe("JobConfigService", () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockError),
       } as any);
+      jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
       const result = await service.getErrorCounts(jobRunId);
-
       expect(result).toEqual(mockError);
     });
     it("should throw error", async () => {
@@ -4064,10 +4085,71 @@ describe("JobConfigService", () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockRejectedValue(new Error("Database error")),
       } as any);
+      jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
       const result = await service.getErrorCounts(jobRunId);
       expect(result).toEqual([]);
     });
   });
 
+  it("should count error from setupFailedErrors", async () => {
+    const mockError = [
+      {
+        errorType: "FATAL_ERROR",
+        count: 0,
+      },
+    ];
+    const jobRunId = "12345";
+    jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockError),
+    } as any);
+    jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([{
+      jobRunId: jobRunId,
+      workerId: "worker1",
+      workerResponse: {}
+    }] as any);
+    const result = await service.getErrorCounts(jobRunId);
+    expect(result).toEqual([
+      {
+        errorType: "FATAL_ERROR",
+        count: 1,
+      },
+    ]);
+  })
 
+  it("should count error from setupFailedErrors", async () => {
+    const mockError = [
+      {
+        errorType: "ERROR",
+        count: 0,
+      },
+    ];
+    const jobRunId = "12345";
+    jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockError),
+    } as any);
+    jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([{
+      jobRunId: jobRunId,
+      workerId: "worker1",
+      workerResponse: {}
+    }] as any);
+    const result = await service.getErrorCounts(jobRunId);
+    expect(result).toEqual([
+      {
+        errorType: "ERROR",
+        count: 0,
+      },
+      {
+        errorType: "FATAL_ERROR",
+        count: 1,
+      },
+    ]);
+  })
 });
