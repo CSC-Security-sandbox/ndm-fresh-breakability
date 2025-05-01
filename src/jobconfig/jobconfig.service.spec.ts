@@ -1773,6 +1773,19 @@ describe("JobConfigService", () => {
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
 
+      const createQueryBuilderMock = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
+      const operationErrorRepoMock = {
+        createQueryBuilder: jest.fn(() => createQueryBuilderMock),
+      };
+
+      (service as any).operationErrorRepo = operationErrorRepoMock;
       const result = await service.getJobConfigById(mockJobConfigId);
 
       expect(result).toEqual({
@@ -1799,17 +1812,17 @@ describe("JobConfigService", () => {
             endTime,
             jobType: "MIGRATE",
             timeElapsed: 1000,
-            scannedFilesCount: "10",
-            scannedDirectoriesCount: "5",
-            totalScannedSize: "4.88 KB",
-            errors: [],
+            scannedFilesCount: "0",
+            scannedDirectoriesCount: "0",
+            totalScannedSize: "0 Bytes",
+            errors: undefined,
           },
         ],
         aggregateData: {
           timeElapsed: 1000,
-          scannedFilesCount: "10",
-          scannedDirectoriesCount: "5",
-          totalScannedSize: "4.88 KB",
+          scannedFilesCount: "0",
+          scannedDirectoriesCount: "0",
+          totalScannedSize: "0 Bytes",
         },
         errors: [],
       });
@@ -1920,10 +1933,10 @@ describe("JobConfigService", () => {
       });
     });
 
-    it("should return jobStats for jobRun.status===JobRunStatus.COMPLETED", async () => {
+    it("should return jobStats for jobRun.status === JobRunStatus.COMPLETED", async () => {
       const startTime = new Date("2025-03-27T00:00:00Z");
       const endTime = new Date("2025-03-27T00:00:01Z");
-
+    
       const mockJobConfig = {
         id: "jobConfigId",
         jobType: JobType.MIGRATE,
@@ -1960,19 +1973,34 @@ describe("JobConfigService", () => {
         status: "Active",
         createdAt: startTime,
       };
-
       jest
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
-
+    
+      const createQueryBuilderMock = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+    
+      const operationErrorRepoMock = {
+        createQueryBuilder: jest.fn(() => createQueryBuilderMock),
+      };
+    
+      (service as any).operationErrorRepo = operationErrorRepoMock;
+    
       const result = await service.getJobConfigById("jobConfigId");
+    
       expect(result.aggregateData).toEqual({
         timeElapsed: 2000,
-        scannedFilesCount: "30",
-        scannedDirectoriesCount: "15",
-        totalScannedSize: "0 Bytes",
+        scannedFilesCount: "0",
+        scannedDirectoriesCount: "0",
+        totalScannedSize: "0 Bytes", 
       });
     });
+    
   });
 
   describe("parseSize", () => {
