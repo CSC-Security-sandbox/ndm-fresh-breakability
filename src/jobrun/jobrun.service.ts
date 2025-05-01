@@ -805,12 +805,7 @@ export class JobRunService {
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
-    const setupFailedErrors = await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+    const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
     if (setupFailedErrors.length > 0) {
       const setupFailedError = setupFailedErrors.map((error): any => {
         return {
