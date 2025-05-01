@@ -2032,14 +2032,14 @@ describe("JobRunService", () => {
         mockError
       );
       expect(result).toEqual([
-        { errorType: "FATAL_ERROR", count: 1 }
+        { errortype: "FATAL_ERROR", count: 1 }
       ])
     })
 
     it('should count correct setupFailedErrors for setupFailed error type when other already there', async () => {
       const mockJobRunId = "jobRunId";
       const mockErrorCounts = [
-        { errorType: "FATAL_ERROR", count: 1 }
+        { errortype: "FATAL_ERROR", count: 1 }
       ];
 
       const mockQueryBuilder = {
@@ -2053,7 +2053,7 @@ describe("JobRunService", () => {
       jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any);
       const result = await service.getErrorCounts(mockJobRunId);
-      expect(result).toEqual([{ errorType: "FATAL_ERROR", count: 2 }])
+      expect(result).toEqual([{ errortype: "FATAL_ERROR", count: 2 }])
     })
   });
   describe("getJobRunErrors", () => {
