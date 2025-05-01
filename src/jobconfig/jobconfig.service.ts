@@ -1909,7 +1909,7 @@ export class JobConfigService {
         workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
       },
     });
-    if (setupFailedErrors.length > 0) {
+    if (setupFailedErrors?.length > 0) {
       const fatalError = errorTypeCounts.find(
         (error) => error.errorType === "FATAL_ERROR"
       );
