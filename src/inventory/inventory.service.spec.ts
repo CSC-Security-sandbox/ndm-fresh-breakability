@@ -15,7 +15,7 @@ import {
   TaskStatus,
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
-import { OperationStatus } from "../enum/queues.enum";
+import { OperationStatus, OperationType } from "../enum/queues.enum";
 import { SpeedLogEntity } from "../entities/speed-test.entity";
 import { SpeedLogEntryEntity } from "../entities/speed-test.entity";
 
@@ -236,6 +236,8 @@ describe("InventoryService", () => {
         operationId: "opId",
         errorType: ErrorType.FATAL_ERROR,
         errorFiles: { fileName: "file.txt", filePath: "/path/to/file" },
+        operationName: OperationType.SCAN,
+        origin: "source",
       };
       const operationError = {
         id: 1,
@@ -245,6 +247,8 @@ describe("InventoryService", () => {
         fileName: "file.txt",
         filePath: "/path/to/file",
         createdAt: new Date(),
+        operationName: OperationType.SCAN,
+        origin: "source",
       };
 
       jest
@@ -257,13 +261,15 @@ describe("InventoryService", () => {
       await service.saveOperationError(data);
 
       expect(operationErrorRepo.create).toHaveBeenCalledWith({
+        createdAt: expect.any(Date),
         errorCode: "123",
         errorMessage: "Error",
         operationId: "opId",
         fileName: "file.txt",
         filePath: "/path/to/file",
-        createdAt: expect.any(Date),
-        error_type:'FATAL_ERROR'
+        error_type:'FATAL_ERROR',
+        operationType: OperationType.SCAN  || null,
+        origin: "source" as any,
       });
       expect(operationErrorRepo.save).toHaveBeenCalledWith(operationError);
     });
