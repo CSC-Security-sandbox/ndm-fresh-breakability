@@ -783,28 +783,35 @@ export class JobRunService {
       jobRunId,
       errorType,
     } = taskQuery;
-    const queryBuilder = this.operationErrorRepo
+    const data = await this.operationErrorRepo.query(`
+      SELECT 
+        MIN(oe.id::text) AS id,
+        MIN(oe.error_message) AS "errorMessage",
+        MIN(oe.error_type) AS "errorType",
+        MIN(oe.created_at) AS "createdAt",
+        MIN(oe.file_name) AS "fileName",
+        MIN(oe.file_path) AS "filePath",
+        MIN(oe.origin) AS "origin",
+        MIN(oe.operation_type) AS "operationType",
+        MIN(oe.error_code) AS "errorCode"
+      FROM datamigrator.operation_errors oe
+      LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
+      WHERE o.job_run_id = $1 AND oe.error_type = $2
+      GROUP BY oe.file_path
+      ORDER BY MIN($3) ${order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}
+      LIMIT $4 OFFSET $5
+      `, [jobRunId, errorType, `oe.${sort}`, parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10)]
+    );
+    
+    const totalResult = await this.operationErrorRepo
       .createQueryBuilder("oe")
-      .leftJoinAndSelect("oe.operation", "o")
+      .leftJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType = :errorType", { errorType })
-      .orderBy(`oe.${sort}`, order as "ASC" | "DESC")
-      .select([
-        "oe.id",
-        "oe.errorMessage",
-        "oe.errorType",
-        "oe.createdAt",
-        "oe.fileName",
-        "oe.filePath",
-        "oe.origin",
-        "oe.operationType",
-        "oe.errorCode",
-        "COALESCE(o.retryCount, 0) AS retryCount",
-      ])
-      .limit(parseInt(limit))
-      .offset((parseInt(page) - 1) * parseInt(limit));
+      .select("COUNT(DISTINCT oe.filePath)", "total")
+      .getRawOne();
 
-    const [data, total] = await queryBuilder.getManyAndCount();
+    const total = parseInt(totalResult.total ?? '0', 10);
 
     if(errorType && errorType === "FATAL_ERROR") {
       const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
