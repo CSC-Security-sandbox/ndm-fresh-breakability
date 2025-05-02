@@ -16,6 +16,7 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import { notify } from "@components/notification/NotificationWrapper";
+import ReportsGeneratingLoader from "@components/ReportsGeneratingLoader/ReportsGeneratingLoader";
 import {
   getActionMenu,
   getReportActions,
@@ -143,7 +144,7 @@ const JobRunDetails = () => {
           </Button>
           <Box>Job Run Details</Box>
         </Breadcrumbs>
-        <Box className="flex gap-2">
+        <Box className="flex gap-2 items-center">
           {actionButtons.length > 0 && (
             <ActionMenuButtonStyle
               button={<DropdownButton>Action</DropdownButton>}
@@ -161,33 +162,48 @@ const JobRunDetails = () => {
           )}
           <Show>
             <Show.When isTrue={reportActionButtons.length > 0}>
-              <ActionMenuButtonStyle
-                isDisabled={!jobRunDetails?.isReportReady}
-                button={
-                  <DropdownButton>
-                    {isDiscoveryJob ? "Discovery" : "Download"} Report
-                  </DropdownButton>
+              <Show.When
+                isTrue={
+                  !jobRunDetails?.isReportReady &&
+                  jobRunDetails?.status === JOB_STATUS_TYPE_ENUM.COMPLETED
                 }
               >
-                {isDiscoveryJob && (
-                  <ActionMenu.Button
-                    onClick={() => {
-                      navigate(`/job-discovery-preview/${jobRunId}`);
-                    }}
-                  >
-                    Preview
-                  </ActionMenu.Button>
-                )}
-                {reportActionButtons.map((row) => (
-                  <ActionMenu.Button
-                    onClick={row.onClick}
-                    isDisabled={row.disabled}
-                    key={row.label}
-                  >
-                    {row.label}
-                  </ActionMenu.Button>
-                ))}
-              </ActionMenuButtonStyle>
+                <ReportsGeneratingLoader />
+              </Show.When>
+
+              <Show.When
+                isTrue={
+                  jobRunDetails?.isReportReady &&
+                  jobRunDetails?.status === JOB_STATUS_TYPE_ENUM.COMPLETED
+                }
+              >
+                <ActionMenuButtonStyle
+                  button={
+                    <DropdownButton>
+                      {isDiscoveryJob ? "Discovery" : "Download"} Report
+                    </DropdownButton>
+                  }
+                >
+                  <Show.When isTrue={isDiscoveryJob}>
+                    <ActionMenu.Button
+                      onClick={() => {
+                        navigate(`/job-discovery-preview/${jobRunId}`);
+                      }}
+                    >
+                      Preview
+                    </ActionMenu.Button>
+                  </Show.When>
+                  {reportActionButtons.map((row) => (
+                    <ActionMenu.Button
+                      onClick={row.onClick}
+                      isDisabled={row.disabled}
+                      key={row.label}
+                    >
+                      {row.label}
+                    </ActionMenu.Button>
+                  ))}
+                </ActionMenuButtonStyle>
+              </Show.When>
             </Show.When>
           </Show>
           <Button

@@ -12,4 +12,5 @@ export const PRECHECK_ERROR_STATUS = {
   SOURCE_DATA_SIZE_CALCULATION_FAILED:
     "The calculation of the source data size failed.",
   SOURCE_PATH_UNMOUNT_FAILED: "The source path failed to unmount.",
+  ALL_COMMON_WORKERS_UNHEALTHY: "All common workers are unhealthy.",
 };
