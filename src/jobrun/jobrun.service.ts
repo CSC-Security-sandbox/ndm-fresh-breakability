@@ -120,11 +120,12 @@ export class JobRunService {
       { id: jobRunId },
       { status: JobRunStatus.Completed, subStatus: status }
     );
-    const jobContext = await this.redisService.getJobContext(jobRunId);
-    if (jobContext) {
-      jobContext.cleanup();
-      this.logger.log(`Job Context for ${jobRunId} cleaned up`);
-    }
+    // TO-DO: keeping for future use
+    // const jobContext = await this.redisService.getJobContext(jobRunId);
+    // if (jobContext) {
+    //   jobContext.cleanup();
+    //   this.logger.log(`Job Context for ${jobRunId} cleaned up`);
+    // }
   }
 
   async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
@@ -291,7 +292,7 @@ export class JobRunService {
 
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      jobContext.jobState.status = JobContextStatus.Pending;
+      jobContext.jobState.status = JobContextStatus.Running;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
       // append dummy file entry to appendToFileList to close consumers and then start new consumers
       await jobContext.appendToFileList(this.dummyFileEntry());
