@@ -1119,6 +1119,7 @@ export class JobConfigService {
               jobRunStats.directories || "0"
             )?.toString(),
             totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
+            totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
             errors: jobRunStats.errors || [] ,
           };
         }
@@ -1134,7 +1135,8 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(inventoryCounts.totalSize  || 0)),
+          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize  || 0)),
+          totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
       })

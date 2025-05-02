@@ -17,15 +17,13 @@ import {
   JobType,
   Protocol,
   TemplateType,
-  WorkFlows,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { RedisService } from "src/redis/redis.service";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
-import { nextDate } from "src/utils/mapper";
-import { In, Repository } from "typeorm";
+import { In, Repository, Raw } from "typeorm";
 import * as winston from "winston";
 import { FileServerEntity } from "../entities/fileserver.entity";
 import { InventoryEntity } from "../entities/inventory.entity";
@@ -55,6 +53,14 @@ import { SendMailService } from "src/utils/send-email";
 import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+
+jest.mock('typeorm', () => {
+  const actual = jest.requireActual('typeorm');
+  return {
+    ...actual,
+    Raw: jest.fn((fn) => fn('workerResponse')),
+  };
+});
 
 describe("JobConfigService", () => {
   let service: JobConfigService;
@@ -1832,6 +1838,7 @@ describe("JobConfigService", () => {
             scannedFilesCount: "10",
             scannedDirectoriesCount: "5",
             totalScannedSize: "4.88 KB",
+            totalMigratedSize: "4.88 KB",
             errors: [],
           },
         ],
@@ -4156,6 +4163,7 @@ describe("JobConfigService", () => {
         count: 1,
       },
     ]);
+    expect(Raw).toHaveBeenCalled();
   })
 
   it("should count error from setupFailedErrors", async () => {
@@ -4189,5 +4197,57 @@ describe("JobConfigService", () => {
         count: 1,
       },
     ]);
+  })
+
+  describe('createBulkCutover', () => {
+    it('should throw if inactive cutover already exists for source-destination pair', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+    
+      const cutoverConfig = [{ sourcePathId, destinationPathId }];
+      const completedMigrateJob = {
+        id: 'migrate-job-id',
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        targetPathId: destinationPathId,
+        excludeFilePatterns: ['*.tmp'],
+        preserveAccessTime: true,
+        status: JobStatus.Active,
+      };
+    
+      const jobRun = {
+        jobConfigId: completedMigrateJob.id,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+    
+      const existingCutoverJob = {
+        id: 'cutover-id',
+        jobType: JobType.CUT_OVER,
+        sourcePathId,
+        targetPathId: destinationPathId,
+        status: JobStatus.InActive, // <-- This triggers the throw
+      };
+    
+      jest
+        .spyOn(service as any, 'flattenCutoverConfig')
+        .mockReturnValue(cutoverConfig);
+    
+      jest
+        .spyOn(service as any, 'findJobConfigs')
+        .mockResolvedValue([completedMigrateJob]);
+    
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+    
+      jest
+        .spyOn(service['jobConfigRepo'], 'findOne')
+        .mockResolvedValue(existingCutoverJob as any);
+    
+      await expect(
+        service.createBulkCutover({ cutoverConfig } as any)
+      ).rejects.toThrowError(
+        `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`
+      );
+    });
   })
 });
