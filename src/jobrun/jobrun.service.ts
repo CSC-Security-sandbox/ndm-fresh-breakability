@@ -793,7 +793,8 @@ export class JobRunService {
         MIN(oe.file_path) AS "filePath",
         MIN(oe.origin) AS "origin",
         MIN(oe.operation_type) AS "operationType",
-        MIN(oe.error_code) AS "errorCode"
+        MIN(oe.error_code) AS "errorCode",
+        COUNT(*) AS occurrence
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
