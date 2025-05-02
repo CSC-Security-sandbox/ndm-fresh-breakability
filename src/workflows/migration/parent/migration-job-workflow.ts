@@ -33,6 +33,7 @@ export const registerNewWorkerSignal = wf.defineSignal<[WorkerConfig]>('register
 const {
   updateJobErrorStatus: updateJobErrorActivity,
   updateWorkerResponse: updateWorkerResponse,
+  cleanupJobContext: cleanupJobContextActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -196,7 +197,7 @@ export const MigrationWorkflow = async ({
     }),
     )
   }
-
-  
+  const response = await cleanupJobContextActivity(traceId)
+  console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
   return workFlowStatus;
 };

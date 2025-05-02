@@ -33,6 +33,16 @@ export class CommonActivityService{
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
   }
 
+  async cleanupJobContext(traceId: string): Promise<any> {
+    try{
+      const jobContext = await this.redisService.getJobContext(traceId);
+      jobContext.cleanup()
+    }catch(error){
+      this.logger.error(`[${traceId}] Error while cleaning up the job context: ${error}`);
+      return { message: 'Error while cleaning up the job context: ' + traceId };
+    }
+  }
+
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);

@@ -28,7 +28,8 @@ export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
   updateJobErrorStatus: updateJobErrorActivity,
-  updateWorkerResponse: updateWorkerResponse
+  updateWorkerResponse: updateWorkerResponse,
+  cleanupJobContext: cleanupJobContextActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -162,6 +163,7 @@ export async function DiscoveryWorkflow({traceId, payload, options}:DiscoveryJob
       }),
       )
     }
-    
+    const response = await cleanupJobContextActivity(traceId)
+    console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
     return workFlowStatus
 }

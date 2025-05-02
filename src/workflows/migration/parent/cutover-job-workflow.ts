@@ -44,9 +44,9 @@ const {
 
 const {
    updateJobErrorStatus: updateJobErrorActivity,
-   updateWorkerResponse: updateWorkerResponse
+   updateWorkerResponse: updateWorkerResponse,
+   cleanupJobContext: cleanupJobContextActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
-
 
 export const CutOverWorkFlow = async ({
   traceId,
@@ -109,12 +109,13 @@ export const CutOverWorkFlow = async ({
     });
     try{
       const result = await workerFuture.result();
-      if (result?.status === 'success') 
-      workFlowStatus.setupCompletedWorkers.push(worker);
+      if (result?.status === 'success') {
+        workFlowStatus.setupCompletedWorkers.push(worker);
         if(workFlowStatus.isScanIsRunning)
           await scanWorkflow.signal('syncWorkerList', workFlowStatus.setupCompletedWorkers);
         if(workFlowStatus.isSyncIsRunning) 
           await syncWorkflow.signal('syncWorkerList', workFlowStatus.setupCompletedWorkers);
+      }
       else {
         workFlowStatus.setupFailedWorkerCount++;
         await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
@@ -213,8 +214,8 @@ export const CutOverWorkFlow = async ({
     }),
     )
   }
-
-
+  const response = await cleanupJobContextActivity(traceId)
+  console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
   return workFlowStatus;
 };
 
