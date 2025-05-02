@@ -51,7 +51,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
 
             if (destination?.workers?.length > 0 && destination?.workers?.every(worker => worker.ishealthy === false)) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;
-                preCheckDestinationStatus.errors.push(PreCheckErrorCodes.ALL_WORKERS_UNHEALTHY);
+                preCheckDestinationStatus.errors.push(PreCheckErrorCodes.ALL_COMMON_WORKERS_UNHEALTHY);
             }
             if(sourceVersion !== serverCredentials.get(destination.serverId).protocolVersion) {
                 preCheckDestinationStatus.status = PreCheckStatus.FAILED;

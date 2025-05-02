@@ -322,7 +322,7 @@ describe('PreCheckValidationWorkflow', () => {
         const result = await PreCheckValidationWorkflow(request);
       
         expect(result[0].destination[0].status).toBe(PreCheckStatus.FAILED);
-        expect(result[0].destination[0].errors).toContain(PreCheckErrorCodes.ALL_WORKERS_UNHEALTHY);
+        expect(result[0].destination[0].errors).toContain(PreCheckErrorCodes.ALL_COMMON_WORKERS_UNHEALTHY);
       });
       
 
