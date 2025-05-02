@@ -65,6 +65,7 @@ const Filters = ({
     value = value.toString();
     return {
       label: formatter ? formatter(value) : value,
+      tooltip: formatter ? formatter(value) : value,
       value,
     };
   };
