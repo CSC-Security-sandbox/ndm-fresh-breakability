@@ -1832,6 +1832,7 @@ describe("JobConfigService", () => {
             scannedFilesCount: "10",
             scannedDirectoriesCount: "5",
             totalScannedSize: "4.88 KB",
+            totalMigratedSize: "4.88 KB",
             errors: [],
           },
         ],
