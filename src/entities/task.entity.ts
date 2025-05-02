@@ -6,7 +6,6 @@ import { TaskErrorEntity } from './task-error.entity';
 import { TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 
 
-
 @Entity({ name: 'tasks'})
 @Index('idx_job_run_id', ['jobRunId'])
 @Index('idx_job_run_status', ['jobRunId', 'status'])
@@ -31,6 +30,14 @@ export class TaskEntity {
   @ApiProperty({ description: 'Id of the worker worked on the task' })
   @Column({ type: 'uuid', nullable: true,  name: 'worker_id' })
   workerId: string;
+
+  @ApiProperty({ description: 'created_at' })
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @ApiProperty({ description: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at',nullable:true })
+  updatedAt: Date;
 
   @OneToMany(()=> OperationsEntity, operations=>operations.task, { cascade: true,  eager: false})
   operations: OperationsEntity[]

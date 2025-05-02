@@ -201,10 +201,13 @@ export class InventoryService {
           lock: { mode: "pessimistic_write" }, // Lock for concurrency
         });
   
-        if (!task || task.status !== 'COMPLETED') {
+        if (!task || ![TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR, TaskStatus.ERRORED].includes(task?.status)) {
+          const updatedAt = [TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR, TaskStatus.ERRORED].includes(status)
+          ? new Date()
+          : null;
           await queryRunner.manager.upsert(
             TaskEntity,
-            { id, jobRunId, status, taskType, workerId },
+            { id, jobRunId, status, taskType, workerId ,updatedAt},
             ['id']
           );
         }

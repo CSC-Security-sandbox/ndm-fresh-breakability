@@ -205,7 +205,7 @@ export class RedisConsumerService {
                         this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
                         try {
                             if(jobContext && jobContext.jobConfig.jobType != 'CUT_OVER'){
-                             await jobContext.cleanup(); 
+                            //  await jobContext.cleanup(); 
                              this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
                             }else{
                               this.logger.log(`[${jobRunId}] Job context cleanup skipped for CUTOVER job.`);
@@ -386,10 +386,10 @@ export class RedisConsumerService {
             // Retrieve job context using jobRunId
             const jobContext = await contextProvider.getJobContext(jobRunId);
 
-            const speedTestContextProvider = JobContextFactory.getSpeedTestProvider("redis", this.redisClient);
+            // const speedTestContextProvider = JobContextFactory.getSpeedTestProvider("redis", this.redisClient);
 
-            const speedTestJobContext = await speedTestContextProvider.getJobContext(jobRunId);
-            if (!jobContext || !speedTestJobContext) {
+            // const speedTestJobContext = await speedTestContextProvider.getJobContext(jobRunId);
+            if (!jobContext) {
                 // Stop consumer if jobContext is missing and throw an error
                 await this.stopConsumer(jobRunId, consumerType);
                 throw new Error('jobContext is null');
@@ -410,7 +410,7 @@ export class RedisConsumerService {
                 this.logger.log(`[${jobRunId}] Running Process for key: ${key}`);
                 let hasData = false;
                 // Get the data reader instance
-                const reader = this.getReader(jobContext, speedTestJobContext, readerName, consumerType);
+                const reader = this.getReader(jobContext, readerName, consumerType);
 
                 // Iterate over incoming data
                 for await (const data of reader) {
@@ -490,10 +490,10 @@ export class RedisConsumerService {
                     this.handleFiles(data, jobRunId, pathId, jobContext);
                     break;
 
-                case ConsumerType.speedtestTask:
-                    // Handle file processing
-                    this.inventoryService.saveSpeedLogsEntries(data);
-                    break;
+                // case ConsumerType.speedtestTask:
+                //     // Handle file processing
+                //     this.inventoryService.saveSpeedLogsEntries(data);
+                //     break;
 
                 default:
                     // Log a warning for unknown consumer types
@@ -604,7 +604,6 @@ export class RedisConsumerService {
         }
     }
 
-
     /**
      * Returns the appropriate reader function for the given consumer type.
      *
@@ -614,7 +613,7 @@ export class RedisConsumerService {
      * @returns The appropriate reader function.
      * @throws Error if the consumer type is invalid.
      */
-    private getReader(jobContext: JobContext, speedTestJobContext:any, readerName: string, consumerType: string) {
+    private getReader(jobContext: JobContext,  readerName: string, consumerType: string) {
         if (!jobContext) {
             throw new Error("getReader: jobContext is null or undefined.");
         }
@@ -625,7 +624,6 @@ export class RedisConsumerService {
             [ConsumerType.errors]: jobContext.groupReadErrors(readerName, 500, GroupReaderType.DB_WRITER),
             [ConsumerType.tasks]: jobContext.groupReadTasks(readerName, 500, GroupReaderType.DB_WRITER),
             [ConsumerType.migrationTask]: jobContext.groupReadMigrationTask(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.speedtestTask]: speedTestJobContext.speedTestReadWriteTask(readerName, 500, GroupReaderType.DB_WRITER),
             [ConsumerType.updatedTask]: jobContext.readUpdatedTaskInfo(readerName, 500, GroupReaderType.DB_WRITER),
         };
 

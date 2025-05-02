@@ -1,0 +1,3 @@
+ALTER TABLE tasks
+    ALTER COLUMN updated_at DROP DEFAULT,
+    ALTER COLUMN updated_at DROP NOT NULL;
