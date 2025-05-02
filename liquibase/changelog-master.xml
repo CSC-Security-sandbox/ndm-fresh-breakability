@@ -42,4 +42,7 @@
     <changeSet id="7010" author="dsseervi">
       <sqlFile path="liquibase/20250424_01_unique_constrain_for_path_and_jobrunid_column_inventy_table.sql"/>
    </changeSet>
+   <changeSet id="7011" author="vbikkad">
+         <sqlFile path="liquibase/20250502_01_change_task_tabel_updated_at_columns.sql"/>
+   </changeSet>
 </databaseChangeLog>
