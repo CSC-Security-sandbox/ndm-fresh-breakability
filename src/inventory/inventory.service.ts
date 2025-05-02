@@ -136,7 +136,9 @@ export class InventoryService {
         fileName: data.errorFiles?.fileName ?? null,
         filePath: data.errorFiles?.filePath ?? null,
         createdAt: new Date(),
-        error_type: data?.errorType || null
+        error_type: data?.errorType || null,
+        operationType:data?.operationName || null,
+        origin: data?.origin || null,
       });
 
       await this.operationErrorRepo.save(operationError);
