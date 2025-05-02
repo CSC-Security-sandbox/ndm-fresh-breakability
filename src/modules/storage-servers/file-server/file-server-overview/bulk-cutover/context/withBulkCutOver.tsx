@@ -39,12 +39,12 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const { jobRunList, refetch, isFetching } = useGetJobRunsQuery(
+    const { jobRunList, refetch, isFetching, error } = useGetJobRunsQuery(
       {
         projectId,
       },
       {
-        selectFromResult: ({ data, isFetching }) => ({
+        selectFromResult: ({ data, isFetching, error }) => ({
           jobRunList: data
             ?.map((jobRun) => ({
               ...jobRun,
@@ -52,6 +52,7 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
             }))
             .filter((jobRun) => jobRun.status === JOB_STATUS_TYPE_ENUM.RUNNING),
           isFetching,
+          error,
         }),
       }
     );
@@ -77,6 +78,13 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         }
       })();
     }, [fileServerDetails]);
+
+    useEffect(() => {
+      if (error) {
+        notify.error(error?.message || "Something went wrong.");
+        console.error("Error while fetching job runs", error);
+      }
+    }, [error]);
 
     // SELECT PATH (STEP 1)
     const selectPathTableState: BlueXpTableStateType<GetAllCutOverPathsApiType> =
