@@ -58,7 +58,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
         gotoPage={gotoPage}
       />
     ),
-    [tableRows]
+    [tableRows, pagination?.pageIndex, pageCount, rowsCountArray]
   );
 
   return (

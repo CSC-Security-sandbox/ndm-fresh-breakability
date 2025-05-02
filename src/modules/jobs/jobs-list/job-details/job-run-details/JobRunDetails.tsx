@@ -21,7 +21,6 @@ import {
   getReportActions,
 } from "@modules/jobs/job-run-list/run.utils";
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
-import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 import JobRunHeader from "@modules/jobs/jobs-list/job-details/components/JobRunHeader";
 import JobRunTaskCard from "@modules/jobs/jobs-list/job-details/components/JobRunTaskDetails";
 import { handleDownloadReport } from "@modules/jobs/jobs.utils";
@@ -36,6 +35,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
+import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
