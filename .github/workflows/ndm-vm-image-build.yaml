@@ -27,6 +27,7 @@ on:
           - all
           - azure
           - vsphere
+          - gcp
   schedule:
     - cron: '30 18 * * *'
 
@@ -47,7 +48,7 @@ jobs:
 
           # Set providers based on input
           if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
-            PROVIDERS='["azure", "vsphere"]'
+            PROVIDERS='["azure", "vsphere", "gcp"]'
           else
             PROVIDERS='["${{ github.event.inputs.provider }}"]'
           fi
@@ -283,6 +284,14 @@ jobs:
             ;;
           gcp)
             echo "Capturing image details for GCP..."
+
+            # Extract GCP Image ID from the Packer log
+            IMAGE_ID=$(grep 'A disk image was created' $GITHUB_WORKSPACE/packer.log | tail -1 | awk -F': ' '{print $NF}')
+
+            echo "gcp_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "GCP Image ID: $IMAGE_ID"
             ;;
           esac
 
