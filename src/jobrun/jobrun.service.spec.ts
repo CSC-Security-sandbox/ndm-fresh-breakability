@@ -67,7 +67,7 @@ import { JobRunStats } from "./dto/jobstats";
 
 import * as parser from "cron-parser";
 import exp from "constants";
-import e from "express";
+import e, { query } from "express";
 import { SendMailService } from "src/utils/send-email";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
 import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
@@ -233,6 +233,7 @@ describe("JobRunService", () => {
             innerJoin: jest.fn(),
             where: jest.fn(),
             select: jest.fn(),
+            query: jest.fn(),
           },
         },
         {
@@ -2057,200 +2058,124 @@ describe("JobRunService", () => {
     })
   });
   describe("getJobRunErrors", () => {
-    it("should return job run errors based on the query", async () => {
-      const mockTaskQuery: JobErrorQueryDto = {
+    let repoQuerySpy: jest.SpyInstance;
+    let qbWhereSpy: jest.SpyInstance;
+  
+    beforeEach(() => {
+      repoQuerySpy = jest
+        .spyOn(operationErrorRepo, "query")
+        .mockResolvedValue([
+          {
+            id: "errorId1",
+            errorMessage: "Err 1",
+            errorType: "FATAL_ERROR",
+            createdAt: "2025-05-02T10:41:29.015Z",
+            fileName: "file1.txt",
+            filePath: "/path/1",
+            origin: "Dest",
+            operationType: "Op1",
+            errorCode: "code1",
+            occurrence: "2",           
+          },
+        ]);
+  
+    
+      const fakeQB = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: "5" }),
+      };
+      qbWhereSpy = jest
+        .spyOn(operationErrorRepo, "createQueryBuilder")
+        .mockReturnValue(fakeQB as any);
+  
+      jest.spyOn(service as any, "getWorkerSetupErrors").mockResolvedValue([
+        {
+          workerResponse: {
+            message: "setupFailedMsg",
+            createdAt: "2025-05-02T11:00:00.000Z",
+            operation: "SetupOp",
+            code: "setupCode",
+          },
+        } as any,
+      ]);
+    });
+  
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+  
+    it("should return grouped rows + total", async () => {
+      const dto: JobErrorQueryDto = {
         page: "1",
         limit: "10",
         sort: "createdAt",
         order: "DESC",
-        jobRunId: "jobRunId",
+        jobRunId: "job123",
         errorType: ErrorType.FATAL_ERROR,
       };
+  
+      const result = await service.getJobRunErrors(dto);
 
-      const mockErrors = [
-        {
-          id: "errorId1",
-          errorMessage: "Error message 1",
-          errorType: "FATAL_ERROR",
-          createdAt: new Date(),
-          fileName: "file1.txt",
-          filePath: "/path/to/file1.txt",
-          origin: "origin1",
-          operationType: "operation1",
-          errorCode: "code1",
-          retryCount: 0,
-        },
-      ];
-
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        offset: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([mockErrors, 1]),
-      };
-
-      jest
-        .spyOn(operationErrorRepo, "createQueryBuilder")
-        .mockReturnValue(mockQueryBuilder as any);
-      jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
-
-      const result = await service.getJobRunErrors(mockTaskQuery);
-
-      expect(result).toEqual({ data: mockErrors, total: 1 });
-      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
-      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
-        "oe.operation",
-        "o"
-      );
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        "o.jobRunId = :jobRunId",
-        { jobRunId: mockTaskQuery.jobRunId }
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        "oe.errorType = :errorType",
-        { errorType: mockTaskQuery.errorType }
-      );
-      expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith(
-        "oe.createdAt",
-        "DESC"
-      );
-      expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        "oe.id",
-        "oe.errorMessage",
-        "oe.errorType",
-        "oe.createdAt",
-        "oe.fileName",
-        "oe.filePath",
-        "oe.origin",
-        "oe.operationType",
-        "oe.errorCode",
-        "COALESCE(o.retryCount, 0) AS retryCount",
-      ]);
-      expect(mockQueryBuilder.limit).toHaveBeenCalledWith(
-        parseInt(mockTaskQuery.limit)
-      );
-      expect(mockQueryBuilder.offset).toHaveBeenCalledWith(
-        (parseInt(mockTaskQuery.page) - 1) * parseInt(mockTaskQuery.limit)
-      );
-      expect(mockQueryBuilder.getManyAndCount).toHaveBeenCalled();
+      expect(qbWhereSpy).toHaveBeenCalledWith("oe");
+      expect(result).toEqual({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            id: "errorId1",
+            occurrence: "2",
+            errorType: "FATAL_ERROR",
+          }),
+          expect.objectContaining({
+            errorMessage: "setupFailedMsg",
+            errorType: "FATAL_ERROR",
+            operationType: "SetupOp",
+            errorCode: "setupCode",
+          }),
+        ]),
+        total: 6,
+      });
     });
-
-    it("should handle default values for page, limit, sort, and order", async () => {
-      const mockTaskQuery: JobErrorQueryDto = {
-        jobRunId: "jobRunId",
-        errorType: ErrorType.FATAL_ERROR,
+  
+    it("should fallback defaults when page/limit/sort/order missing", async () => {
+      const dto: JobErrorQueryDto = {
+        jobRunId: "job123",
+        errorType: ErrorType.RECOVERABLE_ERROR,
       };
-
-      const mockErrors = [
-        {
-          id: "errorId1",
-          errorMessage: "Error message 1",
-          errorType: "FATAL_ERROR",
-          createdAt: new Date(),
-          fileName: "file1.txt",
-          filePath: "/path/to/file1.txt",
-          origin: "origin1",
-          operationType: "operation1",
-          errorCode: "code1",
-          retryCount: 0,
-        },
-      ];
-
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        offset: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([mockErrors, 1]),
-      };
-
-      jest
-        .spyOn(operationErrorRepo, "createQueryBuilder")
-        .mockReturnValue(mockQueryBuilder as any);
-      
-      jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue([]);
-
-      const result = await service.getJobRunErrors(mockTaskQuery);
-
-      expect(result).toEqual({ data: mockErrors, total: 1 });
-      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
-      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
-        "oe.operation",
-        "o"
+      jest.spyOn(service as any, "getWorkerSetupErrors").mockResolvedValue([]);
+  
+      const result = await service.getJobRunErrors(dto);
+  
+      expect(repoQuerySpy).toHaveBeenCalledWith(
+        expect.stringContaining("LIMIT $4 OFFSET $5"),
+        ["job123", ErrorType.RECOVERABLE_ERROR, "oe.createdAt", 10, 0]
       );
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        "o.jobRunId = :jobRunId",
-        { jobRunId: mockTaskQuery.jobRunId }
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        "oe.errorType = :errorType",
-        { errorType: mockTaskQuery.errorType }
-      );
-      expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith(
-        "oe.createdAt",
-        "DESC"
-      );
-      expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        "oe.id",
-        "oe.errorMessage",
-        "oe.errorType",
-        "oe.createdAt",
-        "oe.fileName",
-        "oe.filePath",
-        "oe.origin",
-        "oe.operationType",
-        "oe.errorCode",
-        "COALESCE(o.retryCount, 0) AS retryCount",
-      ]);
-      expect(mockQueryBuilder.limit).toHaveBeenCalledWith(10);
-      expect(mockQueryBuilder.offset).toHaveBeenCalledWith(0);
-      expect(mockQueryBuilder.getManyAndCount).toHaveBeenCalled();
+      expect(result).toEqual({
+        data: expect.any(Array),
+        total: 5,
+      });
     });
-
-    it('should push getJobRunErrors to the data array', async () => {
-      const mockTaskQuery: JobErrorQueryDto = {
-        jobRunId: "jobRunId",
-        errorType: ErrorType.FATAL_ERROR,
+  
+    it("should not include worker setup errors when errorType != FATAL_ERROR", async () => {
+      const dto: JobErrorQueryDto = {
+        jobRunId: "job123",
+        errorType: ErrorType.RECOVERABLE_ERROR,
+        page: "2",
+        limit: "5",
+        sort: "filePath",
+        order: "ASC",
       };
-      const mockErrors = [
-        {
-          id: "errorId1",
-          errorMessage: "Error message 1",
-          errorType: "FATAL_ERROR",
-          createdAt: new Date(),
-          fileName: "file1.txt",
-          filePath: "/path/to/file1.txt",
-          origin: "origin1",
-          operationType: "operation1",
-          errorCode: "code1",
-          retryCount: 0,
-        },
-        { workerId: "worker1", workerResponse: "setupFailed" }
-      ];
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        offset: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([mockErrors, 1]),
-      };
-      jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
-      jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any);
-      const result = await service.getJobRunErrors(mockTaskQuery);
-      expect(result).toEqual({ data: mockErrors, total: 2 });
-    })
+      jest.spyOn(service as any, "getWorkerSetupErrors").mockResolvedValue([
+        { workerResponse: { /* ... */ } },
+      ]);
+  
+      const result = await service.getJobRunErrors(dto);
+  
+      expect(result.total).toBe(5);
+      expect(result.data).toHaveLength(1); 
+    });
   });
-
   it("should throw NotFoundException if jobRunId is not found", async () => {
     const mockJobRunId = "nonexistent-jobRunId";
 
