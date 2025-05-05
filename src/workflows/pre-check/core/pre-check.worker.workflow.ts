@@ -9,11 +9,13 @@ const {
 } = proxyActivities<PrecheckActivity>({ startToCloseTimeout: '3000s' });
 
 export const  PreCheckWorkerValidationWorkflow = async (workerId:string, workerTaskPayload: WorkerTaskPayload, traceId: string): Promise<{workerId: string, paths:PreCheckPathOutput[]}> => {
-    const sourceResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>path.isSource).map(async (sourcePath) => {
-        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, traceId)
-    })) 
-    const destinationResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>!path.isSource).map(async (sourcePath) => {
-        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, traceId)
+    const sourceResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>path.isSource).map(async (sourcePath,index) => {
+        const sourceTraceId = `${traceId}-${index + 1}`;
+        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, sourceTraceId)
+    }))  
+    const destinationResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>!path.isSource).map(async (sourcePath,index) => {
+        const destinationTraceId = `${traceId}-${index + 1}`;
+        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, destinationTraceId)
     })) 
     return {workerId, paths:[...sourceResponse, ...destinationResponse]};
 }
