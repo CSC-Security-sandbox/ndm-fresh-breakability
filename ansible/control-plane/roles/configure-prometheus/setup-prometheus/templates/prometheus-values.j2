@@ -41,6 +41,8 @@ alertmanager:
   config:
     route:
       receiver: webhook-receiver
+      group_by: ['...']
+      repeat_interval: 4h
     receivers:
       - name: webhook-receiver
         webhook_configs:
