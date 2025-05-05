@@ -6,7 +6,7 @@
 
 - name: 3. Configure cloud init
   import_playbook: configure-cloud-init.yaml
-  when: local_cluster is not defined or vm_deployment is not defined
+  when: local_cluster is not defined 
 
 - name: 4. Configure Worker
   import_playbook: configure-worker.yaml

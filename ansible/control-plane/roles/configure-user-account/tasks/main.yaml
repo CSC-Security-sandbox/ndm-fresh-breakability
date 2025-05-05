@@ -30,8 +30,6 @@
     regexp: '^#?PermitRootLogin'
     line: 'PermitRootLogin no'
     state: present
-  when:
-    vm_deployment is not defined
 
 - name: 1.5. Enable password authentication for SSH
   lineinfile:
