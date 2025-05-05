@@ -351,6 +351,7 @@ export class ConfigurationService {
                 jobType: true,
                 sourcePathId: true,
                 targetPathId: true,
+                status: true,
               },
             },
           },
@@ -400,14 +401,11 @@ export class ConfigurationService {
       return config.fileServers.flatMap((fileServer) =>
         fileServer.volumes.flatMap((volume) =>
           volume.jobConfig
-            .filter(
-              (jobConfig) =>
-                jobConfig.jobType === JobType.Migrate &&
-                jobConfig.status !== JobStatus.InActive &&
-                jobConfig.jobRunDetails.some(
-                  (jobRun) => jobRun.status === JobRunStatus.Completed,
-                ),
-            )
+            .filter((jobConfig) => {
+              const isCompletedCutOverExits = jobConfig.jobType === JobType.CutOver && jobConfig.status === JobStatus.Active && jobConfig.jobRunDetails.some((jobRun) => jobRun.status === JobRunStatus.Errored);
+              const isAnyCompletedActiveMigrationExists = jobConfig.jobType === JobType.Migrate && jobConfig.status !== JobStatus.InActive && jobConfig.jobRunDetails.some((jobRun) => jobRun.status === JobRunStatus.Completed);
+              return isCompletedCutOverExits || isAnyCompletedActiveMigrationExists;
+            })
             .map((job) => ({
               protocol: fileServer.protocol,
               sourcePathId: job.sourcePathId,
