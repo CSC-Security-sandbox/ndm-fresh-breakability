@@ -82,7 +82,15 @@ export const MigrationWorkflow = async ({
       }
       else {
         workFlowStatus.setupFailedWorkerCount++;
-        await updateWorkerResponse(traceId, id, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
+        await updateWorkerResponse(traceId, id, { 
+          status: 'FAILED',
+          code: 'SETUP_WORKER_FAILURE',
+          operation: 'Worker Setup Failed',
+          occurrence: 1,
+          origin: 'Worker',
+          message: result.message,
+          createdAt: new Date()
+        });
         console.error(`[${traceId}] Failed to setup worker: ${id}`);
       }
     })
@@ -108,12 +116,27 @@ export const MigrationWorkflow = async ({
       }
       else {
         workFlowStatus.setupFailedWorkerCount++;
-        await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: result.message, createdAt: new Date() });
-        console.error(`[${traceId}] Failed to setup worker: ${worker}`);
+        await updateWorkerResponse(traceId, worker, {
+          status: 'FAILED',
+          code: 'SETUP_WORKER_FAILURE',
+          operation: 'Worker Setup Failed',
+          occurrence: 1,
+          origin: 'Worker',
+          message: result.message,
+          createdAt: new Date()
+        });
       }
     } catch(error) {
       workFlowStatus.setupFailedWorkerCount++;
-      await updateWorkerResponse(traceId, worker, { status: 'FAILED', code: 'SETUP_WORKER_FAILURE', operation: 'SetupWorkerWorkflow', message: error.message, createdAt: new Date() });
+      await updateWorkerResponse(traceId, worker, {
+        status: 'FAILED',
+        code: 'SETUP_WORKER_FAILURE',
+        operation: 'Worker Setup Failed',
+        occurrence: 1,
+        origin: 'Worker',
+        message: error.message,
+        createdAt: new Date()
+      });
       console.error(`[${traceId}] Error in SetupWorkerWorkflow: ${error}`);
     }
   })
