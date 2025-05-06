@@ -28,7 +28,8 @@ const BulkMigrateProceedButton = () => {
       disabled={
         !mappingStepForm?.isValid ||
         (currentStepIndex == 1 &&
-          !optionForm.formState.incremental_sync_schedule_cron_expression) ||
+          (!optionForm.formState.incremental_sync_schedule_cron_expression || (optionForm.formState.incremental_sync_schedule_cron_expression_error ? true : false))
+        ) ||
         (currentStepIndex == 2 && selectedReviewIds.length === 0) ||
         !optionForm.isValid
       }

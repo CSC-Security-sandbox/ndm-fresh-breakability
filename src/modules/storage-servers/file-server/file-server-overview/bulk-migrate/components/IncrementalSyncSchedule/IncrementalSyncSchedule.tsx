@@ -16,9 +16,12 @@ const IncrementalSyncSchedule = () => {
   const [cronErrorMessage, setCronErrorMessage] = useState<string>();
   const cronString = useMemo(() => {
     setCronErrorMessage("");
-    if (!optionForm.formState.incremental_sync_schedule_cron_expression)
+    if (!optionForm.formState.incremental_sync_schedule_cron_expression) {
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = null;
       return "";
+    }
     try {
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = null;
       return cronstrue.toString(
         optionForm.formState.incremental_sync_schedule_cron_expression
       );
@@ -26,6 +29,7 @@ const IncrementalSyncSchedule = () => {
       setCronErrorMessage(
         (error as string) || "Failed to build cron expression"
       );
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = (error as string);
       return "";
     }
   }, [optionForm.formState.incremental_sync_schedule_cron_expression]);
