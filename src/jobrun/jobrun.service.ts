@@ -824,6 +824,8 @@ export class JobRunService {
             createdAt: error.workerResponse.createdAt,
             operationType: error.workerResponse.operation,
             errorCode: error.workerResponse.code,
+            origin: error.workerResponse.origin,
+            occurrence: error.workerResponse.occurrence || 1,
           }
         });
         data.push(...setupFailedError);
