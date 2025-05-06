@@ -34,6 +34,12 @@ export class OperationErrorEntity {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
+  @Column({ type: "text", name: 'operation_type' })
+  operationType: string;
+
+  @Column({ type: "text", name: 'origin' })
+  origin: string;
+
   @OneToOne(() => OperationsEntity, (operation) => operation.operationErrors, { onDelete: "CASCADE" })
   operation: OperationsEntity;
 }
