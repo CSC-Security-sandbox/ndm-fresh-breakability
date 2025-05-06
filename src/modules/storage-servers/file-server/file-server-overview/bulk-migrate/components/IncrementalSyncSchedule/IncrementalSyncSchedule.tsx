@@ -17,11 +17,11 @@ const IncrementalSyncSchedule = () => {
   const cronString = useMemo(() => {
     setCronErrorMessage("");
     if (!optionForm.formState.incremental_sync_schedule_cron_expression) {
-      optionForm.formState.incremental_sync_schedule_cron_expression_error = null;
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
       return "";
     }
     try {
-      optionForm.formState.incremental_sync_schedule_cron_expression_error = null;
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
       return cronstrue.toString(
         optionForm.formState.incremental_sync_schedule_cron_expression
       );

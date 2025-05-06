@@ -21,17 +21,23 @@ const BulkMigrateProceedButton = () => {
     goToNextStep();
   };
 
+  const isMappingStepFormInValid = !mappingStepForm?.isValid;
+  const isIncrementalSyncScheduleInValid = currentStepIndex == 1 && (
+    !optionForm.formState.incremental_sync_schedule_cron_expression ||
+    (optionForm.formState.incremental_sync_schedule_cron_expression_error ? true : false)
+  );
+  const isSelectedReviewIdsEmpty = currentStepIndex == 2 && selectedReviewIds.length === 0;
+  const isOptionFormInValid = !optionForm.isValid;
+
   return (
     <Button
       onClick={handleNextOrSubmit}
       style={{ width: 152 }}
       disabled={
-        !mappingStepForm?.isValid ||
-        (currentStepIndex == 1 &&
-          (!optionForm.formState.incremental_sync_schedule_cron_expression || (optionForm.formState.incremental_sync_schedule_cron_expression_error ? true : false))
-        ) ||
-        (currentStepIndex == 2 && selectedReviewIds.length === 0) ||
-        !optionForm.isValid
+        isMappingStepFormInValid ||
+        isIncrementalSyncScheduleInValid ||
+        isSelectedReviewIdsEmpty ||
+        isOptionFormInValid
       }
       isSubmitting={isFormSubmitting}
     >

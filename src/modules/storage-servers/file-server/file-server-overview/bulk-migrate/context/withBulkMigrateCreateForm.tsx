@@ -217,7 +217,7 @@ export function withBulkMigrateCreateForm(
         incremental_sync_schedule_weekly_weekday: WEEKDAY_OPTIONS[0],
         incremental_sync_schedule_weekly_weekday_week: WEEK_OPTIONS[0],
         incremental_sync_schedule_cron_expression: "* * * * *",
-        incremental_sync_schedule_cron_expression_error: '',
+        incremental_sync_schedule_cron_expression_error: "",
       },
       OPTIONS_FORM
     );
