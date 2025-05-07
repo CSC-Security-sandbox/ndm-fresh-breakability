@@ -14,21 +14,25 @@ import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-se
 const IncrementalSyncSchedule = () => {
   const { optionForm } = useContext(BulkMigrateContext);
   const [cronErrorMessage, setCronErrorMessage] = useState<string>();
+  const { incremental_sync_schedule_cron_expression } = optionForm.formState;
+
   const cronString = useMemo(() => {
     setCronErrorMessage("");
-    if (!optionForm.formState.incremental_sync_schedule_cron_expression)
+    if (!incremental_sync_schedule_cron_expression) {
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
       return "";
+    }
     try {
-      return cronstrue.toString(
-        optionForm.formState.incremental_sync_schedule_cron_expression
-      );
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
+      return cronstrue.toString(incremental_sync_schedule_cron_expression);
     } catch (error) {
       setCronErrorMessage(
         (error as string) || "Failed to build cron expression"
       );
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = (error as string);
       return "";
     }
-  }, [optionForm.formState.incremental_sync_schedule_cron_expression]);
+  }, [incremental_sync_schedule_cron_expression]);
 
   return (
     <Box className="w-5/6">

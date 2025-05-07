@@ -101,6 +101,9 @@ export interface OptionsFormType {
 
   // Incremental Schedule Options - Cron Expression
   incremental_sync_schedule_cron_expression: string;
+
+  // Incremental Schedule Options - Cron Expression - Error
+  incremental_sync_schedule_cron_expression_error: string;
 }
 
 // THIS IS TYPE WHICH IS SHARED IN CONTEXT ACROSS ALL THE STEPS OF BULK MIGRATION.
