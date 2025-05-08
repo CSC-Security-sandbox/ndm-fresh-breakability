@@ -131,7 +131,7 @@
       "/coverage",
       "/dist",
       "/test/",
-      "src/workflows/reporting/reporting.workflow.ts"
+      ".*\\.workflow\\.ts$"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -140,7 +140,7 @@
       "/dist",
       "/test/",
       "src/logger/logger.service.ts",
-      "src/workflows/reporting/reporting.workflow.ts"
+      ".*\\workflow\\.ts$"
     ]
   }
 }

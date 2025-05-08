@@ -1,78 +1,223 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { RedisService } from './redis.service';
-import { RedisClientType } from 'redis';
+import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { createClient, RedisClientType } from 'redis';
 
-jest.mock('redis');
+jest.mock('redis', () => ({
+  createClient: jest.fn(),
+}));
+
+jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
+  JobContextFactory: {
+    getProvider: jest.fn(),
+    getSpeedTestProvider: jest.fn(),
+  },
+}));
 
 describe('RedisService', () => {
   let service: RedisService;
-  let client: RedisClientType;
+  let mockClient: any;
 
-  beforeEach(async () => {
-    client = {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClient = {
+      isOpen: false,
       connect: jest.fn().mockResolvedValue(undefined),
       quit: jest.fn().mockResolvedValue(undefined),
-      hGet: jest.fn(),
-      set: jest.fn(),
-      isOpen: true, // Simulate an open client
-    } as unknown as RedisClientType;
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RedisService,
-        {
-          provide: 'RedisClient',
-          useValue: client,
-        },
-      ],
-    }).compile();
-
-    service = module.get<RedisService>(RedisService);
-    (service as any).client = client; // Mock the client
-  });
-
-  // check service is defined
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-
-  it('should disconnect Redis client on module destroy', async () => {
-    await service.onModuleDestroy();
-    expect(client.quit).toHaveBeenCalled();
-  });
-
-  it('should return the Redis client', () => {
-    const result = service.getClient();
-    expect(result).toBe(client);
-  });
-
-  it('should throw an error if client is not initialized', () => {
-    (service as any).client = null; // Simulate uninitialized client
-    expect(() => service.getClient()).toThrow('Redis client is not initialized yet.');
-  });
-
-
-  it('should set job context', async () => {
-    const traceId = 'test-trace-id';
-    const jobContext = { serialize: jest.fn().mockReturnValue('serialized') };
-    (service as any).ensureClient = jest.fn().mockResolvedValue(undefined);
-    (service as any).client = { set: jest.fn().mockResolvedValue(undefined) };
-
-    await service.setJobContext(traceId, jobContext);
-    expect((service as any).client.set).toHaveBeenCalledWith(traceId, 'serialized');
+      on: jest.fn(),
+      set: jest.fn().mockResolvedValue('OK'),
+      info: jest.fn().mockResolvedValue(
+        'used_memory:1024\ntotal_system_memory:4096\n'
+      ),
+      hGet: jest.fn().mockResolvedValue('identity'),
+    };
+    (createClient as jest.Mock).mockReturnValue(mockClient);
+    service = new RedisService();
   });
 
   describe('onModuleInit', () => {
-    it('should create a Redis client', async () => {
-      const mockClient = {
-        connect: jest.fn(),
-        on: jest.fn(),
-      };
-      (service as any).createClient = jest.fn().mockResolvedValue(mockClient);
+    it('should create client on init', async () => {
+      const spyCreate = jest.spyOn(service, 'createClient');
       await service.onModuleInit();
-      expect((service as any).createClient).toHaveBeenCalled();
+      expect(spyCreate).toHaveBeenCalled();
     });
-  })
+  });
+
+  describe('onModuleDestroy', () => {
+    it('should quit client and log when open', async () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = true;
+      const logSpy = jest.spyOn(
+        (service as any).logger,
+        'log'
+      );
+      await service.onModuleDestroy();
+      expect(mockClient.quit).toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalledWith('Redis client disconnected');
+    });
+
+    it('should not quit when client not open', async () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = false;
+      await service.onModuleDestroy();
+      expect(mockClient.quit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createClient', () => {
+    it('should return early if client already open', async () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = true;
+      await service.createClient();
+      expect(createClient).not.toHaveBeenCalled();
+    });
+
+    it('should create client without auth and connect', async () => {
+      delete process.env.REDIS_USERNAME;
+      delete process.env.REDIS_PASSWORD;
+      delete process.env.REDIS_HOST;
+      delete process.env.REDIS_PORT;
+      await service.createClient();
+      expect(createClient).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'redis://127.0.0.1:6379' })
+      );
+      expect(mockClient.connect).toHaveBeenCalled();
+      expect(mockClient.on).toHaveBeenCalledWith(
+        'error',
+        expect.any(Function)
+      );
+      expect(mockClient.on).toHaveBeenCalledWith(
+        'connect',
+        expect.any(Function)
+      );
+    });
+
+    it('should include auth when env vars set', async () => {
+      process.env.REDIS_HOST = 'host';
+      process.env.REDIS_PORT = '1234';
+      process.env.REDIS_USERNAME = 'user';
+      process.env.REDIS_PASSWORD = 'pass';
+      await service.createClient();
+      expect(createClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'redis://host:1234',
+          username: 'user',
+          password: 'pass',
+        })
+      );
+    });
+  });
+
+  describe('getClient', () => {
+    it('should return client when initialized and open', () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = true;
+      const client = service.getClient();
+      expect(client).toBe(mockClient);
+    });
+
+    it('should throw if client not open', () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = false;
+      expect(() => service.getClient()).toThrow(
+        'Redis client is not initialized yet.'
+      );
+    });
+  });
+
+  describe('ensureClient', () => {
+    it('should call createClient when no client', async () => {
+      const spyCreate = jest.spyOn(service as any, 'createClient');
+      (service as any).client = undefined;
+      await (service as any).ensureClient();
+      expect(spyCreate).toHaveBeenCalled();
+    });
+
+    it('should call createClient when client not open', async () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = false;
+      const spyCreate = jest.spyOn(service as any, 'createClient');
+      await (service as any).ensureClient();
+      expect(spyCreate).toHaveBeenCalled();
+    });
+  });
+
+  describe('JobContext operations', () => {
+    beforeEach(() => {
+      jest.spyOn(service as any, 'ensureClient').mockResolvedValue(undefined);
+    });
+
+    it('getJobContext should return from provider', async () => {
+      const fakeProvider = { getJobContext: jest.fn().mockResolvedValue('ctx') };
+      (JobContextFactory.getProvider as jest.Mock).mockReturnValue(fakeProvider);
+      (service as any).client = mockClient;
+      const ctx = await service.getJobContext('id');
+      expect(JobContextFactory.getProvider).toHaveBeenCalledWith('redis', mockClient);
+      expect(ctx).toBe('ctx');
+    });
+
+    it('getSpeedTestJobContext should return from speed test provider', async () => {
+      const fakeProvider = { getJobContext: jest.fn().mockResolvedValue('ctx2') };
+      (JobContextFactory.getSpeedTestProvider as jest.Mock).mockReturnValue(fakeProvider);
+      (service as any).client = mockClient;
+      const ctx = await service.getSpeedTestJobContext('id2');
+      expect(JobContextFactory.getSpeedTestProvider).toHaveBeenCalledWith('redis', mockClient);
+      expect(ctx).toBe('ctx2');
+    });
+
+    it('setJobContext should serialize and set', async () => {
+      (service as any).client = mockClient;
+      const jobContext = { serialize: jest.fn().mockReturnValue('data') };
+      await service.setJobContext('trace', jobContext);
+      expect(jobContext.serialize).toHaveBeenCalled();
+      expect(mockClient.set).toHaveBeenCalledWith('trace', 'data');
+    });
+
+    it('getJobState happy path', async () => {
+      (service as any).getJobContext = jest.fn().mockResolvedValue({ getJobState: jest.fn().mockResolvedValue('ok') });
+      const state = await service.getJobState('t');
+      expect(state).toBe('ok');
+    });
+
+    it('getJobState error path', async () => {
+      (service as any).getJobContext = jest.fn().mockRejectedValue(new Error('fail'));
+      const state = await service.getJobState('t2');
+      expect(state).toEqual({ message: 'Error while getting the job state : t2' });
+    });
+
+    it('setJobState happy path', async () => {
+      (service as any).getJobContext = jest.fn().mockResolvedValue({ setJobState: jest.fn().mockResolvedValue(undefined), getJobState: jest.fn().mockResolvedValue('new') });
+      const res = await service.setJobState('t3', 'state' as any);
+      expect(res).toBe('new');
+    });
+
+    it('setJobState error path', async () => {
+      (service as any).getJobContext = jest.fn().mockRejectedValue(new Error('oops'));
+      const res = await service.setJobState('t4', 'state' as any);
+      expect(res).toEqual({ message: 'Error while updating the job state : t4' });
+    });
+
+    it('getOwnerIdentity should hGet mapping', async () => {
+      (service as any).client = mockClient;
+      const jobCtx = { jobRunId: 'runId' } as any;
+      const result = service.getOwnerIdentity(jobCtx, '123', 'UID');
+      await expect(mockClient.hGet).toHaveBeenCalledWith('runId:mapping', 'UID:123');
+      await expect(result).resolves.toBe('identity');
+    });
+  });
+
+  describe('Memory info', () => {
+    it('parseMemoryStats extracts values', () => {
+      const stats = 'used_memory:256\ntotal_system_memory:1024\nother:foo';
+      const parsed = service.parseMemoryStats(stats);
+      expect(parsed).toEqual({ used_memory: 256, total_system_memory: 1024 });
+    });
+
+    it('getMemoryInfo calls info and returns parsed', async () => {
+      (service as any).client = mockClient;
+      (mockClient as any).isOpen = true;
+      const info = await service.getMemoryInfo();
+      expect(mockClient.info).toHaveBeenCalledWith('memory');
+      expect(info).toEqual({ used_memory: 1024, total_system_memory: 4096 });
+    });
+  });
 });
- 

@@ -1,15 +1,13 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
-import { WorkersConfig } from 'src/config/app.config';
-import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
-import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
-import { writeFileSync, unlinkSync } from 'fs';
+import * as fs from 'fs';
+import { unlinkSync, writeFileSync } from 'fs';
+import * as path from 'path';
 import { join } from 'path';
-import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
+import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
+import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
