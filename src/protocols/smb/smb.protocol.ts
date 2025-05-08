@@ -11,7 +11,6 @@ export class SMBProtocol extends Protocol {
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
-  protected fstabPath =  CommandConfig.getFstabPath(this.platform);
 
   // --------------------------- Validate Connection -------------------------- //
   async validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
@@ -148,78 +147,64 @@ export class SMBProtocol extends Protocol {
     }
 
 
-    async unmountPath(traceId: string, payload: any): Promise<any> {
-      this.logger.info(
-        `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
-      );
-    
+  async unmountPath(traceId: string, payload: any): Promise<any> {
+    this.logger.info(
+      `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
+    );
+    const response = await this.executeCommand(
+      traceId,
+      ProtocolTypes.SMB,
+      payload,
+      this.getCommandPattern(CommandPattern.UNMOUNT_PATH),
+      'SMB Unmount',
+    );
+
+    if(response?.message?.toLowerCase().includes("successfully.")){
       const response = await this.executeCommand(
         traceId,
         ProtocolTypes.SMB,
         payload,
-        this.getCommandPattern(CommandPattern.UNMOUNT_PATH),
-        'SMB Unmount',
+        this.getCommandPattern(CommandPattern.UNLINK_PATH),
+        'SMB Show Shares',
       );
-    
-      if (response?.message?.toLowerCase().includes('successfully.')) {
-        const unlinkResponse = await this.executeCommand(
-          traceId,
-          ProtocolTypes.SMB,
-          payload,
-          this.getCommandPattern(CommandPattern.UNLINK_PATH),
-          'SMB Show Shares',
-        );
-        this.logger.info(`[${traceId}] ${unlinkResponse.message}`);
-    
-        // Remove the corresponding entry from /etc/fstab
-        try {
-          const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
-          const fstabEntry = `//${payload.hostname}/${payload.path} ${mountDir} cifs username=${payload.username},password=${payload.password},iocharset=utf8,sec=ntlm 0 0\n`;
-    
-          if (fs.existsSync(this.fstabPath)) {
-            const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
-            const updatedFstabContent = fstabContent
-              .split('\n')
-              .filter((line) => line.trim() !== fstabEntry.trim())
-              .join('\n');
-    
-            fs.writeFileSync(this.fstabPath, updatedFstabContent);
-            this.logger.info(`[${traceId}] Removed entry from /etc/fstab: ${fstabEntry}`);
-          } else {
-            this.logger.warn(`[${traceId}] /etc/fstab does not exist.`);
-          }
-        } catch (error) {
-          this.logger.error(`[${traceId}] Error removing entry from /etc/fstab: ${error.message}`);
-
-        }
-      }
-    
-      return response;
+      this.logger.info(`[${traceId}] ${response.message}`);
     }
+
+    // if (response['status'] === 'success') {
+    //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
+    //   if (fs.existsSync(mountDir)) {
+    //     fs.rmdirSync(mountDir, { recursive: false });
+    //     this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+    //   } else {
+    //     this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+    //   }
+      return response;
+    // }
+  }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
     this.logger.info(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
-  
+
     const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
     if (!fs.existsSync(mountDir)) {
-      try {
-        fs.mkdirSync(mountDir, { recursive: true });
+      try{
+        fs.mkdirSync(mountDir,{ recursive: true });
         this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
-      } catch (error) {
-        this.logger.error(`[${traceId}] Error creating directory: ${error.message}`);
-        return {
-          traceId,
-          status: 'error',
-          protocolType: ProtocolTypes.SMB,
-          hostname: payload.hostname,
-          workerId: this.workerId,
-          message: `[${traceId}] Error creating directory: ${error.message}`,
-        };
+        } catch (error) {
+          this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: ProtocolTypes.NFS,
+            hostname: payload.hostname,
+            workerId: this.workerId,
+            message: `[${traceId}] Error creating directory: ${error.message}`,
+          }
       }
     }
-  
+
     const result = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
@@ -227,32 +212,7 @@ export class SMBProtocol extends Protocol {
       this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'SMB Mount',
     );
-  
-    if (result?.message?.toLowerCase().includes('successfully.')) {
-      // Append the mount entry to /etc/fstab
-      try {
-        const fstabEntry = `//${payload.hostname}/${payload.path} ${mountDir} cifs username=${payload.username},password=${payload.password},iocharset=utf8,sec=ntlm 0 0\n`;
-  
-        // Check if the entry already exists in /etc/fstab
-        const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
-        if (!fstabContent.includes(fstabEntry)) {
-          fs.appendFileSync(this.fstabPath, fstabEntry);
-          this.logger.info(`[${traceId}] Added entry to /etc/fstab: ${fstabEntry}`);
-        } else {
-          this.logger.info(`[${traceId}] Entry already exists in /etc/fstab: ${fstabEntry}`);
-        }
-      } catch (error) {
-        this.logger.error(`[${traceId}] Error updating /etc/fstab: ${error.message}`);
-        return {
-          traceId,
-          status: 'error',
-          protocolType: ProtocolTypes.SMB,
-          hostname: payload.hostname,
-          workerId: this.workerId,
-          message: `[${traceId}] Error updating /etc/fstab: ${error.message}`,
-        };
-      }
-  
+    if(result?.message?.toLowerCase().includes("successfully.")){
       const response = await this.executeCommand(
         traceId,
         ProtocolTypes.SMB,
@@ -260,12 +220,11 @@ export class SMBProtocol extends Protocol {
         this.getCommandPattern(CommandPattern.CREATE_PATH_LINK),
         'SMB Show Shares',
       );
-  
+
       this.logger.info(`[${traceId}] ${response.message}`);
       return response;
     }
-  
-    return result;
+
   }
   
   async disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
