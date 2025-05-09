@@ -20,7 +20,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       message: `Incoming request: [${req.method}] ${req.url}`,
       ip: req.ip,
       headers: () => {
-        const headers = req.headers;
+        const headers = { ...req.headers };
         delete headers['authorization'];
         return headers;
       }
