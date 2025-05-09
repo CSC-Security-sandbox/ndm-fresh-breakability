@@ -20,7 +20,6 @@ export class JwtAuthGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const permissions = this.reflector.get<Permission[]>('permissions', context.getHandler());
         const request = context.switchToHttp().getRequest();
-        this.logger.debug(request.headers)
         const authHeader = request.headers.authorization;
 
         if (!authHeader) {
@@ -37,12 +36,10 @@ export class JwtAuthGuard implements CanActivate {
 
         try {
             const decoded: DecodedToken = await this.jwtService.verifyToken(token);
-            this.logger.log(`Token decoded successfully: ${JSON.stringify(decoded)}`);
             if(!decoded.user) return false;
-
+            this.logger.debug(`Token decoded successfully`);
             request['user'] = decoded.user
 
-            this.logger.debug(decoded.user)
 
             if(permissions.length > 0) {
                 const project = request.headers.projectid
@@ -54,7 +51,6 @@ export class JwtAuthGuard implements CanActivate {
                                 return false;
                             }
                         }
-                        this.logger.log(`Authorized permission ${permMap}`)
                         return true
                     }
                 }
