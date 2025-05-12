@@ -6,6 +6,9 @@ on:
       - main
       - temporal
 
+permissions: 
+  contents: read
+
 jobs:
   unit-test-cases-and-code-coverage:
     runs-on: ubuntu-latest
