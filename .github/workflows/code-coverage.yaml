@@ -6,6 +6,9 @@ on:
       - main
       - 'release*'
 
+permissions: 
+  contents: write
+
 jobs:
   unit-test-cases-and-code-coverage:
     runs-on: ubuntu-latest
