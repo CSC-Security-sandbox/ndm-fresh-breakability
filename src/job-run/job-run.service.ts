@@ -16,6 +16,7 @@ import { InventoryStatusSummary, TaskStatusCount } from "./job-run.type";
 import * as fs from "fs";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import * as path from 'path';
 
 @Injectable()
 export class JobRunService {
@@ -215,7 +216,7 @@ export class JobRunService {
         throw new NotFoundException(
           `Job Run with id ${jobRunId} is not a migration job`
         );
-      const filePath = `${this.getReportsDirectory}/${jobRunId}-coc-report.csv`;
+      const filePath = path.join(this.getReportsDirectory, `${jobRunId}-coc-report.csv`);
       if (fs.existsSync(filePath)) return filePath;
       await this.csvService.generateCsv(filePath, jobRunId);
 

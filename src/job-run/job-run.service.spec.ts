@@ -9,7 +9,7 @@ import { ReportsEntity } from 'src/entities/reports.entity';
 import { JobRunStatus, JobType, ReportType } from 'src/constants/enums';
 import { CsvService } from 'src/csv/csv_export.service';
 import * as fs from "fs";
-import { Repository } from 'typeorm';
+import * as path from 'path';
 
 describe('JobRunService', () => {
   let service: JobRunService;
@@ -404,8 +404,8 @@ describe('JobRunService', () => {
     const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
 
     it("should return the file path if the report already exists", async () => {
+      jest.spyOn(path, 'join').mockReturnValue(mockFilePath);
       jest.spyOn(fs, "existsSync").mockReturnValue(true);
-
       jest.spyOn(mockJobRunRepo, "findOne").mockResolvedValue(mockJobRun);
 
       const result = await service.getCocReportByJobRunId(jobRunId);
