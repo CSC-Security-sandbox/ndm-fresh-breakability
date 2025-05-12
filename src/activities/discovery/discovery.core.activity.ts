@@ -28,10 +28,10 @@ export class DiscoveryScanActivity {
         this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 250; 
     }
 
-    async getDirectoryContents(directoryPath: string): Promise<string[]> {
+    async getDirectoryContents(directoryPath: string): Promise<fs.Dirent[]> {
         if (!fs.existsSync(directoryPath))
             return [];
-        return await fs.promises.readdir(directoryPath);
+        return await fs.promises.readdir(directoryPath,{ withFileTypes: true });
     }
 
     async scanTaskActivity({ jobRunId, failedWorkers }: DiscoverPathInput): Promise<DiscoverPathOutput> {
@@ -181,10 +181,33 @@ export class DiscoveryScanActivity {
             const sourceContent = await this.getDirectoryContents(sourcePath);
 
             for (const item of sourceContent) {
-                const sourceContentPath = path.join(sourcePath, item);
-                if (!fs.existsSync(sourceContentPath)) continue;
+                const sourceContentPath = path.join(sourcePath, item.name);
 
-                const sourceStat = await fs.promises.lstat(sourceContentPath);
+                let sourceStat: fs.Stats;
+                try {
+                    sourceStat = await fs.promises.lstat(sourceContentPath);
+                } catch (err) {
+                    this.logger.debug(`[${jobContext.jobRunId}] Skipping path: "${sourceContentPath}" (lstat failed: ${err.message})`);
+                    continue;
+                }
+                
+                let resolvedTarget = '';
+
+                if (sourceStat.isSymbolicLink()) {
+                    try {
+                        const linkTarget = await fs.promises.readlink(sourceContentPath);
+                        resolvedTarget = path.resolve(path.dirname(sourceContentPath), linkTarget);
+                        if (!fs.existsSync(resolvedTarget)) {
+                            this.logger.debug(`[${jobContext.jobRunId}] Broken symbolic link: "${sourceContentPath}" → "${resolvedTarget}" (target does not exist)`);
+                        }
+                    } catch (err) {
+                        this.logger.debug(`[${jobContext.jobRunId}] Error reading symbolic link: "${sourceContentPath}" (${err.message})`);
+                    }
+                } else if (!fs.existsSync(sourceContentPath)) {
+                    this.logger.debug(`[${jobContext.jobRunId}] Skipping non-existent path: "${sourceContentPath}"`);
+                    continue;
+                }
+               
 
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
@@ -196,8 +219,7 @@ export class DiscoveryScanActivity {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                const fileInfo: FileInfo = await getFileInfo({ name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
-
+                const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);

@@ -28,7 +28,6 @@ export class PrecheckActivity {
       errorCodes: [],
       workerId: this.workerId
     };
-
     this.logger.log(`Started Prechecking path ${serverPaths.pathName} on server ${serverCredentials.host}`);
     const protocol = Protocols.getProtocol(ProtocolTypes[serverCredentials.protocol]);
     const protocolPayload = {

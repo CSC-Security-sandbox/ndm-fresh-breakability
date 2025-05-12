@@ -161,8 +161,8 @@ describe('MigrationScanService', () => {
     it('should return directory contents if the directory exists', async () => {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const returnValue = [
-        { name: 'file1.txt', isDirectory: () => false } as fs.Dirent,
-        { name: 'file2.txt', isDirectory: () => false } as fs.Dirent,
+        { name: 'file1.txt', isDirectory: () => false } as any,
+        { name: 'file2.txt', isDirectory: () => false } as any,
       ];
 
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue(returnValue);
@@ -261,8 +261,8 @@ describe('MigrationScanService', () => {
       };
 
       const returnValue = [
-        { name: 'dir1', isDirectory: () => true } as fs.Dirent,
-        { name: 'file.txt', isDirectory: () => false } as fs.Dirent,
+        { name: 'dir1', isDirectory: () => true } as any,
+        { name: 'file.txt', isDirectory: () => false } as any,
       ];
 
       jest.spyOn(fs.Stats.prototype, 'isDirectory').mockReturnValue(true);
