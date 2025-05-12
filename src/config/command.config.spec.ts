@@ -79,7 +79,7 @@ describe('Command Config', () => {
           unlinkPath: undefined,
           disconnectSession: undefined,
           getSIDforObject: undefined,
-          serSIDforObject: undefined,
+          setSIDforObject: undefined,
           mountedFolderSize: undefined,
           availableDiskSpace: undefined,
         },

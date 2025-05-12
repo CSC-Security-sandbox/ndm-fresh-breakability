@@ -42,3 +42,8 @@ export interface getFileInfoInput {
     },
     getID?: boolean
 }
+
+export interface ACL {
+    user: string;
+    permissions: string;
+}

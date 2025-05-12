@@ -100,7 +100,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getOwnerIdentity(jobContext: JobContext, id: string, type: 'SID' | 'UID' | 'GID') {
-    return this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
+    return await this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
   }
 
   async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number }> {

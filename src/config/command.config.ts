@@ -13,7 +13,8 @@ export enum CommandPattern{
     VERSION_DETAIL='versionDetails',
     DISCONNECT_SESSION='disconnectSession',
     GET_SID_FOR_OBJECT='getSIDforObject',
-    SET_SID_FOR_OBJECT='serSIDforObject',
+    SET_SID_FOR_OBJECT='setSIDforObject',
+    SET_SID_FOR_OBJECT_DIR='setSIDforDirObject',
     MOUNTED_FOLDER_SIZE='mountedFolderSize',
     AVAILABLE_DISK_SPACE='availableDiskSpace'
 }
@@ -41,7 +42,8 @@ export interface BaseCommands {
     unlinkPath?: string | undefined
     disconnectSession?: string | undefined
     getSIDforObject? : string | undefined
-    serSIDforObject? : string | undefined
+    setSIDforDirObject? : string | undefined
+    setSIDforObject?: string | undefined
     mountedFolderSize? : string | undefined
     availableDiskSpace? : string | undefined
 }
@@ -88,7 +90,8 @@ export default registerAs(
                 unlinkPath: process.env.SMB_WIN_UNLINK_PATH_CMD,
                 disconnectSession: process.env.SMB_WIN_DISCONNECT_SESSION_CMD,
                 getSIDforObject: process.env.SMB_WIN_GET_SID_FOR_OBJECT_CMD,
-                serSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
+                setSIDforDirObject: process.env.SMB_WIN_SET_SID_FOR_DIR_OBJECT_CMD,
+                setSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
                 mountedFolderSize: process.env.WIN_USED_DISK_SPACE,
                 availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
             },

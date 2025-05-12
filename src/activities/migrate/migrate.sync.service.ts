@@ -9,8 +9,8 @@ import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { CommonActivityService } from '../common/common.service';
 import { ShellService } from '../common/shell.service';
-import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, isFatalError } from '../utils/utils';
-import { getFileInfoInput, Operation, Origin } from '../utils/utils.types';
+import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError } from '../utils/utils';
+import { ACL, getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { Context } from '@temporalio/activity';
 
@@ -115,7 +115,7 @@ export class MigrationSyncService {
         this.logger.error(`Error setting file mode: ${error.message}`);
       }
      }
-    if(metadata?.birthtime){
+    if(metadata?.birthtime && command.ops[0].cmd !== OPS_CMD.COPY_DIR){
       try {
         if(process.platform == 'win32') {
           const birthtime = new Date(metadata.birthtime) 
@@ -128,7 +128,7 @@ export class MigrationSyncService {
           this.logger.debug(`Output of setting birthtime for ${targetPath} is ${output} and birthtime is ${birth_time} and metadata.birthtime is ${metadata.birthtime}`)
         }else {
           const birthtimeCommand = `touch -t ${formatDate(new Date(metadata.birthtime))} ${targetPath}`;
-          const output = await this.shellService.runCommand(birthtimeCommand);
+          await this.shellService.runCommand(birthtimeCommand);
         }
       } catch(error) {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
@@ -137,52 +137,61 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
     }
-    if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-      if(metadata.gid && metadata.uid && process.platform  !== 'win32') {
-          try {
-            const gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
-            const uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
-            this.logger.debug(`UID : ${metadata.uid} -> ${uid}`)
-            this.logger.debug(`GID : ${metadata.gid} -> ${gid}`)
-            if(gid && uid)
-              await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
-          } catch(error) {
-            this.logger.error(`Error setting ownership: ${error.message}`);
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-            stampMetaDataOutput.errors.push(error.code)
-            await jobContext.appendToErrorList(dmErr);
-          }
+    
+    if(metadata.gid && metadata.uid && process.platform  !== 'win32') {
+      try {
+        let gid = metadata.gid?.toString();
+        let uid = metadata.uid?.toString();
+        if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
+          gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
+          uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
         }
-       if(process.platform === 'win32') {
-          try{
-            metadata.sid = await this.getSID(sourcePath);
-            this.logger.debug(`SID for ${sourcePath} is ${metadata.sid}`)
-          }
-          catch(error) {
-            this.logger.error(`Error setting ownership: ${error.message}`);
-            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-            stampMetaDataOutput.errors.push(error.code)
-            await jobContext.appendToErrorList(dmErr);
-          }
-          try{
-            const sid = await this.redisService.getOwnerIdentity(jobContext, metadata.sid, 'SID')
-            this.logger.debug(`Setting ownership for ${sourcePath} to ${targetPath} is ${metadata.sid} to ${sid}`)
-            if(sid) {
-              const setSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.SET_SID_FOR_OBJECT)?.replaceAll('${PATH}', targetPath)?.replaceAll('${SID}', sid);
-              this.logger.debug(`sid command : ${setSIDCommand}`)
-              await this.shellService.runCommand(setSIDCommand);
-             this.logger.debug(`Successfully stamped SID for ${targetPath} is ${metadata.sid}`)
-           } else {
-             this.logger.debug(`SID not found for the file ${sourcePath}`)
-           }
-         } catch(error) {
-           this.logger.error(`Error setting ownership: ${error.message}`);
-           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-           stampMetaDataOutput.errors.push(error.code)
-           await jobContext.appendToErrorList(dmErr);
-         }
-       }
-     }
+        if(gid && uid)
+          await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
+      } catch(error) {
+        this.logger.error(`Error setting ownership: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
+      }
+    }
+     
+    if(process.platform === 'win32') {
+      try{
+        metadata.sid = await this.getSID(sourcePath);
+      }
+      catch(error) {
+        this.logger.error(`Error setting ownership: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
+      }
+      try{
+        const usersAcls:ACL[] = getUserACLs(metadata.sid)
+        await Promise.all(
+          usersAcls.map(async (userAcl) => {
+            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext, userAcl.user, 'SID');
+            if (user) {
+              const commandExec = command.ops[0].cmd !== OPS_CMD.COPY_DIR
+                ? CommandPattern.SET_SID_FOR_OBJECT
+                : CommandPattern.SET_SID_FOR_OBJECT_DIR;
+              const rawCommand = CommandConfig.getSMBCommand(process.platform, commandExec);
+              let setSIDCommand = rawCommand
+                .replace('${PATH}', targetPath)
+                .replace('${USER}', user)
+                .replace('${ACL}', userAcl.permissions);
+              const output = await this.shellService.runCommand(setSIDCommand);
+              this.logger.debug( `output : ${output} | setSIDCommand : ${setSIDCommand}`)
+            }
+          })
+        );
+      } catch(error) {
+        this.logger.error(`Error setting ownership: ${error.message}`);
+        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+        stampMetaDataOutput.errors.push(error.code)
+        await jobContext.appendToErrorList(dmErr);
+      }
+    }
     
     if(metadata.mtime && metadata.atime) {
       try {
@@ -249,7 +258,7 @@ export class MigrationSyncService {
         }
       }
     }
-    if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED && ops[0].cmd !== OPS_CMD.COPY_DIR) {
+    if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED) {
       const result = await this.stampMetaData(targetPath, sourcePath, ops[1].metadata, jobContext, command)
       result.errors.forEach(error => syncOperation.errors.add(error))
       syncOperation.ops[1].status = result.errors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
@@ -420,4 +429,6 @@ export class MigrationSyncService {
         clearInterval(interval);
     }
   }
+
+
 }

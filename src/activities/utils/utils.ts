@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
+import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
@@ -258,3 +258,32 @@ export const getSID = (filePath: string) => {
     const getSIDCommand= `powershell.exe -Command "(Get-Acl '${filePath}').Owner"`;
     return execSync(getSIDCommand, { encoding: "utf-8" }).trim();
 }
+
+
+export const getUserACLs = (line: string): ACL[] => {
+  const lines: string[] = line.split('\n').map(l => l.trim()).filter(Boolean);
+  const aclLines: string[] = [];
+
+  const firstLine = lines[0];
+  const fileMatch = firstLine.match(/^(.+?)\s+(.+\\.+:\(.*\))$/i);
+  if (fileMatch) {
+    aclLines.push(fileMatch[2]); 
+  }
+
+  aclLines.push(...lines.slice(1));
+
+  return aclLines
+    .map(acl => {
+      const match = acl.match(/^(.+?):\s*(.*)$/);
+      if (!match) return null;
+
+      const user = match[1].trim();
+      const permsRaw = match[2].trim();
+
+      const permsMatch = permsRaw.match(/\(*[A-Z]+\)*$/)
+      if (!permsMatch || permsMatch.length === 0 ||permsRaw.includes('(I)')) return null;
+      return { user, permissions: permsRaw}; 
+    })
+    .filter((item): item is ACL => item !== null);
+};
+
