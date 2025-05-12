@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - temporal
+      - hmn/workflow-permissions
+
+permissions: 
+  contents: read
 
 jobs:
   build-and-push:
