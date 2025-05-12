@@ -1,16 +1,13 @@
 name: Check Code Coverage and Run Unit Test Cases
 
 on:
-  push:
-    branches: 
-      - hmn/workflow-permissions
   pull_request:
     branches:
       - main
       - 'release*'
 
 permissions: 
-  contents: write
+  contents: read
 
 jobs:
   unit-test-cases-and-code-coverage:
