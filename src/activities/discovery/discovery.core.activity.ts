@@ -246,7 +246,7 @@ export class DiscoveryScanActivity {
         const ctx = Context.current();
         const interval = setInterval(() => { ctx.heartbeat({ workerId: this.workerId }) }, 10000);
         try {
-            return this.scanTaskActivity({ jobRunId, failedWorkers });
+            return await this.scanTaskActivity({ jobRunId, failedWorkers });
         } finally {
             clearInterval(interval);
         }
