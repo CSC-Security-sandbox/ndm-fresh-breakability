@@ -123,6 +123,17 @@ const JobRunDetails = () => {
 
   const viewLogUrl = getGrafanaLogUrl(jobRunId);
 
+  const isJobStatusValid = (status: JOB_STATUS_TYPE_ENUM) => {
+    const validStatuses = [
+      JOB_STATUS_TYPE_ENUM.COMPLETED,
+      JOB_STATUS_TYPE_ENUM.BLOCKED,
+      JOB_STATUS_TYPE_ENUM.APPROVED,
+      JOB_STATUS_TYPE_ENUM.REJECTED,
+    ];
+
+    return validStatuses.includes(status);
+  };
+
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -165,7 +176,7 @@ const JobRunDetails = () => {
               <Show.When
                 isTrue={
                   !jobRunDetails?.isReportReady &&
-                  jobRunDetails?.status === JOB_STATUS_TYPE_ENUM.COMPLETED
+                  isJobStatusValid(jobRunDetails?.status)
                 }
               >
                 <ReportsGeneratingLoader />
@@ -174,7 +185,7 @@ const JobRunDetails = () => {
               <Show.When
                 isTrue={
                   jobRunDetails?.isReportReady &&
-                  jobRunDetails?.status === JOB_STATUS_TYPE_ENUM.COMPLETED
+                  isJobStatusValid(jobRunDetails?.status)
                 }
               >
                 <ActionMenuButtonStyle
