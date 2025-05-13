@@ -27,7 +27,7 @@ async function log(traceId: string, message: string) {
 
 const { scanActivity } = proxyActivities<DiscoveryScanActivity>({ 
   startToCloseTimeout: '24h', 
-  heartbeatTimeout: '2m',
+  heartbeatTimeout: '10m',
 });
 
 const { 
