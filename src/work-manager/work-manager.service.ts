@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { firstValueFrom, lastValueFrom, retry, timer } from 'rxjs';
+import { firstValueFrom, retry, timeout, timer } from 'rxjs';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
@@ -56,6 +56,7 @@ export class WorkManagerService {
                 this.httpService.get(`${this.workerConfigUrl}/api/v1/work-manager/config`, {
                    headers: { Authorization: `Bearer ${accessToken}` },
                 }).pipe(
+                    timeout(1000 * 10),
                     retry({
                         count: 3,
                         delay: (error, retryCount) => {
@@ -68,6 +69,7 @@ export class WorkManagerService {
             if (response.status !== 200) {
                 throw new Error(`Failed to fetch configurations. Status: ${response.status}`);
             }
+            this.logger.debug(`Fetched worker configuration: ${JSON.stringify(response.data)}`);
             await this.handleConfigurations(response.data);
         } catch (error) {
             this.logger.error(`Error fetching configurations: ${error.message}`);
@@ -95,16 +97,15 @@ export class WorkManagerService {
         }
         for(let [id, config] of configsToStart) {
             this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
-            configsToStart.delete(id)
             const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
+            configsToStart.delete(id);
         }
     }
 
     async startWorker(id: string, workerOptions: any){
         try {
         const worker: Worker = await Worker.create(workerOptions);
-            this.activeWorkers.set(id,worker);
             if (worker.getState() === WorkerState.INITIALIZED) 
                 worker.run();
             while (worker.getState() !== WorkerState.RUNNING) {
@@ -112,8 +113,10 @@ export class WorkManagerService {
                 //sleep 
                 await new Promise((resolve) => setTimeout( resolve, this.workerStartupTimeout));
             }
+            this.logger.info(`Worker ${id} started successfully`);
+            this.activeWorkers.set(id, worker);
         } catch (err) {
-            this.logger.error(err);
+            this.logger.error(`Error starting worker ${id}: ${err}`);
         }
     }
 
