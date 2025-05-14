@@ -26,7 +26,7 @@ export const useJobRunStatus = (
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
   const [isButtonDisabled, setIsButtonDisabled] = useState(STATUS_TYPE);
-  const [selectedId, SetSelectedId] = useState<string[]>([]);
+  const [selectedId, setSelectedId] = useState<string[]>([]);
   const dispatch = useDispatch();
   const [selectedAction, setSelectedAction] = useState<string>("");
   const [loadingState, setLoadingState] = useState<Record<string, boolean>>({});
@@ -50,11 +50,13 @@ export const useJobRunStatus = (
   };
 
   useEffect(() => {
-    const selectedRows = getSelectedRows(rows, selectedJobRunIds);
-    const jobRunIds = selectedRows.map((row) => row.jobRunId);
+    if (rows.length > 0) {
+      const selectedRows = getSelectedRows(rows, selectedJobRunIds);
+      const jobRunIds = selectedRows.map((row) => row.jobRunId);
 
-    SetSelectedId(jobRunIds);
-    setIsButtonDisabled(hasUniqueStatus(selectedRows));
+      setSelectedId(jobRunIds);
+      setIsButtonDisabled(hasUniqueStatus(selectedRows));
+    }
   }, [rows, selectedJobRunIds]);
 
   useEffect(() => {
