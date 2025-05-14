@@ -12,7 +12,6 @@ import * as os from 'os';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
-jest.mock('fast-folder-size');
 
 describe('NFSProtocol', () => {
   let nfsProtocol: NFSProtocol;
