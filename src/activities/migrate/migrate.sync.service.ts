@@ -167,7 +167,7 @@ export class MigrationSyncService {
         await jobContext.appendToErrorList(dmErr);
       }
       try{
-        const usersAcls:ACL[] = getUserACLs(metadata.sid)
+        const usersAcls:ACL[] = getUserACLs(metadata.sid, sourcePath)
         await Promise.all(
           usersAcls.map(async (userAcl) => {
             const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext, userAcl.user, 'SID');
@@ -180,8 +180,9 @@ export class MigrationSyncService {
                 .replace('${PATH}', targetPath)
                 .replace('${USER}', user)
                 .replace('${ACL}', userAcl.permissions);
-              const output = await this.shellService.runCommand(setSIDCommand);
-              this.logger.debug( `output : ${output} | setSIDCommand : ${setSIDCommand}`)
+                this.logger.warn(` setSIDCommand : ${setSIDCommand}`)
+                const output = await this.shellService.runCommand(setSIDCommand);
+                this.logger.debug(` output : ${output}`)
             }
           })
         );

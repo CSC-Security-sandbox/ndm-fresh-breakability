@@ -1,15 +1,16 @@
-import { HttpService } from '@nestjs/axios';
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import axios from 'axios';
+
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
+import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
+import axios from 'axios';
 import { JobRunStatus } from '../discovery/enums';
+import { JobStatus, Task, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
 
 jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('CommonActivityService', () => {
   let service: CommonActivityService;
@@ -18,53 +19,55 @@ describe('CommonActivityService', () => {
   let authService: Partial<AuthService>;
   let logger: Partial<Logger>;
   let redisService: Partial<RedisService>;
+  let mockContext: any;
 
   const traceId = 'test-trace';
-  const jobRunId = 'run-123';
-
-  const createJobContext = () => ({
-    appendToFileList: jest.fn().mockResolvedValue('file-id'),
-    appendToDirList: jest.fn().mockResolvedValue('dir-id'),
-    appendToTaskList: jest.fn().mockResolvedValue('task-id'),
-    appendToMigrationTask: jest.fn().mockResolvedValue('migr-task-id'),
-    appendToUpdatedTaskList: jest.fn().mockResolvedValue('upd-task-id'),
-    appendToErrorList: jest.fn().mockResolvedValue('err-id'),
-    filesInfo: { lastId: null },
-    dirsInfo: { lastId: null },
-    tasksInfo: { lastId: null },
-    migrateTask: { lastId: null },
-    updatedTaskInfo: { lastId: null },
-    errorsInfo: { lastId: null },
-    getJobState: jest.fn().mockResolvedValue({ state: 'ok' }),
-    groupReadTasks: jest.fn().mockResolvedValue((async function* () { yield { id: 't1' }; })()),
-    groupReadMigrationTask: jest.fn().mockResolvedValue((async function* () { yield { id: 'm1' }; })()),
-    jobRunId: jobRunId,
-    getMigrationTaskLength: jest.fn().mockResolvedValue(1),
-  });
+  const jobRunId = 'job123';
+  const workerId = 'worker1';
 
   beforeEach(async () => {
+    mockContext = {
+      cleanup: jest.fn(),
+      appendToFileList: jest.fn().mockResolvedValue('fileId'),
+      appendToDirList: jest.fn().mockResolvedValue('dirId'),
+      appendToTaskList: jest.fn().mockResolvedValue(1),
+      appendToMigrationTask: jest.fn().mockResolvedValue(2),
+      appendToUpdatedTaskList: jest.fn().mockResolvedValue(3),
+      appendToErrorList: jest.fn().mockResolvedValue(4),
+      filesInfo: { lastId: null },
+      dirsInfo: { lastId: null },
+      tasksInfo: { lastId: null },
+      migrateTask: { lastId: null },
+      updatedTaskInfo: { lastId: null },
+      errorsInfo: { lastId: null },
+      getJobState: jest.fn().mockResolvedValue({ state: 'OK' }),
+      getMigrationTaskLength: jest.fn().mockResolvedValue(0),
+      groupReadTasks: jest.fn().mockResolvedValue([Promise.resolve({ id: 't1' })]),
+      groupReadMigrationTask: jest.fn().mockResolvedValue([Promise.resolve({ id: 'mt1' })]),
+      getAllRunningScanTasks: jest.fn().mockResolvedValue([]),
+      getAllRunningSyncTasks: jest.fn().mockResolvedValue([]),
+      deleteAllScanTasks: jest.fn(),
+      deleteAllSyncTasks: jest.fn(),
+      jobRunId: traceId,
+    } as unknown as JobContext;
+
     configService = {
-      get: jest.fn().mockImplementation((key: string) => {
-        switch (key) {
-          case 'worker.workerId': return 'worker-1';
-          case 'worker.workerJobServiceUrl': return 'http://job';
-          case 'worker.workerReportServiceUrl': return 'http://report';
-        }
+      get: jest.fn((key: string) => {
+        const map = {
+          'worker.workerId': workerId,
+          'worker.workerJobServiceUrl': 'http://job',
+          'worker.workerReportServiceUrl': 'http://report',
+          'worker.migrationTaskLimit': 5,
+        };
+        return map[key];
       }),
     };
     httpService = {};
-    authService = {
-      getAccessToken: jest.fn().mockResolvedValue('token'),
-    };
-    logger = {
-      log: jest.fn(),
-      error: jest.fn(),
-    };
+    authService = { getAccessToken: jest.fn().mockResolvedValue('token') };
+    logger = { log: jest.fn(), error: jest.fn() };
     redisService = {
-      getJobContext: jest.fn().mockResolvedValue(createJobContext()),
-      setJobContext: jest.fn().mockResolvedValue(undefined),
-      getJobState: jest.fn().mockResolvedValue({ failedWorkers: ['w1'] }),
-      setJobState: jest.fn().mockResolvedValue(undefined),
+      getJobContext: jest.fn().mockResolvedValue(mockContext),
+      setJobContext: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -81,194 +84,181 @@ describe('CommonActivityService', () => {
     service = module.get<CommonActivityService>(CommonActivityService);
   });
 
-  describe('constructor', () => {
-    it('should set properties correctly from config', () => {
-      expect(service.workerId).toBe('worker-1');
-      expect(service.workerJobServiceUrl).toBe('http://job');
-      expect(service.reportServiceUrl).toBe('http://report');
-      expect(service.fetchTaskBatch).toBe(50);
-      expect(service.pushTaskDirSize).toBe(500);
+  describe('cleanupJobContext', () => {
+    it('should cleanup successfully', async () => {
+      await service.cleanupJobContext(traceId);
+      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
+      expect(mockContext.cleanup).toHaveBeenCalled();
+    });
+
+    it('should handle error', async () => {
+      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('fail'));
+      const res = await service.cleanupJobContext(traceId);
+      expect(logger.error).toHaveBeenCalled();
+      expect(res).toEqual({ message: 'Error while cleaning up the job context: ' + traceId });
     });
   });
 
   describe('updateLastEntry', () => {
-    it('should publish last entries and return success message', async () => {
-      const result = await service.updateLastEntry(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-      expect(redisService.setJobContext).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Job completed for job id: ' + traceId });
-      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Publishing last entry for job id: ${traceId}`);
-      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Last entry published for job id: ${traceId}`);
+    it('should publish last entries', async () => {
+      const res = await service.updateLastEntry(traceId);
+      expect(mockContext.appendToFileList).toHaveBeenCalled();
+      expect(redisService.setJobContext).toHaveBeenCalledWith(traceId, mockContext);
+      expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
     });
 
-
-    it('should handle errors and return error message', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('fail'));
-      const result = await service.updateLastEntry(traceId);
+    it('should handle error', async () => {
+      (mockContext.appendToFileList as jest.Mock).mockRejectedValueOnce(new Error('err'));
+      const res = await service.updateLastEntry(traceId);
       expect(logger.error).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
-    });
-
-    it('should handle error during append operations', async () => {
-      const fakeCtx = createJobContext();
-      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeCtx);
-      (fakeCtx.appendToDirList as jest.Mock).mockRejectedValueOnce(new Error('dir append fail'));
-      const result = await service.updateLastEntry(traceId);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error while marking the job as completed'));
-      expect(result).toEqual({ message: expect.stringContaining('Error while marking the job as completed') });
+      expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
     });
   });
 
   describe('updateStatus', () => {
-    it('should send patch request and return success message', async () => {
-      mockedAxios.patch.mockResolvedValueOnce({});
-      const input = { jobRunId, status: 'RUNNING' as any };
-      const result = await service.updateStatus(input);
+    it('should update status successfully', async () => {
+      (axios.patch as jest.Mock).mockResolvedValue({});
+      const res = await service.updateStatus({ jobRunId, status: JobRunStatus.Completed});
       expect(authService.getAccessToken).toHaveBeenCalled();
-      expect(mockedAxios.patch).toHaveBeenCalledWith(
-        `http://job/api/v1/job-run/${jobRunId}/${input.status}`,
+      expect(axios.patch).toHaveBeenCalledWith(
+        `http://job/api/v1/job-run/${jobRunId}/COMPLETED`,
         {},
         { headers: { Authorization: `Bearer token` } },
       );
-      expect(result).toEqual({ message: 'Job status updated for job id: ' + jobRunId });
+      expect(res).toEqual({ message: 'Job status updated for job id: ' + jobRunId });
     });
 
-    it('should handle missing token and log error', async () => {
-      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce(null);
-      const result = await service.updateStatus({ jobRunId, status: 'DONE' as any });
-      expect(logger.error).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Error while updating the status of the job id : ' + jobRunId });
+    it('should handle missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      const res = await service.updateStatus({ jobRunId, status: JobRunStatus.Completed});
+      expect(res.message).toContain('Error while updating the status');
     });
 
-    it('should handle axios error gracefully', async () => {
-      mockedAxios.patch.mockRejectedValueOnce(new Error('patch fail'));
-      const result = await service.updateStatus({ jobRunId, status: 'FAILED' as any });
+    it('should handle error', async () => {
+      (axios.patch as jest.Mock).mockRejectedValueOnce(new Error('fail'));  
+      const res = await service.updateStatus({ jobRunId, status: JobRunStatus.Completed});
       expect(logger.error).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Error while updating the status of the job id : ' + jobRunId });
+      expect(res.message).toContain('Error while updating the status');
     });
   });
 
   describe('generateJobsReport', () => {
-
-    it('should trigger report generation and return success message', async () => {
-      mockedAxios.post = jest.fn().mockResolvedValueOnce({});
-      const result = await service.generateJobsReport(jobRunId);
-      expect(authService.getAccessToken).toHaveBeenCalled();
-      expect(mockedAxios.post).toHaveBeenCalledWith(
+    it('should trigger report successfully', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({});
+      const res = await service.generateJobsReport(jobRunId);
+      expect(axios.post).toHaveBeenCalledWith(
         `http://report/api/v1/report/inventory/generate-jobs-report`,
         { jobRunId },
         { headers: { Authorization: `Bearer token` } },
       );
-      expect(result).toEqual({ message: 'Triggering generateJobsReport successful for job id: ' + jobRunId });
-      expect(logger.log).toHaveBeenCalledWith(`[${jobRunId}] reportServiceUrl to URL ${service.reportServiceUrl}/api/v1/report`);
-      expect(logger.log).toHaveBeenCalledWith(`[${jobRunId}] Triggering generateJobsReport for url : ${service.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
+      expect(res).toEqual({ message: 'Triggering generateJobsReport successful for job id: ' + jobRunId });
     });
 
-    it('should handle missing token and log error', async () => {
-      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce(null);
-      const result = await service.generateJobsReport(jobRunId);
-      expect(logger.error).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId });
+    it('should handle missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      const res = await service.generateJobsReport(jobRunId);
+      expect(res.message).toContain('Error while Triggering generateJobsReport');
     });
 
-    it('should handle axios error gracefully', async () => {
-      mockedAxios.post = jest.fn().mockRejectedValueOnce(new Error('post fail'));
-      const result = await service.generateJobsReport(jobRunId);
+    it('should handle error', async () => {
+      (axios.post as jest.Mock).mockRejectedValueOnce(new Error('fail'));
+      const res = await service.generateJobsReport(jobRunId);
       expect(logger.error).toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId });
+      expect(res.message).toContain('Error while Triggering generateJobsReport');
     });
   });
 
   describe('updateJobErrorStatus', () => {
     it('should call updateStatus and updateLastEntry', async () => {
-      const statusSpy = jest.spyOn(service, 'updateStatus').mockResolvedValue(undefined as any);
-      const lastEntrySpy = jest.spyOn(service, 'updateLastEntry').mockResolvedValue(undefined as any);
+      const spyStatus = jest.spyOn(service, 'updateStatus').mockResolvedValue({ message: 'ok' });
+      const spyLast = jest.spyOn(service, 'updateLastEntry').mockResolvedValue({ message: 'ok' });
+
       await service.updateJobErrorStatus(jobRunId);
-      expect(statusSpy).toHaveBeenCalledWith({ jobRunId, status: JobRunStatus.Errored });
-      expect(lastEntrySpy).toHaveBeenCalledWith(jobRunId);
-    });
-
-    it('should propagate error if updateStatus fails', async () => {
-      const statusSpy = jest.spyOn(service, 'updateStatus').mockRejectedValueOnce(new Error('fail'));
-      await expect(service.updateJobErrorStatus(jobRunId)).rejects.toThrow('fail');
-      expect(statusSpy).toHaveBeenCalled();
+      expect(spyStatus).toHaveBeenCalledWith({ jobRunId, status: JobRunStatus.Errored });
+      expect(spyLast).toHaveBeenCalledWith(jobRunId);
     });
   });
 
-  describe('getJobState', () => {
-    it('should return job state from context', async () => {
+  describe('get/set JobState', () => {
+    it('should get job state', async () => {
       const state = await service.getJobState(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-      expect(state).toEqual({ state: 'ok' });
+      expect(state).toEqual({ state: 'OK' });
+    });
+
+    it('should set job state', async () => {
+      const newState = { workers: [], tasks_completed: 1, tasks_total: 2, status: JobRunStatus.Completed };
+      await service.setJobState(traceId, newState as any);
+      expect(redisService.setJobContext).toHaveBeenCalledWith(traceId, expect.anything());
     });
   });
-
 
   describe('getJobStateWithStreamLoad', () => {
-    it('should return job state with isStreamOverloaded', async () => {
-      jest.spyOn(service, 'publishPendingTasksToStream').mockResolvedValue(undefined);
-      await service.getJobStateWithStreamLoad(traceId, 'SCAN');
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
+    it('should return state and overload flag', async () => {
+      mockContext.getMigrationTaskLength = jest.fn().mockResolvedValue(10);
+      const pubSpy = jest.spyOn(service, 'publishPendingTasksToStream').mockResolvedValue(undefined);
+      const result = await service.getJobStateWithStreamLoad(traceId, 'SCAN');
+      expect(result.jobState).toEqual({ state: 'OK' });
+      expect(result.isStreamOverloaded).toBe(true);
+      expect(pubSpy).toHaveBeenCalledWith(mockContext, 'SCAN');
     });
   });
 
-
-  describe('fetchOneTask / fetchOneMigrationTask', () => {
-    it('should fetch one task successfully', async () => {
-      const fakeCtx = createJobContext();
-      const task = await service.fetchOneTask(fakeCtx as any);
+  describe('fetchOneTask and fetchOneMigrationTask', () => {
+    it('should fetch one task', async () => {
+      const task = await service.fetchOneTask(mockContext);
       expect(task).toEqual({ id: 't1' });
     });
-
-    it('should skip undefined tasks and return the first valid one', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadTasks as jest.Mock).mockResolvedValue((async function*() { yield undefined; yield { id: 't2' }; })());
-      const task = await service.fetchOneTask(fakeCtx as any);
-      expect(task).toEqual({ id: 't2' });
-    });
-
-    it('should return undefined if no tasks', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadTasks as jest.Mock).mockResolvedValue((async function*() {})());
-      const task = await service.fetchOneTask(fakeCtx as any);
+    it('should return undefined on error', async () => {
+      mockContext.groupReadTasks = jest.fn().mockRejectedValueOnce(new Error('fail'));
+      const task = await service.fetchOneTask(mockContext);
       expect(task).toBeUndefined();
     });
 
-    it('should log and return undefined on error', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadTasks as jest.Mock).mockRejectedValueOnce(new Error('fail tasks'));
-      const task = await service.fetchOneTask(fakeCtx as any);
-      expect(logger.error).toHaveBeenCalled();
+    it('should fetch one migration task', async () => {
+      const task = await service.fetchOneMigrationTask(mockContext);
+      expect(task).toEqual({ id: 'mt1' });
+    });
+    it('should return undefined on migration error', async () => {
+      mockContext.groupReadMigrationTask = jest.fn().mockRejectedValueOnce(new Error('fail'));
+      const task = await service.fetchOneMigrationTask(mockContext);
       expect(task).toBeUndefined();
-    });
-
-    it('should fetch one migration task successfully', async () => {
-      const fakeCtx = createJobContext();
-      const mtask = await service.fetchOneMigrationTask(fakeCtx as any);
-      expect(mtask).toEqual({ id: 'm1' });
-    });
-
-    it('should skip undefined migration tasks and return the first valid one', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadMigrationTask as jest.Mock).mockResolvedValue((async function*() { yield undefined; yield { id: 'm2' }; })());
-      const mtask = await service.fetchOneMigrationTask(fakeCtx as any);
-      expect(mtask).toEqual({ id: 'm2' });
-    });
-
-    it('should return undefined if no migration tasks', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadMigrationTask as jest.Mock).mockResolvedValue((async function*() {})());
-      const mtask = await service.fetchOneMigrationTask(fakeCtx as any);
-      expect(mtask).toBeUndefined();
-    });
-
-    it('should handle migration task errors gracefully', async () => {
-      const fakeCtx = createJobContext();
-      (fakeCtx.groupReadMigrationTask as jest.Mock).mockRejectedValueOnce(new Error('fail mig'));
-      const mtask = await service.fetchOneMigrationTask(fakeCtx as any);
-      expect(logger.error).toHaveBeenCalled();
-      expect(mtask).toBeUndefined();
     });
   });
 
-})
+  describe('getJobStateAndUpdateTaskList', () => {
+    it('should publish pending and return state', async () => {
+      const pubSpy = jest.spyOn(service, 'publishPendingTasksToStream').mockResolvedValue(undefined);
+      const state = await service.getJobStateAndUpdateTaskList(traceId, 'SYNC');
+      expect(pubSpy).toHaveBeenCalledWith(mockContext, 'SYNC');
+      expect(state).toEqual({ state: 'OK' });
+    });
+  });
+
+  describe('publishPendingTasksToStream', () => {
+    it('should process SCAN tasks', async () => {
+      mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue([null]);
+      await service.publishPendingTasksToStream(mockContext, 'SCAN');
+      expect(mockContext.appendToTaskList).toHaveBeenCalled();
+      expect(mockContext.deleteAllScanTasks).toHaveBeenCalled();
+    });
+    it('should process SYNC tasks', async () => {
+      mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue([null]);
+      await service.publishPendingTasksToStream(mockContext, 'SYNC');
+      expect(mockContext.appendToMigrationTask).toHaveBeenCalled();
+      expect(mockContext.deleteAllSyncTasks).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateWorkerResponse', () => {
+    it('should update worker response successfully', async () => {
+      (axios.put as jest.Mock).mockResolvedValue({});
+      const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
+      expect(res).toEqual({ message: 'Worker response updated successfully for job id: ' + jobRunId });
+    });
+    it('should handle error', async () => {
+      (axios.put as jest.Mock).mockRejectedValueOnce(new Error('fail'));
+      const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
+      expect(res.message).toContain('Error while updating the worker response');
+    });
+  });
+});

@@ -260,14 +260,14 @@ export const getSID = (filePath: string) => {
 }
 
 
-export const getUserACLs = (line: string): ACL[] => {
+export const getUserACLs = (line: string, path:string): ACL[] => {
   const lines: string[] = line.split('\n').map(l => l.trim()).filter(Boolean);
   const aclLines: string[] = [];
 
   const firstLine = lines[0];
-  const fileMatch = firstLine.match(/^(.+?)\s+(.+\\.+:\(.*\))$/i);
-  if (fileMatch) {
-    aclLines.push(fileMatch[2]); 
+  if (firstLine.includes(path)) {
+    const permissions = firstLine.slice(path.length, firstLine.length).trim()
+    aclLines.push(permissions); 
   }
 
   aclLines.push(...lines.slice(1));
