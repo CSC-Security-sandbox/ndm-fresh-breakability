@@ -18,11 +18,6 @@ export const hasUniqueStatus = (
       return statuses; // All buttons disabled
     }
 
-    if (uniqueStatus === JOB_STATUS_TYPE_ENUM.READY) {
-      statuses.STOPPED = false;
-      return statuses; // All buttons disabled except STOPPED
-    }
-
     if (uniqueStatus in statuses) {
       return Object.fromEntries(
         Object.keys(statuses).map((status) => [status, status === uniqueStatus])
