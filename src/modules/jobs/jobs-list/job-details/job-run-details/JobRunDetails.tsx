@@ -32,7 +32,7 @@ import {
   Button,
   DropdownButton,
 } from "@netapp/bxp-design-system-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
@@ -123,16 +123,19 @@ const JobRunDetails = () => {
 
   const viewLogUrl = getGrafanaLogUrl(jobRunId);
 
-  const isJobStatusValid = (status: JOB_STATUS_TYPE_ENUM) => {
-    const validStatuses = [
-      JOB_STATUS_TYPE_ENUM.COMPLETED,
-      JOB_STATUS_TYPE_ENUM.BLOCKED,
-      JOB_STATUS_TYPE_ENUM.APPROVED,
-      JOB_STATUS_TYPE_ENUM.REJECTED,
-    ];
+  const isJobStatusValid = useCallback(
+    (status: JOB_STATUS_TYPE_ENUM) => {
+      const validStatuses = [
+        JOB_STATUS_TYPE_ENUM.COMPLETED,
+        JOB_STATUS_TYPE_ENUM.BLOCKED,
+        JOB_STATUS_TYPE_ENUM.APPROVED,
+        JOB_STATUS_TYPE_ENUM.REJECTED,
+      ];
 
-    return validStatuses.includes(status);
-  };
+      return validStatuses.includes(status);
+    },
+    [jobRunDetails?.status]
+  );
 
   return (
     <Box className="flex flex-col gap-4">
