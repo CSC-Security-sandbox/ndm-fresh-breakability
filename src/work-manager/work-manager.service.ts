@@ -10,6 +10,8 @@ import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
+import { Connection } from '@temporalio/client';
+
 
 
 @Injectable()
@@ -22,6 +24,8 @@ export class WorkManagerService {
     private connection: NativeConnection = null;
     private activeWorkers: Map<string,Worker> = new Map<string, Worker>()
     private readonly workerStartupTimeout: number;
+    private taskQueuesToMonitor =  [];
+    private temporalClientConnection: Connection = null;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -39,6 +43,8 @@ export class WorkManagerService {
         this.logger.info('[onApplicationBootstrap] - Starting Worker Service');
         try {
             this.connection = await NativeConnection.connect(this.configService.get('temporal'));
+            this.temporalClientConnection = await Connection.connect(this.configService.get('temporal'));
+            
         } catch (err) {
             this.logger.error(`Error on setting temporal connection: ${err}`);
             throw err;
@@ -71,11 +77,12 @@ export class WorkManagerService {
             }
             this.logger.debug(`Fetched worker configuration: ${JSON.stringify(response.data)}`);
             await this.handleConfigurations(response.data);
+            this.monitorTaskQueues();
         } catch (error) {
             this.logger.error(`Error fetching configurations: ${error.message}`);
         } finally {
             this.loadingConfigs = false;
-        }
+        }        
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {
@@ -115,12 +122,14 @@ export class WorkManagerService {
             }
             this.logger.info(`Worker ${id} started successfully`);
             this.activeWorkers.set(id, worker);
+            this.taskQueuesToMonitor.push({queueName: workerOptions.taskQueue, workerId: id})       
         } catch (err) {
             this.logger.error(`Error starting worker ${id}: ${err}`);
         }
     }
 
     async shutdownWorker(worker: Worker, force: boolean) {
+
         if (worker.getState() === WorkerState.RUNNING || worker.getState() === WorkerState.INITIALIZED) 
             worker.shutdown();
 
@@ -137,6 +146,32 @@ export class WorkManagerService {
                 else 
                     this.logger.debug('Worker shutdown');
             },  this.workerStartupTimeout);
+        }
+        // remove task queue from taskQueueArr
+        this.taskQueuesToMonitor = this.taskQueuesToMonitor.filter((taskQueue) => taskQueue.workerId !== worker.options.identity);
+    }
+
+    async monitorTaskQueues() {
+        const workerToShutDown = [];        
+        for (const taskQueue of this.taskQueuesToMonitor) {
+            const response: any = await this.temporalClientConnection.workflowService.describeTaskQueue({
+                namespace: 'default',
+                taskQueue: { name: taskQueue.queueName, kind: 1 },
+            });
+            const pollers = response.pollers || [];
+            if (pollers.length == 0) {
+                this.logger.info(`No active workers for task queue: ${taskQueue.queueName}`);
+                workerToShutDown.push(this.activeWorkers.get(taskQueue.workerId));
+            }
+        }       
+        for(const worker of workerToShutDown) {
+            this.logger.info(`Shutting down worker ${worker.options.identity}`);
+            try{
+                await this.shutdownWorker(worker, true);
+            }catch(err){
+                this.logger.error(`Error shutting down worker ${worker.options.identity}: ${err}`);
+            }
+            this.activeWorkers.delete(worker.options.identity);
         }
     }
 }

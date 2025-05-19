@@ -30,6 +30,11 @@ jest.mock('@temporalio/worker', () => ({
     connect: jest.fn(),
   },
 }));
+jest.mock('@temporalio/client', () => ({
+  Connection: {
+    connect: jest.fn(),
+  }
+}));
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -258,4 +263,75 @@ describe('WorkManagerService', () => {
       expect(service['activeWorkers'].size).toEqual(0);
     });
   });
+
+  describe('monitorTaskQueues', () => {
+
+  beforeEach(() => {
+    service['temporalClientConnection'] = {
+      workflowService: {
+        describeTaskQueue: jest.fn(),
+      },
+    } as any;
+  });
+
+  it('should remove worker if pollers are empty', async () => {
+    const mockWorker = {
+      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+      shutdown: jest.fn(),
+      options: { identity: 'worker1' },
+    }
+    service['taskQueuesToMonitor'] = [{ queueName: 'queue1', workerId: 'worker1' }];
+    service['activeWorkers'].set('worker1', mockWorker as any);
+
+    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+      .mockResolvedValue({ pollers: [] });
+    await service.monitorTaskQueues();
+    expect(mockWorker.shutdown).toHaveBeenCalled();
+    expect(service['activeWorkers'].has('worker1')).toBe(false);
+  });
+
+  it('should not remove worker if pollers are present', async () => {
+    service['taskQueuesToMonitor'] = [{ queueName: 'queue2', workerId: 'worker2' }];
+    service['activeWorkers'].set('worker2', { options: { identity: 'worker2' } } as any);
+
+    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+      .mockResolvedValue({ pollers: [{ identity: 'worker2' }] });
+
+    await service.monitorTaskQueues();
+
+    expect(service['activeWorkers'].has('worker2')).toBe(true);
+  });
+
+  it('should handle multiple task queues', async () => {
+    const mockWorker1 = {
+      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+      shutdown: jest.fn(),
+      options: { identity: 'worker1' },
+    }
+    const mockWorker2 = {
+      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+      shutdown: jest.fn(),
+      options: { identity: 'worker2' },
+    }
+    service['taskQueuesToMonitor'] = [
+      { queueName: 'queue1', workerId: 'worker1' },
+      { queueName: 'queue2', workerId: 'worker2' },
+    ];
+    service['activeWorkers'].set('worker1',  mockWorker1 as any);
+    service['activeWorkers'].set('worker2', mockWorker2 as any);
+
+    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+      .mockImplementation(({ taskQueue }) => {
+        if (taskQueue.name === 'queue1') return Promise.resolve({ pollers: [] });
+        return Promise.resolve({ pollers: [{ identity: 'worker2' }] });
+      });
+
+    await service.monitorTaskQueues();
+    expect(mockWorker1.shutdown).toHaveBeenCalled();
+    expect(service['activeWorkers'].has('worker1')).toBe(false);
+    expect(service['activeWorkers'].has('worker2')).toBe(true);
+  });
+});
+
+
 });
