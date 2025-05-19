@@ -37,7 +37,7 @@ export class WorkerOptionsService {
     private readonly  redismeorycheck: RedisMemoryCheckActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
-    this.jobTaskActivityConcurrency = this.configService.get<number>('worker.jobTaskActivityConcurrency') || 1;
+    this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
     Logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
   }
 
@@ -63,7 +63,6 @@ export class WorkerOptionsService {
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
             listPath: this.listPathActivityService.listPath.bind(this.listPathActivityService),
             validate: this.validateConnectionService.validate.bind(this.validateConnectionService),
-            fetchTasks: this.discoveryActivities.fetchTasks.bind(this.discoveryActivities),
             publishTask: this.discoveryActivities.publishTask.bind(this.discoveryActivities),
             discoveryStatusUpdate: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
             discoveryProcess: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
@@ -75,8 +74,6 @@ export class WorkerOptionsService {
             setJobState: this.commonActivityService.setJobState.bind(this.commonActivityService),
             scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
             publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
-            fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
-            fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
             updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
             updateCutOverStatus: this.migrationTaskService.updateCutOverStatus.bind(this.migrationTaskService),
             updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
@@ -94,7 +91,6 @@ export class WorkerOptionsService {
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
-          fetchTasks: this.discoveryActivities.fetchTasks.bind(this.discoveryActivities),
           publishTask: this.discoveryActivities.publishTask.bind(this.discoveryActivities),
           discoveryStatusUpdate: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
           discoveryProcess: this.discoveryActivities.discoveryStatusUpdate.bind(this.discoveryActivities),
@@ -104,8 +100,6 @@ export class WorkerOptionsService {
           cleanup: this.setupActivityService.cleanup.bind(this.setupActivityService),
           scanPath: this.migrationScanService.scanPath.bind(this.migrationScanService),
           publishScanTask: this.migrationTaskService.publishScanTask.bind(this.migrationTaskService),
-          fetchScanTask: this.migrationTaskService.fetchScanTask.bind(this.migrationTaskService),
-          fetchMigrationTask: this.migrationTaskService.fetchMigrationTask.bind(this.migrationTaskService),
           updateStatus: this.commonActivityService.updateStatus.bind(this.commonActivityService),
           updateLastEntry: this.commonActivityService.updateLastEntry.bind(this.commonActivityService),
           syncTask: this.migrationSyncService.syncTask.bind(this.migrationSyncService),

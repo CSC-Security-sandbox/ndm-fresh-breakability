@@ -21,7 +21,7 @@ export class ValidateWorkingDirectoryActivity {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
-    this.workerConfigUrl = this.configService.get('worker.workerConfigUrl');
+    this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {

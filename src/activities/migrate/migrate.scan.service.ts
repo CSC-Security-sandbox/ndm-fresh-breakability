@@ -15,9 +15,9 @@ import { Context } from '@temporalio/activity';
 @Injectable()
 export class MigrationScanService {
     readonly workerId: string;
-    readonly maxRetryCount: number = 3;
-    readonly maxMigrationCommand : number = 1000;
-    readonly maxConcurrency: number = 10;
+    readonly maxRetryCount: number ;
+    readonly maxMigrationCommand : number;
+    readonly maxConcurrency: number;
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly logger: Logger,
@@ -25,9 +25,9 @@ export class MigrationScanService {
         private readonly commonService: CommonActivityService
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount');
-        this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand');
-        this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 100;   
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+        this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
+        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;   
     }
 
     async getDirectoryContents(directoryPath: string): Promise<string[]> {

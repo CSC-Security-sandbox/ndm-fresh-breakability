@@ -32,10 +32,10 @@ describe('MigrationTaskService', () => {
       get: jest.fn((key) => {
         const map = {
           'worker.workerId': 'worker-123',
-          'worker.workerJobServiceUrl': 'http://job-service',
-          'worker.workerReportServiceUrl': 'http://report-service',
+          'worker.connection.workerJobServiceUrl': 'http://job-service',
+          'worker.connection.workerReportServiceUrl': 'http://report-service',
           'worker.fetchTaskBatchMigration': 1,
-          'worker.scanTaskDirBatch': 2,
+          'worker.maxScanCommand': 2,
         };
         return map[key];
       }),
@@ -74,38 +74,6 @@ describe('MigrationTaskService', () => {
       redisService.getJobContext.mockRejectedValue(new Error('Redis error'));
       const result = await service.publishScanTask({ jobRunId: 'job-123' });
       expect(result.status).toBe('error');
-    });
-  });
-
-  describe('fetchScanTask', () => {
-    it('should fetch scan tasks successfully', async () => {
-      redisService.getJobContext.mockResolvedValue(mockJobContext);
-      mockJobContext.groupReadTasks.mockResolvedValue([{ id: 1 }, { id: 2 }]);
-
-      const result = await service.fetchScanTask({ jobRunId: 'job-123' });
-      expect(result.tasks.length).toBe(2);
-    });
-
-    it('should handle error during fetch scan task', async () => {
-      redisService.getJobContext.mockRejectedValue(new Error('Redis error'));
-      const result = await service.fetchScanTask({ jobRunId: 'job-123' });
-      expect(result.tasks).toEqual([]);
-    });
-  });
-
-  describe('fetchMigrationTask', () => {
-    it('should fetch migration tasks successfully', async () => {
-      redisService.getJobContext.mockResolvedValue(mockJobContext);
-      mockJobContext.groupReadMigrationTask.mockResolvedValue([{ id: 1 }]);
-
-      const result = await service.fetchMigrationTask({ jobRunId: 'job-123' });
-      expect(result.tasks.length).toBe(1);
-    });
-
-    it('should handle error during fetch migration task', async () => {
-      redisService.getJobContext.mockRejectedValue(new Error('Redis error'));
-      const result = await service.fetchMigrationTask({ jobRunId: 'job-123' });
-      expect(result.tasks).toEqual([]);
     });
   });
 

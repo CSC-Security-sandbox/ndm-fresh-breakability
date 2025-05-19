@@ -26,7 +26,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
             return 'worker-1';
           case 'worker.baseWorkingPath':
             return '/base/path';
-          case 'worker.workerConfigUrl':
+          case 'worker.connection.workerConfigUrl':
             return 'http://config.url';
           default:
             return null;

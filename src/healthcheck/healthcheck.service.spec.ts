@@ -35,7 +35,7 @@ describe('HealthcheckService', () => {
     get: jest.fn((key: string) => {
       if (key === 'worker.healthCheckInterval') return healthCheckInterval;
       if (key === 'worker.workerId') return workerId;
-      if (key === 'worker.workerJobServiceUrl') return 'https://localhost:4000';
+      if (key === 'worker.connection.workerJobServiceUrl') return 'https://localhost:4000';
       return null;
     }),
   };

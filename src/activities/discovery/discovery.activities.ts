@@ -14,6 +14,7 @@ import { buildTask, generateDummyFileEntry } from '../utils/utils';
 export class DiscoveryActivity {
   readonly workerId: string;
   readonly reportServiceUrl: string;
+  readonly directoryBatchSize: number;
 
   readonly tokenRequest: string
   constructor(
@@ -24,42 +25,28 @@ export class DiscoveryActivity {
     private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
+    this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
+    this.directoryBatchSize = this.configService.get('worker.maxScanCommand') || 500;
   }
   
   async getWorkerId(): Promise<string> {
     return await this.workerId;
   }
 
-  async fetchTasks(traceId: string): Promise<any> {
-    try {
-      const batchSize = 10;
-      const jobContext = await this.redisService.getJobContext(traceId);
-      const tasks = await jobContext.groupReadTasks(this.workerId, batchSize, GroupReaderType.WORKER);
-      const streamMessages = [];
-      for await (const task of tasks) streamMessages.push(task);
-      this.logger.log(`[${traceId}] Fetched ${streamMessages.length} tasks.`);
-      return streamMessages;
-    } catch (error) {
-      this.logger.error(`[${traceId}] Failed to fetch the task: ${error}`);
-      return [];
-    }
-  }
-
+ 
   async publishTask(traceId: string): Promise<any> {
     this.logger.log(`[${traceId}] Starting publishTask`);
     try {
       const jobContext = await this.redisService.getJobContext(traceId);
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
       const jobState = await this.commonService.getJobState(traceId);
-      const directoryBatchSize = 500;
       let commandsBatch: Command[] = [];
-      for await (const directory of jobContext.readDirs(this.workerId, directoryBatchSize, GroupReaderType.WORKER)) {
+      for await (const directory of jobContext.readDirs(this.workerId, this.directoryBatchSize, GroupReaderType.WORKER)) {
         const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
         const command = new Command(directory.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
         // this.logger.log(`[${traceId}] Task created for publishing.`)
-        if (commandsBatch && commandsBatch.length >= directoryBatchSize) {
+        if (commandsBatch && commandsBatch.length >= this.directoryBatchSize) {
           const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
           const id = await jobContext.appendToTaskList(task);
           jobContext.tasksInfo.lastId = id;

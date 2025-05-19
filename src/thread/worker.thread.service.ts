@@ -16,21 +16,36 @@ export class WorkerThreadService{
     private availableWorkers: Worker[] = [];
     private workerDetails: Map<number, WorkerDetails> = new Map<number, WorkerDetails>();
 
-    private sizes = [
-        {name:"1kb", maxFetch: 1500}, 
-        {name: "1mb", maxFetch: 1000}, 
-        {name: "10mb", maxFetch: 100}, 
-        {name: "100mb", maxFetch: 10}, 
-        {name: "1gb", maxFetch: 1}
-    ]
+    private sizes = []
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly logger: Logger,
     ){   
-        this.totalThreads = this.configService.get('worker.threadCount')||5;
+        const defaultSizes = [
+                        { name: "1kb", maxFetch: 1500 },
+                        { name: "1mb", maxFetch: 1000 },
+                        { name: "10mb", maxFetch: 100 },
+                        { name: "100mb", maxFetch: 10 },
+                        { name: "1gb", maxFetch: 1 }
+                    ];
+        this.totalThreads = this.configService.get('worker.thread.threadCount') || 5;
+        try {
+            const configValue = this.configService.get('worker.thread.threadBand');
+            const parsedSizes = configValue.split(';').map((size) => {
+                const [name, maxFetchStr] = size.split(',');
+                const maxFetch = parseInt(maxFetchStr, 10);
+                if (!name || isNaN(maxFetch)) throw new Error('Invalid size format');
+                return { name, maxFetch };
+            });
+            this.logger.log(`Thread Band Sizes: ${JSON.stringify(parsedSizes)}`);
+            this.sizes = parsedSizes;
+        } catch (error) {
+            this.sizes = defaultSizes;
+        }
         this.assignThreads()
         this.initWorkers(this.totalThreads);    
+
     }
 
     assignThreads = () => {

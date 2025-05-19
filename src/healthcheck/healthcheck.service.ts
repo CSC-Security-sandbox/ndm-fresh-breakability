@@ -35,7 +35,7 @@ export class HealthcheckService implements OnModuleInit {
     );
     this.workerId = this.configService.get<string>('worker.workerId');
     this.workerJobServiceUrl = this.configService.get<string>(
-      'worker.workerJobServiceUrl',
+      'worker.connection.workerJobServiceUrl',
     );
     this.memoryLimitGb = this.getSafeMemoryLimit();
     this.setupDiskLimit();

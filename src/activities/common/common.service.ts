@@ -27,9 +27,9 @@ export class CommonActivityService{
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
-    this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
-    this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
-    this.migrationTaskLimit = this.configService.get('worker.migrationTaskLimit');
+    this.workerJobServiceUrl = this.configService.get('worker.connection.workerJobServiceUrl');
+    this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
+    this.migrationTaskLimit = this.configService.get('worker.migrationTaskStreamLimit');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
   }
 

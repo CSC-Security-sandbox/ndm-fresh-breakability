@@ -14,8 +14,7 @@ import { Context } from '@temporalio/activity';
 export class DiscoveryScanActivity {
 
     readonly workerId: string;
-    readonly maxRetryCount: number = 3;
-    readonly bathSize: number = 1000;
+    readonly maxRetryCount: number;
     readonly maxConcurrency :number 
     constructor(
         private readonly logger: Logger,
@@ -25,7 +24,7 @@ export class DiscoveryScanActivity {
     ) {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.workerId = this.configService.get<string>('worker.workerId');
-        this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 250; 
+        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 250; 
     }
 
     async getDirectoryContents(directoryPath: string): Promise<fs.Dirent[]> {
@@ -225,13 +224,11 @@ export class DiscoveryScanActivity {
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;
                     scanDirOutput.directory++;
-                    this.logger.log(`[${jobContext.jobRunId}] *************** Appending to dir list ***************`);
                 }
                 else scanDirOutput.files++;
 
                 jobContext.dirsInfo.lastId = await jobContext.appendToFileList(fileInfo);
                 jobContext.dirsInfo.numMessages++;
-                this.logger.log(`[${jobContext.jobRunId}] *************** Appending to file list ***************`);
             }
 
         } catch (error) {

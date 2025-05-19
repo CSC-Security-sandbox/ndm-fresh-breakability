@@ -18,11 +18,9 @@ import { Context } from '@temporalio/activity';
 @Injectable()
 export class MigrationSyncService {
   readonly workerId: string;
-  readonly fetchTaskBatch: number;
-  readonly pushTaskDirSize: number;
   readonly CHUNK_SIZE: number;
-  readonly maxRetryCount: number = 3;
-  readonly maxConcurrency: number = 10;
+  readonly maxRetryCount: number;
+  readonly maxConcurrency: number;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -34,10 +32,8 @@ export class MigrationSyncService {
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-    this.maxConcurrency = this.configService.get('worker.maxConcurrency') || 100;
-    this.fetchTaskBatch = 50;
-    this.pushTaskDirSize = 500;
-    this.CHUNK_SIZE = 1024 * 1024;
+    this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+    this.CHUNK_SIZE = this.configService.get('worker.migrationChunkSize') || 1024 * 1024;
   }
 
   async calculateChecksum(filePath: string): Promise<string> {

@@ -61,30 +61,7 @@ describe('DiscoveryActivity', () => {
     });
   });
 
-  describe('fetchTasks', () => {
-    it('should fetch tasks and log count', async () => {
-      const tasks = await service.fetchTasks(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Fetched 1 tasks.`);
-      expect(tasks).toEqual([{ id: 't1' }]);
-    });
 
-    it('should return empty array on getJobContext error', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('ctx fail'));
-      const tasks = await service.fetchTasks(traceId);
-      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to fetch the task: Error: ctx fail`);
-      expect(tasks).toEqual([]);
-    });
-
-    it('should return empty array on groupReadTasks error', async () => {
-      const fakeCtx: any = createJobContext();
-      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeCtx);
-      fakeCtx.groupReadTasks = jest.fn().mockRejectedValueOnce(new Error('group fail'));
-      const tasks = await service.fetchTasks(traceId);
-      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Failed to fetch the task: Error: group fail`);
-      expect(tasks).toEqual([]);
-    });
-  });
 
   describe('publishTask', () => {
     it('should handle errors and return error response', async () => {

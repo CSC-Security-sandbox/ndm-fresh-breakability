@@ -61,7 +61,7 @@ describe('WorkManagerService', () => {
           useValue: {
             get: jest.fn().mockImplementation((s: string) => {
               if (s === 'worker.workerStartupTimeout') return 10;
-              if (s === 'worker.workerConfigUrl') return 'http://localhost/config';
+              if (s === 'worker.connection.workerConfigUrl') return 'http://localhost/config';
               if (s === 'worker.workerId') return 'test-worker';
               if (s === 'keycloak') {
                 return {

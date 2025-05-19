@@ -55,9 +55,9 @@ describe('CommonActivityService', () => {
       get: jest.fn((key: string) => {
         const map = {
           'worker.workerId': workerId,
-          'worker.workerJobServiceUrl': 'http://job',
-          'worker.workerReportServiceUrl': 'http://report',
-          'worker.migrationTaskLimit': 5,
+          'worker.connection.workerJobServiceUrl': 'http://job',
+          'worker.connection.workerReportServiceUrl': 'http://report',
+          'worker.migrationTaskStreamLimit': 5,
         };
         return map[key];
       }),

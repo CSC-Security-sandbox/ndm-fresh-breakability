@@ -30,7 +30,7 @@ describe('SetupActivityService', () => {
         switch (key) {
           case 'worker.workerId': return 'worker-1';
           case 'worker.baseWorkingPath': return '/mnt/work';
-          case 'worker.workerConfigUrl': return 'http://config-service';
+          case 'worker.connection.workerConfigUrl': return 'http://config-service';
           default: return null;
         }
       }),

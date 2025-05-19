@@ -37,7 +37,7 @@ describe('DiscoveryScanActivity', () => {
       switch (key) {
         case 'worker.maxRetryCount': return 2;
         case 'worker.workerId': return 'worker-1';
-        case 'worker.maxConcurrency': return 1;
+        case 'worker.maxCommandConcurrency': return 1;
         default: return null;
       }
     });

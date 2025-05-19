@@ -1,4 +1,3 @@
-import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, GroupReaderType, JobContext, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -7,13 +6,12 @@ import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import { buildTask } from '../utils/utils';
-import { FetchMigrationTaskInput, FetchScanTaskInput, FetchScanTaskOutPut, PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusOutput } from './migrate.type';
+import { PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusOutput } from './migrate.type';
 
 @Injectable()
 export class MigrationTaskService{
 
   readonly workerId: string;
-  readonly fetchTaskBatch: number;
   readonly pushTaskDirSize: number;
   readonly workerJobServiceUrl: string;
   readonly reportServiceUrl: string;
@@ -22,14 +20,12 @@ export class MigrationTaskService{
       @Inject(ConfigService) private readonly configService: ConfigService,
       private readonly logger: Logger,
       private readonly redisService: RedisService,
-      private readonly httpService: HttpService,
       private readonly authService: AuthService,
   ) {
       this.workerId = this.configService.get('worker.workerId');
-      this.workerJobServiceUrl = this.configService.get('worker.workerJobServiceUrl');
-      this.reportServiceUrl = this.configService.get('worker.workerReportServiceUrl');
-      this.fetchTaskBatch =  this.configService.get('worker.fetchTaskBatchMigration') || 1;;
-      this.pushTaskDirSize = this.configService.get('worker.scanTaskDirBatch') || 500;
+      this.workerJobServiceUrl = this.configService.get('worker.connection.workerJobServiceUrl');
+      this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
+      this.pushTaskDirSize = this.configService.get('worker.maxScanCommand') || 500;
   }
 
   async publishScanTask({ jobRunId }: PublishScanTaskInput): Promise<PublishScanTaskOutput> {
@@ -63,32 +59,6 @@ export class MigrationTaskService{
         status: 'error',
         message: `Failed to publish task for Job run id ${jobRunId} : ${error}`,
     };
-    }
-  }
-
-  async fetchScanTask({ jobRunId }: FetchScanTaskInput): Promise<FetchScanTaskOutPut> {
-    const output: FetchScanTaskOutPut = { tasks: [] };
-    try {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadTasks(this.workerId, this.fetchTaskBatch, GroupReaderType.WORKER);
-      for await (const task of tasks) output.tasks.push(task);
-      return output;
-    } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to fetch the task: ${error}`);
-      return output;
-    }
-  }
-
-  async fetchMigrationTask({ jobRunId }: FetchMigrationTaskInput): Promise<FetchScanTaskOutPut> {
-    const output: FetchScanTaskOutPut = { tasks: [] };
-    try {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
-      const tasks = await jobContext.groupReadMigrationTask(this.workerId, this.fetchTaskBatch, GroupReaderType.WORKER);
-      for await (const task of tasks) output.tasks.push(task);
-      return output;
-    } catch (error) {
-      this.logger.error(`[${jobRunId}] Failed to fetch the task: ${error}`);
-      return output;
     }
   }
 

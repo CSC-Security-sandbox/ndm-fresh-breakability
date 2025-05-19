@@ -31,7 +31,7 @@ export class WorkManagerService {
         @Inject(AuthService) private readonly authService: AuthService,
     ) {
 
-        this.workerConfigUrl = `${this.configService.get('worker.workerConfigUrl')}`;
+        this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout');
     }
