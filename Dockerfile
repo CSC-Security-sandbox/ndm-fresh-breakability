@@ -1,4 +1,4 @@
-FROM datamigratedev.azurecr.io/datamigrator-ui:0.0.3 AS builder
+FROM datamigratedev.azurecr.io/datamigrator-ui:0.0.4 AS builder
 
 WORKDIR /app
 
