@@ -87,7 +87,9 @@ initdbScripts:
       #!/bin/bash
       echo "Loading custom providers from /custom/providers..."
       cp -R /custom/providers/* /opt/bitnami/keycloak/providers
-      echo "Successfully loaded custom providers"
+      echo "Loading custom themes from /custom/themes..."
+      cp -R /custom/themes/* /opt/bitnami/keycloak/themes
+      echo "Successfully loaded custom themes and providers"
     
 ingress:
   enabled: true
@@ -110,7 +112,7 @@ ingress:
 
 extraVolumeMounts: |
     - name: themes
-      mountPath: /opt/bitnami/keycloak/themes
+      mountPath: /custom/themes
     - name: providers
       mountPath: /custom/providers
 
@@ -150,8 +152,6 @@ extraEnvVars:
       value: 'keycloak'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded
-    # - name: JAVA_OPTS
-    #   value: "-XX:UseSVE=0"
 
 podSecurityContext:
   fsGroup: {{ vm_gid }}
