@@ -34,6 +34,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { PreCheckService } from "./precheck.service";
 
 @Module({
   imports: [
@@ -62,7 +63,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
     ]),
     RedisModule,
   ],
-  providers: [JobConfigService, WorkflowService, SendMailService],
+  providers: [JobConfigService, WorkflowService, SendMailService, PreCheckService],
   controllers: [JobConfigController],
 })
 export class JobConfigModule {}

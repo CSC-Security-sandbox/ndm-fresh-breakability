@@ -12,12 +12,14 @@ import { JobConfigBulkCutoverRes, JobConfigBulkMigrateFinalResponse, JobConfigBu
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
+import { PreCheckService } from './precheck.service';
 
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobConfigController {
   constructor(
     private readonly jobConfigService: JobConfigService,
+    private readonly preCheckService: PreCheckService,
   ) {}
 
   @ApiOperation({ summary: 'Create a new discovery job' })
@@ -89,7 +91,7 @@ export class JobConfigController {
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
   @Post('/precheck')
   async precheck(@Body() precheckData: JobConfigPrecheck) { 
-     return  await this.jobConfigService.initiatePreCheck(precheckData);
+    return  await this.preCheckService.initiatePreCheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })

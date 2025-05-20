@@ -80,6 +80,7 @@ export interface workerWithStatus {
 }
 export interface PreChecks {
   pathId: string;
+  discoveredSize?: number;
   pathName: string;
   serverId: string
   destinations: {

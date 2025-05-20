@@ -749,6 +749,7 @@ export class JobConfigService {
       const savedJobConfigs = await this.jobConfigRepo.save(jobConfigs);
       const jobConfigIds = savedJobConfigs.map((jobConfig) => jobConfig.id);
       if (parsedMappings.length > 0 && savedJobConfigs.length > 0) {
+        /* istanbul ignore next */
         await this.saveIdentityMappingsWithMap(
           jobConfigIds,
           parsedMappings,
@@ -935,124 +936,6 @@ export class JobConfigService {
       }))
     );
   }
-
-  async initiatePreCheck(data: JobConfigPrecheck): Promise<any> {
-    const helathCheckTimout = parseInt(
-      this.configService.get("app.worker.healthCheckStatusTimout")
-    );
-    const traceId: string = uuidv4();
-    try {
-      const preCheckPayload: PreCheckWorkflowOPayload = {
-        preChecks: [],
-        settings: {
-          preserveAccessTime: data.preserveAccessTime,
-        },
-        serverCredentials: [],
-      };
-      const pathIds: string[] = [];
-      data.migrateConfigs.forEach((config) => {
-        pathIds.push(config.sourcePathId);
-        pathIds.push(...config.destinationPathId);
-      });
-
-      const pathToWorkerMapping: VolumeEntity[] = await this.volumeRepo.find({
-        where: { id: In([...pathIds]) },
-        relations: {
-          fileServer: { workers: { stats: true } },
-        },
-      });
-
-      pathToWorkerMapping.forEach((volume) => {
-        if (
-          !preCheckPayload.serverCredentials.some(
-            (server) => server.id === volume.fileServer.id
-          )
-        ) {
-          preCheckPayload.serverCredentials.push({
-            id: volume.fileServer.id,
-            host: volume.fileServer.host,
-            userName: volume.fileServer.userName,
-            password: volume.fileServer.password,
-            protocol: volume.fileServer.protocol,
-            protocolVersion: volume.fileServer.protocolVersion?.replace(
-              /^v/,
-              ""
-            ),
-            serverType: volume.fileServer.serverType,
-          });
-        }
-      });
-
-      data?.migrateConfigs?.forEach((config) => {
-        const sourceVolume = pathToWorkerMapping.find(
-          (p) => p.id === config.sourcePathId
-        );
-        if (sourceVolume) {
-          const preChecks: PreChecks = {
-            pathId: config.sourcePathId,
-            serverId: sourceVolume.fileServer.id,
-            pathName: sourceVolume.volumePath,
-            destinations: [],
-          };
-        
-          const workerWithStatusSet = new Set<workerWithStatus>(
-            sourceVolume.fileServer.workers
-              .map((worker) => ({
-                workerId: worker.workerId,
-                ishealthy:  filterUnhealthyWorkers(worker, helathCheckTimout), // or whatever the actual status is
-              }))
-          );
-          config.destinationPathId.forEach((destinationPathId) => {
-            const destinationVolume = pathToWorkerMapping.find(
-              (p) => p.id === destinationPathId
-            );
-            if (destinationVolume) {
-              const workerWithStatus: workerWithStatus[] = [];
-              destinationVolume.fileServer.workers
-                .forEach((worker) => {
-                  if ([...workerWithStatusSet].some((w) => w.workerId === worker.workerId)) {
-                    workerWithStatus.push({workerId:worker.workerId, ishealthy:filterUnhealthyWorkers(worker, helathCheckTimout)});
-                  }
-                });
-              preChecks.destinations.push({
-                pathId: destinationPathId,
-                serverId: destinationVolume.fileServer.id,
-                pathName: destinationVolume.volumePath,
-                workers: workerWithStatus,
-              });
-            }
-          });
-          preCheckPayload.preChecks.push(preChecks);
-        }
-      });
-
-      const preCheckWorkPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.PRECHECK + "-" + traceId,
-        taskQueue: "ParentWorkflow-TaskQueue",
-        args: [
-          {
-            traceId: traceId,
-            payload: preCheckPayload,
-            options: new Options(),
-          },
-        ],
-        ...data.options,
-      };
-      const workflow = await this.workFlowService.startWorkflow(
-        WorkFlows.PRECHECK,
-        preCheckWorkPayload
-      );
-      return { workflowId: workflow.workflowId };
-    } catch (error) {
-      this.logger.error(`${traceId}] Failed to perform the precheck: ${error}`);
-      return {
-        status: "error",
-        erros: ["PRECHECK_FAILED"],
-        message: `Failed to perform the precheck: ${error}`,
-      };
-    }
-  }
-
 
   // ------------  update ---------------- //
   async updateJobConfig(

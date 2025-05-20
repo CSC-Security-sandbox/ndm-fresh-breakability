@@ -16,11 +16,17 @@ import {
 } from "src/constants/enums";
 import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
 import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity";
+import { PreCheckService } from "./precheck.service";
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
   let service: JobConfigService;
+  let preCheckService:PreCheckService
 
+  const mockPreCheckService = {
+    initiatePreCheck: jest.fn(),
+    precheckValidation: jest.fn(),
+  };
   const mockJobConfigService = {
     createBulkDiscovery: jest.fn(),
     createBulkMigrate: jest.fn(),
@@ -47,6 +53,27 @@ describe("JobConfigController", () => {
           provide: JobConfigService,
           useValue: mockJobConfigService,
         },
+        {
+        provide: PreCheckService,
+        useValue: mockPreCheckService,
+      },
+       
+        {
+          provide: "JobConfigRepository",
+          useValue: {},
+        },
+        {
+          provide: "JobRunRepository",
+          useValue: {},
+        },
+        {
+          provide: "InventoryRepository",
+          useValue: {},
+        },
+        {
+          provide: "VolumeRepository",
+          useValue: {},
+        },
       ],
     }).compile();
 
@@ -62,7 +89,6 @@ describe("JobConfigController", () => {
     it("should throw BadRequestException if payload is invalid", async () => {
       const payload = new JobConfigDiscoverBulk();
       payload.sourcePathIds = [];
-
       await expect(controller.createBulkDiscovery(payload)).rejects.toThrow(
         BadRequestException
       );
@@ -240,26 +266,48 @@ describe("JobConfigController", () => {
         });
       });
     });
+    // it("should return the result of precheck validation", async () => {
+    //   const precheckData: JobConfigPrecheck = {
+    //     migrateConfigs: [{ sourcePathId: "123", destinationPathId: ["456"] }],
+    //     preserveAccessTime: true,
+    //     options: {
+    //       workflowExecutionTimeout: "300",
+    //       workflowTaskTimeout: "60",
+    //       workflowRunTimeout: "600",
+    //       startDelay: "10",
+    //     }, // Add appropriate options here based on the JobConfigPrecheck definition
+    //   };
+    //   const expectedResult: any = { workflowId: "133" };
+
+    //   mockJobConfigService.initiatePreCheck.mockResolvedValue(expectedResult);
+
+    //   const result = await controller.precheck(precheckData);
+    //    console.log("result", result);
+    //   expect(result).toEqual(expectedResult);
+    //   expect(preCheckService.initiatePreCheck).toHaveBeenCalledWith(precheckData);
+    // });
     it("should return the result of precheck validation", async () => {
-      const precheckData: JobConfigPrecheck = {
-        migrateConfigs: [{ sourcePathId: "123", destinationPathId: ["456"] }],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        }, // Add appropriate options here based on the JobConfigPrecheck definition
-      };
-      const expectedResult: any = { workflowId: "133" };
+    const precheckData: JobConfigPrecheck = {
+      migrateConfigs: [{ sourcePathId: "123", destinationPathId: ["456"] }],
+      preserveAccessTime: true,
+      options: {
+        workflowExecutionTimeout: "300",
+        workflowTaskTimeout: "60",
+        workflowRunTimeout: "600",
+        startDelay: "10",
+      },
+    };
 
-      mockJobConfigService.initiatePreCheck.mockResolvedValue(expectedResult);
+    const expectedResult = { workflowId: "133" };
 
-      const result = await controller.precheck(precheckData);
+    mockPreCheckService.initiatePreCheck.mockResolvedValue(expectedResult);
 
-      expect(result).toEqual(expectedResult);
-      expect(service.initiatePreCheck).toHaveBeenCalledWith(precheckData);
-    });
+    const result = await controller.precheck(precheckData);
+
+    expect(result).toEqual(expectedResult);
+    expect(mockPreCheckService.initiatePreCheck).toHaveBeenCalledWith(precheckData);
+});
+
     describe("checkCommonWorkersAndValidatePaths", () => {
       it("should return the result of precheck validation", async () => {
         const precheckData: MigrateConfig[] = [

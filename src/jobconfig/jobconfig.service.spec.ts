@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   HttpException,
+  HttpStatus,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -815,6 +816,51 @@ describe("JobConfigService", () => {
       expect.any(String)
     );
   });
+
+  it("should throw an error with error.message when present", async () => {
+  jest.spyOn(jobConfigRepo, "find").mockImplementation(() => {
+    throw new Error("Failed to fetch speed test job runs");
+  });
+  const loggerSpy = jest.spyOn(service["logger"], "error");
+
+  await expect(service.getAllSpeedTestJobRuns()).rejects.toThrow(
+    new HttpException(
+      {
+        status: "failed",
+        message: "Failed to fetch speed test job runs",
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR
+    )
+  );
+
+  expect(loggerSpy).toHaveBeenCalledWith(
+    "Failed to fetch speed test job runs",
+    expect.anything()
+  );
+});
+  it("should fallback to default message if error.message is falsy", async () => {
+  
+  const error = { stack: "stack trace" } as any;
+  jest.spyOn(jobConfigRepo, "find").mockImplementation(() => {
+    throw error;
+  });
+  const loggerSpy = jest.spyOn(service["logger"], "error");
+
+  await expect(service.getAllSpeedTestJobRuns()).rejects.toThrow(
+    new HttpException(
+      {
+        status: "failed",
+        message: "Failed to fetch speed test job runs",
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR
+    )
+  );
+
+  expect(loggerSpy).toHaveBeenCalledWith(
+    "Failed to fetch speed test job runs",
+    error.stack
+  );
+});
 
   it("should create bulk discovery job configs successfully", async () => {
     const mockBulkDiscovery = {
@@ -2170,49 +2216,49 @@ describe("JobConfigService", () => {
       });
     });
 
-    it("should handle workflow service errors during precheck", async () => {
-      const mockData = {
-        migrateConfigs: [
-          { sourcePathId: "src1", destinationPathId: ["dest1"] },
-        ],
-        preserveAccessTime: true,
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
+    // it("should handle workflow service errors during precheck", async () => {
+    //   const mockData = {
+    //     migrateConfigs: [
+    //       { sourcePathId: "src1", destinationPathId: ["dest1"] },
+    //     ],
+    //     preserveAccessTime: true,
+    //     options: {
+    //       workflowExecutionTimeout: "300",
+    //       workflowTaskTimeout: "60",
+    //       workflowRunTimeout: "600",
+    //       startDelay: "10",
+    //     },
+    //   };
 
-      const mockVolumes = [
-        {
-          id: "src1",
-          fileServer: {
-            id: "fs1",
-            workers: [{ workerId: "w1" }],
-            protocolVersion: "v3",
-          },
-        },
-        {
-          id: "dest1",
-          fileServer: {
-            id: "fs2",
-            workers: [{ workerId: "w1" }],
-            protocolVersion: "v3",
-          },
-        },
-      ];
+    //   const mockVolumes = [
+    //     {
+    //       id: "src1",
+    //       fileServer: {
+    //         id: "fs1",
+    //         workers: [{ workerId: "w1" }],
+    //         protocolVersion: "v3",
+    //       },
+    //     },
+    //     {
+    //       id: "dest1",
+    //       fileServer: {
+    //         id: "fs2",
+    //         workers: [{ workerId: "w1" }],
+    //         protocolVersion: "v3",
+    //       },
+    //     },
+    //   ];
 
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockRejectedValue(new Error("Workflow error"));
+    //   jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
+    //   jest
+    //     .spyOn(workFlowService, "startWorkflow")
+    //     .mockRejectedValue(new Error("Workflow error"));
 
-      const result = await service.initiatePreCheck(mockData);
+    //   const result = await service.initiatePreCheck(mockData);
 
-      expect(result.status).toBe("error");
-      expect(result.erros).toContain("PRECHECK_FAILED");
-    });
+    //   expect(result.status).toBe("error");
+    //   expect(result.erros).toContain("PRECHECK_FAILED");
+    // });
 
     it("should handle source path not found", async () => {
       const mockPrecheckData = [
@@ -3406,6 +3452,40 @@ describe("JobConfigService", () => {
   });
 
   describe("createBulkMigrate", () => {
+//     it("should return warnings for inactive job configs", async () => {
+//   const bulkMigrate: BulkMigrateJobConfig = {
+//     migrateConfigs: [
+//       { sourcePathId: "src1", destinationPathId: ["dest1"] },
+//     ],
+//   } as any;
+
+//   jobConfigRepo.find = jest.fn().mockResolvedValue([
+//     {
+//       id: "job1",
+//       sourcePathId: "src1",
+//       targetPathId: "dest1",
+//       scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+//       status: JobStatus.InActive,
+//     },
+//   ]);
+
+//   volumeRepo.findOne = jest.fn().mockResolvedValueOnce({ volumePath: "/src/path" });
+//   volumeRepo.findOne = jest.fn().mockResolvedValueOnce({ volumePath: "/dest/path" });
+
+//   const result = await service.createBulkMigrate(bulkMigrate);
+
+//   expect(result.warnings).toEqual([
+//     {
+//       sourcePathId: "src1",
+//       targetPathId: "dest1",
+//       sourcePath: "/dest/path",
+//       targetPath: undefined,
+//       status: JobStatus.InActive,
+//       message: expect.stringContaining("Inactive job found"),
+//     },
+//   ]);
+// });
+
     it("should return an empty array if migrateConfigs is missing", async () => {
       const bulkMigrate: BulkMigrateJobConfig = {
         migrateConfigs: undefined,
@@ -3682,418 +3762,6 @@ describe("JobConfigService", () => {
     });
   });
 
-  describe("initiatePreCheck", () => {
-    it("should initiate a pre-check successfully", async () => {
-      const preCheckData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          { sourcePathId: "path1", destinationPathId: ["path2"] },
-        ],
-      };
-
-      const mockVolume = [
-        {
-          id: "path1",
-          fileServer: {
-            id: "server1",
-            workers: [
-              {
-                workerId: "worker1",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(),
-                },
-              },
-              {
-                workerId: "worker2",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(),
-                },
-              },
-              {
-                workerId: "worker3",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(new Date().getTime() - 1000 * 65),
-                },
-              },
-            ],
-            protocolVersion: "v3",
-          },
-        },
-        {
-          id: "path2",
-          fileServer: {
-            id: "server2",
-            workers: [
-              {
-                workerId: "worker2",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(),
-                },
-              },
-              {
-                workerId: "worker3",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(),
-                },
-              },
-              {
-                workerId: "worker4",
-                stats: {
-                  healthStatus: HealthStatus.Healthy,
-                  updatedAt: new Date(new Date().getTime() - 1000 * 65),
-                },
-              },
-            ],
-            protocolVersion: "v3",
-          },
-        },
-      ];
-      jest.spyOn(configService, "get").mockReturnValue(60);
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolume as any);
-      jest.spyOn(workFlowService, "startWorkflow").mockResolvedValue({
-        workflowId: "mock-workflow-id",
-      } as any);
-      const res = await service.initiatePreCheck(preCheckData as any);
-      const precheckWorkPayload = {
-        args: [
-          {
-            options: {
-              startDelay: "1s",
-              workflowExecutionTimeout: "60s",
-              workflowRunTimeout: "30s",
-              workflowTaskTimeout: "30s",
-            },
-            payload: {
-              preChecks: [
-                {
-                  destinations: [
-                    {
-                      pathId: "path2",
-                      pathName: undefined,
-                      serverId: "server2",
-                      workers: ["worker2"],
-                    },
-                  ],
-                  pathId: "path1",
-                  pathName: undefined,
-                  serverId: "server1",
-                },
-              ],
-              serverCredentials: [
-                {
-                  host: undefined,
-                  id: "server1",
-                  password: undefined,
-                  protocol: undefined,
-                  protocolVersion: "3",
-                  serverType: undefined,
-                  userName: undefined,
-                },
-                {
-                  host: undefined,
-                  id: "server2",
-                  password: undefined,
-                  protocol: undefined,
-                  protocolVersion: "3",
-                  serverType: undefined,
-                  userName: undefined,
-                },
-              ],
-              settings: { preserveAccessTime: true },
-            },
-            traceId: "f5ad47a2-24a7-4514-9bd3-1984d48bad1e",
-          },
-        ],
-        taskQueue: "ParentWorkflow-TaskQueue",
-        workflowId:
-          "PreCheckValidationWorkflow-f5ad47a2-24a7-4514-9bd3-1984d48bad1e",
-      };
-
-      expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
-        "PreCheckValidationWorkflow",
-        expect.objectContaining({
-          args: expect.arrayContaining([
-            expect.objectContaining({
-              payload: expect.objectContaining({
-                preChecks: expect.arrayContaining([
-                  expect.objectContaining({
-                    destinations: expect.arrayContaining([
-                      expect.objectContaining({
-                        workers: expect.arrayContaining([
-                          expect.objectContaining({ workerId: "worker2" }),
-                        ]),
-                      }),
-                    ]),
-                  }),
-                ]),
-              }),
-            }),
-          ]),
-        })
-      );
-      
-      expect(volumeRepo.find).toHaveBeenCalledWith({
-        where: { id: In(["path1", "path2"]) },
-        relations: {
-          fileServer: { workers: { stats: true } },
-        },
-      });
-      expect(res.workflowId).toEqual("mock-workflow-id");
-    });
-
-    it("should return an error if pre-check fails", async () => {
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockRejectedValue(new Error("Workflow failed"));
-
-      const preCheckData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          { sourcePathId: "path1", destinationPathId: ["path2"] },
-        ],
-      };
-
-      const result = await service.initiatePreCheck(preCheckData as any);
-
-      expect(result.status).toBe("error");
-      expect(result.erros).toContain("PRECHECK_FAILED");
-    });
-
-    it("should handle missing volume mappings", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source1",
-            destinationPathId: ["dest1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
-      jest.spyOn(workFlowService, "startWorkflow").mockResolvedValue({} as any);
-
-      try {
-        const result = await service.initiatePreCheck(mockData);
-      } catch (error) {
-        expect(error).toBeInstanceOf(BadRequestException);
-      }
-    });
-
-    it("should call startWorkflow and return a workflowId", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          { sourcePathId: "source-1", destinationPathId: ["dest-1"] },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([
-        {
-          id: "source-1",
-          fileServer: {
-            id: "server-1",
-            workers: [{ workerId: "worker-1" }],
-            protocolVersion: "v3",
-          },
-        },
-      ] as any);
-
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-
-      const result = await service.initiatePreCheck(mockData);
-      expect(result).toEqual({ workflowId: "mock-workflow-id" });
-    });
-
-    it("should handle unexpected errors gracefully", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest
-        .spyOn(volumeRepo, "find")
-        .mockRejectedValue(new Error("Database Error"));
-
-      const result = await service.initiatePreCheck(mockData);
-
-      expect(result).toEqual({
-        status: "error",
-        erros: ["PRECHECK_FAILED"],
-        message: "Failed to perform the precheck: Error: Database Error",
-      });
-    });
-
-    it("should handle when workflow service fails", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockRejectedValue(new Error("Workflow Error"));
-
-      const result = await service.initiatePreCheck(mockData);
-
-      expect(result).toEqual({
-        status: "error",
-        erros: ["PRECHECK_FAILED"],
-        message: "Failed to perform the precheck: Error: Workflow Error",
-      });
-    });
-
-    it("should handle case where source and destination have no common workers", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      const mockVolumes = [
-        {
-          id: "source-1",
-          fileServer: {
-            id: "server-1",
-            workers: [{ workerId: "worker-1" }],
-            protocolVersion: "v3",
-          },
-        },
-        {
-          id: "dest-1",
-          fileServer: {
-            id: "server-2",
-            workers: [{ workerId: "worker-2" }],
-            protocolVersion: "v3",
-          },
-        },
-      ];
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-
-      const result = await service.initiatePreCheck(mockData);
-      expect(result).toEqual({ workflowId: "mock-workflow-id" });
-    });
-
-    it("should handle case where destination path is not found", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-
-      const mockVolumes = [
-        {
-          id: "source-1",
-          volumePath: "/source/path",
-          fileServer: {
-            id: "server-1",
-            workers: [{ workerId: "worker-1" }],
-            protocolVersion: "v3",
-          },
-        },
-      ];
-
-      jest.spyOn(volumeRepo, "find").mockResolvedValue(mockVolumes as any);
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-
-      const result = await service.initiatePreCheck(mockData);
-
-      expect(result).toEqual({ workflowId: "mock-workflow-id" });
-    });
-
-    it("should handle case when no path is found in volumeRepo", async () => {
-      const mockData = {
-        preserveAccessTime: true,
-        migrateConfigs: [
-          {
-            sourcePathId: "source-1",
-            destinationPathId: ["dest-1"],
-          },
-        ],
-        options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
-        },
-      };
-      jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
-      jest
-        .spyOn(workFlowService, "startWorkflow")
-        .mockResolvedValue({ workflowId: "mock-workflow-id" } as any);
-      const result = await service.initiatePreCheck(mockData);
-      expect(result).toEqual({ workflowId: "mock-workflow-id" });
-      expect(workFlowService.startWorkflow).toHaveBeenCalled();
-    });
-  });
 
   describe("getErrorCounts", () => {
     it("should return 0 if error count is not found", async () => {
