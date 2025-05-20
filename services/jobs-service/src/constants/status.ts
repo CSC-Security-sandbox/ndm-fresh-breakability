@@ -1,0 +1,12 @@
+
+
+export enum TaskType {
+    VALIDATE_CONNECTION = 'VALIDATE_CONNECTION',
+    LIST_PATHS='LIST_PATHS',
+}
+
+export enum ScheduleStatus {
+    SCHEDULING = 'SCHEDULING',
+    SCHEDULED = 'SCHEDULED',
+    READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
+}

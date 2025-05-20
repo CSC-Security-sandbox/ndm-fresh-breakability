@@ -1,0 +1,1 @@
+ALTER TABLE jobrun ADD COLUMN  IF NOT EXISTS paused_reason text;

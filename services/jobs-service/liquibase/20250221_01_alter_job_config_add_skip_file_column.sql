@@ -1,0 +1,1 @@
+ALTER TABLE jobconfig ADD COLUMN IF NOT EXISTS skip_file TEXT NULL;
