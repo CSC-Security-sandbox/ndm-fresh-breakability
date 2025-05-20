@@ -1,0 +1,89 @@
+import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
+import { downloadBulkMigrationCsv } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
+import { Box, Button } from "@mui/material";
+import {
+  SearchWidget,
+  Table,
+  TablePager,
+} from "@netapp/bxp-design-system-react";
+import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
+import { useContext, useEffect } from "react";
+
+export const MountPathConfigurationTable = () => {
+  const {
+    mappingStepForm,
+    setSelectedMountPathsId,
+    selectedMountPathsId,
+    setSelectedReviewIds,
+    mappingStepTableState,
+  } = useContext(BulkMigrateContext);
+
+  const { setFieldValue } = mappingStepForm;
+  const {
+    organizedRows,
+    pagination,
+    columns,
+    sortState,
+    toggleSort,
+    filterState,
+    updateFilterState,
+    updateTextFilter,
+    toggleRowSelection,
+    selectionState,
+  } = mappingStepTableState;
+
+  useEffect(() => {
+    const selectedRows = Object.keys(selectionState.rows).filter(
+      (key) => selectionState.rows[key] === true
+    );
+    setSelectedMountPathsId(selectedRows);
+    setSelectedReviewIds(selectedRows?.map((row, key) => key.toString())); // pre-selecting all the paths that are selected at first step.
+    setFieldValue("selectedMountPathsId", selectedRows);
+  }, [selectionState?.count]);
+
+  const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
+    return !selectedMountPathsId.includes(row.id.toString());
+  };
+
+  const handleTableDownload = () => {
+    downloadBulkMigrationCsv(mappingStepForm);
+  };
+
+  return (
+    <Box>
+      <Box className="flex justify-end my-3">
+        <Box className="flex gap-3 items-center">
+          <SearchWidget setFilter={updateTextFilter} />
+          <Button variant="icon" onClick={handleTableDownload}>
+            <DownloadMonochromeIcon />
+          </Button>
+        </Box>
+      </Box>
+
+      <Table
+        columns={columns}
+        rows={pagination?.pageRows}
+        sortState={sortState}
+        toggleSort={toggleSort}
+        filterState={filterState}
+        updateFilterState={updateFilterState}
+        toggleRowSelection={toggleRowSelection}
+        selectionState={selectionState}
+        isRowDisabled={checkDisabled}
+      />
+      {pagination?.pageRows && (
+        <TablePager
+          pageRows={pagination?.pageRows}
+          pageSize={10}
+          rows={organizedRows}
+          pageIndex={pagination?.pageIndex}
+          pageCount={pagination?.pageCount}
+          gotoPage={pagination?.gotoPage}
+        />
+      )}
+    </Box>
+  );
+};
+
+export default MountPathConfigurationTable;

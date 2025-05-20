@@ -1,0 +1,5 @@
+/* Custom NProgress styles */
+#nprogress .bar {
+  height: 0.6rem;
+  background-color: #B0C1EE
+}
