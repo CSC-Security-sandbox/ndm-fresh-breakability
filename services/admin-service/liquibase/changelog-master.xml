@@ -1,0 +1,20 @@
+<databaseChangeLog
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+   <changeSet id="1001" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_admin_existing_tables.sql"/>
+   </changeSet>
+
+   <changeSet id="1002" author="aniketd">
+      <sqlFile path="liquibase/20250203_01_seed.sql" splitStatements="false"/>
+   </changeSet>
+    <changeSet id="1003" author="avadootnarvekar">
+      <sqlFile path="liquibase/20250302_01_create_global_setting.sql" splitStatements="false"/>
+   </changeSet>
+
+    <changeSet id="1004" author="aniketd">
+      <sqlFile path="liquibase/20250415_01_create_sync_email_table.sql" splitStatements="false"/>
+   </changeSet>
+</databaseChangeLog>
