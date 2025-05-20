@@ -1,0 +1,1 @@
+ALTER TABLE jobrun DROP COLUMN IF EXISTS is_coc_report_ready;
