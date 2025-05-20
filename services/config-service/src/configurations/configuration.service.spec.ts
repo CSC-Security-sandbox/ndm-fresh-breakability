@@ -1,0 +1,1934 @@
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { v4 as uuidv4 } from 'uuid';
+import {
+  ConfigurationType,
+  Protocol,
+  ProtocolVersion,
+  ServerType,
+  WorkFlows,
+} from 'src/constants/enums';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
+import { JobType } from 'src/entities/jobconfig.entity';
+import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { ConfigurationService } from './configuration.service';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigDTO } from './dto/config.dto';
+import { WorkflowExecutionStatus } from 'src/workflow/workflow.types';
+import { ListPathWorkflowStatus } from './configuration.types';
+import { SendMailService } from 'src/util/send-email';
+import { ConfigService } from '@nestjs/config';
+
+const mockConfig = {
+  id: uuidv4(),
+  configName: 'Test Config',
+  configType: 'Type1',
+};
+const mockFileServer = {
+  id: uuidv4(),
+  host: 'localhost',
+  serverType: 'Type1',
+  workers: [],
+  volumes: [],
+};
+const mockWorker = { id: uuidv4(), workerName: 'Worker1' };
+
+const mockConfigRepository = {
+  find: jest.fn(),
+  findOne: jest.fn(),
+  count: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
+  remove: jest.fn(),
+  update: jest.fn(),
+};
+
+const mockProjectRepository = {
+  findOne: jest.fn(),
+};
+
+const mockFileServerRepository = {
+  create: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+  createQueryBuilder: jest.fn().mockReturnValue({
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue([
+      {
+        id: 'fileServer1',
+        protocol: 'NFS',
+        workers: [{ workerId: 'worker1', workerName: 'Worker 1' }],
+        config: {
+          id: 'config1',
+          configName: 'Config 1',
+          status: 'ACTIVE',
+          workingDirectory: { workingDirectory: '/path1' },
+        },
+      },
+      {
+        id: 'fileServer2',
+        protocol: 'SMB',
+        workers: [],
+        config: {
+          id: 'config2',
+          configName: 'Config 2',
+          status: 'DRAFT',
+          workingDirectory: { workingDirectory: '' },
+        },
+      },
+    ]),
+  }),
+};
+
+const mockVolumeRepository = {
+  create: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+  findOne: jest.fn(),
+  find: jest.fn(),
+};
+
+const mockWorkerRepository = {
+  findByIds: jest.fn(),
+  find: jest.fn(),
+};
+
+const mockMappingRepository = {
+  create: jest.fn(),
+  save: jest.fn(),
+  findOne: jest.fn(),
+};
+
+describe('ConfigurationService', () => {
+  let service: ConfigurationService;
+  let configRepository: Repository<ConfigEntity>;
+  let mappingRepository: Repository<FileServerWorkingDirectoryMappingEntity>;
+  let workflowService: WorkflowService;
+  let projectRepository: Repository<ProjectEntity>;
+  let sendMailService: SendMailService;
+  let configService: ConfigService;
+
+  let loggerFactoryMock = {
+    create: jest.fn().mockReturnValue({
+      log: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    }),
+  };
+
+  const startWorkflowMock = jest.fn().mockResolvedValue({ workflowId: '123' });
+  const getWorkFlowResMock = jest.fn().mockResolvedValue({ result: 'success' });
+
+  const mockWorkflowService = {
+    startWorkflow: startWorkflowMock,
+    getWorkFlowRes: getWorkFlowResMock,
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ConfigurationService,
+        SendMailService,
+        ConfigService,
+        {
+          provide: getRepositoryToken(ConfigEntity),
+          useValue: mockConfigRepository,
+        },
+        {
+          provide: getRepositoryToken(ProjectEntity),
+          useValue: mockProjectRepository,
+        },
+        {
+          provide: getRepositoryToken(FileServerEntity),
+          useValue: mockFileServerRepository,
+        },
+        {
+          provide: getRepositoryToken(VolumeEntity),
+          useValue: mockVolumeRepository,
+        },
+        {
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: mockWorkerRepository,
+        },
+        {
+          provide: getRepositoryToken(FileServerWorkingDirectoryMappingEntity),
+          useValue: mockMappingRepository,
+        },
+        { provide: LoggerFactory, useValue: loggerFactoryMock },
+        {
+          provide: WorkflowService,
+          useValue: mockWorkflowService,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<ConfigurationService>(ConfigurationService);
+    workflowService = module.get<WorkflowService>(WorkflowService);
+    configRepository = module.get(getRepositoryToken(ConfigEntity));
+    projectRepository = module.get(getRepositoryToken(ProjectEntity));
+    mappingRepository = module.get(
+      getRepositoryToken(FileServerWorkingDirectoryMappingEntity),
+    );
+    sendMailService = module.get<SendMailService>(SendMailService);
+  });
+
+  describe('getAllConfig', () => {
+    it('should return paginated config results', async () => {
+      mockConfigRepository.find.mockResolvedValue([mockConfig]);
+      mockConfigRepository.count.mockResolvedValue(1);
+
+      const result = await service.getAllConfig({
+        page: '1',
+        limit: '10',
+        sort: 'createdAt',
+        order: 'asc',
+      });
+
+      expect(mockConfigRepository.find).toHaveBeenCalled();
+      expect(result.serverConfig).toEqual([mockConfig]);
+      expect(result.total).toBe(1);
+    });
+
+    it('should return all configs without pagination if page and limit are not provided', async () => {
+      mockConfigRepository.find.mockResolvedValue([mockConfig]);
+      mockConfigRepository.count.mockResolvedValue(1);
+
+      const result = await service.getAllConfig({});
+
+      expect(mockConfigRepository.find).toHaveBeenCalled();
+      expect(result.serverConfig).toEqual([mockConfig]);
+      expect(result.total).toBe(1);
+    });
+
+    it('should handle empty filter with default sort and order', async () => {
+      mockConfigRepository.find.mockResolvedValue([]);
+      mockConfigRepository.count.mockResolvedValue(0);
+
+      const result = await service.getAllConfig({});
+
+      expect(mockConfigRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order: { createdAt: 'ASC' },
+        }),
+      );
+      expect(result).toEqual({ serverConfig: [], total: 0 });
+    });
+
+    it('should handle custom sort and order', async () => {
+      mockConfigRepository.find.mockResolvedValue([mockConfig]);
+      mockConfigRepository.count.mockResolvedValue(1);
+
+      await service.getAllConfig({
+        sort: 'configName',
+        order: 'desc',
+      });
+
+      expect(mockConfigRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order: { configName: 'desc' },
+        }),
+      );
+    });
+  });
+
+  describe('getConfigById', () => {
+    it('should return config when valid ID is passed', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+
+      const result = await service.getConfigById(mockConfig.id);
+
+      expect(result).toEqual(mockConfig);
+    });
+
+    it('should throw BadRequestException if invalid UUID is passed', async () => {
+      await expect(service.getConfigById('invalid-uuid')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException if config is not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+      await expect(service.getConfigById(uuidv4())).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('createConfiguration', () => {
+    it('should create and save a new configuration', async () => {
+      mockConfigRepository.create.mockReturnValue({
+        ...mockConfig,
+        fileServers: [mockFileServer],
+      });
+      mockWorkerRepository.find.mockResolvedValue([mockWorker]);
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true });
+
+      const createConfigDTO = {
+        projectId: '123456',
+        createdBy: '123123',
+        stage: '',
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir',
+        },
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            host: 'localhost',
+            protocolVersion: ProtocolVersion.NFSv3,
+            serverType: ServerType.emc,
+            workers: [mockWorker.id],
+            volumes: [
+              {
+                volumePath: '/new-path',
+                isIncluded: true,
+                createdBy: '1234567',
+              },
+            ],
+            createdBy: '1234567',
+            protocol: Protocol.NFS,
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      const savedConfig = { id: uuidv4(), ...createConfigDTO };
+      mockConfigRepository.save.mockResolvedValue(savedConfig);
+      mockConfigRepository.findOne.mockResolvedValue(savedConfig);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue(undefined);
+
+      const result = await service.createConfiguration(
+        createConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      expect(service.isConfigNameUnique).toHaveBeenCalledWith(
+        createConfigDTO.projectId,
+        createConfigDTO.configName,
+      );
+      expect(result).toEqual(savedConfig);
+      expect(mockConfigRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if project ID is invalid', async () => {
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockRejectedValue(new NotFoundException('Invalid Project ID'));
+      const createConfigDTO = {
+        projectId: '123456',
+        createdBy: '123123',
+        stage: '',
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir',
+        },
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            host: 'localhost',
+            protocolVersion: ProtocolVersion.NFSv3,
+            serverType: ServerType.emc,
+            workers: [mockWorker.id],
+            volumes: [
+              {
+                volumePath: '/new-path',
+                isIncluded: true,
+                createdBy: '1234567',
+              },
+            ],
+            createdBy: '1234567',
+            protocol: Protocol.NFS,
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      await expect(
+        service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name already exists', async () => {
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockRejectedValue(
+          new BadRequestException(
+            'Config name already exists for this project.',
+          ),
+        );
+      const createConfigDTO = {
+        projectId: '123456',
+        createdBy: '123123',
+        stage: '',
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir',
+        },
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            host: 'localhost',
+            protocolVersion: ProtocolVersion.NFSv3,
+            serverType: ServerType.emc,
+            workers: [mockWorker.id],
+            volumes: [
+              {
+                volumePath: '/new-path',
+                isIncluded: true,
+                createdBy: '1234567',
+              },
+            ],
+            createdBy: '1234567',
+            protocol: Protocol.NFS,
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      await expect(
+        service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should create working directory mapping when workingDirectory is provided', async () => {
+      const configId = uuidv4();
+      const workingDirData = {
+        pathName: '/test/path',
+        pathId: '123',
+        workingDirectory: '/working/dir',
+      };
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: '123456',
+        workingDirectory: workingDirData,
+        fileServers: [
+          {
+            host: 'test.com',
+            serverType: ServerType.emc,
+            protocol: Protocol.NFS,
+            userName: 'test',
+            protocolVersion: ProtocolVersion.NFSv3,
+            workers: ['worker1'],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true });
+      mockWorkerRepository.find.mockResolvedValue([{ workerId: 'worker1' }]);
+      mockConfigRepository.create.mockReturnValue({
+        id: configId,
+        ...createConfigDTO,
+      });
+      mockConfigRepository.save.mockResolvedValue({
+        id: configId,
+        ...createConfigDTO,
+      });
+
+      await service.createConfiguration(createConfigDTO, uuidv4(), uuidv4());
+
+      expect(mockMappingRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ ...workingDirData, configId }),
+      );
+    });
+
+    it('should handle database error during working directory save', async () => {
+      const workingDirData = {
+        pathName: '/test/path',
+        pathId: '123',
+        workingDirectory: '/working/dir',
+      };
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: '123456',
+        workingDirectory: workingDirData,
+        fileServers: [
+          {
+            host: 'test.com',
+            serverType: ServerType.emc,
+            protocol: Protocol.NFS,
+            userName: 'test',
+            workers: ['worker1'],
+            protocolVersion: ProtocolVersion.NFSv3,
+          },
+        ],
+      };
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true });
+      mockMappingRepository.save.mockRejectedValue(new Error('Database error'));
+
+      await expect(
+        service.createConfiguration(createConfigDTO, uuidv4(), uuidv4()),
+      ).rejects.toThrow('Error Occurred during creating Config');
+    });
+
+    it('should handle empty workers array in fileServer', async () => {
+      const createConfigDTO = {
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        projectId: 'valid-project-id',
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working-directory',
+        },
+        fileServers: [
+          {
+            host: 'test.com',
+            serverType: ServerType.emc,
+            protocol: Protocol.NFS,
+            userName: 'test',
+            protocolVersion: ProtocolVersion.NFSv3,
+            workers: [],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true });
+      mockConfigRepository.create.mockResolvedValue(createConfigDTO);
+      mockConfigRepository.save.mockResolvedValue(createConfigDTO);
+
+      await expect(
+        service.createConfiguration(createConfigDTO, 'user-id', 'trace-123'),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('updateConfiguration', () => {
+    it('should update and save the configuration', async () => {
+      const existingConfig = {
+        id: uuidv4(),
+        configName: 'Old Config',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            createdBy: '1234567',
+            volumes: [],
+            workers: [],
+          },
+        ],
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        createdBy: '123123',
+        configName: 'Updated Config',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir',
+        },
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocolVersion: ProtocolVersion.NFSv3,
+            serverType: ServerType.emc,
+            workers: [mockWorker.id],
+            createdBy: '1234567',
+            protocol: Protocol.NFS,
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      const existingMapping = {
+        id: 'mapping-123',
+        pathId: '123',
+        pathName: '/old/path',
+        workingDirectory: '/old/dir',
+      };
+
+      const updatedMapping = {
+        ...existingMapping,
+        pathName: '/test/path',
+        workingDirectory: '/working/dir',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockConfigRepository.save.mockResolvedValue({
+        ...existingConfig,
+        ...updateConfigDTO,
+      });
+      mockWorkerRepository.find.mockResolvedValue([
+        { workerId: mockWorker.id },
+      ]);
+      mockFileServerRepository.create.mockReturnValue(
+        updateConfigDTO.fileServers[0],
+      );
+      mockMappingRepository.findOne.mockResolvedValue(existingMapping);
+      mockMappingRepository.save.mockResolvedValue(updatedMapping);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+      const result = await service.updateConfiguration(
+        existingConfig.id,
+        updateConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      expect(mockMappingRepository.findOne).toHaveBeenCalledWith({
+        where: { configId: existingConfig.id },
+      });
+      expect(mockMappingRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'mapping-123',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+          pathId: '123',
+        }),
+      );
+
+      expect(mockFileServerRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: mockFileServer.id,
+          host: 'localhost',
+          protocol: Protocol.NFS,
+          protocolVersion: ProtocolVersion.NFSv3,
+          userName: 'TEST',
+          isRefreshed: false,
+        }),
+      );
+
+      expect(result).toBeDefined();
+      expect(result.configName).toBe(updateConfigDTO.configName);
+    });
+
+    it('should throw NotFoundException if config is not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+      await expect(
+        service.updateConfiguration(
+          uuidv4(),
+          {} as ConfigDTO,
+          uuidv4(),
+          uuidv4(),
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should handle working directory mapping not found', async () => {
+      const existingConfig = {
+        id: uuidv4(),
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            protocol: Protocol.NFS,
+            host: 'localhost',
+            workers: [],
+          },
+        ],
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathId: 'non-existent',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            workers: [mockWorker.id],
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockMappingRepository.findOne.mockRejectedValue(new Error('Not found'));
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+      await expect(
+        service.updateConfiguration(
+          existingConfig.id,
+          updateConfigDTO,
+          uuidv4(),
+          uuidv4(),
+        ),
+      ).rejects.toThrow('Error Occurred during updating Config');
+    });
+
+    it('should return the mapping if found', async () => {
+      const existingConfig = {
+        id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            protocol: Protocol.NFS,
+            host: 'localhost',
+            workers: [],
+          },
+        ],
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathId: 'non-existent',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            workers: [mockWorker.id],
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      const expectedResult = {
+        id: existingConfig.id,
+        configName: updateConfigDTO.configName,
+        configType: updateConfigDTO.configType,
+        projectId: updateConfigDTO.projectId,
+        createdBy: updateConfigDTO.createdBy,
+        fileServers: updateConfigDTO.fileServers,
+        workingDirectory: updateConfigDTO.workingDirectory,
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockConfigRepository.save.mockResolvedValue(expectedResult);
+      mockWorkerRepository.find.mockResolvedValue([
+        { workerId: mockWorker.id },
+      ]);
+      mockMappingRepository.findOne.mockResolvedValue({
+        id: '1234',
+        configId: existingConfig.id,
+        pathName: '/test/path',
+        workingDirectory: '/working/dir',
+        pathId: 'non-existent',
+      });
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+      const result = await service.updateConfiguration(
+        existingConfig.id,
+        updateConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      expect(result).toEqual(expectedResult);
+      expect(mockMappingRepository.findOne).toHaveBeenCalledWith({
+        where: { configId: existingConfig.id },
+      });
+    });
+
+    it('should throw NotFoundException if mapping is not found', async () => {
+      const existingConfig = {
+        id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        configName: 'Test Config',
+        configType: ConfigurationType.file,
+        createdBy: 'user1',
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            protocol: Protocol.NFS,
+            host: 'localhost',
+            workers: [],
+            createdBy: 'user1',
+            serverType: 'type1',
+            volumes: [],
+          },
+        ],
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathId: 'non-existent',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            workers: [mockWorker.id],
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockMappingRepository.findOne.mockResolvedValue(null); // mapping not found
+      mockWorkerRepository.find.mockResolvedValue([
+        { workerId: mockWorker.id, stats: [] },
+      ]);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+
+      await expect(
+        service.updateConfiguration(
+          '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+          updateConfigDTO,
+          uuidv4(),
+          uuidv4(),
+        ),
+      ).rejects.toThrowError(
+        new NotFoundException(
+          'Mapping for configId 36bfd77f-1d7c-47a3-8c62-3c8739e2f88f not found',
+        ),
+      );
+
+      expect(mockMappingRepository.findOne).toHaveBeenCalledWith({
+        where: { configId: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' },
+      });
+    });
+
+    it('should handle update when workingDirectory is null', async () => {
+      const existingConfig = {
+        id: uuidv4(),
+        configName: 'Old Config',
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            workers: [],
+          },
+        ],
+      };
+
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathName: '',
+          pathId: '',
+          workingDirectory: '',
+        },
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            userName: 'test',
+            workers: [mockWorker.id],
+          },
+        ],
+      };
+
+      const existingMapping = {
+        id: 'mapping-123',
+        pathId: '123',
+        pathName: '/old/path',
+        workingDirectory: '/old/dir',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockConfigRepository.save.mockResolvedValue({
+        ...existingConfig,
+        ...updateConfigDTO,
+      });
+      mockWorkerRepository.find.mockResolvedValue([
+        { workerId: mockWorker.id },
+      ]);
+      mockMappingRepository.findOne.mockResolvedValue(existingMapping);
+      mockMappingRepository.save.mockResolvedValue(existingMapping);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+      const result = await service.updateConfiguration(
+        existingConfig.id,
+        updateConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      expect(result).toBeDefined();
+      expect(mockMappingRepository.save).toHaveBeenCalledWith(existingMapping);
+    });
+
+    it('should handle fileServer update with missing optional fields', async () => {
+      // Mock existing config with an optional userName
+      const existingConfig = {
+        id: uuidv4(),
+        configName: 'Old Config',
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            userName: 'oldUser', // userName is present here
+            workers: [],
+          },
+        ],
+      };
+
+      // Updated configuration with userName
+      const updateConfigDTO: ConfigDTO = {
+        projectId: '123456',
+        configName: 'Updated Config',
+        configType: ConfigurationType.file,
+        workingDirectory: {
+          pathName: '',
+          pathId: '',
+          workingDirectory: '',
+        },
+        fileServers: [
+          {
+            id: mockFileServer.id,
+            host: 'localhost',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            userName: 'test', // userName provided in update
+            workers: [mockWorker.id],
+          },
+        ],
+      };
+
+      // Mock repository behavior
+      mockConfigRepository.findOne.mockResolvedValue(existingConfig);
+      mockConfigRepository.save.mockImplementation((data) => data);
+      mockWorkerRepository.find.mockResolvedValue([
+        { workerId: mockWorker.id },
+      ]);
+      mockMappingRepository.findOne.mockResolvedValue({});
+      mockMappingRepository.save.mockImplementation((data) => data);
+
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue({} as any);
+
+      // Call the update configuration service method
+      await service.updateConfiguration(
+        existingConfig.id,
+        updateConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      // Check that the repository is called with the correct userName value
+      expect(mockFileServerRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userName: updateConfigDTO.fileServers[0].userName, // check the updated value
+        }),
+      );
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove the configuration', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockConfigRepository.remove.mockResolvedValue(mockConfig);
+
+      const result = await service.remove(mockConfig.id);
+
+      expect(result).toEqual(mockConfig);
+      expect(mockConfigRepository.remove).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException if invalid UUID is passed', async () => {
+      await expect(service.remove('invalid-uuid')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should handle non-existent config during removal', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+      mockConfigRepository.remove.mockImplementation(() => {
+        throw new NotFoundException('Config for id not found.');
+      });
+
+      await expect(service.remove(uuidv4())).rejects.toThrow('Config for id');
+    });
+  });
+
+  it('should update paths correctly', async () => {
+    const id = 'config-id';
+    const details = {
+      completed: [
+        {
+          protocolType: 'NFS',
+          paths: ['/path1', '/path2'],
+        },
+        {
+          protocolType: 'SMB',
+          paths: ['/path3'],
+        },
+      ],
+    };
+
+    const mockConfig = {
+      id,
+      updatedBy: 'user-id',
+      createdBy: 'creator-id',
+      fileServers: [
+        {
+          id: 'file-server-1',
+          protocol: 'NFS',
+          volumes: [{ id: 'vol-1', volumePath: '/path1' }],
+        },
+        {
+          id: 'file-server-2',
+          protocol: 'SMB',
+          volumes: [],
+        },
+      ],
+    };
+
+    jest
+      .spyOn(configRepository, 'findOne')
+      .mockResolvedValue(mockConfig as any);
+    mockVolumeRepository.update.mockResolvedValue(null);
+    mockVolumeRepository.create.mockImplementation((data) => data);
+    mockVolumeRepository.save.mockImplementation((data) => data);
+    mockFileServerRepository.update.mockResolvedValue(null);
+    mockConfigRepository.update.mockResolvedValue(null);
+
+    await service.updatePaths(id, details as any);
+
+    expect(configRepository.findOne).toHaveBeenCalledWith({
+      select: {
+        fileServers: {
+          id: true,
+          protocol: true,
+          volumes: {
+            id: true,
+            volumePath: true,
+          },
+        },
+      },
+      where: { id },
+      relations: {
+        fileServers: {
+          volumes: true,
+        },
+      },
+    });
+  });
+
+  describe('refresh', () => {
+    it('should throw NotFoundException if config is not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.refreshConfig(
+          'ed6aeaf2-d304-4973-8a5a-45e1af8a0c81',
+          'a8b5219a-79a2-44a4-b323-27dd28d5c0b9',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(configRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'ed6aeaf2-d304-4973-8a5a-45e1af8a0c81' },
+        relations: { fileServers: { workers: true } },
+      });
+    });
+
+    it('should not proceed if no workers are found', async () => {
+      const mockConfig = {
+        id: 'config-id',
+        fileServers: [
+          {
+            id: 'file-server-1',
+            host: 'localhost',
+            protocol: 'NFS',
+            userName: 'user',
+            password: 'pass',
+            workers: [],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      const result = await service.refreshConfig(
+        'ed6aeaf2-d304-4973-8a5a-45e1af8a0c81',
+        'a8b5219a-79a2-44a4-b323-27dd28d5c0b9',
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should start workflow and update file servers', async () => {
+      const mockConfig = {
+        id: 'config-id',
+        fileServers: [
+          {
+            id: 'file-server-1',
+            host: 'localhost',
+            protocol: 'NFS',
+            userName: 'user',
+            password: 'pass',
+            workers: [{ workerId: 'worker-1' }, { workerId: 'worker-2' }],
+          },
+        ],
+      };
+
+      const mockWorkflow = { workflowId: 'workflow-123' };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockFileServerRepository.update.mockResolvedValue(null);
+      jest
+        .spyOn(workflowService, 'startWorkflow')
+        .mockResolvedValue(mockWorkflow as any);
+      jest.spyOn(service, 'updateResult').mockResolvedValue(null);
+
+      const result = await service.refreshConfig(
+        'ed6aeaf2-d304-4973-8a5a-45e1af8a0c81',
+        'a8b5219a-79a2-44a4-b323-27dd28d5c0b9',
+      );
+
+      expect(result).toEqual({ workflowId: 'workflow-123' });
+    });
+
+    it('should return grouped file servers by config', async () => {
+      const result = await service.getAllFileServers();
+
+      expect(result).toEqual([
+        {
+          id: 'config1',
+          serverName: 'Config 1',
+          hasScratchPath: true,
+          status: 'ACTIVE',
+          fileServers: [
+            {
+              id: 'fileServer1',
+              protocol: 'NFS',
+              workers: [{ id: 'worker1', workerName: 'Worker 1' }],
+            },
+          ],
+        },
+        {
+          id: 'config2',
+          serverName: 'Config 2',
+          hasScratchPath: false,
+          status: 'DRAFT',
+          fileServers: [
+            {
+              id: 'fileServer2',
+              protocol: 'SMB',
+              workers: [],
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
+  describe('getCutoverDetailsByConfigId', () => {
+    it('should throw BadRequestException for invalid UUID', async () => {
+      await expect(
+        service.getCutoverDetailsByConfigId('invalid-uuid'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw InternalServerErrorException if config not found', async () => {
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.getCutoverDetailsByConfigId(uuidv4()),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should return empty array when no valid job configs found', async () => {
+      const mockConfig = {
+        id: uuidv4(),
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.Scan,
+                    jobRunDetails: [{ status: JobRunStatus.Completed }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+
+      const result = await service.getCutoverDetailsByConfigId(mockConfig.id);
+      expect(result).toEqual([]);
+    });
+
+    it('should successfully fetch and format cutover details', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Migrate,
+                    sourcePathId: 'source1',
+                    targetPathId: 'target1',
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'source1',
+          volumePath: '/source/path',
+          fileServer: {
+            config: {
+              id: 'sourceConfig',
+              configName: 'Source Config',
+            },
+          },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target/path',
+          fileServer: {
+            config: {
+              id: 'targetConfig',
+              configName: 'Target Config',
+            },
+          },
+        },
+      ];
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue(mockVolumes);
+
+      const result = await service.getCutoverDetailsByConfigId(configId);
+
+      expect(result).toEqual([
+        {
+          protocol: Protocol.NFS,
+          sourcePath: {
+            id: 'source1',
+            sourcePathName: '/source/path',
+          },
+          destinationPath: {
+            id: 'target1',
+            destinationPathName: '/target/path',
+          },
+          destinationFileServer: {
+            id: 'targetConfig',
+            destinationFileServerName: 'Target Config',
+          },
+          jobConfig: [
+            {
+              id: 'job1',
+              jobType: JobType.Migrate,
+              jobRunDetails: [
+                {
+                  id: 'run1',
+                  status: JobRunStatus.Completed,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('should handle missing volume details', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Migrate,
+                    sourcePathId: 'source1',
+                    targetPathId: 'target1',
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue([]);
+
+      await expect(
+        service.getCutoverDetailsByConfigId(configId),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle missing fileServer or config in volume details', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Migrate,
+                    sourcePathId: 'source1',
+                    targetPathId: 'target1',
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'source1',
+          volumePath: '/source/path',
+          fileServer: null,
+        },
+        {
+          id: 'target1',
+          volumePath: '/target/path',
+          fileServer: {
+            config: null,
+          },
+        },
+      ];
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue(mockVolumes);
+
+      const result = await service.getCutoverDetailsByConfigId(configId);
+
+      expect(result[0].sourcePath).toBeDefined();
+      expect(result[0].destinationFileServer).toEqual({
+        id: '',
+        destinationFileServerName: '',
+      });
+      expect(result[0].destinationPath.id).toBe('target1');
+    });
+
+    it('should handle missing sourcePathId or targetPathId', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Migrate,
+                    sourcePathId: null,
+                    targetPathId: null,
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue([]);
+
+      await expect(
+        service.getCutoverDetailsByConfigId(configId),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle database error during volume lookup', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job1',
+                    jobType: JobType.Migrate,
+                    sourcePathId: 'source1',
+                    targetPathId: 'target1',
+                    jobRunDetails: [
+                      {
+                        id: 'run1',
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockRejectedValue(new Error('Database error'));
+
+      await expect(
+        service.getCutoverDetailsByConfigId(configId),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('checkUniqueConfigName', () => {
+    it('should throw NotFoundException if project does not exist', async () => {
+      jest.spyOn(projectRepository, 'findOne').mockResolvedValue(null);
+      await expect(
+        service.isConfigNameUnique('invalid-project-id', 'config-name'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if config name is not unique', async () => {
+      jest
+        .spyOn(projectRepository, 'findOne')
+        .mockResolvedValue(new ProjectEntity());
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(new ConfigEntity());
+      await expect(
+        service.isConfigNameUnique('project-id', 'config-name'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return true if config name is unique', async () => {
+      jest
+        .spyOn(projectRepository, 'findOne')
+        .mockResolvedValue(new ProjectEntity());
+      jest.spyOn(configRepository, 'findOne').mockResolvedValue(null);
+      await expect(
+        service.isConfigNameUnique('project-id', 'config-name'),
+      ).resolves.toEqual({ isUnique: true });
+    });
+  });
+
+  describe('startValidateWorkingDirectoryWorkflow', () => {
+    it('should start workflow when conditions are met', async () => {
+      const configId = uuidv4();
+      const traceId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            serverType: ServerType.other,
+            host: 'test.com',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            userName: 'test',
+            password: 'pass',
+            workers: ['worker1'],
+          },
+        ],
+      };
+
+      await service.startValidateWorkingDirectoryWorkflow(
+        createConfig,
+        configId,
+        traceId,
+      );
+
+      expect(workflowService.startWorkflow).toHaveBeenCalledWith(
+        WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
+        expect.objectContaining({
+          workflowId: expect.stringContaining(traceId),
+          taskQueue: 'ParentWorkflow-TaskQueue',
+        }),
+      );
+    });
+
+    it('should not start workflow when no workers', async () => {
+      const configId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            serverType: ServerType.other,
+            host: 'test.com',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            userName: 'test',
+            password: 'pass',
+            workers: [],
+          },
+        ],
+      };
+
+      startWorkflowMock.mockClear();
+      await service.startValidateWorkingDirectoryWorkflow(
+        createConfig,
+        configId,
+        'trace',
+      );
+      expect(startWorkflowMock).not.toHaveBeenCalled();
+    });
+
+    it('should handle workflow start error', async () => {
+      const configId = uuidv4();
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+        workingDirectory: {
+          pathName: '/test/path',
+          pathId: '123',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            serverType: ServerType.other,
+            host: 'test.com',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            createdBy: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
+            userName: 'test',
+            password: 'pass',
+            workers: ['worker1'],
+          },
+        ],
+      };
+
+      startWorkflowMock.mockRejectedValueOnce(new Error('Workflow error'));
+      await service.startValidateWorkingDirectoryWorkflow(
+        createConfig,
+        configId,
+        'trace',
+      );
+      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateResult', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should handle workflow completion and update paths', async () => {
+      const workflowId = 'workflow-1';
+      const configId = 'config-1';
+      const mockWorkflowResult = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/path1'],
+          },
+        ],
+      };
+
+      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
+      jest.spyOn(service, 'updatePaths').mockResolvedValue(undefined);
+
+      service.updateResult(workflowId, configId);
+
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(getWorkFlowResMock).toHaveBeenCalledWith(workflowId);
+      expect(service.updatePaths).toHaveBeenCalledWith(
+        configId,
+        mockWorkflowResult,
+      );
+    }, 10000);
+
+    it('should handle missing workflow details', async () => {
+      getWorkFlowResMock.mockResolvedValueOnce(null);
+
+      service.updateResult('workflow-1', 'config-1');
+
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
+    });
+
+    it('should handle non-completed workflow status', async () => {
+      const mockWorkflowResult = {
+        status: WorkflowExecutionStatus.RUNNING,
+        completed: [],
+      };
+
+      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
+
+      service.updateResult('workflow-1', 'config-1');
+
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
+    });
+
+    it('should handle workflow fetch error', async () => {
+      getWorkFlowResMock.mockRejectedValueOnce(new Error('Fetch error'));
+
+      service.updateResult('workflow-1', 'config-1');
+
+      jest.runAllTimers();
+      await Promise.resolve();
+
+      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+    });
+  });
+
+  describe('updatePaths', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should handle empty paths in workflow details', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: [],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockReturnValue([]);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.save).toHaveBeenCalledWith([]);
+      expect(mockVolumeRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle multiple protocols in workflow details', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/path1'],
+          },
+          {
+            protocolType: 'SMB',
+            paths: ['/path2'],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+          {
+            id: 'fs-2',
+            protocol: 'SMB',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.create).toHaveBeenCalledTimes(2);
+      expect(mockVolumeRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update existing volumes with new reachable count', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/existing-path'],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [
+              {
+                volumePath: '/existing-path',
+              },
+            ],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.update).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ reachableCount: 1 }),
+      );
+    });
+
+    it('should handle database error in findOne', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockRejectedValue(
+        new Error('Database error'),
+      );
+
+      const mockWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: [],
+      };
+
+      await expect(
+        service.updatePaths(configId, mockWorkflowStatus),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle error in volume update', async () => {
+      const configId = uuidv4();
+      const details: ListPathWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: [
+          {
+            protocolType: Protocol.NFS,
+            paths: ['/path1'],
+            traceId: 'trace-1',
+            status: 'success',
+            hostname: 'test-host',
+            workerId: 'worker-1',
+            message: 'Success',
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.update.mockRejectedValue(new Error('Update failed'));
+
+      await expect(service.updatePaths(configId, details)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should handle error in volume save', async () => {
+      const configId = uuidv4();
+      const details: ListPathWorkflowStatus = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        id: 'workflow-1',
+        pending: [],
+        completed: [
+          {
+            protocolType: Protocol.NFS,
+            paths: ['/path1'],
+            traceId: 'trace-1',
+            status: 'success',
+            hostname: 'test-host',
+            workerId: 'worker-1',
+            message: 'Success',
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.save.mockRejectedValue(new Error('Save failed'));
+
+      await expect(service.updatePaths(configId, details)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  describe('refreshConfig', () => {
+    it('should throw BadRequestException for invalid UUID', async () => {
+      await expect(
+        service.refreshConfig('invalid-uuid', 'trace-123'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when config not found', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.refreshConfig(configId, 'trace-123'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should handle empty fileServers array', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        fileServers: [],
+      });
+
+      const result = await service.refreshConfig(configId, 'trace-123');
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle database error', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockRejectedValue(
+        new Error('Database error'),
+      );
+
+      await expect(
+        service.refreshConfig(configId, 'trace-123'),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+});

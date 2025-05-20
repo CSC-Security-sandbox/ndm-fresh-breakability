@@ -1,0 +1,25 @@
+<databaseChangeLog
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+   <changeSet id="3001" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_config_existing_tables.sql"/>
+   </changeSet>
+
+   <changeSet id="3002" author="akunal">
+      <sqlFile path="liquibase/20250210_01_add_meta_config_column.sql"/>
+   </changeSet>
+
+   <changeSet id="3003" author="akunal">
+      <sqlFile path="liquibase/20250211_01_worker_table_add_worker_number_column.sql"/>
+   </changeSet>
+   
+   <changeSet id="3004" author="aniketd">
+      <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
+   </changeSet>
+   
+     <changeSet id="3005" author="vbikkad">
+      <sqlFile path="liquibase/20250414_01_add_meta_config_column_for_worker_jobrun_mapping.sql"/>
+   </changeSet>
+</databaseChangeLog>

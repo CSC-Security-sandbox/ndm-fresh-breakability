@@ -1,0 +1,22 @@
+import { registerAs } from '@nestjs/config';
+
+export default registerAs(
+  'app',
+  (): Record<string, any> => ({
+    http: {
+      host: process.env.APP_HOST || '0.0.0.0',
+      port: parseInt(process.env.APP_PORT) || 3000,
+    },
+    feature: {
+      enableVersionFetch: process.env.ENABLE_VERSIONS_FETCH === 'true' || false,
+      enablePreListPath: process.env.ENABLE_PRE_LIST_PATH === 'true' || false,
+    },
+    email: {
+      sendMail: process.env.SEND_EMAIL || 'http://localhost:3001',
+    },
+    worker: {
+      healthCheckStatusTimout:
+        parseInt(process.env.HEALTHCHECK_STATUS_TIMEOUT_SEC) || 60,
+    },
+  }),
+);
