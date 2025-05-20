@@ -1,0 +1,122 @@
+import { Protocol } from './protocol';
+import { exec } from 'child_process';
+import { WorkersConfig } from 'src/config/app.config';
+import { Logger } from 'src/logger/logger.service';
+import { ProtocolPayload } from './protocol.type';
+
+jest.mock('child_process', () => ({
+  exec: jest.fn(),
+}));
+
+jest.mock('src/config/app.config', () => ({
+  WorkersConfig: {
+    get: jest.fn((key) => {
+      switch (key) {
+        case 'workerId':
+          return 'test-worker-id';
+        case 'baseMountDir':
+          return '/test/base/mount/dir';
+        case 'platform':
+          return 'linux';
+        default:
+          return null;
+      }
+    }),
+  },
+}));
+
+jest.mock('src/logger/logger.service');
+
+class TestProtocol extends Protocol {
+  getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+    return Promise.resolve([]);
+  }
+  unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+    return Promise.resolve([]);
+  }
+  listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+  getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+  validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
+    return Promise.resolve();
+  }
+  
+}
+
+describe('Protocol', () => {
+  let protocol: TestProtocol;
+
+  beforeEach(() => {
+    protocol = new TestProtocol();
+  });
+
+  describe('executeCommand', () => {
+    it('should execute command successfully', async () => {
+      const payload: ProtocolPayload = {
+        mountBasePath: '/test/mount',
+        jobRunId: '123',
+        pathId: '456',
+        hostname: 'localhost',
+        username: 'user',
+        password: 'pass',
+        protocolVersion: '1.0',
+      };
+      const commandPattern = 'echo ${HOST}';
+      const commandDescription = 'Test command';
+      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
+        callback(null, 'Command executed successfully', '');
+      });
+
+      const response = await protocol.executeCommand('trace-123', 'test-protocol', payload, commandPattern, commandDescription);
+
+      expect(response.status).toBe('success');
+      expect(response.message).toContain('Command executed successfully');
+    });
+
+    it('should handle command execution error', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
+      const commandPattern = 'echo ${HOST}';
+      const commandDescription = 'Test Command';
+
+      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
+        callback(new Error('Execution error'), '', '');
+      });
+
+      await expect(
+        protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
+      ).rejects.toThrow('Execution error');
+    });
+
+    it('should handle command execution stderr', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: ''
+      };
+      const commandPattern = 'echo ${HOST}';
+      const commandDescription = 'Test Command';
+
+      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
+        callback(null, '', 'Execution stderr');
+      });
+
+      await expect(
+        protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
+      ).rejects.toBe('Execution stderr');
+    });
+  });
+});

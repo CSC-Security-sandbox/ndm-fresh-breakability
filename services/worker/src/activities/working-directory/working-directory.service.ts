@@ -1,0 +1,207 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from "axios";
+import * as fs from 'fs';
+import { unlinkSync, writeFileSync } from 'fs';
+import * as path from 'path';
+import { join } from 'path';
+import { AuthService } from 'src/auth/auth.service';
+import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
+import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
+
+@Injectable()
+export class ValidateWorkingDirectoryActivity {
+  readonly workerId: string;
+  readonly baseWorkingPath: string;
+  readonly workerConfigUrl: string;
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    private readonly logger: Logger,
+    private readonly authService: AuthService,
+  ) {
+    this.workerId = this.configService.get('worker.workerId');
+    this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
+    this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+  }
+
+  async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
+    const apiUrl = `${this.workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
+
+
+    const configStatusPayload: ConfigStatusPayload = {
+      configId: payload.configId,
+      status: null,
+      errorMessage: null
+    };
+
+    if(!payload?.exportPathWorkingDirectoryProvided) {
+      try {
+        await this.handleMountAndUnmountPaths(traceId, payload);
+        configStatusPayload.status = ConfigStatus.ACTIVE;
+        configStatusPayload.errorMessage = null;
+      } catch (error) {
+        const errorMessage = this.getNfsMountErrorMessage(error);
+        this.logger.error(`Error while mounting: ${errorMessage}`);
+        configStatusPayload.status = ConfigStatus.ERRORED;
+        configStatusPayload.errorMessage = errorMessage;
+      }
+    } else if (!payload.exportPathPresent) {
+      this.logger.log("Invalid Export Path");
+      configStatusPayload.status = ConfigStatus.ERRORED;
+      configStatusPayload.errorMessage = ConfigError.INVALID_EXPORT_PATH;
+    } else {
+      this.logger.log("Valid Export Path");
+      this.logger.log("Started validating working directory");
+
+      try {
+        const isValid = await this.isValidDirectory(payload, traceId);
+        configStatusPayload.status = isValid ? ConfigStatus.ACTIVE : ConfigStatus.ERRORED;
+        configStatusPayload.errorMessage = isValid ? null : ConfigError.INVALID_WORKING_DIRECTORY;
+      } catch (error) {
+        const errorMessage = this.getNfsMountErrorMessage(error);
+        this.logger.error(`Working directory validation error: ${errorMessage}`);
+        configStatusPayload.status = ConfigStatus.ERRORED;
+        configStatusPayload.errorMessage = errorMessage;
+      }
+    }
+
+    await this.updateConfigStatus(apiUrl, configStatusPayload);
+
+    return {
+      traceId,
+      status: configStatusPayload.status === ConfigStatus.ACTIVE ? 'success' : 'error',
+      workerId: this.workerId,
+      message: configStatusPayload.errorMessage
+        ? `Validation failed: ${configStatusPayload.errorMessage}`
+        : `Export path and Working directory validated successfully for workerId ${this.workerId}`,
+    };
+  }
+
+  private getNfsMountErrorMessage(error: any): string {
+    const errorMsg = error?.message;
+
+    if (errorMsg.includes('illegal NFS version value')) {
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
+    } else if (errorMsg.includes('RPC prog. not avail')) {
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
+    } else if(errorMsg.includes('Protocol not supported for')) {
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
+    } else {
+      return errorMsg;
+    }
+  }
+
+  async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
+    try {
+      for (const fileServer of payload.listPathPayload) {
+        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+
+        const mountPathPayload = {
+          hostname: fileServer.host,
+          username: fileServer.username,
+          password: fileServer.password,
+          protocolVersion: fileServer.protocolVersion,
+          path: payload.fetchedPath,
+          mountBasePath: this.baseWorkingPath,
+          pathId: traceId,
+          jobRunId: traceId,
+        };
+
+        this.logger.log(`Mounting export path for host ${fileServer.host}`);
+        await protocol.mountPath(traceId, mountPathPayload);
+        this.logger.log("Mounted export path successfully");
+
+        this.logger.log(`Unmounting export path for host ${fileServer.host}`);
+        await protocol.unmountPath(traceId, mountPathPayload);
+        this.logger.log("Unmounted export path successfully");
+      }
+    } catch (error) {
+      this.logger.error(`Error while mounting the path - ${error?.message || error}`);
+      throw new Error(error?.message || error);
+    }
+  }
+
+  async updateConfigStatus(apiUrl: string, payload: ConfigStatusPayload) {
+    try {
+      const accessToken = await this.authService.getAccessToken();
+      await axios.post(apiUrl, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        }
+      });
+    } catch (error) {
+      this.logger.error(`API Error: ${error?.response?.data || error.message}`);
+      throw new Error(`API Error: ${error?.response?.data || error.message}`);
+    }
+  }
+
+  async isValidDirectory(payload: any, traceId: string): Promise<boolean> {
+    let isDirectoryValid = false;
+    let hasWritePermission = false;
+
+    try {
+      for (const fileServer of payload.listPathPayload) {
+        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+
+        const mountPathPayload = {
+          hostname: fileServer.host,
+          username: fileServer.username,
+          password: fileServer.password,
+          protocolVersion: fileServer.protocolVersion,
+          path: payload.exportPath,
+          mountBasePath: this.baseWorkingPath,
+          pathId: traceId,
+          jobRunId: traceId
+        };
+
+        this.logger.log(`Mounting export path for host ${fileServer.host}`);
+        await protocol.mountPath(traceId, mountPathPayload);
+        this.logger.log("Mounted export path successfully");
+
+        this.logger.log("Started validating the working directory");
+        const mountPoint = path.join(this.baseWorkingPath, traceId, traceId);
+        const fullPath = path.join(mountPoint, payload.workingDirectory);
+
+        if (fs.existsSync(fullPath)) {
+          this.logger.log(`Working Directory exists: ${fullPath}`);
+          isDirectoryValid = true;
+
+          hasWritePermission = this.checkWritable(fullPath);
+
+        } else {
+          this.logger.log(`Working Directory does not exist: ${fullPath}`);
+        }
+
+        this.logger.log(`Unmounting export path for host ${fileServer.host}`);
+        await protocol.unmountPath(traceId, mountPathPayload);
+        this.logger.log("Unmounted export path successfully");
+
+        if (isDirectoryValid && !hasWritePermission) {
+          throw new Error(`Provided working directory ${payload?.workingDirectory} has no writable permission`);
+        }
+
+        if (isDirectoryValid && hasWritePermission) break;
+      }
+    } catch (error) {
+      this.logger.error(`Working Directory validation error: ${error?.message || error}`);
+      throw new Error(error?.message || error);
+    }
+
+    return isDirectoryValid && hasWritePermission;
+  }
+ 
+  checkWritable(directoryPath: string): boolean {
+    const testFile = join(directoryPath, '.nfs_write_test');
+    try {
+      writeFileSync(testFile, '');
+      unlinkSync(testFile);
+      this.logger.log(`Success: Directory ${directoryPath} is writable.`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error: No write permission for directory ${directoryPath} - ${error.message}`);
+      return false;
+    }
+  }
+
+}
