@@ -1,0 +1,1 @@
+ALTER TABLE operation_errors ADD COLUMN file_name TEXT, ADD COLUMN file_path TEXT;
