@@ -1,0 +1,53 @@
+name: Build and Push to ACR on PR Merge
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: 
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # Authenticate to Azure
+      - name: Log in to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Log in to Azure Container Registry
+      - name: 'Authenticate to ACR'
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
+        with:
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_SP_USERNAME }}
+          password: ${{ secrets.AZURE_SP_PASSWORD }}
+
+      # Set up QEMU for cross-architecture builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
+
+      # Set up Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
+
+      # Build and push multi-platform Docker image
+      - name: Build and Push Multi-Platform Docker Image
+        run: |
+          echo "Building Docker image with tags:"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }}"
+          echo "${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest"
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:${{ github.sha }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ github.event.repository.name }}:latest \
+            --push .
+        env:
+          DOCKER_BUILDKIT: 1
