@@ -10,14 +10,14 @@ const fs = require('fs').promises;
 export class PrecheckActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
-  readonly checkSizeFlag: boolean = false;
+  readonly shouldCheckDiskSpace: boolean = false;
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
-    this.checkSizeFlag = this.configService.get<boolean>('worker.checkSpaceForPreCheck');
+    this.shouldCheckDiskSpace = this.configService.get<boolean>('worker.checkSpaceForPreCheck');
 
   }
 
@@ -123,21 +123,29 @@ export class PrecheckActivity {
           ...protocolPayload,
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`
         };
-        if(this.checkSizeFlag){
-          checkPromises.push(
-            protocol.getTotalUsedMemory(traceId, sizePayload)
-              .then(totalSizeInBytes => {
-                this.logger.log(`SourceDataSize : ${totalSizeInBytes} bytes`);
-                preCheckPathOutput.sourceDataSize = totalSizeInBytes;
-              })
-              .catch(error => {
-                this.logger.error(`Error while calculating source data size on server ${serverCredentials.host} : ${error}`);
-                preCheckPathOutput.errorCodes.push(
-                  PreCheckErrorCodes.SOURCE_DATA_SIZE_CALCULATION_FAILED
-                );
-              })
-            );
-        }
+        if(this.shouldCheckDiskSpace){
+          // Check if the source path is empty
+          const isToCalculateSpace = serverPaths?.discoveredSize == null || serverPaths?.discoveredSize < 0;
+            if (isToCalculateSpace) {
+            checkPromises.push(
+              protocol.getTotalUsedMemory(traceId, sizePayload)
+                .then(totalSizeInBytes => {
+                  this.logger.log(`SourceDataSize : ${totalSizeInBytes} bytes`);
+                  preCheckPathOutput.sourceDataSize = totalSizeInBytes;
+                })
+                .catch(error => {
+                  this.logger.error(`Error while calculating source data size on server ${serverCredentials.host} : ${error}`);
+                  preCheckPathOutput.errorCodes.push(
+                    PreCheckErrorCodes.SOURCE_DATA_SIZE_CALCULATION_FAILED
+                  );
+                })
+              );
+          }
+          else {
+            this.logger.log(`SourceDataSize : ${serverPaths?.discoveredSize} bytes`);
+            preCheckPathOutput.sourceDataSize = serverPaths?.discoveredSize || null;
+          }
+      }
       }
 
       if (!serverPaths.isSource) {
@@ -145,20 +153,22 @@ export class PrecheckActivity {
           ...protocolPayload,
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`
         };
-        if(this.checkSizeFlag){
-        checkPromises.push(
-          protocol.getAvailableDiskSpace(traceId, spacePayload)
-            .then(availableBytes => {
-              this.logger.log(`Available space: ${availableBytes.size} bytes`);
-              preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
-            })
-            .catch(error => {
-              this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
-              preCheckPathOutput.errorCodes.push(
-                PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
-              );
-            })
-        );
+        if(this.shouldCheckDiskSpace){
+              checkPromises.push(
+              protocol.getAvailableDiskSpace(traceId, spacePayload)
+                .then(availableBytes => {
+                  this.logger.log(`Available space: ${availableBytes.size} bytes`);
+                  preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
+                })
+                .catch(error => {
+                  this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
+                  preCheckPathOutput.errorCodes.push(
+                    PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
+                  );
+                })
+          );
+       
+        
       }
 
         try {

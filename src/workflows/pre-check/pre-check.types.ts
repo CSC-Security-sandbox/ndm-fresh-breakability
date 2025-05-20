@@ -13,6 +13,7 @@ export interface PreCheck {
   destinations: Destination[];
   serverId: string;
   pathName: string;
+  discoveredSize?: number;
 }
 
 export interface Destination {
@@ -88,6 +89,7 @@ export interface PreCheckDestinationStatus {
   status: PreCheckStatus;
   errors?: PreCheckErrorCodes[];  
   commonWorkers:workerRecord[]
+  warnings?: PreCheckErrorCodes[];
 }
 
 export interface WorkerTaskPaths {
@@ -95,6 +97,7 @@ export interface WorkerTaskPaths {
   serverId: string;
   pathName: string;
   isSource: boolean;
+  discoveredSize?: number;
 }
 export interface WorkerTaskPayload {
   settings: Settings;

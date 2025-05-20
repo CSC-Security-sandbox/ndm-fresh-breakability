@@ -13,9 +13,9 @@ export const  PreCheckWorkerValidationWorkflow = async (workerId:string, workerT
         const sourceTraceId = `${traceId}-${index + 1}`;
         return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, sourceTraceId)
     }))  
-    const destinationResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>!path.isSource).map(async (sourcePath,index) => {
+    const destinationResponse = await Promise.all(workerTaskPayload.serverPaths.filter(path=>!path.isSource).map(async (destinationPath,index) => {
         const destinationTraceId = `${traceId}-${index + 1}`;
-        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === sourcePath.serverId), sourcePath, destinationTraceId)
+        return await preCheckActivity(workerTaskPayload.settings, workerTaskPayload.serverCredentials.find(server=>server.id === destinationPath.serverId), destinationPath, destinationTraceId)
     })) 
     return {workerId, paths:[...sourceResponse, ...destinationResponse]};
 }

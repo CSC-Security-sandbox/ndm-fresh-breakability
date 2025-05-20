@@ -34,6 +34,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
             serverId: preCheck.serverId,
             pathName: preCheck.pathName,
             isSource: true,
+            discoveredSize: preCheck.discoveredSize
         }
         const sourceVersion = serverCredentials.get(preCheck.serverId).protocolVersion;
         preCheck.destinations.map((destination) => {
@@ -41,7 +42,8 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 destinationPathId: destination.pathId,
                 status: PreCheckStatus.SUCCESS ,
                 errors: [],
-                commonWorkers: destination.workers
+                commonWorkers: destination.workers,
+                warnings: []
             }
 
             if(destination.workers.length === 0) {
@@ -97,29 +99,34 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
     );
     const responseRes = await Promise.all(workflows);
 
+
+    const allPaths = responseRes.flatMap(workerResponse => workerResponse.paths);
+    
+
     for(let i = 0; i < response.length; i++) {
-        const sourceFailed = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId && path.status === PreCheckStatus.FAILED);
-        if(sourceFailed) {
-            response[i].status = PreCheckStatus.FAILED;
-            response[i].errors.push(...sourceFailed.errorCodes);
+        const current = response[i];
+        const sourceFailed = allPaths.find(path => path.pathId === current.sourcePathId && path.status === PreCheckStatus.FAILED);
+        if (sourceFailed) {
+                current.status = PreCheckStatus.FAILED;
+                current.errors.push(...sourceFailed.errorCodes);
         }
-        for(let j = 0; j < response[i].destination.length; j++) {
-            const destinationFailed = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].destination[j].destinationPathId && path.status === PreCheckStatus.FAILED);
-            if(destinationFailed) {
-                response[i].destination[j].status = PreCheckStatus.FAILED;
-                response[i].destination[j].errors.push(...destinationFailed.errorCodes);
-            }
 
-            const sourceRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].sourcePathId);
-            const destinationRes = responseRes.flatMap((workerResponse) => workerResponse.paths).find((path) => path.pathId === response[i].destination[j].destinationPathId);
 
-            if (destinationRes?.destinationAvailableSpace < sourceRes?.sourceDataSize) {
-                response[i].destination[j].status = PreCheckStatus.FAILED;
-                response[i].destination[j].errors.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
+        const sourceRes = allPaths.find(path => path.pathId === current.sourcePathId);
+        for (let j = 0; j < current.destination.length; j++) {
+            const destination = current.destination[j];
+            const destinationFailed = allPaths.find(path => path.pathId === destination.destinationPathId && path.status === PreCheckStatus.FAILED);
+            if (destinationFailed) {
+                destination.status = PreCheckStatus.FAILED;
+                destination.errors.push(...destinationFailed.errorCodes);
             }
+        const destinationRes = allPaths.find(path => path.pathId === destination.destinationPathId);
+        if (destinationRes?.destinationAvailableSpace < sourceRes?.sourceDataSize) {
+            destination.status =  destination.status != PreCheckStatus.FAILED ?  PreCheckStatus.SUCCESS : PreCheckStatus.FAILED;
+            destination.warnings.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
+        }
         }
     }
 
     return response;
-
 }

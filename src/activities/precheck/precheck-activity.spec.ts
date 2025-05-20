@@ -107,7 +107,7 @@ describe('PrecheckActivity', () => {
       fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
-      (service as any).checkSizeFlag = true;
+      (service as any).shouldCheckDiskSpace = true;
 
       const result = await service.preCheckPath(
         mockSettings,
@@ -133,7 +133,7 @@ describe('PrecheckActivity', () => {
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
       fs.readdir.mockResolvedValue([]);
-      (service as any).checkSizeFlag = true;
+      (service as any).shouldCheckDiskSpace = true;
 
       const result = await service.preCheckPath(
         mockSettings,
@@ -240,8 +240,7 @@ describe('PrecheckActivity', () => {
       fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
-      (service as any).checkSizeFlag = true;
-
+      (service as any).shouldCheckDiskSpace = true;
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
@@ -267,8 +266,7 @@ describe('PrecheckActivity', () => {
       fs.readFile.mockResolvedValue('test');
       fs.unlink.mockResolvedValue(true);
       fs.readdir.mockResolvedValue([]);
-      (service as any).checkSizeFlag = true;
-
+      (service as any).shouldCheckDiskSpace = true;
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
@@ -336,75 +334,141 @@ describe('PrecheckActivity', () => {
 
     it('should handle path not found for source', async () => {
       mockProtocol.listPaths.mockResolvedValue(['/other/path']);
-    
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
         mockSourcePath,
         mockTraceId
       );
-    
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
     });
-    
+
     it('should handle path not found for destination', async () => {
       mockProtocol.listPaths.mockResolvedValue(['/other/path']);
-    
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
         mockDestinationPath,
         mockTraceId
       );
-    
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND);
     });
-    
     it('should handle list paths failure', async () => {
       mockProtocol.listPaths.mockRejectedValue(new Error('List failed'));
-    
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
         mockSourcePath,
         mockTraceId
       );
-    
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND);
     });
-    
+
     it('should handle no space left on device', async () => {
       const fs = require('fs').promises;
       fs.open.mockRejectedValue({ code: 'ENOSPC' });
-    
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
         mockSourcePath,
         mockTraceId
       );
-    
+
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.NO_SPACE_LEFT_ON_SOURCE_PATH);
     });
-    
+
     it('should handle write permission failure', async () => {
       const fs = require('fs').promises;
       fs.open.mockRejectedValue(new Error('Permission denied'));
-    
+
       const result = await service.preCheckPath(
         mockSettings,
         mockServerCredential,
         mockSourcePath,
         mockTraceId
       );
-    
+
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_WRITE_PERMISSION_FAILED);
     });
+  });
+
+  it('should call getTotalUsedMemory if discoveredSize is undefined', async () => {
+    const testPath = { ...mockSourcePath, discoveredSize: undefined };
+    mockProtocol.getTotalUsedMemory.mockResolvedValue(1000);
+    (service as any).shouldCheckDiskSpace = true;
+
+    const result = await service.preCheckPath(
+      mockSettings,
+      mockServerCredential,
+      testPath,
+      mockTraceId
+    );
+
+    expect(mockProtocol.getTotalUsedMemory).toHaveBeenCalled();
+    expect(result.sourceDataSize).toBe(1000);
+  });
+
+  it('should call getTotalUsedMemory if discoveredSize is null', async () => {
+    const testPath = { ...mockSourcePath, discoveredSize: null };
+    mockProtocol.getTotalUsedMemory.mockResolvedValue(1000);
+    (service as any).shouldCheckDiskSpace = true;
+    const result = await service.preCheckPath(
+      mockSettings,
+      mockServerCredential,
+      testPath,
+      mockTraceId
+    );
+
+    expect(mockProtocol.getTotalUsedMemory).toHaveBeenCalled();
+    expect(result.sourceDataSize).toBe(1000);
+  });
+
+  it('should call getTotalUsedMemory if discoveredSize is negative', async () => {
+    const testPath = { ...mockSourcePath, discoveredSize: -1 };
+    mockProtocol.getTotalUsedMemory.mockResolvedValue(1000);
+    (service as any).shouldCheckDiskSpace = true;
+    const result = await service.preCheckPath(
+      mockSettings,
+      mockServerCredential,
+      testPath,
+      mockTraceId
+    );
+
+    expect(mockProtocol.getTotalUsedMemory).toHaveBeenCalled();
+    expect(result.sourceDataSize).toBe(1000);
+  });
+
+  it('should NOT call getTotalUsedMemory if discoveredSize is 0', async () => {
+    const testPath = { ...mockSourcePath, discoveredSize: 0 };
+    (service as any).shouldCheckDiskSpace = true;
+    const result = await service.preCheckPath(
+      mockSettings,
+      mockServerCredential,
+      testPath,
+      mockTraceId
+    );
+
+    expect(mockProtocol.getTotalUsedMemory).not.toHaveBeenCalled();
+    expect(result.sourceDataSize).toBe(null);
+  });
+
+  it('should NOT call getTotalUsedMemory if discoveredSize is positive', async () => {
+    const testPath = { ...mockSourcePath, discoveredSize: 4567 };
+    (service as any).shouldCheckDiskSpace = true;
+
+    const result = await service.preCheckPath(
+      mockSettings,
+      mockServerCredential,
+      testPath,
+      mockTraceId
+    );
+    expect(mockProtocol.getTotalUsedMemory).not.toHaveBeenCalled();
+    expect(result.sourceDataSize).toBe(4567);
   });
 });
 
