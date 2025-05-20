@@ -1,0 +1,55 @@
+scenarios:
+  - name: create-account
+    url: /api/v1/accounts
+    method: post
+    service_name: admin_service
+    data:
+      account_name: account1
+    response:
+      - account_name: account1
+      - status_code: 201
+    parse:
+      api_account_id: id
+
+
+  - name: get-list-of-accounts
+    url: /api/v1/accounts
+    method: get
+    service_name: admin_service
+    data: {}
+    response:
+      - status_code: 200
+    parse: {}
+    
+
+  - name: get-account-by-account_id
+    url: /api/v1/accounts/{id}
+    method: get
+    service_name: admin_service
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: api_account_id
+
+  - name: update-account
+    url: /api/v1/accounts/{id}
+    method: patch
+    service_name: admin_service
+    data:
+      account_name: account2
+    response:
+      - account_name: "account2"
+      - status_code: 200
+    params:
+      id: api_account_id
+
+  - name: delete-account
+    url: /api/v1/accounts/{id}
+    method: delete
+    service_name: admin_service
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: api_account_id

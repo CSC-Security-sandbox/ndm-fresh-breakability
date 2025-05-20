@@ -1,0 +1,238 @@
+  # TC: Validate able to create User for and able to provide the role of App Admin
+create-account :
+  url: /api/v1/accounts
+  method: post
+  service_name : admin_service
+  data:
+    account_name: "${ACCOUNT_NAME}"
+  response:
+    - account_name: "${ACCOUNT_NAME}"
+    - status_code: 201
+  parse:
+    id: account_id  
+
+create-user:
+  url: /api/v1/create-user
+  method: post
+  service_name: admin_service
+  data:
+    email: "${PROJECT_ADMIN_EMAIL}"
+    firstName: "${PROJECT_ADMIN_FIRST_NAME}"
+    lastName: "${PROJECT_ADMIN_LAST_NAME}"
+    userStatus: "${USER_ACTIVE_STATUS}}"
+  response:
+    - status_code: 201
+    - user.first_name: "${FIRST_NAME}"
+  parse: 
+    id: user.id
+
+create-user:
+  url: /api/v1/create-user
+  method: post
+  service_name: admin_service
+  data:
+    email: "${EMAIL_2}"
+    firstName: "${FIRST_NAME_2}"
+    lastName: "${LAST_NAME_2}"
+    userStatus: "${USER_ACTIVE_STATUS}}"
+  response:
+    - status_code: 201
+    - user.first_name: "${FIRST_NAME_2}"
+  parse: 
+    id: user.id_2
+
+#  continuing App Admin Login
+create-project:
+  url: /api/v1/projects
+  method: post
+  service_name : admin_service
+  data:
+    account_id: $account_id  
+    project_name: "${PROJECT_NAME}"
+    project_description: "${PROJECT_DESCRIP}"
+    start_date: "${CURRENT_DATETIME}"
+  response:
+    - project_name: "${PROJECT_NAME}"
+    - status_code: 201
+  parse:
+    id: project_id
+
+
+create-project2:
+  url: /api/v1/projects
+  method: post
+  service_name : admin_service
+  data:
+    account_id: $account_id  
+    project_name: "${PROJECT_NAME_2}"
+    project_description: "${PROJECT_DESCRIP_2}"
+    start_date: "${CURRENT_DATETIME}"
+  response:
+    - project_name: "${PROJECT_NAME_2}"
+    - status_code: 201
+  parse:
+    id: project_id_2
+    
+
+# TC: Validate that created user is able to assigned as Project admin role
+# Login with APP Admin and give access to project admin to certain project
+
+create-new-user-role-batch:
+  url: /api/v1/user-roles/batch
+  method: post
+  service_name : admin_service
+  data:
+    project_id: $project_id
+    account_id: $account_id
+    users:
+      - user_id: $user_id
+      - role_id: $role_id
+  response:
+    - status_code: 201
+  parse:
+    id: user_role_id
+
+update-user-role-patch:
+  url: /api/v1/user-roles/{id}
+  method: patch
+  service_name : admin_service
+  data:
+    user_id: $user_id
+    role_id: $role_id
+    project_id: $project_id
+    account_id: $account_id
+  response:
+    - status_code: 200
+  params :
+    id : user_role_id
+
+
+# TC: Validate Project Admin able to update the project he have access to.
+
+new-login:
+  method: post
+  data:
+    username: "${EMAIL}"
+    password: "${PASSWORD}"
+  response:
+    - status_code: 201
+  parse: {}
+
+update-project-by-project_id:
+  url : /api/v1/projects/{project_id}
+  method : patch
+  service_name : admin_service
+  data :
+    account_id: $account_id
+    project_name: "${PROJECT_NAME}"
+    project_description: "${UPDATE_PROJECT_DESCRIP}"
+    start_date: "${CURRENT_DATETIME}"
+  params :
+    id : project_id
+  response :
+    - status_code: 200
+  parse :
+    id: project_id
+  
+
+# TC: Validate Project Admin not able to access the project them no access to.
+
+update-project-by-project_id:
+  url : /api/v1/projects/{project_id}
+  method : patch
+  service_name : admin_service
+  data :
+    account_id: $account_id
+    project_name: "${PROJECT_NAME_2}"
+    project_description: "${UPDATE_PROJECT_DESCRIP_2}"
+    start_date: "${CURRENT_DATETIME}"
+  params :
+    id : project_id_2
+  response :
+    - status_code: 403
+  parse :
+    id: project_id
+
+
+# TC: Validate Project Admin user not able to reset password of other user
+
+reset-password-user :
+  url: /api/v1/reset-password
+  method: post
+  service_name : admin_service
+  data:
+    email: "${EMAIL_2}"
+  response:
+    - status_code : 403
+    - email : "${EMAIL}"
+
+# TC: Validate Project Admin  not able to change status of another user
+
+change-user-status :
+  url: /api/v1/user-status
+  method: post
+  service_name : admin_service
+  data:
+    email:  $user.email
+    enable: false
+  response:
+    - status_code : 403
+
+# TC: Validate Project Admin user not able to create new user and new Project
+
+create-user :
+  url: /api/v1/create-user
+  method: post
+  service_name : admin_service
+  data:
+    email: "${EMAIL_3}"
+    username: "${USER_NAME_3}"
+    firstName: "${FIRST_NAME_3}"
+    lastName: "${LAST_NAME_3}"
+  response:
+    - status_code : 403
+    - user.first_name : "${FIRST_NAME_3}"
+  parse: {}
+
+create-project:
+  url: /api/v1/projects
+  method: post
+  service_name : admin_service
+  data:
+    account_id: $account_id  
+    project_name: "${PROJECT_NAME_3}"
+    project_description: "${PROJECT_DESCRIP_3}"
+    start_date: "${CURRENT_DATETIME}"
+  response:
+    - project_name: "${PROJECT_NAME_3}"
+    - status_code: 403
+  parse: {}
+
+# TC: Validate Project Admin able to create the file server Config
+
+create-config:
+  url: /api/v1/servers
+  method: post
+  service_name: config_service
+  data:
+    configName: "${CONFIG_NAME}"
+    configType: "${CONFIG_TYPE}"
+    projectId: $project_id
+    fileServers:
+      - serverType: "${SERVER_TYPE}"
+        userName: "${ROOT_USER_NAME}"
+        password: "${PASSWORD}"
+        protocol: "NFS"
+        protocolVersion: "${PROTOCOL_VERSION_3}"
+        host: "${NFS_HOST}"
+        volumes: []
+        workers:
+          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+    workingDirectory:
+      workingDirectory: ""
+      pathId: null
+      pathName: ""
+  response:
+    - status_code: 201
+  parse:
+    id: configId

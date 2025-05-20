@@ -1,0 +1,395 @@
+scenarios:
+  - name: create-account
+    url: /api/v1/accounts
+    method: post
+    service_name: admin_service
+    data:
+      account_name: Prafull_New_Account
+    response:
+      - account_name: Prafull
+      - status_code: 201
+    parse:
+      id: account_id
+
+  - name: create-user
+    url: /api/v1/create-user
+    method: post
+    service_name: admin_service
+    data:
+      email: "test@user.com"
+      firstName: "Test"
+      lastName: "User"
+      userStatus: "active"
+    response:
+      - status_code: 201
+      - user.first_name: "Test"
+    parse:
+      id: user.id
+
+  - name: create-project
+    url: /api/v1/projects
+    method: post
+    service_name: admin_service
+    data:
+      account_id: "$account_id"
+      project_name: Pune_project22
+      project_description: description_1
+      start_date: "2025-04-09T07:08:02.742Z"
+    response:
+      - project_name: Pune_project221
+      - status_code: 201
+    parse:
+      id: project_id_2
+
+  - name: create-project2
+    url: /api/v1/projects
+    method: post
+    service_name: admin_service
+    data:
+      account_id: "$account_id"
+      project_name: bengaluru_project22
+      project_description: description_2
+      start_date: "2025-04-09T07:08:02.742Z"
+    response:
+      - project_name: bengaluru222
+      - status_code: 201
+    parse:
+      id: project_id_3
+
+  - name: update-project-by-project_id
+    url: /api/v1/projects/{id}
+    method: patch
+    service_name: admin_service
+    data:
+      account_id: "$account_id"
+      project_name: New_updated_description2
+      project_description: desc2
+      start_date: "2025-04-09T07:08:02.742Z"
+    params:
+      id: project_id
+    response:
+      - status_code: 200
+    parse:
+      id: project_id
+
+  - name: create-new-request
+    url: /api/v1/work-manager/validate-connection
+    method: post
+    service_name: config_service
+    data:
+      fileServer:
+        hostname: "192.168.64.6"
+        protocols:
+          - type: "NFS"
+            username: "root"
+            password: ""
+      workerIds: "$workerId"
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse: {}
+    params: {}
+
+  - name: get-workflow-result
+    url: "/api/v1/work-manager/workflow/details/{id}"
+    method: GET
+    service_name: config_service
+    delay: "15"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: workflowId
+
+  - name: create-config
+    url: /api/v1/servers
+    method: post
+    service_name: config_service
+    data:
+      configName: "New_Source_file_server"
+      configType: "FILE"
+      projectId: "15bcd258-23c7-4773-a8e3-92694fe50729"
+      fileServers:
+        - serverType: "${SERVER_TYPE}"
+          userName: "${ROOT_USER_NAME}"
+          password: "${PASSWORD}"
+          protocol: "NFS"
+          protocolVersion: "${PROTOCOL_VERSION_3}"
+          host: "${NFS_HOST}"
+          volumes: []
+          workers:
+            - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+      workingDirectory:
+        workingDirectory: ""
+        pathId: null
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      id: configId
+
+  - name: get-config-by-id
+    url: /api/v1/servers/{id}
+    method: get
+    service_name: config_service
+    delay: "15"
+    data: {}
+    response:
+      - status_code: 200
+      - configs[0].fileServers[0].volumes[0].volumePath: "${NFS_EXPORT_PATH}"
+      - configs[0].fileServers[0].workers[0].workerName: "${NFS_WORKER_NAME}"
+    params:
+      id: configId
+
+  - name: create-new-discovery-job
+    url: /api/v1/jobs/bulk-discovery
+    method: post
+    service_name: job_service
+    data:
+      excludeOlderThan: "2025-04-09T06:55:32.491Z"
+      excludeFilePatterns: "string"
+      preserveAccessTime: false
+      firstRunAt: "2025-04-09T17:33:44.590Z"
+      sourcePathIds: "$sourcePathIds"
+      createdBy: null
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse:
+      id: jobConfigId
+
+  - name: get-jobs-by-job-config-id
+    url: /api/v1/jobs/{id}
+    method: get
+    service_name: job_service
+    delay: "30"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: COMPLETED
+    params:
+      id: jobConfigId
+    parse:
+      jobRuns[0].jobRunId: SourceDiscoveryJobRunId
+
+  - name: get-config-by-id-dest
+    url: /api/v1/servers/{id}
+    method: get
+    service_name: config_service
+    delay: "15"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: configId
+
+  - name: create-new-request-dest
+    url: /api/v1/work-manager/validate-connection
+    method: post
+    service_name: config_service
+    data:
+      fileServer:
+        hostname: "192.168.64.11"
+        protocols:
+          - type: "NFS"
+            username: "root"
+            password: ""
+      workerIds: "$workerId"
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse: {}
+    params: {}
+
+  - name: get-workflow-result-dest
+    url: "/api/v1/work-manager/workflow/details/{id}"
+    method: GET
+    service_name: config_service
+    delay: "5"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: workflowId
+
+  - name: create-config-dest
+    url: /api/v1/servers
+    method: post
+    service_name: config_service
+    data:
+      configName: "New_destination_server"
+      configType: "FILE"
+      projectId: "15bcd258-23c7-4773-a8e3-92694fe50729"
+      fileServers:
+        - serverType: "${SERVER_TYPE}"
+          userName: "${ROOT_USER_NAME}"
+          password: "${PASSWORD}"
+          protocol: "NFS"
+          protocolVersion: "v3"
+          host: "${NFS_HOST}"
+          volumes: []
+          workers:
+            - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+      workingDirectory:
+        workingDirectory: ""
+        pathId: null
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      id: configId
+
+  - name: get-config-by-id-dest
+    url: /api/v1/servers/{id}
+    method: get
+    service_name: config_service
+    delay: "15"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      id: configId
+
+  - name: create-new-discovery-job-dest
+    url: /api/v1/jobs/bulk-discovery
+    method: post
+    service_name: job_service
+    data:
+      excludeOlderThan: ""
+      excludeFilePatterns: ""
+      preserveAccessTime: false
+      firstRunAt: "2025-04-09T17:33:44.590Z"
+      sourcePathIds: "$sourcePathIds"
+      createdBy: null
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse:
+      id: jobConfigId
+
+  - name: get-jobs-by-job-config-id-dest
+    url: /api/v1/jobs/{id}
+    method: get
+    service_name: job_service
+    delay: "20"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: COMPLETED
+    params:
+      id: jobConfigId
+    parse:
+      jobRuns[0].jobRunId: DestinationDiscoveryJobRunId
+
+  - name: get-config-and-volume-by-project-id
+    url: /api/v1/jobs/project/{project_id}
+    method: get
+    service_name: job_service
+    params:
+      project_id: projectId
+    response:
+      - status_code: 200
+    parse: {}
+
+  - name: pre-check-migration
+    url: /api/v1/jobs/precheck
+    method: post
+    service_name: job_service
+    data:
+      migrateConfigs:
+        sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+        destinationPathId:
+          - "UUID_PLACEHOLDER"
+      preserveAccessTime: true
+    response:
+      - status_code: 201
+    parse:
+      workflowId: workflowId
+
+  - name: create-migration-now
+    url: /api/v1/jobs/bulk-migrate
+    method: post
+    service_name: job_service
+    data:
+      firstRunAt: "2025-04-09T09:51:01.230Z"
+      futureRunSchedule: ""
+      migrateConfigs:
+        - sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+          destinationPathId: "$destinationPathId"
+      sid_mapping: false
+      options:
+        excludeFilePatterns: ""
+        preserveAccessTime: true
+        skipFile: "15-M"
+    response:
+      - status_code: 201
+    parse:
+      id: MigrationJobConfigId
+
+  - name: create-bulk-cutover-job
+    url: /api/v1/jobs/bulk-cutover
+    method: post
+    service_name: job_service
+    delay: "60"
+    data:
+      cutoverConfig:
+        - sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+          destinationPathId:
+            - "$destinationPathId"
+    response:
+      - status_code: 201
+    parse:
+      id_migration: id
+
+  - name: approve-bulk-cutover-job
+    url: /api/v1/job-run/cutover/{id}/approve
+    method: put
+    service_name: job_service
+    delay: "15"
+    data:
+      action: "APPROVED"
+      jobRunId: "$id"
+    response:
+      - status_code: 200
+
+  - name: create-bulk-cutover-job-dest
+    url: /api/v1/jobs/bulk-cutover
+    method: post
+    service_name: job_service
+    delay: "60"
+    data:
+      cutoverConfig:
+        - sourcePathId: "$configs[0].fileServers[0].volumes[0].id"
+          destinationPathId:
+            - "$destinationPathId"
+    response:
+      - status_code: 201
+    parse:
+      id_migration: id
+
+  - name: reject-bulk-cutover-job
+    url: /api/v1/job-run/cutover/{id}/reject
+    method: put
+    service_name: job_service
+    delay: "15"
+    data:
+      action: "REJECTED"
+      jobRunId: "$id"
+    response:
+      - status_code: 200

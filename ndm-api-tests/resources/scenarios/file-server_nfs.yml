@@ -1,0 +1,194 @@
+# TC: Validate the creaton of NFS file server with protocol version 3
+create-config:
+  url: /api/v1/servers
+  method: post
+  service_name: config_service
+  data:
+    configName: "${CONFIG}"
+    configType: "${CONFIG_TYPE}"
+    projectId: $project_id
+    fileServers:
+      - serverType: "${SERVER_TYPE}"
+        userName: "${ROOT_USER_NAME}"
+        password: "${PASSWORD}"
+        protocol: "NFS"
+        protocolVersion: "${PROTOCOL_VERSION_3}"
+        host: "${NFS_HOST}"
+        volumes: []
+        workers:
+          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+    workingDirectory:
+      workingDirectory: ""
+      pathId: null
+      pathName: ""
+
+  response:
+    - status_code: 201
+  parse:
+    id: configId
+
+# TC: Validate the file server created successfully with expected export path and worker with protocol version 3 
+get-config-by-id:
+  url: /api/v1/servers/{id}
+  method: get
+  service_name : config_service
+  delay : "5"
+  data: {}
+  response:
+    - status_code : 200
+      configs[0].fileServers[0].volumes[0].volumePath: "${NFS_EXPORT_PATH}"
+      configs[0].fileServers[0].workers[0].workerName: "${NFS_WORKER_NAME}"
+  params :
+    id: configId
+
+
+
+# TC: Validate the creaton of NFS file server with protocol version 4
+create-config:
+  url: /api/v1/servers
+  method: post
+  service_name: config_service
+  data:
+    configName: "${CONFIG_2}"
+    configType: "${CONFIG_TYPE}"
+    projectId: $project_id
+    fileServers:
+      - serverType: "${SERVER_TYPE}"
+        userName: "${ROOT_USER_NAME}"
+        password: "${PASSWORD}"
+        protocol: "NFS"
+        protocolVersion: "${PROTOCOL_VERSION_4}"
+        host: "${NFS_HOST}"
+        volumes: []
+        workers:
+          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+    workingDirectory:
+      workingDirectory: ""
+      pathId: null
+      pathName: ""
+
+  response:
+    - status_code: 201
+  parse:
+    id: configId_2
+
+# TC: Validate the file server created successfully with expected export path and worker with protocol version 4
+get-config-by-id:
+  url: /api/v1/servers/{id}
+  method: get
+  service_name : config_service
+  delay : "5"
+  data: {}
+  response:
+    - status_code : 200
+      configs[0].fileServers[0].volumes[0].volumePath: "${NFS_EXPORT_PATH}"
+      configs[0].fileServers[0].workers[0].workerName: "${NFS_WORKER_NAME}"
+  params :
+    id: configId
+
+# TC: Validate the file server not able to create if we provide incorrect host name
+create-new-request:
+  url: /api/v1/work-manager/validate-connection
+  method: post
+  service_name : config_service
+  data:
+    fileServer:
+      hostname: "${INCORRECT_HOST_NAME}"
+      protocols:
+        - type: "NFS"
+          username: "${ROOT_USER_NAME}"
+          password: "${PASSWORD}"
+    workerIds: "$workerId"
+    options :
+      workflowExecutionTimeout: "60s"
+      workflowTaskTimeout: "30s"
+      workflowRunTimeout: "30s"
+      startDelay: "10s"
+
+  response:
+    - status_code: 200
+      completed[0].message: "Failed to validate connection for 0.0.0.0 of type NFS: Error: Error: Unexpected error while connecting to 0.0.0.0:2049 - Connection timed out"
+
+
+# TC: Validate the file server getting created with Error status if Export path is incorrect
+create-config:
+  url: /api/v1/servers
+  method: post
+  service_name: config_service
+  data:
+    configName: "${CONFIG_3}"
+    configType: "${CONFIG_TYPE}"
+    projectId: $project_id
+    fileServers:
+      - serverType: "${SERVER_TYPE}"
+        userName: "${ROOT_USER_NAME}"
+        password: "${PASSWORD}"
+        protocol: "NFS"
+        protocolVersion: "${PROTOCOL_VERSION_3}"
+        host: "${NFS_HOST}"
+        volumes: []
+        workers:
+          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+    workingDirectory:
+      workingDirectory: ""
+      pathId: null
+      pathName: "/wrongPath"
+  response:
+    - status_code: 201
+  parse:
+    id: configId_2
+
+ get-config-by-id:
+  url: /api/v1/servers/{id}
+  method: get
+  service_name : config_service
+  delay : "15"
+  data: {}
+  response:
+    - status_code : 200
+      serverConfig[0].status: "ERRORED"
+      serverConfig[0].errorMessage: "Invalid export path"
+  params :
+    id: configId_2
+
+
+# TC: Validate the file server getting created with Error status if Working directory path is incorrect
+create-config:
+  url: /api/v1/servers
+  method: post
+  service_name: config_service
+  data:
+    configName: "${CONFIG_4}"
+    configType: "${CONFIG_TYPE}"
+    projectId: $project_id
+    fileServers:
+      - serverType: "${SERVER_TYPE}"
+        userName: "${ROOT_USER_NAME}"
+        password: "${PASSWORD}"
+        protocol: "NFS"
+        protocolVersion: "${PROTOCOL_VERSION_3}"
+        host: "${NFS_HOST}"
+        volumes: []
+        workers:
+          - "7c8877e6-df9b-414b-bf1d-e8d8c3d78cad"
+    workingDirectory:
+      workingDirectory: "/wrongPath"//
+      pathId: null
+      pathName: "/expectedPath"//
+  response:
+    - status_code: 201
+  parse:
+    id: configId_3
+
+ get-config-by-id:
+  url: /api/v1/servers/{id}
+  method: get
+  service_name : config_service
+  delay : "15"
+  data: {}
+  response:
+    - status_code : 200
+      serverConfig[0].status: "ERRORED"
+      serverConfig[0].errorMessage: "Invalid working directory"
+  params :
+    id: configId_3

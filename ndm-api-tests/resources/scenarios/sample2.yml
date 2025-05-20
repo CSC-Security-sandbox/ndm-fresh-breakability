@@ -1,0 +1,28 @@
+
+
+# create-project:
+#   url: /api/v1/projects
+#   method: post
+#   data:
+#     account_id: $account_id  
+#     project_name: TP-P-jaipur6
+#     project_description: desc is there.
+#     start_date: "2025-03-05T07:08:02.742Z"
+#   response:
+#     - project_name: TP-P-jaipur6
+#     - status_code: 201
+#   parse:
+#     id: project_id 
+    
+    # Consistent naming convention
+# get-project-by-account_id:
+#   url: /api/v1/projects/accounts/{account_id}/projects
+#   method: post
+#   data:
+#   params:
+#     account_id: $account_id
+#   response:
+#     - account_id: $account_id
+#     - status_code: 201
+#   parse:
+

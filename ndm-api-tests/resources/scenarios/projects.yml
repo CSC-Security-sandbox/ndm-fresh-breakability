@@ -1,0 +1,120 @@
+
+create-account :
+  url: /api/v1/accounts
+  method: post
+  service_name : admin_service
+  data:
+    account_name: Prafull
+  response:
+    - account_name: Prafull
+    - status_code: 201
+  parse:
+    id: account_id  
+
+
+#  Project section
+# nsistent naming convention
+
+create-user :
+  url: /api/v1/create-user
+  method: post
+  service_name : admin_service
+  data:
+    username: "lalitsinfffgh8122000@email.com"
+    firstName: "Laflit"
+    lastName: "Sinfgh"
+  response:
+    - status_code : 201
+    - user.first_name : "Laflit"
+  parse: 
+    id: user.id
+
+
+
+
+create-project:
+  url: /api/v1/projects
+  method: post
+  service_name : admin_service
+  data:
+    account_id: $account_id  
+    project_name: Pune_project22
+    project_description: desc1
+    start_date: "2025-03-05T07:08:02.742Z"
+  response:
+    - project_name: Pune_project22
+    - status_code: 201
+  parse:
+    id: project_id_2 # Consistent naming convention
+
+create-project2:
+  url: /api/v1/projects
+  method: post
+  service_name : admin_service
+  template_name : create-project
+  data:
+    account_id: $account_id  
+    project_name: bengaluru22
+    project_description: desc1
+    start_date: "2025-03-05T07:08:02.742Z"
+  response:
+    - project_name: bengaluru22
+    - status_code: 201
+  parse:
+    id: project_id_3 # Consistent naming convention
+
+
+# get-project-by-account_id:
+#   url : /api/v1/projects/accounts/{account_id}/projects
+#   method : get
+#   service_name : admin_service
+#   data : {}
+#   params :
+#     account_id: account_id
+#   response :
+#     - status_code: 200
+#   parse : {}
+
+
+# # {project_id = 12}
+# get-project-by-project_id:
+#   url : /api/v1/projects/{id}
+#   method : get
+#   service_name : admin_service
+#   data :
+#   params :
+#     id : project_id
+#   response :
+#     - status_code: 200
+#   parse :
+#     id: project_id
+
+
+# update-project-by-project_id:
+#   url : /api/v1/projects/{id}
+#   method : patch
+#   service_name : admin_service
+#   data :
+#     account_id: $account_id
+#     project_name: Udaipur-project2
+#     project_description: desc2
+#     start_date: "2025-03-12 08:25:08.154"
+#   params :
+#     id : project_id
+#   response :
+#     - status_code: 200
+#   parse :
+#     id: project_id
+
+# delete-project-by-project_id:
+#   url : /api/v1/projects/{id}
+#   method : delete
+#   data :
+#   params :
+#     id : project_id
+#   response :
+#     - status_code: 200
+#   parse :
+#     id: project_id
+#   params :
+#     id: project_id
