@@ -1,0 +1,26 @@
+{
+  "name": "@NetApp-Cloud-DataMigrate/auth-lib",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "version": "1.0.0",
+  "description": "Authentication and Authorization Keycloak",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "author": "Kunal Avghade",
+  "license": "ISC",
+  "dependencies": {
+    "@nestjs/common": "^10.4.16",
+    "@nestjs/config": "^3.3.0",
+    "@nestjs/core": "^10.0.0",
+    "@types/node": "^22.9.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0",
+    "rxjs": "^7.8.1",
+    "typescript": "^5.6.3"
+  }
+}
