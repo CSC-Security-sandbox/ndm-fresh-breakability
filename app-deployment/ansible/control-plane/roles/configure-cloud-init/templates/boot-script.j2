@@ -1,0 +1,225 @@
+#!/bin/bash
+
+# Configuration
+MAX_RETRIES=3
+RETRY_DELAY=5
+WAIT_TIMEOUT=600
+MICROK8S_INIT_DELAY=80
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+retry() {
+    local retries=$1
+    local command=$2
+    local delay=${3:-$RETRY_DELAY}
+    local timeout=${4:-$WAIT_TIMEOUT}
+    local attempt=1
+
+    while [ $attempt -le $retries ]; do
+        log "Attempt $attempt: $command"
+        timeout "$timeout" bash -c "$command"
+        if [ $? -eq 0 ]; then
+            return 0
+        fi
+        log "Command failed, retrying in $delay seconds..."
+        sleep "$delay"
+        attempt=$((attempt + 1))
+    done
+    log "Command failed after $retries attempts: $command"
+    return 1
+}
+
+handle_failure() {
+    log "[ERROR] $1"
+    exit 1
+}
+
+check_prerequisites() {
+    command -v microk8s >/dev/null 2>&1 || handle_failure "microk8s is not installed"
+    command -v kubectl >/dev/null 2>&1 || handle_failure "kubectl is not installed"
+    command -v jq >/dev/null 2>&1 || handle_failure "jq is not installed"
+}
+
+init_microk8s() {
+    log "Starting MicroK8s..."
+    retry $MAX_RETRIES "microk8s start" || handle_failure "Failed to start MicroK8s"
+    
+    log "Checking MicroK8s status..."
+    if microk8s status | grep -q "microk8s is running"; then
+        log "MicroK8s is running. Proceeding with certificate refresh..."
+        
+        log "Refreshing MicroK8s certificates..."
+        local certs=("server.crt" "front-proxy-client.crt" "ca.crt")
+        for cert in "${certs[@]}"; do
+            retry $MAX_RETRIES "microk8s refresh-certs --cert $cert" || handle_failure "Failed to refresh $cert"
+        done
+        log "MicroK8s is running and certificates are refreshed."
+    else
+        log "MicroK8s is not running. Refreshing certificates and rechecking status..."
+
+        # Refresh certificates
+        local certs=("server.crt" "front-proxy-client.crt" "ca.crt")
+        for cert in "${certs[@]}"; do
+            retry $MAX_RETRIES "microk8s refresh-certs --cert $cert" || handle_failure "Failed to refresh $cert"
+        done
+
+        # Recheck MicroK8s status after refreshing certificates
+        log "Rechecking MicroK8s status after refreshing certificates..."
+        if ! microk8s status | grep -q "microk8s is running"; then
+            handle_failure "MicroK8s is still not running after certificate refresh"
+        fi
+    fi
+}
+
+unseal_openbao() {
+    log "Waiting for openbao-0 to be ready..."
+    retry $MAX_RETRIES "kubectl wait --namespace=\"openbao\" --for=jsonpath='{.status.phase}'=Running pod/openbao-0 --timeout=${WAIT_TIMEOUT}s" || handle_failure "openbao-0 pod not ready"
+
+    log "Allow some time for openbao-0 to be fully ready..."
+    sleep 120
+    
+    # Unseal openbao-0 first, since it's the leader pod
+    log "Unsealing openbao-0..."
+    local OPENBAO_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json)
+    [ -z "$OPENBAO_UNSEAL_KEY" ] && handle_failure "Failed to get openbao unseal key"
+    
+    retry $MAX_RETRIES "kubectl exec openbao-0 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-0"
+
+    # After unsealing openbao-0, move forward even if openbao-1 and openbao-2 are not ready yet
+    log "Proceeding with unsealing openbao-1 and openbao-2..."
+
+    # Unseal openbao-1 and openbao-2
+    retry $MAX_RETRIES "kubectl exec openbao-1 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-1"
+    retry $MAX_RETRIES "kubectl exec openbao-2 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-2"
+    
+    # Wait for both parallel tasks to complete
+    wait
+}
+
+restart_statefulsets() {
+    local services=("postgresql:postgres" "keycloak:keycloak" "redis-master:redis")
+
+    for service in "${services[@]}"; do
+        IFS=':' read -r statefulset namespace <<< "$service"
+        
+        log "Restarting StatefulSet $statefulset in namespace $namespace..."
+
+        if ! retry $MAX_RETRIES "kubectl rollout restart statefulset $statefulset -n $namespace"; then
+            handle_failure "Failed to restart StatefulSet $statefulset in namespace $namespace"
+            continue
+        fi
+
+        log "Waiting for StatefulSet $statefulset rollout to complete in namespace $namespace..."
+        if ! retry $MAX_RETRIES "kubectl rollout status --watch statefulset/$statefulset -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+            handle_failure "Rollout of StatefulSet $statefulset in namespace $namespace failed"
+            continue
+        else
+            log "StatefulSet $statefulset in namespace $namespace restarted successfully and all pods are Ready."
+        fi
+    done
+}
+
+restart_temporal_deployments() {
+    local namespace="temporal"
+    log "Restarting Deployments in namespace $namespace..."
+
+    if ! retry $MAX_RETRIES "kubectl rollout restart deployment -n $namespace"; then
+        handle_failure "Failed to restart Deployments in namespace $namespace"
+        continue
+    fi
+
+    log "Waiting for Deployments rollout to complete in namespace $namespace..."
+    if ! retry $MAX_RETRIES "kubectl rollout status  --watch  deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Rollout of Deployments in namespace $namespace failed"
+        continue
+    else
+        log "Deployments in namespace $namespace restarted successfully and all pods are Ready."
+    fi
+}
+
+restart_datamigrator_deployments() {
+    local namespace="datamigrator"
+    log "Restarting Deployments in namespace $namespace..."
+
+    if ! retry $MAX_RETRIES "kubectl rollout restart deployment -n $namespace"; then
+        handle_failure "Failed to restart Deployments in namespace $namespace"
+        continue
+    fi
+
+    log "Waiting for Deployments rollout to complete in namespace $namespace..."
+    if ! retry $MAX_RETRIES "kubectl rollout status  --watch  deployment -n $namespace --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Rollout of Deployments in namespace $namespace failed"
+        continue
+    else
+        log "Deployments in namespace $namespace restarted successfully and all pods are Ready."
+    fi
+}
+
+setup_metallb() {
+    log "Configuring MetalLB..."
+    local PRIVATE_IP=$(hostname -I | awk '{print $1}')
+    [ -z "$PRIVATE_IP" ] && handle_failure "Failed to get private IP"
+    retry $MAX_RETRIES "microk8s enable metallb:${PRIVATE_IP}/32" || handle_failure "Failed to enable MetalLB"
+}
+
+post_checks() {
+    log "Starting post-deployment checks..."
+    
+    local METALLB_IP=$(hostname -I | awk '{print $1}')
+    [ -z "$METALLB_IP" ] && handle_failure "Failed to get MetalLB IP for post-checks"
+    
+    # Define microservices and their health endpoints
+    declare -A MICROSERVICES=(
+        ["keycloak"]="http://${METALLB_IP}:8080/auth/realms/master"
+        ["ui"]="http://${METALLB_IP}:3000/health"
+        ["vault"]="http://${METALLB_IP}:8200/v1/sys/health"
+        ["service1"]="http://${METALLB_IP}:4000/health"
+        ["service2"]="http://${METALLB_IP}:5000/health"
+        ["service3"]="http://${METALLB_IP}:6000/health"
+    )
+    
+    # Check each microservice
+    for service in "${!MICROSERVICES[@]}"; do
+        local endpoint="${MICROSERVICES[$service]}"
+        log "Checking ${service} at ${endpoint}..."
+        retry $MAX_RETRIES "curl -sSf --max-time 10 ${endpoint}" || handle_failure "${service} is not responding at ${endpoint}"
+    done
+
+    # PostgreSQL
+    log "Checking PostgreSQL..."
+    retry $MAX_RETRIES "kubectl exec -n postgres $(kubectl get pod -n postgres -l app=postgres-postgresql -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -c '\l'" || handle_failure "PostgreSQL is not responding"
+
+    # datamigrator Services
+    log "Checking datamigrator microservices..."
+    retry $MAX_RETRIES "kubectl get pods -n datamigrator --no-headers | grep -v Running && false" || log "All datamigrator pods are running"
+
+    log "All post-checks passed successfully!"
+}
+
+
+trap 'handle_failure "Script terminated unexpectedly"' ERR
+
+main() {
+    log "Starting MicroK8s boot script..."
+    check_prerequisites
+    init_microk8s
+    
+    log "Waiting for system stabilization..."
+    sleep $MICROK8S_INIT_DELAY
+    
+    unseal_openbao
+    restart_statefulsets
+    restart_temporal_deployments
+    
+    log "Restarting datamigrator pods..."
+    restart_datamigrator_deployments
+    
+    setup_metallb
+    retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"
+    touch /var/lib/boot-microk8s.done
+    log "MicroK8s cloud init setup completed successfully"
+}
+
+main

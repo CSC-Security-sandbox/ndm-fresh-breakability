@@ -1,0 +1,92 @@
+admin:
+  user: admin
+  password: admin
+
+grafana:
+  replicaCount: 1
+  podSecurityContext:
+    fsGroup: {{ vm_gid }}
+  containerSecurityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
+  extraEnvVars:
+    - name: MY_HOST_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: GF_SERVER_DOMAIN
+      value: "$(MY_HOST_IP)"
+    - name: GF_SERVER_ROOT_URL
+      value: "https://$(MY_HOST_IP)/grafana/"
+    - name: GF_SERVER_SERVE_FROM_SUB_PATH
+      value: "true"
+    - name: GF_AUTH_TOKEN_ROTATION_INTERVAL_MINUTES
+      value: "1000"
+    - name: GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION
+      value: "24h"
+    - name: GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION
+      value: "30d"
+
+ingress:
+  enabled: true
+  pathType: Prefix
+  ingressClassName: public
+  hostname: ""
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /grafana/$1
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  extraRules:
+    - host: ""
+      http:
+        paths:
+          - path: "/grafana/?(.*)"
+            pathType: Prefix
+            backend:
+              service:
+                name: "grafana"
+                port:
+                  number: 3000
+dashboardsProvider:
+  enabled: true
+
+dashboardsConfigMaps:
+  - configMapName: kubernetes-monitoring
+    fileName: kubernetes-monitoring.json
+  - configMapName: loki-dashboard
+    fileName: loki-dashboard.json
+  - configMapName: worker-dashboard
+    fileName: worker-dashboard.json
+  - configMapName: limits-monitoring-dashboard
+    fileName: limits-monitoring-dashboard.json
+       
+datasources:
+  secretDefinition:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server.prometheus.svc.cluster.local/
+        isDefault: true
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki-gateway/
+        jsonData:
+          tlsSkipVerify: true
+          httpHeaderName1: 'X-Scope-OrgID'
+        secureJsonData:
+          httpHeaderValue1: 'ndm-1'
+
+persistence:
+  enabled: true
+  storageClass: "local-storage-grafana"
+  size: {{ grafana_data_volume_size }}
+  selector:
+      matchLabels:
+          role: grafana-data
+
+volumePermissions:
+  enabled: true

@@ -1,0 +1,9 @@
+---
+- name: Configure datamigrator worker
+  become: true
+  become_method: ansible.builtin.sudo
+  debugger: never
+  gather_facts: true
+  hosts: default
+  roles:
+    - { role:  ../roles/configure-worker, tags: 'configure-worker' }

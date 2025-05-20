@@ -1,0 +1,260 @@
+kind: DaemonSet
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 400m
+    memory: 128Mi
+
+service:
+  ports:
+    - name: logs
+      protocol: TCP
+      containerPort: 32422    
+
+volumes:
+  - name: fluentd-logs
+    hostPath:
+      path: /fluentd-logs
+      type: DirectoryOrCreate
+
+volumeMounts:
+  - name: fluentd-logs
+    mountPath: /fluentd-logs
+
+plugins:
+  - fluent-plugin-grafana-loki
+
+fileConfigs:
+  01_sources.conf: |-
+    ## logs from podman
+    <source>
+      @type tail
+      @id in_tail_container_logs
+      @label @KUBERNETES
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_type string
+          time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+          keep_time_key false
+        </pattern>
+        <pattern>
+          format regexp
+          expression /^(?<time>.+) (?<stream>stdout|stderr)( (.))? (?<log>.*)$/
+          time_format '%Y-%m-%dT%H:%M:%S.%NZ'
+          keep_time_key false
+        </pattern>
+      </parse>
+      emit_unmatched_lines true
+    </source>
+
+    <source>
+      @type forward
+      bind 0.0.0.0
+      port 32422
+      <security>
+        self_hostname fluentd-server 
+        shared_key secure_communication_is_awesome 
+      </security>
+      @label @WORKER
+    </source>
+
+    # expose metrics in prometheus format
+    <source>
+      @type prometheus
+      bind 0.0.0.0
+      port 24231
+      metrics_path /metrics
+    </source>
+  
+  02_filters.conf: |-
+    <label @KUBERNETES>
+      <match kubernetes.var.log.containers.fluentd**>
+        @type relabel
+        @label @FLUENT_LOG
+      </match>
+
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+        @id filter_kube_metadata
+        skip_labels false
+        skip_container_metadata false
+        skip_namespace_metadata false 
+        skip_master_url true
+        watch false
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @DISPATCH
+      </match>
+    </label>
+
+    <label @WORKER>
+      <filter worker.tag>
+        @type prometheus
+        <metric>
+          name fluentd_worker_input_status_records_total
+          type counter
+          desc The total number of incoming worker records
+          <labels>
+            tag ${tag}
+            hostname ${hostname}
+          </labels>
+        </metric>
+      </filter>
+
+      <match worker.tag>
+        @type copy
+        <store>
+          @type relabel
+          @label @WORKER_LOKI
+        </store>
+        <store>
+          @type relabel
+          @label @WORKER_FILE
+        </store>
+      </match>
+    </label>
+  
+  03_dispatch.conf: |-
+    <label @DISPATCH>
+      <filter **>
+        @type prometheus
+        <metric>
+          name fluentd_input_status_num_records_total
+          type counter
+          desc The total number of incoming records
+          <labels>
+            tag ${tag}
+            hostname ${hostname}
+          </labels>
+        </metric>
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @OUTPUT
+      </match>
+    </label>
+  
+  04_outputs.conf: |-
+    <label @OUTPUT>
+      <match **>
+        @type copy
+        <store>
+          @type relabel
+          @label @LOKI
+        </store>
+        <store>
+          @type relabel
+          @label @FILE
+        </store>
+      </match>
+    </label>
+
+    <label @LOKI>
+      <match **>
+        @type loki
+        url http://loki-gateway.grafana.svc.cluster.local:80
+        tenant ndm-1
+        extract_kubernetes_labels false
+        remove_keys kubernetes
+        extra_labels {"job":"fluentd"}
+        <label>
+          app $.kubernetes.labels.app
+          namespace $.kubernetes.namespace_name
+          pod $.kubernetes.pod_name
+          container $.kubernetes.container_name
+        </label>
+        flush_interval 10s
+        flush_at_shutdown true
+      </match>
+    </label>
+
+    <label @WORKER_LOKI>
+      <match worker.tag>
+        @type loki
+        url http://loki-gateway.grafana.svc.cluster.local:80
+        tenant ndm-1
+        extra_labels {"job":"worker"}
+        flush_interval 10s
+        flush_at_shutdown true
+      </match>
+    </label>
+
+    <label @FILE>
+      <filter **>
+        @type record_transformer
+        enable_ruby true
+        <record>
+          log "[${time.strftime('%Y-%m-%d %H:%M:%S')}] ${record['log']}"
+          namespace ${record.dig("kubernetes", "namespace_name") || "unknown"}
+          pod_name ${record.dig("kubernetes", "pod_name") || "unknown"}
+          container_name ${record.dig("kubernetes", "container_name") || "unknown"}
+        </record>
+      </filter>
+
+      <match **>
+        @type file
+        path /fluentd-logs/%Y-%m-%d/${namespace}/${pod_name}/${container_name}
+        append true
+        <buffer time,namespace,pod_name,container_name>
+          @type file
+          path /var/log/fluentd-buffers/k8s
+          timekey 24h
+          timekey_wait 120
+          timekey_use_utc false
+          flush_mode interval
+          flush_interval 5s
+          flush_at_shutdown true
+        </buffer>
+
+        <format>
+          @type single_value
+          message_key log
+        </format>
+      </match>
+    </label>
+
+    <label @WORKER_FILE>
+      <filter worker.tag>
+        @type record_transformer
+        enable_ruby true
+        renew_record true
+        <record>
+          message "[${time.strftime('%Y-%m-%d %H:%M:%S')}] ${record.to_json}"
+          worker_name "worker"
+        </record>
+      </filter>
+
+      <match worker.tag>
+        @type file
+        path /fluentd-logs/%Y-%m-%d/worker/${worker_name}
+        append true
+        <buffer time,worker_name>
+          @type file
+          path /var/log/fluentd-buffers/worker
+          timekey 24h
+          timekey_wait 120
+          timekey_use_utc false
+          flush_mode interval
+          flush_interval 5s
+          flush_at_shutdown true
+        </buffer>
+
+        <format>
+          @type single_value
+          message_key message
+        </format>
+      </match>
+    </label>

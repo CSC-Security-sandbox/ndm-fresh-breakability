@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-unseal-script
+  namespace: openbao
+data:
+  unseal.sh: |
+    #!/bin/bash
+
+    MAX_RETRIES=3
+    RETRY_DELAY=5
+    
+    log() {
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    }
+    
+    handle_failure() {
+      log "[ERROR] $1"
+      exit 1
+    }
+    
+    check_and_unseal() {
+      log "Checking OpenBao seal status..."
+      
+      OPENBAO_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /unseal-keys/cluster-keys.json)
+      
+      if [ -z "$OPENBAO_UNSEAL_KEY" ]; then
+        handle_failure "Unseal key not found"
+      fi
+      
+      for i in {0..2}; do
+        POD_EXISTS=$(kubectl get pod openbao-$i -n openbao --no-headers --ignore-not-found | wc -l)
+        if [ "$POD_EXISTS" -eq "0" ]; then
+          log "Pod openbao-$i does not exist, skipping"
+          continue
+        fi
+        
+        log "Checking seal status for openbao-$i..."
+        SEAL_STATUS=$(kubectl exec openbao-$i -n openbao -- bao status -format=json 2>/dev/null | jq -r '.sealed')
+        
+        if [ "$?" -ne 0 ]; then
+          log "Failed to get seal status for openbao-$i, pod may not be ready"
+          continue
+        fi
+        
+        if [ "$SEAL_STATUS" == "true" ]; then
+          log "openbao-$i is sealed, unsealing now..."
+          kubectl exec openbao-$i -n openbao -- bao operator unseal "$OPENBAO_UNSEAL_KEY"
+          sleep 5
+          
+          NEW_STATUS=$(kubectl exec openbao-$i -n openbao -- bao status -format=json | jq -r '.sealed')
+          if [ "$NEW_STATUS" == "true" ]; then
+            log "Failed to unseal openbao-$i"
+          else
+            log "Successfully unsealed openbao-$i"
+          fi
+        else
+          log "openbao-$i is already unsealed"
+        fi
+      done
+    }
+    
+    check_and_unseal

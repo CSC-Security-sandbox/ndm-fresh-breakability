@@ -1,0 +1,52 @@
+server:
+  dataStorage:
+    enabled: true
+    size: {{ openbao_data_volume_size }}
+    mountPath: "/openbao/data"
+    storageClass: "local-storage-openbao"
+    accessMode: ReadWriteOnce
+    annotations: {}
+    labels: 
+      role: openbao-data
+    
+  affinity: {}
+
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+          retry_join {
+            leader_api_addr = "http://openbao-0.openbao-internal:8200"
+          }          
+          retry_join {
+            leader_api_addr = "http://openbao-1.openbao-internal:8200"
+          }          
+          retry_join {
+            leader_api_addr = "http://openbao-2.openbao-internal:8200"
+          }          
+        }
+
+        service_registration "kubernetes" {}
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 120
+    successThreshold: 1
+    failureThreshold: 5
+ui:
+  enabled: true

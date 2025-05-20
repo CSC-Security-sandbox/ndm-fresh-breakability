@@ -1,0 +1,39 @@
+---
+
+- name: delete prometheus-data directory if uninstall flag is defined 
+  become: yes
+  file:
+    path: /data/prometheus-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: prometheus_uninstall is defined
+
+- name: delete alertmanager-data directory if uninstall flag is defined 
+  become: yes
+  file:
+    path: /data/alertmanager-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: prometheus_uninstall is defined
+
+- name: create prometheus-data directory 
+  become: yes
+  file:
+    path: /data/prometheus-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+
+- name: create alertmanager-data directory 
+  become: yes
+  file:
+    path: /data/alertmanager-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755

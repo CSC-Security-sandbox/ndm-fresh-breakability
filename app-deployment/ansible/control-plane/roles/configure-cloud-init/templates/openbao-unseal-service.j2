@@ -1,0 +1,15 @@
+[Unit]
+Description=Unseal OpenBao on boot
+After=network-online.target
+ConditionPathExists=/var/lib/boot-microk8s.done
+
+[Service]
+Type=oneshot
+ExecStart=/opt/datamigrator/bin/unseal.sh
+User=root
+Group=root
+StandardOutput=append:/opt/datamigrator/logs/openbao-unseal.log
+StandardError=append:/opt/datamigrator/logs/openbao-unseal.log
+
+[Install]
+WantedBy=multi-user.target

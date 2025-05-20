@@ -1,0 +1,83 @@
+---
+- name: Copy contents of helm-chart values.yaml
+  become: no
+  local_action:
+    module: template
+    src: "../../values.j2"
+    dest: "../roles/datamigrator/helm-chart/package/values.yaml"
+
+- name: Package the tarball
+  become: no
+  local_action:
+    module: command
+    cmd: helm package ../roles/datamigrator/helm-chart/package/ -d ../roles/datamigrator/helm-chart/package/
+
+- name: Copy the tarball to the remote host
+  become: yes
+  copy:
+    src: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
+    dest: "$HOME/helm-chart.tgz"
+
+- name: Install Helm chart
+  become: yes
+  shell: |
+    helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz
+  register: helm_install_output
+
+- name: Debug Helm install output
+  debug:
+    var: helm_install_output.stdout_lines
+
+- name: Wait for pods to come up and handle failure
+  block:
+    - name: Wait for pods to come up
+      become: yes
+      shell: kubectl wait --namespace="datamigrator" --for=condition=Ready pod --all
+      register: kubectl_get_pods
+      retries: 10 # debug retries
+      delay: 25
+      until: kubectl_get_pods.rc == 0
+  rescue:
+    - name: Fetch and display pod logs
+      become: yes
+      shell: |
+        for pod in $(kubectl get pods -n datamigrator -o jsonpath='{.items[*].metadata.name}'); do
+          echo "Logs for pod: $pod"
+          kubectl logs -n datamigrator $pod --all-containers=true
+          echo "----------------------------------------"
+        done
+      register: pod_logs
+    - name: Display pod logs
+      ansible.builtin.debug:
+        msg: "{{ pod_logs.stdout }}"
+    - name: Fail the play due to pod readiness failure
+      fail:
+        msg: "Pods did not become ready within the expected time frame."
+
+- name: debug output
+  ansible.builtin.debug:
+    msg: "Get pods (datamigrator): {{ kubectl_get_pods.stdout | split('\n') }}"
+
+- name: Check datamigrator pod status
+  shell: kubectl get pods -n datamigrator
+  register: pod_status
+
+- name: Delete the tarball from the remote host
+  become: yes
+  file:
+    path: $HOME/helm-chart.tgz
+    state: absent
+
+- name: Delete the local tarball
+  become: no
+  local_action:
+    module: file
+    path: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
+    state: absent
+
+- name: Delete the local values.yaml in package folder
+  become: no
+  local_action:
+    module: file
+    path: "../roles/datamigrator/helm-chart/package/values.yaml"
+    state: absent

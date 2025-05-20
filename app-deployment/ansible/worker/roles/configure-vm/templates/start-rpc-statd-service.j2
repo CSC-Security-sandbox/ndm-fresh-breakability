@@ -1,0 +1,11 @@
+[Unit]
+Description=start rpc-statd at boot
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl start rpc-statd
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

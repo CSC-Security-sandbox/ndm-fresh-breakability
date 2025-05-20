@@ -1,0 +1,9 @@
+---
+- name: Configure cloud init
+  become: true
+  become_method: ansible.builtin.sudo
+  debugger: never
+  gather_facts: true
+  hosts: default
+  roles:
+    - { role:  ../roles/configure-cloud-init, tags: 'configure-cloud-init' }

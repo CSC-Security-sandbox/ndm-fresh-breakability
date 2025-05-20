@@ -1,0 +1,16 @@
+[Unit]
+Description=Datamigrator Worker Service
+After=network.target
+
+[Service]
+EnvironmentFile=/opt/datamigrator/conf/worker.env
+ExecStart=/opt/datamigrator/binary/{{ remote_binary_path | basename }}
+WorkingDirectory=/opt/datamigrator
+Restart=always
+User=root
+Group=root
+StandardOutput=append:/opt/datamigrator/logs/datamigrator-worker.log
+StandardError=append:/opt/datamigrator/logs/datamigrator-worker.log
+
+[Install]
+WantedBy=multi-user.target

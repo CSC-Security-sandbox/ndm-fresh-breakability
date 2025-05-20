@@ -1,0 +1,5 @@
+apiVersion: v2
+name: reports-service
+description: Helm chart to deploy reports-service
+version: 0.1.0
+type: application

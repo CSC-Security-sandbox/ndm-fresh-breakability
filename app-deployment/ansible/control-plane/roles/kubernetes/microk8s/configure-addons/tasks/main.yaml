@@ -1,0 +1,106 @@
+- name: 6.1. Get current addons state
+  become: yes
+  command: "{{ microk8s_bin_path }}microk8s.status --format yaml"
+  register: microk8s_status
+  check_mode: no
+
+- name: 6.3. Parse current addons state
+  set_fact:
+    microk8s_status_parsed: "{{ microk8s_status.stdout | from_yaml }}"
+
+- name: local cluster setup detected
+  debug:
+    msg: "Local cluster setup detected"
+  when: local_cluster is defined
+
+- name: 6.4. Always disable DNS addon first
+  become: yes
+  command: "{{ microk8s_bin_path }}microk8s.disable dns"
+  register: dns_disable_result
+  ignore_errors: yes
+  when: local_cluster is defined
+
+- name: 6.4.1. Debug DNS disable result
+  debug:
+    msg: "DNS disable result: {{ dns_disable_result }}"
+  when: local_cluster is defined
+
+- name: 6.5. Enable DNS addon with 8.8.8.8,8.8.4.4
+  become: yes
+  command: "{{ microk8s_bin_path }}microk8s.enable dns:8.8.8.8,8.8.4.4"
+  register: dns_addon_result
+  when: local_cluster is defined
+
+- name: 6.5.1. Debug DNS addon result
+  debug:
+    msg: "DNS addon result: {{ dns_addon_result }}"
+  when: local_cluster is defined
+
+- name: 6.6. Enable addons (excluding DNS)
+  become: yes
+  loop: "{{ microk8s_status_parsed.addons }}"
+  loop_control:
+    label: "{{ item.name }}"
+  command:
+    cmd: "{{ microk8s_bin_path }}microk8s.enable {{ item.name }}{% if microk8s_plugins[item.name] != True %}:{{ microk8s_plugins[item.name] }}{% endif %}"
+  when:
+    - item.name != 'dns'
+    - item.status == 'disabled'
+    - item.name in microk8s_plugins
+    - microk8s_plugins[item.name]
+
+- name: 6.7. Debug enabled addons
+  debug:
+    msg: "Enabled addon: {{ item.name }}"
+  when:
+    - item.name != 'dns'
+    - item.status == 'disabled'
+    - item.name in microk8s_plugins
+    - microk8s_plugins[item.name]
+  loop: "{{ microk8s_status_parsed.addons }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: 6.8. Enable registry for local cluster
+  become: yes
+  command: "{{ microk8s_bin_path }}microk8s.enable registry"
+  when: local_cluster is defined
+
+- name: 6.9. Fetch private IP of the server
+  set_fact:
+    private_ip: "{{ ansible_default_ipv4.address }}"
+  when: local_cluster is defined
+
+- name: 6.10. Display private_ip
+  debug:
+    var: private_ip
+  when: local_cluster is defined
+
+- name: 6.11. Enable MetalLB load balancer
+  become: yes
+  command: "{{ microk8s_bin_path }}microk8s.enable metallb:{{ private_ip }}/32"
+  when: local_cluster is defined
+
+- name: 6.12. Disable addons (excluding DNS)
+  become: yes
+  loop: "{{ microk8s_status_parsed.addons }}"
+  loop_control:
+    label: "{{ item.name }}"
+  command: "{{ microk8s_bin_path }}microk8s.disable {{ item.name }}"
+  when:
+    - item.name != 'dns'
+    - item.status == 'enabled'
+    - item.name in microk8s_plugins
+    - not microk8s_plugins[item.name]
+
+- name: 6.13. Debug disabled addons
+  debug:
+    msg: "Disabled addon: {{ item.name }}"
+  when:
+    - item.name != 'dns'
+    - item.status == 'enabled'
+    - item.name in microk8s_plugins
+    - not microk8s_plugins[item.name]
+  loop: "{{ microk8s_status_parsed.addons }}"
+  loop_control:
+    label: "{{ item.name }}"

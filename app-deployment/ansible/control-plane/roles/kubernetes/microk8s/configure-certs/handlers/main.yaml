@@ -1,0 +1,7 @@
+- name: Refresh certs
+  become: yes
+  command: "{{ item }}"
+  loop:
+    - microk8s refresh-certs --cert server.crt
+    - microk8s refresh-certs --cert front-proxy-client.crt
+    - microk8s refresh-certs --cert ca.crt

@@ -1,0 +1,156 @@
+---
+- name: Creates openbao directory
+  become: yes
+  file:
+    path: $HOME/openbao
+    state: directory
+
+- name: openbao namespace
+  become: yes
+  template: src=./templates/openbao-namespace.j2 dest=$HOME/openbao/openbao-namespace.yaml
+
+- name: openbao-storageclass template
+  become: yes
+  template: src=./templates/openbao-storageclass.j2 dest=$HOME/openbao/openbao-storageclass.yaml
+
+- name: openbao-pv template
+  become: yes
+  template: src=./templates/openbao-pv.j2 dest=$HOME/openbao/openbao-pv.yaml
+
+- name: openbao-values template
+  become: yes
+  template: src=./templates/openbao-values.j2 dest=$HOME/openbao/openbao-values.yaml
+
+- name: openbao-ingress template
+  become: yes
+  template: src=./templates/openbao-ingress.j2 dest=$HOME/openbao/openbao-ingress.yaml
+
+- name: openbao-unseal-cronjob-configmap template
+  become: yes
+  template: src=./templates/openbao-unseal-cronjob-configmap.j2 dest=$HOME/openbao/openbao-unseal-cronjob-configmap.yaml
+
+- name: openbao-unseal-cronjob template
+  become: yes
+  template: src=./templates/openbao-unseal-cronjob.j2 dest=$HOME/openbao/openbao-unseal-cronjob.yaml
+
+- name: openbao-unseal-rbac template
+  become: yes
+  template: src=./templates/openbao-unseal-rbac.j2 dest=$HOME/openbao/openbao-unseal-rbac.yaml
+
+- name: remove previous installation
+  become: yes
+  shell: |
+    helm delete openbao --namespace "openbao"
+    kubectl delete pvc --all --namespace "openbao"
+    kubectl delete -f $HOME/openbao/openbao-ingress.yaml
+    kubectl delete -f $HOME/openbao/openbao-pv.yaml
+    kubectl delete -f $HOME/openbao/openbao-storageclass.yaml
+    kubectl delete -f $HOME/openbao openbao-unseal-cronjob-configmap.yaml
+    kubectl delete -f $HOME/openbao/openbao-unseal-cronjob.yaml
+    kubectl delete -f $HOME/openbao/openbao-unseal-rbac.yaml
+    kubectl delete -f $HOME/openbao/openbao-namespace.yaml
+  when: openbao_uninstall is defined
+  args:
+    chdir: $HOME
+
+- name: setup namespace, persistentvolume for openbao
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/openbao/openbao-namespace.yaml
+    kubectl apply -f $HOME/openbao/openbao-storageclass.yaml
+    kubectl apply -f $HOME/openbao/openbao-pv.yaml
+  args:
+    chdir: $HOME
+
+- name: Deploy openbao helm chart
+  become: yes
+  shell: |
+    helm repo add openbao https://openbao.github.io/openbao-helm
+    helm upgrade --install openbao openbao/openbao -f $HOME/openbao/openbao-values.yaml --version "{{ openbao_version }}" --namespace "openbao"
+    exit 0
+  args:
+    executable: /bin/bash
+  register: SHELL_STDOUT
+
+- name: setup ingress for openbao
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/openbao/openbao-ingress.yaml
+  args:
+    chdir: $HOME
+
+- name: debug output
+  ansible.builtin.debug:
+    msg: "Helm Install (openbao) => stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Pause for 90 seconds to make sure openbao is up
+  ansible.builtin.pause:
+    seconds: 90
+
+- name: Waiting for openbao-0 to be ready
+  become: yes
+  shell: |
+    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
+  with_items:
+    - 0
+  args:
+    chdir: $HOME
+  retries: 6
+  delay: 20
+
+- name: Get the unseal keys and store them in /opt/datamigrator/openbao
+  become: yes
+  shell: |
+    kubectl exec openbao-{{ item }} -n openbao -- bao operator init -key-shares=1 -key-threshold=1 -format=json > /opt/datamigrator/openbao/cluster-keys.json
+    OPENBAO_UNSEAL_KEY=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".unseal_keys_b64[]")
+    kubectl exec openbao-{{ item }} -n openbao -- bao operator unseal $OPENBAO_UNSEAL_KEY
+  with_items:
+    - 0
+
+- name: Pause for 45 seconds to make sure openbao is up
+  ansible.builtin.pause:
+    seconds: 45
+
+- name: Waiting for openbao-1, openbao-2 to be ready
+  become: yes
+  shell: |
+    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
+  with_items:
+    - 1
+    - 2
+  args:
+    chdir: $HOME
+  retries: 6
+  delay: 20
+
+- name: Unseal the openbao vault
+  become: yes
+  shell: |
+    OPENBAO_UNSEAL_KEY=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".unseal_keys_b64[]")
+    kubectl exec openbao-{{ item }} -n openbao -- bao operator unseal $OPENBAO_UNSEAL_KEY
+  with_items:
+    - 1
+    - 2
+
+- name: Pause for 10 seconds to make sure openbao is up
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Authenticate to openbao
+  become: yes
+  shell: |
+    OPENBAO_ROOT_PASSWORD=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".root_token")
+    kubectl exec openbao-{{ item }} -n openbao -- bao login $OPENBAO_ROOT_PASSWORD
+  with_items:
+    - 0
+    - 1
+    - 2
+
+- name: Deploy OpenBao unseal CronJob, ConfigMap and RBAC
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/openbao/openbao-unseal-rbac.yaml
+    kubectl apply -f $HOME/openbao/openbao-unseal-cronjob-configmap.yaml
+    kubectl apply -f $HOME/openbao/openbao-unseal-cronjob.yaml
+  args:
+    chdir: $HOME

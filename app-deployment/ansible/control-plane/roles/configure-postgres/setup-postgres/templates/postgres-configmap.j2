@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: postgres-init-config
+    namespace: postgres
+data:
+  
+    createSchema.sql: |
+        CREATE ROLE keycloak_role;
+        CREATE ROLE liquibase_role;
+        CREATE ROLE temporal_role;
+        CREATE ROLE dmadmin_role;
+
+        CREATE USER kcadmin WITH PASSWORD '{{ keycloak_postgres_password }}';
+        GRANT keycloak_role TO kcadmin;
+        CREATE DATABASE keycloak OWNER kcadmin;
+
+        CREATE USER liquibase WITH PASSWORD '{{ liquibase_postgres_password }}';
+        GRANT liquibase_role TO liquibase;
+
+        CREATE USER temporal WITH PASSWORD '{{ temporal_postgres_password }}';
+        
+        GRANT temporal_role TO temporal;
+        ALTER USER temporal WITH CREATEDB;
+
+        GRANT dmadmin_role TO dmadmin;
+
+        \connect keycloak
+        CREATE SCHEMA IF NOT EXISTS keycloak AUTHORIZATION kcadmin;
+        GRANT ALL PRIVILEGES ON SCHEMA keycloak TO keycloak_role;
+        GRANT ALL PRIVILEGES ON DATABASE keycloak TO kcadmin;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA keycloak TO keycloak_role;
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA keycloak TO keycloak_role;
+        GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA keycloak TO keycloak_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON TABLES TO keycloak_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON SEQUENCES TO keycloak_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA keycloak GRANT ALL PRIVILEGES ON FUNCTIONS TO keycloak_role;
+
+        CREATE DATABASE IF NOT EXISTS datamigrator OWNER dmadmin;
+        \connect datamigrator
+        CREATE SCHEMA IF NOT EXISTS datamigrator AUTHORIZATION dmadmin;
+        CREATE SCHEMA IF NOT EXISTS liquibase AUTHORIZATION liquibase;
+
+        GRANT CONNECT, CREATE ON DATABASE datamigrator TO dmadmin_role, liquibase_role;
+        GRANT USAGE, CREATE ON SCHEMA datamigrator TO dmadmin_role, liquibase_role;
+
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
+        GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA datamigrator TO dmadmin_role, liquibase_role;
+        
+        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
+            GRANT ALL PRIVILEGES ON TABLES TO dmadmin_role;
+        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
+            GRANT ALL PRIVILEGES ON SEQUENCES TO dmadmin_role;
+        ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
+            GRANT ALL PRIVILEGES ON FUNCTIONS TO dmadmin_role;

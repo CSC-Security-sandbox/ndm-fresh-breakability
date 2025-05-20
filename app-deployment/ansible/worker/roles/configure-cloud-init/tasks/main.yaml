@@ -1,0 +1,8 @@
+- name: 3.1. Copy cloud-init configuration
+  become: yes
+  copy:
+    src: ./templates/cloud-init.j2
+    dest: /etc/cloud/cloud.cfg.d/00-datamigrator-hostname-init.cfg
+    owner: root
+    group: root
+    mode: '0644'

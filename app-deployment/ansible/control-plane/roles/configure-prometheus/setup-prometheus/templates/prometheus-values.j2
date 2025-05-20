@@ -1,0 +1,60 @@
+#reference: https://artifacthub.io/packages/helm/prometheus-community/prometheus?modal=values
+
+configmapReload:
+  prometheus:
+    enabled: false
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs: {{ customScrapeConfigs }}
+  alerting_rules.yml:
+    groups: {{ customAlertingRules }}
+
+server:
+  retention: "30d"
+  ingress:
+    enabled: false
+  
+  securityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
+  
+  persistentVolume:
+    storageClass: "local-storage-prometheus"
+    size: {{ prometheus_data_volume_size }}
+    selector:
+      matchLabels: 
+        role: prometheus-server-data
+  
+alertmanager:
+  enabled: true
+  podSecurityContext:
+    runAsUser: {{ vm_uid }}
+    runAsNonRoot: true
+    runAsGroup: {{ vm_gid }}
+    fsGroup: {{ vm_gid }}
+  service:
+    type: ClusterIP
+
+  config:
+    route:
+      receiver: webhook-receiver
+      group_by: ['...']
+      repeat_interval: 4h
+    receivers:
+      - name: webhook-receiver
+        webhook_configs:
+          - url: 'http://admin-service-service.datamigrator.svc.cluster.local:3000/api/v1/email/external'
+            send_resolved: true
+
+  persistence:
+    enabled: true
+    size: {{ prometheus_alertmanager_data_volume_size }}
+    storageClass: "local-storage-alertmanager"
+    selector:
+      matchLabels: 
+        role: prometheus-alertmanager-data
+
+  

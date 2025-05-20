@@ -1,0 +1,9 @@
+---
+- name: Configure VM by upgrading packages
+  become: true
+  become_method: ansible.builtin.sudo
+  debugger: never
+  gather_facts: true
+  hosts: default
+  roles:
+    - { role:  ../roles/configure-vm, tags: 'configure-vm' }

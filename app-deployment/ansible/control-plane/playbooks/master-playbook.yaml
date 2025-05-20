@@ -1,0 +1,55 @@
+- name: Configure user access on VM
+  import_playbook: configure-user.yaml
+
+- name: Configure VM by upgrading packages
+  import_playbook: configure-vm.yaml
+
+- name: Configure firewall
+  import_playbook: configure-firewall.yaml
+
+- name: Install and configure microk8s cluster, users, addons
+  import_playbook: configure-microk8s.yaml
+
+- name: Configure openbao
+  import_playbook: configure-openbao.yaml
+
+- name: Configure postgres
+  import_playbook: configure-postgres.yaml
+
+- name: Configure prometheus
+  import_playbook: configure-prometheus.yaml
+  when: local_cluster is not defined
+
+- name: Configure fluentd
+  import_playbook: configure-fluentd.yaml
+
+- name: Configure grafana
+  import_playbook: configure-grafana.yaml
+  when: local_cluster is not defined
+
+- name: Configure redis
+  import_playbook: configure-redis-standalone.yaml
+
+- name: Configure temporal
+  import_playbook: configure-temporal.yaml
+
+- name: Configure microk8s image registry with datamigrator application images
+  import_playbook: configure-microk8s-registry.yaml
+  when: local_cluster is defined 
+
+- name: Configure keycloak
+  import_playbook: configure-keycloak.yaml
+
+- name: Configure datamigrator helm chart and resources
+  import_playbook: configure-datamigrator.yaml
+
+- name: Configure keycloak realm
+  import_playbook: post-install.yaml
+
+- name: Configure cloud init
+  import_playbook: configure-cloud-init.yaml
+  when: local_cluster is not defined 
+
+- name: Reset Cluster
+  import_playbook: reset-cluster.yaml
+  when: local_cluster is not defined 
