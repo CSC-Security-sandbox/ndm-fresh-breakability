@@ -1,0 +1,30 @@
+appName: db-migrations
+
+image:
+  repository: db-migrations
+
+annotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-pre-populate-only: "true"
+  vault.hashicorp.com/role: "datamigrator-role"
+  vault.hashicorp.com/agent-inject-status: "update"
+  vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-template-postgres.env: |
+    {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+    export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
+    export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
+    {{- end }}
+
+serviceAccountName: datamigrator-openbao-sa
+imagePullSecrets: azure-dev-acr-creds
+
+env:
+  - name: LIQUIBASE_COMMAND_URL
+    value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
+  - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME
+    value: "liquibase"
+  - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
+    value: "datamigrator"
+args:
+  - "update"
+  - "--source-vault"
