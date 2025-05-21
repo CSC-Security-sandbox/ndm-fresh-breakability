@@ -200,7 +200,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Values.appName }}-db-migrations
+  name: {{ .Values.appName }}
   labels:
     app: {{ .Values.appName }}
   annotations:
