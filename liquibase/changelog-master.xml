@@ -1,0 +1,336 @@
+<databaseChangeLog
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+   <changeSet id="20250124_01_create_all_admin_existing_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_admin_existing_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250203_01_seed.sql" author="aniketd">
+      <sqlFile path="liquibase/20250203_01_seed.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250302_01_create_global_setting.sql" author="avadootnarvekar">
+      <sqlFile path="liquibase/20250302_01_create_global_setting.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250415_01_create_sync_email_table.sql" author="aniketd">
+      <sqlFile path="liquibase/20250415_01_create_sync_email_table.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250124_01_create_all_config_existing_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_config_existing_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250210_01_add_meta_config_column.sql" author="akunal">
+      <sqlFile path="liquibase/20250210_01_add_meta_config_column.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250211_01_worker_table_add_worker_number_column.sql" author="akunal">
+      <sqlFile path="liquibase/20250211_01_worker_table_add_worker_number_column.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+   
+   <changeSet id="20250228_01_error_message_column.sql" author="aniketd">
+      <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250124_01_create_all_jobs_existing_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_jobs_existing_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250414_01_add_meta_config_column_for_worker_jobrun_mapping.sql" author="vbikkad">
+      <sqlFile path="liquibase/20250414_01_add_meta_config_column_for_worker_jobrun_mapping.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250210_01_jobrun_table_add_column.sql" author="akunal">
+      <sqlFile path="liquibase/20250210_01_jobrun_table_add_column.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250217_01_alter_ops_add_extension_columns.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_alter_ops_add_extension_columns.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250221_01_alter_job_config_add_skip_file_column.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250221_01_alter_job_config_add_skip_file_column.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250310_01_create_all_speed_test_tables.sql" author="adityav2">
+      <sqlFile path="liquibase/20250310_01_create_all_speed_test_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250314_01_update_speed_test_result_tables.sql" author="adityav2">
+      <sqlFile path="liquibase/20250314_01_update_speed_test_result_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+   
+   <changeSet id="20250315_01_create_identity_mapping_tables.sql" author="shivam6">
+      <sqlFile path="liquibase/20250315_01_create_identity_mapping_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250323_02_alter_jobrun_table_add_column_substatus.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250323_02_alter_jobrun_table_add_column_substatus.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250323_01_create_substatus_view.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250323_01_create_substatus_view.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250324_01_alter_cross_mapping_table.sql" author="shivam6">
+      <sqlFile path="liquibase/20250324_01_alter_cross_mapping_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250324_03_alter_jobrun_table_add_column_jobstats.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250324_03_alter_jobrun_table_add_column_jobstats.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250404_01_create_error_remedies_table.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_01_create_error_remedies_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250404_2_seed_error_remedies.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250404_2_seed_error_remedies.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+  
+   <changeSet id="20250404_01_alter_speed_test_tables.sql" author="adityav2">
+      <sqlFile path="liquibase/20250404_01_alter_speed_test_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250401_01_create_worker_stats_table.sql" author="abhishek">
+      <sqlFile path="liquibase/20250401_01_create_worker_stats_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250410_01_alter_jobrun_add_column_paused_reason.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250410_01_alter_jobrun_add_column_paused_reason.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+    
+   <changeSet id="20250429_01_alter_table_workerjobrunmapping_ad_column_errorreason.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250429_01_alter_table_workerjobrunmapping_ad_column_errorreason.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250124_01_create_all_db_writer_existing_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_db_writer_existing_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250206_01_alter_inventory_table.sql" author="aniketd">
+      <sqlFile path="liquibase/20250206_01_alter_inventory_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250217_01_create_operation_error_table.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_create_operation_error_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250217_01_create_task_error_table.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250217_01_create_task_error_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250219_01_alter_operations_error_table.sql" author="dineshs">
+      <sqlFile path="liquibase/20250219_01_alter_operations_error_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250310_01_alter_ops_task_err_tabls.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250310_01_alter_ops_task_err_tabls.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250311_01_alter_operation_errors_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250311_01_alter_operation_errors_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250322_01_add_index_inventory.sql" author="anarvekar">
+      <sqlFile path="liquibase/20250322_01_add_index_inventory.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250325_01_remove_constraint_on_task_errors.sql" author="vbikkad">
+      <sqlFile path="liquibase/20250325_01_remove_constraint_on_task_errors.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+    
+    <changeSet id="20250424_01_unique_constrain_for_path_and_jobrunid_column_inventy_table.sql" author="dsseervi">
+      <sqlFile path="liquibase/20250424_01_unique_constrain_for_path_and_jobrunid_column_inventy_table.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+   
+   <changeSet id="20250502_01_change_task_tabel_updated_at_columns.sql" author="vbikkad">
+         <sqlFile path="liquibase/20250502_01_change_task_tabel_updated_at_columns.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250124_01_create_all_reports_existing_tables.sql" author="aniketd">
+      <sqlFile path="liquibase/20250124_01_create_all_reports_existing_tables.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250131_01_procedure.sql" author="aniketd">
+      <sqlFile path="liquibase/20250131_01_procedure.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+    <changeSet id="20250209_01_jobs_report_procedure.sql" author="aniketd">
+      <sqlFile path="liquibase/20250209_01_jobs_report_procedure.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250213_02_procedure.sql" author="shivam6">
+      <sqlFile path="liquibase/20250213_02_procedure.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250215_03_procedure.sql" author="shivam6">
+      <sqlFile path="liquibase/20250215_03_procedure.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+  
+   <changeSet id="20250301_alter_jobrun_table_add_is_coc_report_ready_column.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250301_alter_jobrun_table_add_is_coc_report_ready_column.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250304_01_drop_column_is_coc_report_ready.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250304_01_drop_column_is_coc_report_ready.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+   
+   <changeSet id="20250305_04_procedure.sql" author="shivam6">
+      <sqlFile path="liquibase/20250305_04_procedure.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250304_02_updated_jobs_report_proc.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250304_02_updated_jobs_report_proc.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250305_02_updated_jobs_report_proc_v2.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250305_02_updated_jobs_report_proc_v2.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250305_01_generate_discovery_report.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250305_01_generate_discovery_report.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250320_02_updated_jobs_report_path_based.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250320_02_updated_jobs_report_path_based.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250322_01_updated_jobs_report_path_based.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250322_01_updated_jobs_report_path_based.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250401_01_discovery_proc.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250401_01_discovery_proc.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250408_01_file_server_name_fix_for_jobs_report_prod.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250408_01_file_server_name_fix_for_jobs_report_prod.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250408_02_discovery_report_proc_cover_invalid_case.sql" author="cfdineshseervi">
+      <sqlFile path="liquibase/20250408_02_discovery_report_proc_cover_invalid_case.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250410_proc_updated_for_capacity_job_report.sql" author="singhlalit">
+      <sqlFile path="liquibase/20250410_proc_updated_for_capacity_job_report.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+     <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
+      <sqlFile path="liquibase/20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+</databaseChangeLog>

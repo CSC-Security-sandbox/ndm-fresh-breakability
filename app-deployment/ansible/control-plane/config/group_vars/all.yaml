@@ -2,16 +2,12 @@
 # Microservices release tags of docker images
 datamigrator_ui_tag: "latest"
 config_service_tag: "latest"
-config_service_liquibase_tag: "latest"
 db_writer_service_tag: "latest"
-admin_service_liquibase_tag: "latest"
 jobs_service_tag: "latest"
-jobs_service_liquibase_tag: "latest"
 reports_service_tag: "latest"
-reports_service_liquibase_tag: "latest"
 admin_service_tag: "latest"
-db_writer_service_liquibase_tag: "latest"
 keycloak_customizations_tag: "latest"
+db_migrations_tag: "latest"
 
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
 

@@ -6,7 +6,7 @@ ENV LIQUIBASE_COMMAND_DRIVER=org.postgresql.Driver \
 WORKDIR /app/liquibase
 
 COPY changelog-master.xml /app/liquibase/
-COPY *.sql /app/liquibase/
+COPY apply/*.sql /app/liquibase/
 COPY --chmod=755 entrypoint.sh /app/
 
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -22,8 +22,6 @@ annotations:
     {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
     export DATABASE_USERNAME="{{ .Data.POSTGRES_DMADMIN_USER }}"
     export DATABASE_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
-    export LIQUIBASE_COMMAND_USERNAME="{{ .Data.LIQUIBASE_POSTGRES_USER }}"
-    export LIQUIBASE_COMMAND_PASSWORD="{{ .Data.LIQUIBASE_POSTGRES_PASSWORD }}"
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
@@ -101,16 +99,4 @@ ingress:
   tls:
     enabled: false
   host: ""
-
-liquibase:
-  enabled: true
-  env:
-    - name: LIQUIBASE_COMMAND_URL
-      value: "jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator"
-    - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME
-      value: "liquibase"
-    - name: LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME
-      value: "datamigrator"
-  args:
-    - "update"
-    - "--source-vault"
+  

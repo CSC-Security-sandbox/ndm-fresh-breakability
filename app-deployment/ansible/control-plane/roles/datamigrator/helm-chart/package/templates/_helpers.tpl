@@ -48,17 +48,6 @@ spec:
         runAsGroup: 1001
         fsGroup: 1001
       {{- end }}
-      initContainers:
-      {{- if .Values.liquibase }}
-      - name: {{ .Values.appName  }}-migrations
-        image: {{ .Values.global.registry }}/{{ .Values.image.repository }}-migrations:{{ .Values.liquibase.image.tag }}
-        env:
-        {{- if .Values.liquibase.env }}
-        {{- toYaml .Values.liquibase.env | nindent 8 }}
-        {{- end }}
-        args:
-        {{- toYaml .Values.liquibase.args | nindent 8 }}
-      {{- end }}
       containers:
       - name: {{ .Values.appName }}
         image: {{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
@@ -204,4 +193,39 @@ spec:
           averageUtilization: {{ .Values.hpa.memoryUtilization }}
     {{- end }}
 {{- end }}
+{{- end }}
+
+{{/* Default Template for DB Migration Job. All Sub-Charts under this Chart can include the below template. */}}
+{{- define "datamigrator.jobtemplate" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.appName }}
+  labels:
+    app: {{ .Values.appName }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.annotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- if not .Values.global.local_cluster }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      restartPolicy: OnFailure
+      containers:
+        - name: db-migrations
+          image: {{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: IfNotPresent
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          args:
+            {{- toYaml .Values.args | nindent 12 }}
 {{- end }}

@@ -35,7 +35,7 @@ initial_build=false
 images=()
 
 # List of all services (defined once)
-services=( "keycloak-customizations" "admin-service" "config-service" "datamigrator-ui" "db-writer" "jobs-service" "reports-service" )
+services=( "keycloak-customizations" "admin-service" "config-service" "datamigrator-ui" "db-writer" "jobs-service" "reports-service" "db-migrations" )
 
 # Check if "--initial-build" flag is passed
 if [[ "$1" == "--initial-build" ]]; then
@@ -70,15 +70,21 @@ for service in "${services[@]}"; do
     service_name=$service
     service_version=${2:-latest}
 
-    # Define Dockerfile name
-    docker_file_name="Dockerfile"
+    # Set Dockerfile and context paths
+    if [ "$service_name" == "db-migrations" ]; then
+        docker_file_path="$base_dir/liquibase/Dockerfile"
+        build_context="$base_dir/liquibase"
+    else
+        docker_file_path="$base_dir/services/${service_name}/Dockerfile"
+        build_context="$base_dir/services/${service_name}"
+    fi
 
     image_tag="${repo_url}/${service_name}:${service_version}"
     
     echo -e "\nBuilding service image: $image_tag"
     docker build --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
         -t "$image_tag" \
-        -f "${base_dir}/${service_name}/${docker_file_name}" "${base_dir}/${service_name}"
+        -f "$docker_file_path" "$build_context"
 
     if $initial_build; then
         images+=("$image_tag")  # Store image name
@@ -88,22 +94,6 @@ for service in "${services[@]}"; do
         docker push "$image_tag"
     fi
 
-    # Build Liquibase migrations image (except for keycloak-customizations and datamigrator-ui)
-    if [[ "$service_name" != "keycloak-customizations" && "$service_name" != "datamigrator-ui" ]]; then
-        migration_image_tag="${repo_url}/${service_name}-migrations:${service_version}"
-        
-        echo -e "\nBuilding migrations image: $migration_image_tag"
-        docker build -t "$migration_image_tag" \
-            -f "${base_dir}/${service_name}/liquibase/Dockerfile" "${base_dir}/${service_name}/liquibase"
-
-        if $initial_build; then
-            images+=("$migration_image_tag")  # Store image name
-            echo -e "Added $migration_image_tag to the list for TAR saving"
-        else
-            echo -e "Pushing migrations image: $migration_image_tag"
-            docker push "$migration_image_tag"
-        fi
-    fi
 done
 
 # Save all images in one tar file if initial build

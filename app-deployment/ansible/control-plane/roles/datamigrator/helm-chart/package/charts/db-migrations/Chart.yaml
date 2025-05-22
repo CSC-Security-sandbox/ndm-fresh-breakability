@@ -1,0 +1,5 @@
+apiVersion: v2
+name: db-migrations
+description: Liquibase migrations job
+version: 0.1.0
+type: application
