@@ -127,7 +127,8 @@ build {
       "ANSIBLE_CONFIG=../../../ansible/control-plane/config/ansible.cfg"
     ]
     extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false"
+      "--extra-vars", "display_skipped_hosts=false",
+      "--extra-vars", "@../../../ansible/control-plane/config/group_vars/vars.yaml"
     ]
   }
 

@@ -31,7 +31,7 @@ variable "project_name" {
 variable "component_name" {
   type        = string
   description = "The name of the project."
-  default     = "control-plane"
+  default     = "unified-plane"
 }
 
 // vSphere Credentials
@@ -524,6 +524,12 @@ variable "additional_packages" {
   default     = []
 }
 
+// Unified Plane Settings
+variable "worker_binary_path" {
+  type    = string
+  description = "The path to the worker binary."
+}
+
 //  BLOCK: data
 //  Defines the data sources.
 
@@ -722,7 +728,23 @@ build {
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
     ]
   }
-
+  provisioner "ansible" {
+    playbook_file          = "../../../ansible/worker/playbooks/master-playbook.yaml"
+    inventory_directory    = "../../../ansible/worker/config"
+    galaxy_file            = "../../../ansible/worker/playbooks/linux-requirements.yaml"
+    galaxy_force_with_deps = true
+    user                   = var.build_username
+    ansible_env_vars = [
+      "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
+    ]
+    extra_arguments = [
+      "--extra-vars", "display_skipped_hosts=false",
+      "--extra-vars", "ansible_username=${var.build_username}",
+      "--extra-vars", "ansible_key='${var.build_key}'",
+      "--extra-vars", "local_binary_path=${var.worker_binary_path}",
+      "--extra-vars", "unified_plane=true"
+    ]
+  }
   provisioner "ansible" {
     user                   = var.build_username
     galaxy_file            = "../../../ansible/control-plane/playbooks/linux-requirements.yaml"
