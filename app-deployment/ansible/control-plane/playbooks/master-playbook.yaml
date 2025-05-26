@@ -1,3 +1,16 @@
+- hosts: all
+  tasks:
+    - name: Show all release tag values
+      debug:
+        msg:
+          datamigrator_ui_tag: "{{ datamigrator_ui_tag }}"
+          config_service_tag: "{{ config_service_tag }}"
+          db_writer_service_tag: "{{ db_writer_service_tag }}"
+          jobs_service_tag: "{{ jobs_service_tag }}"
+          reports_service_tag: "{{ reports_service_tag }}"
+          admin_service_tag: "{{ admin_service_tag }}"
+          keycloak_customizations_tag: "{{ keycloak_customizations_tag }}"
+          db_migrations_tag: "latest"
 - name: Configure user access on VM
   import_playbook: configure-user.yaml
 
