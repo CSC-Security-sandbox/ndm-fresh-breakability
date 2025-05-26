@@ -5,37 +5,77 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      service:
-        description: 'Service to build (one of: db-writer, keycloak-customizations, reports-service, worker, admin-service, config-service, datamigrator-ui, jobs-service)'
-        required: true
-        default: 'db-writer'
 
-permissions: 
+permissions:
   contents: read
 
 jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_count: ${{ steps.set-matrix.outputs.matrix_count }}
+    steps:
+      - name: Checkout Code with full history
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - id: set-matrix
+        shell: bash
+        run: |
+          # List of all known service directories
+          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
+
+          # Use HEAD^ as the previous commit.
+          if git rev-parse "HEAD^" >/dev/null 2>&1; then
+            base="HEAD^"
+          else
+            echo "No previous commit found. Exiting as nothing can be compared."
+            echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
+            echo "matrix_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          changed_services=()
+          for service in "${services[@]}"; do
+            # Compare the previous commit to the current commit for each service
+            if ! git diff --quiet "$base" HEAD -- "$service/"; then
+              echo "Detected changes in $service"
+              changed_services+=("$service")
+            else
+              echo "No changes in $service"
+            fi
+          done
+
+          service_count=${#changed_services[@]}
+          echo "Detected $service_count changed services."
+
+          # Convert changed_services array to JSON on a single line using jq
+          service_json=$(printf '%s\n' "${changed_services[@]}" | jq -R . | jq -s . | tr -d '\n')
+          echo "Matrix for changed services: $service_json"
+
+          # Write outputs ensuring the JSON is on one line
+          echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
+          echo "matrix_count=$service_count" >> $GITHUB_OUTPUT
+
   build-and-push:
     runs-on: ubuntu-latest
-
+    needs: determine-matrix
+    if: ${{ needs.determine-matrix.outputs.matrix_count != '0' }}
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
+      fail-fast: false
     steps:
-      # Checkout the repository
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Set a variable for the service (from the workflow_dispatch input)
-      - name: Set Service Variable
-        id: set_service
-        run: |
-          echo "SERVICE=${{ github.event.inputs.service }}" >> $GITHUB_ENV
-
-      # Authenticate to Azure
       - name: Log in to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Authenticate to Azure Container Registry
       - name: Authenticate to ACR
         uses: azure/docker-login@v1
         with:
@@ -43,29 +83,24 @@ jobs:
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
-      # Set up QEMU for cross-architecture builds
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
-      # Set up Buildx for multi-platform builds
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Build and push multi-platform Docker image based on the service input
-      - name: Build and Push Multi-Platform Docker Image
+      - name: Build and Push Docker Image for ${{ matrix.service }}
         run: |
-          # Set the image name
-          IMAGE_NAME="${{ secrets.ACR_NAME }}.azurecr.io/mono-ndm-${{ env.SERVICE }}"
-          echo "Building Docker image for service: ${{ env.SERVICE }} with tags"
-          echo "Image tags:"
+          echo "Building Docker image for service: ${{ matrix.service }}"
+          IMAGE_NAME="${{ secrets.ACR_NAME }}.azurecr.io/mono-ndm-${{ matrix.service }}"
+          echo "Using image tags:"
           echo "$IMAGE_NAME:${{ github.sha }}"
           echo "$IMAGE_NAME:latest"
 
-          # Build and push the image using buildx.
           docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
             -t "$IMAGE_NAME:${{ github.sha }}" \
             -t "$IMAGE_NAME:latest" \
-            --push "services/${{ env.SERVICE }}"
+            --push "services/${{ matrix.service }}"
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
