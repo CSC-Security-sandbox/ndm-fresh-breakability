@@ -37,7 +37,7 @@ on:
 
 jobs:
   determine-matrix:
-    runs-on: openlab
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -68,7 +68,7 @@ jobs:
   packer:
     needs: determine-matrix
     name: Build ${{ matrix.component }} on ${{ matrix.provider }}
-    runs-on: openlab
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
@@ -96,7 +96,7 @@ jobs:
           # Dynamically generate the path for each component-provider combination
           PROVIDER_PATH="${{ matrix.provider }}"
 
-          PACKER_PATH="packer/${PROVIDER_PATH}/${{ matrix.component }}"
+          PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
           echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
           echo "Using packer configuration path: $PACKER_PATH"
 
@@ -144,8 +144,10 @@ jobs:
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
         run: |
-          chmod +x ./scripts/get_tags.sh
-          ./scripts/get_tags.sh
+          echo "Current working directory:"
+          pwd
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh
 
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}
@@ -322,7 +324,7 @@ jobs:
     needs: [ packer, determine-matrix ]
     
     name: Create VM for ${{ matrix.component }} on ${{ matrix.provider }}
-    runs-on: openlab
+    runs-on: ubuntu-latest
     outputs:
       vm_ip_address: ${{ steps.deployment-info.outputs.vm_ip_address }}
       deployment_id: ${{ steps.deployment-info.outputs.deployment_id }}
