@@ -64,7 +64,7 @@ serviceAccount:
 
 initContainers:
     - name: keycloak-customizations
-      image: {{ acr_registry }}/keycloak-customizations:{{ keycloak_customizations_tag | default(common_tag) | default("latest") }}
+      image: {{ acr_registry }}/ndm-keycloak-customizations:{{ keycloak_customizations_tag | default(common_tag) | default("latest") }}
       imagePullPolicy: Always
       command:
         - sh

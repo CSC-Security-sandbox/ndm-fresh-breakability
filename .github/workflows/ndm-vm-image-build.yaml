@@ -96,7 +96,7 @@ jobs:
           # Dynamically generate the path for each component-provider combination
           PROVIDER_PATH="${{ matrix.provider }}"
 
-          PACKER_PATH="packer/${PROVIDER_PATH}/${{ matrix.component }}"
+          PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
           echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
           echo "Using packer configuration path: $PACKER_PATH"
 
@@ -144,8 +144,10 @@ jobs:
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
         run: |
-          chmod +x ./scripts/get_tags.sh
-          ./scripts/get_tags.sh
+          echo "Current working directory:"
+          pwd
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh
 
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}

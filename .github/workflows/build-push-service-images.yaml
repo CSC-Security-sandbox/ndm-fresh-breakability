@@ -45,6 +45,7 @@ jobs:
               changed_services+=("$service")
             else
               echo "No changes in $service"
+              changed_services+=("$service")
             fi
           done
 
@@ -92,7 +93,7 @@ jobs:
       - name: Build and Push Docker Image for ${{ matrix.service }}
         run: |
           echo "Building Docker image for service: ${{ matrix.service }}"
-          IMAGE_NAME="${{ secrets.ACR_NAME }}.azurecr.io/mono-ndm-${{ matrix.service }}"
+          IMAGE_NAME="${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}"
           echo "Using image tags:"
           echo "$IMAGE_NAME:${{ github.sha }}"
           echo "$IMAGE_NAME:latest"
