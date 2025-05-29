@@ -67,25 +67,25 @@ Ensure the following tools are installed on your macOS system:
 
 ### Building Docker Images (First Time)
 
-1. Pull all services from the main branch before running the script or any branch you would like.
-2. Here are the repos you need to clone and their branches:
+1. Pull the code from the main branch before running the script or any branch you would like.
+2. Here are the services which are used in control plane:
    ```sh
-   keycloak-customizations (main)
-   admin-service (main)
-   config-service (main)
-   datamigrator-ui (main)
-   db-writer (main)
-   jobs-service (main)
-   reports-service (main)
+    keycloak-customizations
+    admin-service
+    config-service
+    datamigrator-ui
+    db-writer
+    jobs-service
+    reports-service
    ```
 3. Run the build script:
    ```sh
-   cd local-deployment/bin
+   cd app-deployment/local-deployment/bin
    ./build.sh --initial-build
    ```
 4. Verify the Docker images:
    ```sh
-   cd local-deployment/bin
+   cd app-deployment/local-deployment/bin
    docker load --input ../../../app-deployment/datamigrator/datamigrator.tar
    ```
 
@@ -94,7 +94,7 @@ Ensure the following tools are installed on your macOS system:
 - Run the setup script:
 
   ```sh
-  cd local-deployment/bin
+  cd app-deployment/local-deployment/bin
   ./setup.sh control-plane
   ```
 
@@ -102,12 +102,12 @@ Ensure the following tools are installed on your macOS system:
 
 #### Before running the script download the binary from github
 
-1. Download the binary from the [worker](https://github.com/NetApp-Cloud-DataMigrate/worker/tags) repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
+1. Download the binary from the [worker](https://github.com/NetApp-Cloud-DataMigrate/ndm/tags) repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
 2. Note the path of the binary and copy it.
 3. Run the script and when prompted, provide the full path to the binary on your local Mac:
 
    ```sh
-   cd local-deployment/bin
+   cd app-deployment/local-deployment/bin
    ./setup.sh data-plane
    ```
 
@@ -115,7 +115,7 @@ Ensure the following tools are installed on your macOS system:
 
 - Run the setup script:
   ```sh
-  cd local-deployment/bin
+  cd app-deployment/local-deployment/bin
   ./nfs.sh
   ```
 
@@ -193,13 +193,13 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
 - To build and push a Docker image for a single service:
 
   ```sh
-  cd local-deployment/bin
+  cd app-deployment/local-deployment/bin
   ./build.sh admin-service <tag>
   ```
 
 - For example, this will build the image for admin service and admin service liquibase. It will also push to the Multipass MicroK8s registry.
   ```sh
-  cd local-deployment/bin
+  cd app-deployment/local-deployment/bin
   ./build.sh admin-service new_tag
   ```
 
