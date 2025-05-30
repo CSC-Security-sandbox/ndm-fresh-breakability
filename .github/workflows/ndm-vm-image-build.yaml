@@ -144,8 +144,6 @@ jobs:
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
         run: |
-          echo "Current working directory:"
-          pwd
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh
 
@@ -437,10 +435,10 @@ jobs:
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.vm_ip_address }}..."
           
           # Ensure script is executable
-          chmod +x ./scripts/service_check.sh
+          chmod +x ./app-deployment/scripts/service_check.sh
           
           # Run the service_check.sh script to wait for the microk8s-boot service to complete
-          ./scripts/service_check.sh \
+          ./app-deployment/scripts/service_check.sh \
           "${{ steps.deployment-info.outputs.vm_ip_address }}" \
           "$VM_USERNAME" \
           "$VM_PASSWORD"

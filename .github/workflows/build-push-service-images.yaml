@@ -45,7 +45,6 @@ jobs:
               changed_services+=("$service")
             else
               echo "No changes in $service"
-              changed_services+=("$service")
             fi
           done
 

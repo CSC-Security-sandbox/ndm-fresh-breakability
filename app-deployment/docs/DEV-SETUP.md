@@ -67,20 +67,20 @@ Ensure the following tools are installed on your macOS system:
 
 ### Building Docker Images (First Time)
 
-1. The services are present under the services directory.
-2. Here are the services which are used in control plane:
+1. Pull all services from the main branch before running the script or any branch you would like.
+2. Here are the repos you need to clone and their branches:
    ```sh
-   keycloak-customizations
-   admin-service
-   config-service
-   datamigrator-ui
-   db-writer
-   jobs-service
-   reports-service
+   keycloak-customizations (main)
+   admin-service (main)
+   config-service (main)
+   datamigrator-ui (main)
+   db-writer (main)
+   jobs-service (main)
+   reports-service (main)
    ```
 3. Run the build script:
    ```sh
-   cd app-deployment/local-deployment/bin
+   cd local-deployment/bin
    ./build.sh --initial-build
    ```
 4. Verify the Docker images:
