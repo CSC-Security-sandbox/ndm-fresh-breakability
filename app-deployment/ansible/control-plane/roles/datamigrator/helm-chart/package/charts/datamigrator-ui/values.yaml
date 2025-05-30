@@ -3,7 +3,7 @@ kubeApiVersion: "apps/v1"
 replicaCount: 1
 
 image:
-  repository: datamigrator-ui
+  repository: ndm-datamigrator-ui
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"

@@ -38,6 +38,7 @@ services=(
     "config_service:ndm-config-service"
     "datamigrator_ui:ndm-datamigrator-ui"
     "db_writer_service:ndm-db-writer"
+    "db_migrations:ndm-db-migrations"
     "jobs_service:ndm-jobs-service"
     "reports_service:ndm-reports-service"
     "keycloak_customizations:ndm-keycloak-customizations"
