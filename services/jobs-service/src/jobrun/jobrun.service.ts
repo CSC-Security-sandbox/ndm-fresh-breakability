@@ -209,7 +209,7 @@ export class JobRunService {
     const jobRunConfigs = await this.jobRunRepo.find({
       where: {
         id: In(jobRuns),
-        status: In([JobRunStatus.Paused, JobRunStatus.Running]),
+        status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]),
       },
       select: { jobConfigId: true },
     });
@@ -230,26 +230,45 @@ export class JobRunService {
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      const workflowId = this.jobRunInitService.getWorkFlowId(
-        jobRunId,
-        jobContext.jobConfig.jobType as JobType
-      );
-      await this.workFlowService.terminateWorkflow(workflowId);
+      let workflowId: string;
+      try {
+        workflowId = this.jobRunInitService.getWorkFlowId(
+          jobRunId,
+          jobContext.jobConfig.jobType as JobType
+        );
 
-      jobContext.jobState.status = JobContextStatus.Stopped;
-      // append dummy file entry to appendToFileList
-      await jobContext.appendToFileList(this.dummyFileEntry());
-      this.logger.debug(
-        `Job Run ${jobRunId} Stopped and appended Last file entry to file list`
-      );
-      await this.redisService.setJobContext(jobRunId, jobContext);
-      // wait for 10 seconds to close consumers
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      await jobContext.cleanup();
-      this.logger.debug(
-        `Job Run ${jobRunId} Stopped and appended Last file entry to file list`
-      );
-      this.logger.debug(`Workflow Terminated ${workflowId}`);
+        await this.workFlowService.terminateWorkflow(workflowId);
+        this.logger.debug(`Workflow Terminated ${workflowId}`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to terminate workflow for jobRunId ${jobRunId}: ${error.message}`,
+          error.stack
+        );
+        continue; 
+      }
+
+      try {
+        jobContext.jobState.status = JobContextStatus.Stopped;
+
+        await jobContext.appendToFileList(this.dummyFileEntry());
+
+        this.logger.debug(
+          `Job Run ${jobRunId} Stopped and appended Last file entry to file list`
+        );
+
+        await this.redisService.setJobContext(jobRunId, jobContext);
+
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+
+        await jobContext.cleanup();
+
+        this.logger.debug(`Cleanup completed for jobRunId ${jobRunId}`);
+      } catch (error) {
+        this.logger.error(
+          `Error during cleanup for jobRunId ${jobRunId}: ${error.message}`,
+          error.stack
+        );
+      }
     }
     return { details: "Operation Completed Successfully" };
   }

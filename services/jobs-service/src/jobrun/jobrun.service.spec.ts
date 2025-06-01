@@ -2501,7 +2501,7 @@ describe("JobRunService", () => {
       expect(jobRunRepo.find).toHaveBeenCalledWith({
         where: {
           id: In(jobRuns),
-          status: In([JobRunStatus.Paused, JobRunStatus.Running]),
+          status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]),
         },
         select: { jobConfigId: true },
       });

@@ -149,6 +149,7 @@ describe('JobRunInitService', () => {
   describe('scheduleAJob', () => {
     it('should return an array of jobs', async () => {
       const currentTime = new Date();
+      jest.spyOn(global.Date, 'now').mockReturnValue(currentTime as any);
       const jobs: JobConfigEntity[] = [];
       jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(jobs);
 
