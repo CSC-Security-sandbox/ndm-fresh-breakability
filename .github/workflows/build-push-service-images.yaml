@@ -25,44 +25,18 @@ jobs:
         shell: bash
         run: |
           # List of all known service directories
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
-
-          # Use HEAD^ as the previous commit.
-          if git rev-parse "HEAD^" >/dev/null 2>&1; then
-            base="HEAD^"
-          else
-            echo "No previous commit found. Exiting as nothing can be compared."
-            echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
-            echo "matrix_count=0" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          changed_services=()
-          for service in "${services[@]}"; do
-            # Compare the previous commit to the current commit for each service
-            if ! git diff --quiet "$base" HEAD -- "$service/"; then
-              echo "Detected changes in $service"
-              changed_services+=("$service")
-            else
-              echo "No changes in $service"
-            fi
-          done
-
-          service_count=${#changed_services[@]}
-          echo "Detected $service_count changed services."
+          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "liquibase" )
 
           # Convert changed_services array to JSON on a single line using jq
-          service_json=$(printf '%s\n' "${changed_services[@]}" | jq -R . | jq -s . | tr -d '\n')
+          service_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -s . | tr -d '\n')
           echo "Matrix for changed services: $service_json"
 
           # Write outputs ensuring the JSON is on one line
           echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
-          echo "matrix_count=$service_count" >> $GITHUB_OUTPUT
 
   build-and-push:
     runs-on: ubuntu-latest
     needs: determine-matrix
-    if: ${{ needs.determine-matrix.outputs.matrix_count != '0' }}
     strategy:
       matrix:
         service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
@@ -97,10 +71,16 @@ jobs:
           echo "$IMAGE_NAME:${{ github.sha }}"
           echo "$IMAGE_NAME:latest"
 
+          if [ "${{ matrix.service }}" = "liquibase" ]; then
+            CONTEXT="liquibase"
+          else
+            CONTEXT="services/${{ matrix.service }}"
+          fi
+
           docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
             -t "$IMAGE_NAME:${{ github.sha }}" \
             -t "$IMAGE_NAME:latest" \
-            --push "services/${{ matrix.service }}"
+            --push "$CONTEXT"
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
