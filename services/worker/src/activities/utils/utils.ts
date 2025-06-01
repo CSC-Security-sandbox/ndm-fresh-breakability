@@ -225,8 +225,10 @@ export const formatDate = (date: Date): string => {
 };
 
 export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
-  if(error && error?.code && isFatalError(error.code))
-    errorType = ErrorType.FATAL_ERROR;
+  if(error && error?.code ) {
+    if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+    if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+  }
 
   switch (type) {
     case 'OPERATION': {
@@ -249,8 +251,10 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
 
+export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 
 

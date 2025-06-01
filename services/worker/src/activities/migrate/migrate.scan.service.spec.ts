@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import { Logger } from "@nestjs/common";
-import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStatus, FileServerDetails, NFS, OPS_CMD } from "@netapp-cloud-datamigrate/jobs-lib"
+import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStatus, FileServerDetails, NFS, OPS_CMD, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib"
 import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
@@ -187,14 +187,14 @@ describe('MigrationScanService', () => {
       };
 
       const input: ScanContentInput = {
-        excludePatterns: [],
-        jobContext,
+        excludePatterns: [], jobContext,
         sourcePath: 'source-path',
         sourcePrefix: 'source-prefix',
         targetPath: 'target-path',
         command,
         skipFile: '',
         jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
       };
 
       jest.spyOn(fs.promises, 'readdir').mockRejectedValue(new Error('Read error'));
@@ -226,6 +226,7 @@ describe('MigrationScanService', () => {
         command,
         skipFile: '',
         jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
       };
 
       (fs.promises.readdir as jest.Mock).mockResolvedValue(['file.txt']);
@@ -258,6 +259,7 @@ describe('MigrationScanService', () => {
         command,
         skipFile: '',
         jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
       };
 
       const returnValue = [

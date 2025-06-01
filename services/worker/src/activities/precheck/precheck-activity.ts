@@ -154,32 +154,18 @@ export class PrecheckActivity {
           path: `${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`
         };
         if(this.shouldCheckDiskSpace){
-              checkPromises.push(
-              protocol.getAvailableDiskSpace(traceId, spacePayload)
-                .then(availableBytes => {
-                  this.logger.log(`Available space: ${availableBytes.size} bytes`);
-                  preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
-                })
-                .catch(error => {
-                  this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
-                  preCheckPathOutput.errorCodes.push(
-                    PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
-                  );
-                })
-          );
-       
-        
-      }
-
-        try {
-          const dirContents = await fs.readdir(`${this.baseWorkingPath}/${traceId}/${serverPaths.pathId}`);
-          const onlyExpectedFile = dirContents.length === 1 && dirContents[0] === `test-${traceId}-${this.workerId}.txt`;
-          preCheckPathOutput.destinationIsEmpty = dirContents.length === 0 || onlyExpectedFile;
-          this.logger.log(`Destination path empty status: ${preCheckPathOutput?.destinationIsEmpty}`);
-        } catch (error) {
-          this.logger.error(`Error while checking destination path empty status: ${error.message}`);
-          preCheckPathOutput.errorCodes.push(
-            PreCheckErrorCodes.DESTINATION_EMPTY_PATH_CHECK_FAILED
+          checkPromises.push(
+            protocol.getAvailableDiskSpace(traceId, spacePayload)
+              .then(availableBytes => {
+                this.logger.log(`Available space: ${availableBytes.size} bytes`);
+                preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
+              })
+              .catch(error => {
+                this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
+                preCheckPathOutput.errorCodes.push(
+                  PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
+                );
+              })
           );
         }
       }

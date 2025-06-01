@@ -36,6 +36,7 @@ export interface ScanDirCommandInput{
     command : Command;
     jobContext: JobContext;
     skipFile: string;
+    errorType: ErrorType;
 }
 
 export interface ScanDirCommandOutput{

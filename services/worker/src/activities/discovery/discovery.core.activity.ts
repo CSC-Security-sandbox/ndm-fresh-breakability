@@ -110,7 +110,8 @@ export class DiscoveryScanActivity {
                         sourcePrefix: basePrefixPath,
                         command,
                         jobContext,
-                        skipFile
+                        skipFile,
+                        errorType: command.retryCount+1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
                     };
 
                     const scanOutput = await this.scanDirCommand(scanInput);
@@ -174,7 +175,7 @@ export class DiscoveryScanActivity {
 
     async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
         const scanDirOutput: ScanDirCommandOutput = {
-            files: 0, directory: 0, isFatal: false, error: undefined, errorType: command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR,
+            files: 0, directory: 0, isFatal: false, error: undefined, errorType: errorType,
         }
         try {
             const sourceContent = await this.getDirectoryContents(sourcePath);
