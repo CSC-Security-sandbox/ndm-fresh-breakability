@@ -109,12 +109,6 @@ describe('WorkManagerService', () => {
 
 
   describe('handleCron', () => {
-    it('should exit early if loadingConfigs is true', async () => {
-      service['loadingConfigs'] = true;
-      await service.handleCron();
-      // No logs for error fetching configs expected if loadingConfigs is true
-      expect(logger.error).not.toHaveBeenCalled();
-    });
 
     it('should fetch configurations and call handleConfigurations', async () => {
       service['loadingConfigs'] = false;

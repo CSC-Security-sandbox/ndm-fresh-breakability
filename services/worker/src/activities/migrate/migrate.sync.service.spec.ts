@@ -8,7 +8,7 @@ import { ShellService } from '../common/shell.service';
 import * as fs from 'fs';
 import * as utils from '../utils/utils';
 import * as crypto from 'crypto';
-import { CommandStatus, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, ErrorType, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { WorkerThreadService } from '../../thread/worker.thread.service';
 
 jest.mock('@temporalio/activity', () => ({
@@ -214,7 +214,7 @@ describe('MigrationSyncService', () => {
                 targetChecksum: 'targetChecksum',
                 sourceChecksum: 'sourceChecksum',
             });
-            jest.spyOn(service, 'stampMetaData').mockResolvedValue({ errors: [] });
+            jest.spyOn(service, 'stampMetaData').mockResolvedValue({ sourceErrors: [], targetErrors: [], errorType: undefined });
             jest.spyOn(workerThreadService, 'migrateWorkerThread').mockResolvedValue({
                 sourceChecksum: 'sourceChecksum',
                 targetChecksum: 'targetChecksum',
@@ -224,7 +224,7 @@ describe('MigrationSyncService', () => {
             expect(result.ops[0].status).toBe(OPS_STATUS.COMPLETED);
             expect(result.ops[1].status).toBe(OPS_STATUS.COMPLETED);
             expect(result.status).toBe(OPS_STATUS.COMPLETED);
-            expect(result.errors.size).toBe(0);
+            expect(result.errors.source.size).toBe(0);
             expect(result.checksums).toEqual({
                 sourceChecksum: 'sourceChecksum',
                 targetChecksum: 'targetChecksum'
@@ -298,7 +298,7 @@ describe('MigrationSyncService', () => {
             }
 
             jest.spyOn(service, 'copyFileWithChecksum').mockRejectedValue(new Error('Copy error'));
-            jest.spyOn(service, 'stampMetaData').mockResolvedValue({ errors: [] });
+            jest.spyOn(service, 'stampMetaData').mockResolvedValue({ sourceErrors: [], targetErrors: [], errorType: undefined });
             jest.spyOn(workerThreadService, 'migrateWorkerThread').mockRejectedValue(new Error('Copy error'))
 
             try {
@@ -375,7 +375,7 @@ describe('MigrationSyncService', () => {
             const result = await service.syncOperation(mockInput as any);
             expect(result.ops[0].status).toBe(OPS_STATUS.COMPLETED);
             expect(result.status).toBe(OPS_STATUS.COMPLETED);
-            expect(result.errors.size).toBe(0);
+            expect(result.errors.target.size).toBe(0);
         });
 
         // ensureDirectoryExists should throw an error
@@ -590,7 +590,10 @@ describe('MigrationSyncService', () => {
 
             const result = await service.syncTask({failedWorkers: [], jobRunId: '1234'} as any);
             expect(result).toEqual({
-                errors: new Set(),
+                errors: {
+                    source: new Set(),
+                    target: new Set(),
+                },
                 success: 0,
                 error: 0,
                 retryCount: 0,
@@ -705,9 +708,9 @@ describe('MigrationSyncService', () => {
 
             jest.spyOn(fs.promises, 'chmod').mockResolvedValue();
 
-            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
 
-            expect(result.errors).toHaveLength(0);
+            expect(result.sourceErrors).toHaveLength(0);
             expect(fs.promises.chmod).toHaveBeenCalledWith(mockTargetPath, mockMetadata.mode);
         });
 
@@ -729,9 +732,9 @@ describe('MigrationSyncService', () => {
 
             jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
 
-            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
 
-            expect(result.errors).toHaveLength(0);
+            expect(result.sourceErrors).toHaveLength(0);
             expect(fs.promises.utimes).toHaveBeenCalledWith(mockTargetPath, new Date(mockMetadata.atime), new Date(mockMetadata.mtime));
         });
 
@@ -754,8 +757,8 @@ describe('MigrationSyncService', () => {
 
             jest.spyOn(fs.promises, 'chmod').mockRejectedValue(() => { });
             try {
-                const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata, mockJobContext, mockCommand);
-                expect(result.errors).toHaveLength(1);
+                const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+                expect(result.targetErrors).toHaveLength(1);
             } catch (error) {
                 expect(error.message).toBe('Error setting file mode');
             }
@@ -779,8 +782,8 @@ describe('MigrationSyncService', () => {
             } as unknown as JobContext;
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
             jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
-            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand);
-            expect(result.errors).toHaveLength(0);
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+            expect(result.targetErrors).toHaveLength(0);
         });
     });
 });

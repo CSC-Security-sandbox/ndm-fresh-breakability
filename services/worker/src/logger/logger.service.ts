@@ -66,7 +66,7 @@ export class Logger implements LoggerService {
       ),
       transports: [
         new winston.transports.Console(),
-        fluent,
+        // fluent,
         // new winston.transports.DailyRotateFile({
         //   filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
         //   datePattern: 'YYYY-MM-DD',

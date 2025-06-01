@@ -53,36 +53,22 @@ export class WorkManagerService {
     
     @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
-        if (this.loadingConfigs) return;
-        this.loadingConfigs = true;
         try {
            const accessToken = await this.authService.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
                 this.httpService.get(`${this.workerConfigUrl}/api/v1/work-manager/config`, {
-                   headers: { Authorization: `Bearer ${accessToken}` },
-                }).pipe(
-                    timeout(1000 * 10),
-                    retry({
-                        count: 3,
-                        delay: (error, retryCount) => {
-                            this.logger.warn(`Retrying (${retryCount}) due to error: ${error.message}`);
-                            return timer(1500 * retryCount); 
-                        },
-                    })
-                )
+                    headers: { Authorization: `Bearer ${accessToken}` }, timeout: 5000,
+                })
             );
             if (response.status !== 200) {
                 throw new Error(`Failed to fetch configurations. Status: ${response.status}`);
             }
-            this.logger.debug(`Fetched worker configuration: ${JSON.stringify(response.data)}`);
             await this.handleConfigurations(response.data);
-            this.monitorTaskQueues();
+            await this.monitorTaskQueues();
         } catch (error) {
             this.logger.error(`Error fetching configurations: ${error.message}`);
-        } finally {
-            this.loadingConfigs = false;
-        }        
+        }      
     }
     
     async handleConfigurations(configs: WorkerConfiguration[]) {

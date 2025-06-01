@@ -42,12 +42,13 @@ export class MigrationScanService {
         this.logger.debug(`[${jobContext.jobRunId}] Task published: ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
     }
 
-    async scanContent({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, command, skipFile }: ScanContentInput): Promise<ScanContentOutput> {
+    async scanContent({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, command, skipFile, errorType }: ScanContentInput): Promise<ScanContentOutput> {
         const syncContentOutput: ScanContentOutput = {
-             files: 0, directory: 0, isGeneratedTask: false, error: undefined, command : []
-            }
-        let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set(), errorType = command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR ;
-        
+            files: 0, directory: 0, isGeneratedTask: false, error: undefined, command : [],
+            errorType: errorType
+        }
+       let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
+
         try {
             sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
         }catch(error) {
@@ -175,7 +176,8 @@ export class MigrationScanService {
                         jobRunId: task.jobRunId,
                         command,
                         jobContext,
-                        skipFile
+                        skipFile,
+                        errorType: command.retryCount+1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
                     };
         
                     const result = await this.scanContent(scanInput);

@@ -11,6 +11,7 @@ export interface ScanContentInput{
     command : Command;
     jobContext: JobContext;
     skipFile: string;
+    errorType: ErrorType;
 }
 export interface ScanContentOutput{
     files:  number,
@@ -75,7 +76,10 @@ export interface SyncTaskInput {
 }
 
 export interface SyncTaskOutput {
-    errors: Set<string>;
+    errors: {
+        source: Set<string>
+        target: Set<string>
+    };
     success: number;
     error: number,
     retryCount: number;
@@ -97,7 +101,10 @@ export interface SyncOperationInput {
 export interface SyncOperationOutput {
     status: OPS_STATUS;
     ops: Record<number, CommandOperation>
-    errors: Set<string>
+    errors: {
+        source: Set<string>,
+        target: Set<string>
+    }
     checksums?:{
         sourceChecksum?: string,
         targetChecksum?:string
@@ -115,7 +122,8 @@ export interface UpdateStatusOutput{
 }
 
 export interface StampMetaDataOutput{
-    errors: string[],
+    sourceErrors: string[],
+    targetErrors: string[],
     errorType?: ErrorType | undefined
 }
 
