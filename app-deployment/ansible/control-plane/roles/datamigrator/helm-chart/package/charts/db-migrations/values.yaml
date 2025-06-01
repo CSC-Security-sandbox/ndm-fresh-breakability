@@ -1,7 +1,7 @@
 appName: db-migrations
 
 image:
-  repository: db-migrations
+  repository: ndm-db-migrations
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"

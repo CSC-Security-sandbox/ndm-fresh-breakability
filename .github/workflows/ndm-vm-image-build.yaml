@@ -96,7 +96,7 @@ jobs:
           # Dynamically generate the path for each component-provider combination
           PROVIDER_PATH="${{ matrix.provider }}"
 
-          PACKER_PATH="packer/${PROVIDER_PATH}/${{ matrix.component }}"
+          PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
           echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
           echo "Using packer configuration path: $PACKER_PATH"
 
@@ -144,8 +144,8 @@ jobs:
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
         run: |
-          chmod +x ./scripts/get_tags.sh
-          ./scripts/get_tags.sh
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh
 
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}
@@ -380,29 +380,29 @@ jobs:
           
       - name: Initialize Terraform
         run: |
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           terraform init
 
       - name: Validate Terraform Configuration
         run: |
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           terraform validate
 
       - name: Create Terraform Plan
         run: |
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           terraform plan -out=tfplan
 
       - name: Apply Terraform Plan
         id: terraform-apply
         run: |
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           terraform apply -auto-approve tfplan
 
       - name: Extract Deployment Information
         id: deployment-info
         run: |
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           
           # Extract VM IP address
           VM_IP=$(terraform output -raw vm_ip_address)
@@ -435,10 +435,10 @@ jobs:
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.vm_ip_address }}..."
           
           # Ensure script is executable
-          chmod +x ./scripts/service_check.sh
+          chmod +x ./app-deployment/scripts/service_check.sh
           
           # Run the service_check.sh script to wait for the microk8s-boot service to complete
-          ./scripts/service_check.sh \
+          ./app-deployment/scripts/service_check.sh \
           "${{ steps.deployment-info.outputs.vm_ip_address }}" \
           "$VM_USERNAME" \
           "$VM_PASSWORD"
@@ -456,20 +456,11 @@ jobs:
         uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
         with:
           go-version: ${{ env.GO_VERSION }}
-      
-      - name: Checkout API Tests Repository
-        if: ${{ matrix.provider == 'vsphere' && matrix.component == 'unified-plane' }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: 'NetApp-Cloud-DataMigrate/ndm-api-tests'
-          ref: develop
-          token: ${{ env.GITOPS_USER_GITHUB_TOKEN }}
-          path: api-tests
 
       - name: Run API Tests
         if: ${{ matrix.provider == 'vsphere' && matrix.component == 'unified-plane' }}
         run: |
-          cd api-tests
+          cd ndm-api-tests
           go mod tidy
           go test -v -count=1 ./...
         continue-on-error: true
@@ -478,7 +469,7 @@ jobs:
         if: ${{ always() && matrix.provider == 'vsphere' && matrix.component == 'unified-plane' }}
         run: |
           echo "Destroying Terraform resources for ${{ matrix.component }} on ${{ matrix.provider }}..."
-          cd terraform/${{ matrix.provider }}
+          cd app-deployment/terraform/${{ matrix.provider }}
           terraform destroy -auto-approve
           echo "Terraform resources destroyed."
       

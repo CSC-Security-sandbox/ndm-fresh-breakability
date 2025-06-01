@@ -3,7 +3,7 @@ kubeApiVersion: "apps/v1"
 replicaCount: 1
 
 image:
-  repository: jobs-service
+  repository: ndm-jobs-service
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"
