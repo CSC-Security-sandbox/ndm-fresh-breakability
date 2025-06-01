@@ -10,7 +10,7 @@ const TooltipRenderer = ({
   show = true,
 }: TooltipRendererProps) => {
   return (
-    <Box className="Table-module_cell-value__ss5_Y">
+    <Box className="overflow-hidden">
       {children}
       <Show.When isTrue={show}>
         <Tooltip>

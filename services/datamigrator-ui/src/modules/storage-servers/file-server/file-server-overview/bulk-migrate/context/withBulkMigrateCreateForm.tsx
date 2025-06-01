@@ -54,6 +54,12 @@ import { useNavigate } from "react-router-dom";
 import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.utils";
+import { Box } from "@components/container";
+import { useDispatch } from "react-redux";
+import {
+  setModalClose,
+  setModalProps,
+} from "@store/reducer/commonComponentSlice";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -97,6 +103,8 @@ export function withBulkMigrateCreateForm(
 
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [fileName, setFileName] = useState<string>("");
+
+    const dispatch = useDispatch();
 
     const mappingStepForm = useFormik<MappingStepFormikFormType>({
       initialValues: {
@@ -274,6 +282,27 @@ export function withBulkMigrateCreateForm(
       console.error({ level: "Bulk Migrate - Precheck.", error });
     };
 
+    const onsubmit = (onSuccessfulSubmit?: () => void) => {
+      handleSubmit(onSuccessfulSubmit);
+      dispatch(setModalClose());
+    };
+
+    const createModalContent = () => (
+      <Box className="flex flex-col gap-10 text-gray-700 font-light">
+        Insufficient destination space for the selected path. Do you still want
+        to proceed with the migration?
+      </Box>
+    );
+
+    const createModalFooter = (onSuccessfulSubmit?: () => void) => (
+      <>
+        <Button color="secondary" onClick={() => onsubmit(onSuccessfulSubmit)}>
+          Proceed
+        </Button>
+        <Button onClick={() => dispatch(setModalClose())}>Cancel</Button>
+      </>
+    );
+
     const handlePrecheck = (onSuccessfulSubmit?: () => void) => {
       let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
@@ -306,7 +335,23 @@ export function withBulkMigrateCreateForm(
               }
               setIsSubmitting(false);
               if (precheckState.errors.length === 0) {
-                handleSubmit(onSuccessfulSubmit);
+                if (precheckState?.warnings.length > 0) {
+                  const warning = precheckState.warnings.filter((warning) =>
+                    warning?.warnings.includes("INSUFFICIENT_DESTINATION_SPACE")
+                  );
+                  if (warning.length > 0) {
+                    dispatch(
+                      setModalProps({
+                        isOpen: true,
+                        modalHeader: "Confirmation to proceed with migration",
+                        modalContent: createModalContent(),
+                        modalFooter: createModalFooter(onSuccessfulSubmit),
+                      })
+                    );
+                  } else {
+                    handleSubmit(onSuccessfulSubmit);
+                  }
+                }
               }
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
               const error = new Error(

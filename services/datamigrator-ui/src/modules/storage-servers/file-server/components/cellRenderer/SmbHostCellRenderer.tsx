@@ -1,5 +1,6 @@
 import { BlueXpTableRowType } from "@/types/app.type";
 import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
+import { Text } from "@netapp/bxp-design-system-react";
 
 const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const smbFileServer = params?.row?.fileServers.find(
@@ -8,7 +9,9 @@ const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
 
   return (
     <TooltipRenderer tooltipContent={smbFileServer?.host || "-"} show={smbFileServer?.host ? true : false}>
-      {smbFileServer?.host || "-"}
+      <Text className="overflow-hidden text-ellipsis whitespace-nowrap">
+        {smbFileServer?.host || "-"}
+      </Text>
     </TooltipRenderer>
   );
 };

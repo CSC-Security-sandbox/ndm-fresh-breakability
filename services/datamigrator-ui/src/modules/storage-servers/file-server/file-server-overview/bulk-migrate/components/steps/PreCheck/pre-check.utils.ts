@@ -2,7 +2,7 @@ import { PreCheckStatus } from "@modules/storage-servers/file-server/file-server
 
 export const getPreCheckStatus = (data: any): PreCheckStatus => {
   if (data?.status !== "COMPLETED") {
-    return { success: [], failed: [], errors: [] };
+    return { success: [], failed: [], errors: [], warnings: [] };
   }
 
   return data?.completed.reduce(
@@ -10,7 +10,7 @@ export const getPreCheckStatus = (data: any): PreCheckStatus => {
       processCompletedItem(completedItem, acc);
       return acc;
     },
-    { success: [], failed: [], errors: [] }
+    { success: [], failed: [], errors: [], warnings: [] }
   );
 };
 
@@ -21,8 +21,10 @@ const processCompletedItem = (completedItem: any, acc: PreCheckStatus) => {
 
   if (completedItem?.status === "success" && allDestinationsSuccess) {
     acc?.success.push(completedItem?.sourcePathId);
+    getAllWarnings(completedItem, acc);
   } else {
     getAllErrors(completedItem, acc);
+    getAllWarnings(completedItem, acc);
   }
 };
 
@@ -36,8 +38,24 @@ const getAllErrors = (completedItem, acc) => {
   });
 };
 
+const getAllWarnings = (completedItem, acc) => {
+  const destinationWarnings = flattenWarnings(completedItem?.destination);
+  acc?.warnings.push({
+    sourcePathId: completedItem?.sourcePathId,
+    destinationPathId: completedItem?.destination[0].destinationPathId,
+    warnings: [
+      ...(completedItem?.warnings || []),
+      ...(destinationWarnings || []),
+    ],
+  });
+};
+
 const flattenErrors = (items: any[]): any[] => {
   return items?.flatMap((item: any) => item?.errors || []);
+};
+
+const flattenWarnings = (items: any[]): any[] => {
+  return items?.flatMap((item: any) => item?.warnings || []);
 };
 
 const getTruncatedPath = (path: string) =>

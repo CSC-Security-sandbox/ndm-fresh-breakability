@@ -15,7 +15,7 @@ const ReportsGeneratingLoader = () => {
 
   return (
     <Box
-      className="buttons-module_primary__HC_JW"
+      className="buttons-module_primary__MS4wLjE2"
       disabled
       style={{ paddingLeft: "10px", paddingRight: "20px" }}
     >

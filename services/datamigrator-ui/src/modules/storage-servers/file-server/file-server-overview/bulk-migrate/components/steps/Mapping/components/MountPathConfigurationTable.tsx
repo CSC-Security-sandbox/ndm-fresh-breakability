@@ -42,10 +42,6 @@ export const MountPathConfigurationTable = () => {
     setFieldValue("selectedMountPathsId", selectedRows);
   }, [selectionState?.count]);
 
-  const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
-    return !selectedMountPathsId.includes(row.id.toString());
-  };
-
   const handleTableDownload = () => {
     downloadBulkMigrationCsv(mappingStepForm);
   };
@@ -70,7 +66,6 @@ export const MountPathConfigurationTable = () => {
         updateFilterState={updateFilterState}
         toggleRowSelection={toggleRowSelection}
         selectionState={selectionState}
-        isRowDisabled={checkDisabled}
       />
       {pagination?.pageRows && (
         <TablePager
