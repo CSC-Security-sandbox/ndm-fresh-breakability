@@ -1,5 +1,6 @@
 import { BlueXpTableRowType } from "@/types/app.type";
 import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
+import { Text } from "@netapp/bxp-design-system-react";
 
 const NfsUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const nfsFileServer = params?.row?.fileServers.find(
@@ -8,7 +9,9 @@ const NfsUserNameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
 
   return (
     <TooltipRenderer tooltipContent={nfsFileServer?.userName}>
-      {nfsFileServer?.userName || "-"}
+      <Text className="overflow-hidden text-ellipsis whitespace-nowrap">
+        {nfsFileServer?.userName || "-"}
+      </Text>
     </TooltipRenderer>
   );
 };

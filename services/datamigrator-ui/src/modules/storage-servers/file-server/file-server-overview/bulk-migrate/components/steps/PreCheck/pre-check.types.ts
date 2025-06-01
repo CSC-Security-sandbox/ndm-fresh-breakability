@@ -16,6 +16,7 @@ export type PreCheckStatus = {
   success: string[];
   failed: string[];
   errors: ErrorItem[];
+  warnings: string[];
 };
 
 export type PreCheckErrorDetailsPropsType = {

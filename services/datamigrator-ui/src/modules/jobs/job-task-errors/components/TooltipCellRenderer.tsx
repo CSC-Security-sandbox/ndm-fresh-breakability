@@ -7,8 +7,8 @@ const TooltipCellRenderer = ({ value }: { value: string }) => {
   }
 
   return (
-    <Box className="Table-module_cell-value__ss5_Y">
-      <Text className="pr-1">{value}</Text>
+    <Box className="overflow-hidden">
+      <Text className="pr-1 overflow-hidden text-ellipsis whitespace-nowrap">{value}</Text>
       <Tooltip>
         <Box className="break-words whitespace-pre-wrap">{value}</Box>
       </Tooltip>

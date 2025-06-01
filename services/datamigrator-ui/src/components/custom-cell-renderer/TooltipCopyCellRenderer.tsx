@@ -27,7 +27,7 @@ const TooltipCopyCellRenderer = ( value: string ) => {
   }
 
   return (
-    <Box className="Table-module_cell-value__ss5_Y">
+    <Box className="overflow-hidden text-ellipsis whitespace-nowrap">
       {value}
       <Show>
         <Show.When isTrue={showTooltip}>
