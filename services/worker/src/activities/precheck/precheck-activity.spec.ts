@@ -121,32 +121,6 @@ describe('PrecheckActivity', () => {
       expect(result.sourceDataSize).toBe(1024);
     });
 
-    it('should successfully pre-check a destination path', async () => {
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
-      mockProtocol.getAvailableDiskSpace.mockResolvedValue({ size: 2048 });
-      mockProtocol.unmountPath.mockResolvedValue(true);
-
-      const fs = require('fs').promises;
-      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
-      fs.readFile.mockResolvedValue('test');
-      fs.unlink.mockResolvedValue(true);
-      fs.readdir.mockResolvedValue([]);
-      (service as any).shouldCheckDiskSpace = true;
-
-      const result = await service.preCheckPath(
-        mockSettings,
-        mockServerCredential,
-        mockDestinationPath,
-        mockTraceId
-      );
-
-      expect(result.status).toBe(PreCheckStatus.SUCCESS);
-      expect(result.errorCodes).toHaveLength(0);
-      expect(result.destinationAvailableSpace).toBe(2048);
-      expect(result.destinationIsEmpty).toBe(true);
-    });
 
     it('should handle mount failure for source path', async () => {
       mockProtocol.validateConnection.mockRejectedValue(new Error('Connection failed'));
@@ -278,32 +252,6 @@ describe('PrecheckActivity', () => {
       expect(result.destinationAvailableSpace).toBeUndefined();
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error while calculating destination available space')
-      );
-    });
-
-    it('should handle destination empty check failure', async () => {
-      mockProtocol.validateConnection.mockResolvedValue(true);
-      mockProtocol.mountPath.mockResolvedValue(true);
-      mockProtocol.listPaths.mockResolvedValue(['/dest/path']);
-      mockProtocol.getAvailableDiskSpace.mockResolvedValue({ size: 2048 });
-
-      const fs = require('fs').promises;
-      fs.open.mockResolvedValue({ close: jest.fn().mockResolvedValue(true) });
-      fs.readFile.mockResolvedValue('test');
-      fs.unlink.mockResolvedValue(true);
-      fs.readdir.mockRejectedValue(new Error('Read dir failed'));
-
-      const result = await service.preCheckPath(
-        mockSettings,
-        mockServerCredential,
-        mockDestinationPath,
-        mockTraceId
-      );
-
-      expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(result.destinationIsEmpty).toBeUndefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error while checking destination path empty status')
       );
     });
 

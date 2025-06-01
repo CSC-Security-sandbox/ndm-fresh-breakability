@@ -2,7 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { Logger } from 'src/logger/logger.service';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
@@ -16,24 +16,17 @@ jest.mock('./factory/worker-options.factory');
 jest.mock('src/utils/worker-manager.mappers', () => ({
   getWorkerIdentity: (config: any) => `${config.workerId}-${config.configName}`,
 }));
-
 jest.mock('@temporalio/worker', () => ({
-  Worker: {
-    create: jest.fn(),
-  },
+  Worker: { create: jest.fn() },
   WorkerState: {
     INITIALIZED: 'initialized',
     RUNNING: 'running',
     STOPPED: 'stopped',
   },
-  NativeConnection: {
-    connect: jest.fn(),
-  },
+  NativeConnection: { connect: jest.fn() },
 }));
 jest.mock('@temporalio/client', () => ({
-  Connection: {
-    connect: jest.fn(),
-  }
+  Connection: { connect: jest.fn() }
 }));
 
 describe('WorkManagerService', () => {
@@ -107,9 +100,7 @@ describe('WorkManagerService', () => {
     expect(service).toBeDefined();
   });
 
-
   describe('handleCron', () => {
-
     it('should fetch configurations and call handleConfigurations', async () => {
       service['loadingConfigs'] = false;
       jest.spyOn(authService, 'getAccessToken').mockResolvedValue('valid-token');
@@ -142,6 +133,33 @@ describe('WorkManagerService', () => {
         expect.stringMatching(/Failed to fetch configurations. Status: 500/)
       );
     });
+
+    it('should skip if loadingConfigs is true', async () => {
+      service['loadingConfigs'] = true;
+      await service.handleCron();
+      expect(logger.debug).toHaveBeenCalledWith('Already loading configurations, skipping this cycle.');
+    });
+
+    it('should call monitorTaskQueues after handleConfigurations in handleCron', async () => {
+      service['loadingConfigs'] = false;
+      jest.spyOn(authService, 'getAccessToken').mockResolvedValue('valid-token');
+      jest.spyOn(httpService, 'get').mockReturnValue(
+        of({ status: 200, data: [] } as any)
+      );
+      jest.spyOn(service, 'handleConfigurations').mockResolvedValue(undefined);
+      const monitorTaskQueuesSpy = jest.spyOn(service, 'monitorTaskQueues').mockResolvedValue(undefined);
+
+      await service.handleCron();
+
+      expect(monitorTaskQueuesSpy).toHaveBeenCalled();
+    });
+
+    it('should set loadingConfigs to false after handleCron, even on error', async () => {
+      service['loadingConfigs'] = false;
+      jest.spyOn(authService, 'getAccessToken').mockRejectedValue(new Error('fail'));
+      await service.handleCron();
+      expect(service['loadingConfigs']).toBe(false);
+    });
   });
 
   describe('startWorker', () => {
@@ -165,6 +183,17 @@ describe('WorkManagerService', () => {
       expect(service['activeWorkers'].get(id)).toBe(worker);
     }, 3000);
 
+    describe('error handling', () => {
+      it('should log error if create worker throws error ', async () => {
+        const id = 'worker-error';
+        const workerOptions = { options: 'workerOptions' };
+        (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker create failed'));
+        await service.startWorker(id, workerOptions);
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringMatching(/Error starting worker worker-error: Error: Worker create failed/)
+        );
+      });
+    });
   });
 
   describe('shutdownWorker', () => {
@@ -202,6 +231,42 @@ describe('WorkManagerService', () => {
       await service.shutdownWorker(worker, true);
       jest.advanceTimersByTime(100);
       expect(worker.shutdown).toHaveBeenCalled();
+    });
+
+    describe('edge cases', () => {
+      it('should not call shutdown if worker is already stopped', async () => {
+        const worker: Worker = {
+          getState: jest.fn().mockReturnValue(WorkerState.STOPPED),
+          shutdown: jest.fn(),
+          options: { identity: 'worker-stopped' },
+        } as any;
+        await service.shutdownWorker(worker, false);
+        expect(worker.shutdown).not.toHaveBeenCalled();
+      });
+
+      it('should log if worker did not shutdown in forced mode', async () => {
+        const worker: Worker = {
+          getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+          shutdown: jest.fn(),
+          options: { identity: 'worker-force' },
+        } as any;
+        await service.shutdownWorker(worker, true);
+        jest.advanceTimersByTime(service['workerStartupTimeout']);
+        expect(logger.debug).toHaveBeenCalledWith('Worker did not shutdown');
+      });
+
+      it('should log if worker shutdown in forced mode', async () => {
+        const worker: Worker = {
+          getState: jest.fn()
+            .mockReturnValueOnce(WorkerState.RUNNING)
+            .mockReturnValueOnce(WorkerState.STOPPED),
+          shutdown: jest.fn(),
+          options: { identity: 'worker-force-stopped' },
+        } as any;
+        await service.shutdownWorker(worker, true);
+        jest.advanceTimersByTime(service['workerStartupTimeout']);
+        expect(logger.debug).toHaveBeenCalledWith('Worker shutdown');
+      });
     });
   });
 
@@ -256,76 +321,138 @@ describe('WorkManagerService', () => {
       expect(shutdownWorkerSpy).toHaveBeenCalledWith(worker, false);
       expect(service['activeWorkers'].size).toEqual(0);
     });
+
+    it('should stop workers not present in configs', async () => {
+      const worker: Worker = {
+        getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+        shutdown: jest.fn(),
+        options: { identity: 'old-worker-OLD_WORKFLOW' },
+      } as any;
+      service['activeWorkers'].set('old-worker-OLD_WORKFLOW', worker);
+      const shutdownWorkerSpy = jest.spyOn(service, 'shutdownWorker').mockResolvedValue(undefined);
+      await service.handleConfigurations([]);
+      expect(shutdownWorkerSpy).toHaveBeenCalledWith(worker, false);
+      expect(service['activeWorkers'].size).toBe(0);
+    });
+
+    it('should start new workers for configs not in activeWorkers', async () => {
+      const config: WorkerConfiguration = {
+        workerId: 'worker-3',
+        configName: 'NEW_WORKFLOW',
+        taskQueueId: 'queue3',
+        dynamicTaskQueue: false,
+      };
+      service['activeWorkers'].clear();
+      service['workerOptions'].createWorkerOptions = jest.fn().mockReturnValue({ taskQueue: 'queue3', options: {} });
+      const startWorkerSpy = jest.spyOn(service, 'startWorker').mockResolvedValue(undefined);
+
+      await service.handleConfigurations([config]);
+      expect(startWorkerSpy).toHaveBeenCalledWith('worker-3-NEW_WORKFLOW', expect.anything());
+    });
+
+    it('should not start worker if already active', async () => {
+      const config: WorkerConfiguration = {
+        workerId: 'worker-4',
+        configName: 'EXISTING_WORKFLOW',
+        taskQueueId: 'queue4',
+        dynamicTaskQueue: false,
+      };
+      const id = 'worker-4-EXISTING_WORKFLOW';
+      service['activeWorkers'].set(id, {} as any);
+      service['workerOptions'].createWorkerOptions = jest.fn();
+      const startWorkerSpy = jest.spyOn(service, 'startWorker').mockResolvedValue(undefined);
+
+      await service.handleConfigurations([config]);
+      expect(startWorkerSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('monitorTaskQueues', () => {
+    beforeEach(() => {
+      service['temporalClientConnection'] = {
+        workflowService: {
+          describeTaskQueue: jest.fn(),
+        },
+      } as any;
+    });
 
-  beforeEach(() => {
-    service['temporalClientConnection'] = {
-      workflowService: {
-        describeTaskQueue: jest.fn(),
-      },
-    } as any;
+    it('should remove worker if pollers are empty', async () => {
+      const mockWorker = {
+        getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+        shutdown: jest.fn(),
+        options: { identity: 'worker1' },
+      }
+      service['taskQueuesToMonitor'] = [{ queueName: 'queue1', workerId: 'worker1' }];
+      service['activeWorkers'].set('worker1', mockWorker as any);
+
+      (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+        .mockResolvedValue({ pollers: [] });
+      await service.monitorTaskQueues();
+      expect(mockWorker.shutdown).toHaveBeenCalled();
+      expect(service['activeWorkers'].has('worker1')).toBe(false);
+    });
+
+    it('should not remove worker if pollers are present', async () => {
+      service['taskQueuesToMonitor'] = [{ queueName: 'queue2', workerId: 'worker2' }];
+      service['activeWorkers'].set('worker2', { options: { identity: 'worker2' } } as any);
+
+      (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+        .mockResolvedValue({ pollers: [{ identity: 'worker2' }] });
+
+      await service.monitorTaskQueues();
+
+      expect(service['activeWorkers'].has('worker2')).toBe(true);
+    });
+
+    it('should handle multiple task queues', async () => {
+      const mockWorker1 = {
+        getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+        shutdown: jest.fn(),
+        options: { identity: 'worker1' },
+      }
+      const mockWorker2 = {
+        getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+        shutdown: jest.fn(),
+        options: { identity: 'worker2' },
+      }
+      service['taskQueuesToMonitor'] = [
+        { queueName: 'queue1', workerId: 'worker1' },
+        { queueName: 'queue2', workerId: 'worker2' },
+      ];
+      service['activeWorkers'].set('worker1',  mockWorker1 as any);
+      service['activeWorkers'].set('worker2', mockWorker2 as any);
+
+      (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
+        .mockImplementation(({ taskQueue }) => {
+          if (taskQueue.name === 'queue1') return Promise.resolve({ pollers: [] });
+          return Promise.resolve({ pollers: [{ identity: 'worker2' }] });
+        });
+
+      await service.monitorTaskQueues();
+      expect(mockWorker1.shutdown).toHaveBeenCalled();
+      expect(service['activeWorkers'].has('worker1')).toBe(false);
+      expect(service['activeWorkers'].has('worker2')).toBe(true);
+    });
+
+    it('should log and continue if shutdownWorker throws in monitorTaskQueues', async () => {
+      const mockWorker = {
+        getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
+        shutdown: jest.fn(),
+        options: { identity: 'worker7' },
+      };
+      service['taskQueuesToMonitor'] = [{ queueName: 'queue7', workerId: 'worker7' }];
+      service['activeWorkers'].set('worker7', mockWorker as any);
+      service['temporalClientConnection'] = {
+        workflowService: {
+          describeTaskQueue: jest.fn().mockResolvedValue({ pollers: [] }),
+        },
+      } as any;
+      jest.spyOn(service, 'shutdownWorker').mockRejectedValue(new Error('shutdown error'));
+      await service.monitorTaskQueues();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/Error shutting down worker worker7: Error: shutdown error/)
+      );
+      expect(service['activeWorkers'].has('worker7')).toBe(false);
+    });
   });
-
-  it('should remove worker if pollers are empty', async () => {
-    const mockWorker = {
-      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
-      shutdown: jest.fn(),
-      options: { identity: 'worker1' },
-    }
-    service['taskQueuesToMonitor'] = [{ queueName: 'queue1', workerId: 'worker1' }];
-    service['activeWorkers'].set('worker1', mockWorker as any);
-
-    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
-      .mockResolvedValue({ pollers: [] });
-    await service.monitorTaskQueues();
-    expect(mockWorker.shutdown).toHaveBeenCalled();
-    expect(service['activeWorkers'].has('worker1')).toBe(false);
-  });
-
-  it('should not remove worker if pollers are present', async () => {
-    service['taskQueuesToMonitor'] = [{ queueName: 'queue2', workerId: 'worker2' }];
-    service['activeWorkers'].set('worker2', { options: { identity: 'worker2' } } as any);
-
-    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
-      .mockResolvedValue({ pollers: [{ identity: 'worker2' }] });
-
-    await service.monitorTaskQueues();
-
-    expect(service['activeWorkers'].has('worker2')).toBe(true);
-  });
-
-  it('should handle multiple task queues', async () => {
-    const mockWorker1 = {
-      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
-      shutdown: jest.fn(),
-      options: { identity: 'worker1' },
-    }
-    const mockWorker2 = {
-      getState: jest.fn().mockReturnValue(WorkerState.RUNNING),
-      shutdown: jest.fn(),
-      options: { identity: 'worker2' },
-    }
-    service['taskQueuesToMonitor'] = [
-      { queueName: 'queue1', workerId: 'worker1' },
-      { queueName: 'queue2', workerId: 'worker2' },
-    ];
-    service['activeWorkers'].set('worker1',  mockWorker1 as any);
-    service['activeWorkers'].set('worker2', mockWorker2 as any);
-
-    (service['temporalClientConnection'].workflowService.describeTaskQueue as jest.Mock)
-      .mockImplementation(({ taskQueue }) => {
-        if (taskQueue.name === 'queue1') return Promise.resolve({ pollers: [] });
-        return Promise.resolve({ pollers: [{ identity: 'worker2' }] });
-      });
-
-    await service.monitorTaskQueues();
-    expect(mockWorker1.shutdown).toHaveBeenCalled();
-    expect(service['activeWorkers'].has('worker1')).toBe(false);
-    expect(service['activeWorkers'].has('worker2')).toBe(true);
-  });
-});
-
-
 });

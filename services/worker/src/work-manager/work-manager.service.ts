@@ -53,12 +53,17 @@ export class WorkManagerService {
     
     @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
+        if (this.loadingConfigs) {
+            this.logger.debug('Already loading configurations, skipping this cycle.');
+            return;
+        }
         try {
-           const accessToken = await this.authService.getAccessToken();
+            this.loadingConfigs = true;
+            const accessToken = await this.authService.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
                 this.httpService.get(`${this.workerConfigUrl}/api/v1/work-manager/config`, {
-                    headers: { Authorization: `Bearer ${accessToken}` }, timeout: 5000,
+                   headers: { Authorization: `Bearer ${accessToken}` }, timeout: 5000,
                 })
             );
             if (response.status !== 200) {
@@ -68,6 +73,9 @@ export class WorkManagerService {
             await this.monitorTaskQueues();
         } catch (error) {
             this.logger.error(`Error fetching configurations: ${error.message}`);
+        }
+        finally {
+            this.loadingConfigs = false;
         }      
     }
     
