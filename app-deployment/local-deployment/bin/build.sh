@@ -79,7 +79,7 @@ for service in "${services[@]}"; do
         build_context="$base_dir/services/${service_name}"
     fi
 
-    image_tag="${repo_url}/${service_name}:${service_version}"
+    image_tag="${repo_url}/ndm-${service_name}:${service_version}"
     
     echo -e "\nBuilding service image: $image_tag"
     docker build --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
