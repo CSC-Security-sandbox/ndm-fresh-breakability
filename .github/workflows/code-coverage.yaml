@@ -1,0 +1,105 @@
+name: Check Code Coverage and Run Unit Test Cases
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release*'
+  workflow_dispatch:
+    inputs:
+      selected_services:
+        description: 'Select services to test'
+        required: false
+        type: choice
+        options:
+          - all
+          - db-writer
+          - reports-service
+          - admin-service
+          - config-service
+          - jobs-service
+          - worker
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_count: ${{ steps.set-matrix.outputs.matrix_count }}
+    steps:
+      - name: Checkout Code with full history
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - id: set-matrix
+        shell: bash
+        run: |
+          # List of all known service directories
+          all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" )
+
+          # If workflow_dispatch and input is set, use it, else use all
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.selected_services }}" ]]; then
+            if [[ "${{ github.event.inputs.selected_services }}" == "all" ]]; then
+              services=( "${all_services[@]}" )
+            else
+              services=( "${{ github.event.inputs.selected_services }}" )
+            fi
+          else
+            services=( "${all_services[@]}" )
+          fi
+
+          # Convert services array to JSON on a single line using jq
+          service_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -s . | tr -d '\n')
+          echo "Matrix for selected services: $service_json"
+
+          # Write outputs ensuring the JSON is on one line
+          echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
+
+
+  unit-test-cases-and-code-coverage:
+    runs-on: ubuntu-latest
+    needs: determine-matrix
+    strategy:
+      matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js version 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Replace GitHub Token Placeholder in .npmrc
+        working-directory: services/${{ matrix.service }}
+        run: |
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm install
+
+      - name: Run test cases with code coverage
+        working-directory: services/${{ matrix.service }}
+        run: npm run test:coverage
+        continue-on-error: true
+        env:
+          CI: true
+
+      - name: Clone cicd-scripts repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/cicd-scripts
+          token: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          path: cicd-scripts
+
+      - name: Validate test cases and code coverage for ${{ matrix.service }}
+        working-directory: services/${{ matrix.service }}
+        run: |
+          chmod +x ../../cicd-scripts/scripts/cicd/unit_test_cases_coverage.sh
+          ../../cicd-scripts/scripts/cicd/unit_test_cases_coverage.sh
