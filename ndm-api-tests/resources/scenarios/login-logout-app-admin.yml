@@ -1,0 +1,15 @@
+scenarios:
+  - name: new-login
+    method: post
+    data:
+      username: ""
+      password: ""
+    response:
+      - status_code: 201
+    parse: {}
+  - name: logout-user
+    method: post
+    data: {}
+    response:
+      - status_code: 204
+    parse: {}

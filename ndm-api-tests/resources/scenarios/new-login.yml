@@ -2,7 +2,7 @@ scenarios:
   - name: new-login
     method: post
     data:
-      username: admin@datamigrator.local
+      username: admin@datamigrator.new
       password: Welcome@123
     response:
       - status_code: 201
