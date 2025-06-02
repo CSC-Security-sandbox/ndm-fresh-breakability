@@ -155,17 +155,17 @@ export class PrecheckActivity {
         };
         if(this.shouldCheckDiskSpace){
           checkPromises.push(
-            protocol.getAvailableDiskSpace(traceId, spacePayload)
-              .then(availableBytes => {
-                this.logger.log(`Available space: ${availableBytes.size} bytes`);
-                preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
-              })
-              .catch(error => {
-                this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
-                preCheckPathOutput.errorCodes.push(
-                  PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
-                );
-              })
+          protocol.getAvailableDiskSpace(traceId, spacePayload)
+            .then(availableBytes => {
+              this.logger.log(`Available space: ${availableBytes.size} bytes`);
+              preCheckPathOutput.destinationAvailableSpace = availableBytes.size;
+            })
+            .catch(error => {
+              this.logger.error(`Error while calculating destination available space on server ${serverCredentials.host} : ${error}`);
+              preCheckPathOutput.errorCodes.push(
+                PreCheckErrorCodes.DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED
+              );
+            })
           );
         }
       }

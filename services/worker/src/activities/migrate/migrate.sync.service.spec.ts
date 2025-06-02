@@ -783,7 +783,7 @@ describe('MigrationSyncService', () => {
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
             jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
-            expect(result.targetErrors).toHaveLength(0);
+                expect(result.targetErrors).toHaveLength(0);
         });
     });
 });
