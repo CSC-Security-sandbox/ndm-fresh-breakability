@@ -1,0 +1,296 @@
+# Create user with project admin role
+scenarios:
+  - name: create-user
+    url: /api/v1/create-user
+    method: POST
+    service_name: admin_service
+    data:
+      username: "testprojectadmin111@email.com"
+      firstName: "test1"
+      lastName: "user1"
+    response:
+      - status_code: 201
+      - user.first_name: "test1"
+    parse:
+      user: user
+      userid: user.id
+
+  - name: create-new-user-role
+    url: /api/v1/user-roles
+    method: POST
+    service_name: admin_service
+    data:
+      project_id: $project_id
+      account_id: $account_id
+      user_id: $userid
+      role_id: $project_admin_id
+    response:
+      - status_code: 201
+    parse:
+      user_role_id: id
+
+  - name: keycloak-reset-password
+    method: POST
+    data:
+      username: $user.email
+      password: "Root@123"
+    response:
+      - status_code: 201
+    parse: {}
+
+# Login with project admin
+  - name: new-login
+    method: POST
+    data:
+      username: $user.email
+      password: "Root@123"
+    response:
+      - status_code: 201
+    parse: {}
+
+# Create Source File Server
+  - name: create-source-file-server
+    url: /api/v1/servers
+    method: POST
+    service_name: config_service
+    headers: 
+      projectid: $project_id
+    delay: "100"
+    data:
+      configName: "Project_admin_config_source"
+      configType: "FILE"
+      projectId: $project_id
+      fileServers:
+        - serverType: "OtherNAS"
+          userName: "Root"
+          password: ""
+          protocol: "NFS"
+          protocolVersion: "v3"
+          host: $source_host_IP
+          volumes: []
+          workers:
+            - $workerId
+      workingDirectory:
+        workingDirectory: ""
+        pathId: null
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      configId: id
+
+  - name: get-file-server-by-id
+    delay: "5"
+    data:
+      type : source
+
+# Run Discovery
+  - name: create-new-discovery-job-for-source
+    url: /api/v1/jobs/bulk-discovery
+    method: POST
+    service_name: job_service
+    headers: 
+      projectid: $project_id
+    delay: "30"
+    data:
+      excludeOlderThan: null
+      excludeFilePatterns: ""
+      preserveAccessTime: false
+      firstRunAt: "2025-05-20T07:09:19.642Z"
+      sourcePathIds:
+        - 
+      createdBy: null
+    response:
+      - status_code: 201
+    parse:
+      jobConfigId: "[0].id"
+
+  - name: get-jobs-by-job-config-id-for-source
+    url: /api/v1/jobs/{id}
+    method: GET
+    service_name: job_service
+    headers: 
+      projectid: $project_id
+    delay: "120"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: COMPLETED
+    params:
+      id: jobConfigId
+    parse:
+      sourceDiscoveryJobRunId: jobRuns[0].jobRunId
+
+# Create Destination File Server
+  - name: create-destination-file-server
+    url: /api/v1/servers
+    method: POST
+    service_name: config_service
+    headers: 
+      projectid: $project_id
+    delay: "60"
+    data:
+      configName: "Project_admin_config_destination"
+      configType: "FILE"
+      projectId: $project_id
+      fileServers:
+        - serverType: "OtherNAS"
+          userName: "Root"
+          password: ""
+          protocol: "NFS"
+          protocolVersion: "v3"
+          host: $destination_host_IP
+          volumes: []
+          workers:
+            - $workerId
+      workingDirectory:
+        workingDirectory: ""
+        pathId: null
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      configId: id
+
+  - name: get-file-server-by-id
+    delay: "5"
+    data:
+      type : "destination"
+
+# Run Migration
+  - name: pre-check-migration
+    url: /api/v1/jobs/precheck
+    method: POST
+    service_name: job_service
+    headers: 
+      projectid: $project_id
+    data:
+      migrateConfigs:
+        - sourcePathId: $sourcePathId
+          destinationPathId: 
+            - $destinationPathId
+      preserveAccessTime: false
+    response:
+      - status_code: 201
+    parse:
+      workflowId: workflowId
+
+  - name: create-migration-now
+    url: /api/v1/jobs/bulk-migrate
+    method: POST
+    service_name: job_service
+    headers: 
+      projectid: $project_id
+    delay: "150"   
+    data:
+      firstRunAt: "2025-05-14T07:09:30.6432Z"
+      futureRunSchedule: ""
+      migrateConfigs:
+        - sourcePathId: $sourcePathId
+          destinationPathId: 
+            - $destinationPathId
+      sid_mapping: false
+      options:
+        excludeFilePatterns: ""
+        preserveAccessTime: true
+        skipFile: "15-M"
+    response:
+      - status_code: 201
+
+# Run Cutover 
+  - name: create-bulk-cutover-job
+    url: /api/v1/jobs/bulk-cutover
+    method: POST
+    service_name: job_service
+    headers: 
+      projectid: $project_id    
+    delay: "150"
+    data:
+      cutoverConfig:
+        - sourcePathId: $sourcePathId
+          destinationPathId:
+            - $destinationPathId
+    response:
+      - status_code: 201
+    parse:
+      jobConfigId: "[0].id"
+
+  - name: get-jobs-by-job-config-id
+    url: /api/v1/jobs/{id}
+    method: GET
+    service_name: job_service
+    headers: 
+      projectid: $project_id   
+    delay: "60"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: BLOCKED
+    params:
+      id: jobConfigId
+    parse:
+      id_cutover: jobRuns[0].jobRunId
+
+# Reject Cutover
+  - name: reject-bulk-cutover-job
+    url: /api/v1/job-run/cutover/approve
+    method: PUT
+    service_name: job_service
+    headers: 
+      projectid: $project_id
+    delay: "30"
+    data:
+      action: "REJECTED"
+      jobRunId: $id_cutover
+    params:
+      id: id_cutover  
+    response:
+      - status_code: 200
+
+  - name: create-bulk-cutover-job
+    url: /api/v1/jobs/bulk-cutover
+    method: POST
+    service_name: job_service
+    headers: 
+      projectid: $project_id    
+    delay: "150"
+    data:
+      cutoverConfig:
+        - sourcePathId: $sourcePathId
+          destinationPathId:
+            - $destinationPathId
+    response:
+      - status_code: 201
+    parse: {}
+
+  - name: get-jobs-by-job-config-id
+    url: /api/v1/jobs/{id}
+    method: GET
+    service_name: job_service
+    headers: 
+      projectid: $project_id   
+    delay: "60"
+    data: {}
+    response:
+      - status_code: 200
+      - jobRuns[0].status: BLOCKED
+    params:
+      id: jobConfigId
+    parse:
+      id_cutover: jobRuns[0].jobRunId      
+
+# Accept Cutover
+  - name: approve-bulk-cutover-job
+    url: /api/v1/job-run/cutover/approve
+    method: PUT
+    service_name: job_service
+    headers: 
+      projectid: $project_id   
+    delay: "15"
+    data:
+      action: "APPROVED"
+      jobRunId: $id_cutover
+    params:
+      id: id_cutover   
+    response:
+      - status_code: 200

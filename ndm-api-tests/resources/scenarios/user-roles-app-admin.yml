@@ -1,0 +1,52 @@
+scenarios:
+  - name: create-user
+    url: /api/v1/create-user
+    method: POST
+    service_name: admin_service
+    data:
+      username: "testprojectadmin@email.com"
+      firstName: "test"
+      lastName: "user"
+    response:
+      - status_code: 201
+      - user.first_name: "test"
+    parse:
+      userid: user.id
+
+  - name: create-new-user-role
+    url: /api/v1/user-roles
+    method: POST
+    service_name: admin_service
+    data:
+      project_id: "$project_id"
+      account_id: "$account_id"
+      user_id: "$userid"
+      role_id: "$project_admin_id"
+    response:
+      - status_code: 201
+    parse:
+      user_role_id: id
+
+  - name: get-user-role
+    url: /api/v1/user-roles
+    method: GET
+    service_name: admin_service
+    data: {}
+    response:
+      - status_code: 200
+
+  - name: update-user-role-patch
+    url: /api/v1/user-roles/{id}
+    method: PATCH
+    service_name: admin_service
+    data:
+      project_id: "$project_id"
+      account_id: "$account_id"
+      user_id: "$userid"
+      role_id: "$project_viewer_id"
+    params:
+      id: user_role_id
+    response:
+      - status_code: 200
+
+

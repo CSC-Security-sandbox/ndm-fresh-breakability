@@ -14,6 +14,7 @@ type Scenario struct {
 	Method      string                   `yaml:"method"`
 	ServiceName string                   `yaml:"service_name"`
 	Delay       string                   `yaml:"delay"`
+	Headers     map[string]string        `yaml:"headers"`
 	Data        interface{}              `yaml:"data"`
 	Response    []map[string]interface{} `yaml:"response"`
 	Parse       map[string]string        `yaml:"parse"`
