@@ -173,7 +173,7 @@ export class DiscoveryScanActivity {
         return scanPath;
     }
 
-    async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
+    async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile, errorType }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
         const scanDirOutput: ScanDirCommandOutput = {
             files: 0, directory: 0, isFatal: false, error: undefined, errorType: errorType,
         }

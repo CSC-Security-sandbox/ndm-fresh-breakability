@@ -112,7 +112,7 @@ export class MigrationSyncService {
       }
      }
     if(metadata?.birthtime && command.ops[0].cmd !== OPS_CMD.COPY_DIR){
-      try {
+      try { 
         if(process.platform == 'win32') {
           const birthtime = new Date(metadata.birthtime) 
           var dateString = new Date(
@@ -260,7 +260,7 @@ export class MigrationSyncService {
       result.sourceErrors.forEach(error => syncOperation.errors.source.add(error))
       result.targetErrors.forEach(error => syncOperation.errors.target.add(error))
       syncOperation.ops[1].status = result.targetErrors.length || result.sourceErrors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
-      }
+    }
     return syncOperation ;
   }
 
@@ -359,12 +359,12 @@ export class MigrationSyncService {
           break;
         }
 
-        for(const error of syncTask.errors.source)
-          if(isSourceFatalError(error)) {
-            syncTask.isFatal = true;
-            break;
-          }
-  
+      for(const error of syncTask.errors.source)
+        if(isSourceFatalError(error)) {
+          syncTask.isFatal = true;
+          break;
+        }
+        
       const errorType = syncTask.isFatal ? ErrorType.FATAL_ERROR : syncTask.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
       const dmErr = dmError("TASK", Origin.DESTINATION,  Operation.COPY_CONTENT, errorType, task.id,  undefined, undefined, {
           errorCode: syncTask.errors.target.size > 0 || syncTask.errors.source.size > 0 ? [...Array.from(syncTask.errors.target), ...Array.from(syncTask.errors.source)] : [], 

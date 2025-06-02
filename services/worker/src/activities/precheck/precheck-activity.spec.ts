@@ -121,7 +121,6 @@ describe('PrecheckActivity', () => {
       expect(result.sourceDataSize).toBe(1024);
     });
 
-
     it('should handle mount failure for source path', async () => {
       mockProtocol.validateConnection.mockRejectedValue(new Error('Connection failed'));
 
@@ -254,6 +253,7 @@ describe('PrecheckActivity', () => {
         expect.stringContaining('Error while calculating destination available space')
       );
     });
+
 
     it('should handle unmount failure', async () => {
       mockProtocol.validateConnection.mockResolvedValue(true);
@@ -419,7 +419,6 @@ describe('PrecheckActivity', () => {
     expect(result.sourceDataSize).toBe(4567);
   });
 });
-
 
 
 
