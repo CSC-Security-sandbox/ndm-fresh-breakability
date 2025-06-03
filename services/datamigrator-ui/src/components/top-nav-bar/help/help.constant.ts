@@ -1,14 +1,18 @@
 export const HELP_ITEMS = [
   {
     id: 1,
-    name: "Support",
+    name: "About NDM",
   },
   {
     id: 2,
-    name: "Documentation",
+    name: "Support",
   },
   {
     id: 3,
+    name: "Documentation",
+  },
+  {
+    id: 4,
     name: "Feedback",
   },
 ];
