@@ -51,7 +51,6 @@ const JobConfig = () => {
           label="Working Directory"
         />
 
-        <Box></Box>
       </Box>
     </FormFrame>
   );
