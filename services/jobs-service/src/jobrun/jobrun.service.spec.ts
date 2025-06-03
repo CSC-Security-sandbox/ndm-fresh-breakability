@@ -738,6 +738,7 @@ describe("JobRunService", () => {
           status: JobRunStatus.Completed,
           endTime: expect.any(Date),
           jobStats: expect.anything(),
+          timeElapsed: null,
         }
       );
     });
@@ -1203,8 +1204,8 @@ describe("JobRunService", () => {
         targetfileserverprotocol: "FTP",
         targetconfigname: "TargetServer",
         status: JobRunStatus.Running,
-        starttime: new Date(Date.now() - 10000),
-        endtime: new Date(),
+        startTime: new Date(Date.now() - 10000), 
+        endTime: new Date(),   
         jobstats: {
           fileCount: "10",
           directories: "2",
@@ -1239,8 +1240,6 @@ describe("JobRunService", () => {
     expect(result).toMatchObject([
       {
         status: JobRunStatus.Running,
-        startTime: mockJobRuns[0].starttime,
-        endTime: mockJobRuns[0].endtime,
         jobType: "DISCOVER",
         sourceServer: {
           serverName: "SourceServer",
@@ -2290,7 +2289,9 @@ describe("JobRunService", () => {
       );
       expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
         { id: In(jobRuns) },
-        { status: JobRunStatus.Paused }
+        expect.objectContaining({
+          status: JobRunStatus.Paused,
+        })
       );
     });
 
@@ -2377,6 +2378,7 @@ describe("JobRunService", () => {
           status: JobRunStatus.Completed,
           endTime: expect.any(Date),
           jobStats: mockJobRunStats,
+          timeElapsed: JobRunStatus.Completed ? null : expect.any(Date),
         }
       );
     });

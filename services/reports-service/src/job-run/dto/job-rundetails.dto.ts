@@ -130,6 +130,10 @@ export class JobRunDetailsResponseDto {
   @ApiProperty()
   @IsObject()
   task?: TaskDto;
+
+  @ApiProperty()
+  @IsNumber()
+  timeElapsed: number;
 }
 
 export function serializeJobRunDetailsResponse(plainObject: any): JobRunDetailsResponseDto {

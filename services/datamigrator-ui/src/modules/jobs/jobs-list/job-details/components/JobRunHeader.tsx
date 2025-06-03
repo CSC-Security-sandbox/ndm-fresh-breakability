@@ -20,10 +20,9 @@ const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
     );
   }
   const { jobType } = jobRunDetails.jobConfig;
-  const timeElapsed = calculateTimeDiff(
-    jobRunDetails.startTime,
-    jobRunDetails.endTime
-  );
+  const timeElapsed = jobRunDetails.timeElapsed 
+    ? jobRunDetails.timeElapsed 
+    : calculateTimeDiff(jobRunDetails.startTime, jobRunDetails.endTime);
 
   let jobStats;
   switch (jobType) {

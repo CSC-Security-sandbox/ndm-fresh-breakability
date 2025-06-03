@@ -2094,6 +2094,70 @@ describe("JobConfigService", () => {
     
   });
 
+  it("should handle job runs with paused status", async () => {
+    const mockJobConfig = {
+      id: "job1",
+      jobType: JobType.MIGRATE,
+      jobRuns: [
+        {
+          id: "run1",
+          status: JobRunStatus.Paused,
+          startTime: new Date("2023-01-01T00:00:00Z"),
+          endTime: null,
+          timeElapsed: new Date("2023-01-01T01:00:00Z"),
+          isReportReady: false,
+          subStatus: null,
+        },
+      ],
+      sourcePath: {
+        volumePath: "/source",
+        fileServer: {
+          protocol: "NFS",
+          config: { configName: "SourceServer" },
+        },
+      },
+      targetPath: {
+        volumePath: "/target",
+        fileServer: {
+          protocol: "NFS",
+          config: { configName: "TargetServer" },
+        },
+      },
+      status: "Active",
+      createdAt: new Date(),
+    };
+
+    jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+    jest.spyOn(service, "calculateJobRunStats").mockResolvedValue({
+      fileCount: "10",
+      directories: "5",
+      totalSize: "1000",
+      errors: [],
+    });
+
+    const result = await service.getJobConfigById("job1");
+    expect(result.jobRuns[0].status).toBe("PAUSED");
+    expect(result.jobRuns[0].timeElapsed).toBeGreaterThan(0);
+  });
+
+  it("should handle missing source or target paths", async () => {
+    const mockJobConfig = {
+      id: "job1",
+      jobType: JobType.MIGRATE,
+      jobRuns: [],
+      sourcePath: null,
+      targetPath: null,
+      status: "Active",
+      createdAt: new Date(),
+    };
+
+    jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+
+    const result = await service.getJobConfigById("job1");
+    expect(result.sourceServer).toEqual({ serverName: null, path: null, protocol: null });
+    expect(result.destinationServer).toEqual({});
+  });
+
   describe("parseSize", () => {
     it("should return 0 for empty or undefined input", () => {
       expect(service.parseSize("")).toBe(0);
@@ -3587,6 +3651,47 @@ describe("JobConfigService", () => {
       const result = await service.createBulkMigrate(bulkMigrate as any);
       expect(result).toEqual({"jobs": [], "warnings": undefined});
     });
+  });
+
+  it("should handle when no destination paths are provided", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        { sourcePathId: "source1", destinationPathId: [] },
+      ],
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+      },
+    };
+
+    const result = await service.createBulkMigrate(mockBulkMigrate as any);
+    expect(result.jobs).toEqual([]);
+  });
+
+  it("should handle when all source-destination pairs already exist", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        { sourcePathId: "source1", destinationPathId: ["dest1"] },
+      ],
+      options: {
+        excludeFilePatterns: "*.tmp",
+        preserveAccessTime: true,
+      },
+    };
+
+    const mockExistingList = [
+      { 
+        sourcePathId: "source1", 
+        targetPathId: "dest1",
+        scheduler: ScheduleStatus.SCHEDULING,
+        id: "existingJob1"
+      },
+    ];
+
+    jest.spyOn(jobConfigRepo, "find").mockResolvedValue(mockExistingList as any);
+
+    const result = await service.createBulkMigrate(mockBulkMigrate as any);
+    expect(result.jobs.length).toBe(0);
   });
 
   describe("getCutoverDetailsByFileServerId", () => {

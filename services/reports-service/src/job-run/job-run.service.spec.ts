@@ -175,6 +175,7 @@ describe('JobRunService', () => {
             volumePath: '/destination'
           },
         },
+        timeElapsed: JobRunStatus.Paused ? new Date(Date.now() - 10000) : 1000,
         worker: { workerId: 'worker1' },
       };
 
@@ -191,6 +192,71 @@ describe('JobRunService', () => {
       expect(result.discovery).toBeDefined();
       expect(result.discovery.directories).toBe('10');
       expect(result.discovery.fileCount).toBe('50');
+    });
+
+    it('should correctly calculate timeElapsed when job is paused', async () => {
+      const mockJobRun = {
+      id: jobId,
+      startTime: new Date(Date.now() - 5000),
+      status: JobRunStatus.Paused,
+      timeElapsed: new Date(Date.now() - 2000),
+      jobConfig: {
+        id: 'configId',
+        jobType: JobType.Discover,
+        sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+        destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+      },
+      worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.timeElapsed).toBe(3000); // 5000ms - 2000ms
+    });
+
+    it('should correctly calculate timeElapsed when job is completed', async () => {
+      const mockJobRun = {
+      id: jobId,
+      startTime: new Date(Date.now() - 10000),
+      endTime: new Date(Date.now() - 5000),
+      status: JobRunStatus.Completed,
+      jobConfig: {
+        id: 'configId',
+        jobType: JobType.Discover,
+        sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+        destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+      },
+      worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.timeElapsed).toBe(5000); // 10000ms - 5000ms
+    });
+
+    it('should correctly calculate timeElapsed when job is running and endTime is not set', async () => {
+      const mockJobRun = {
+      id: jobId,
+      startTime: new Date(Date.now() - 7000),
+      status: JobRunStatus.Running,
+      jobConfig: {
+        id: 'configId',
+        jobType: JobType.Discover,
+        sourcePath: { fileServer: { protocol: 'http', config: { configName: 'sourceServer' } }, volumePath: '/source' },
+        destinationPath: { fileServer: { protocol: 'ftp', config: { configName: 'destServer' } }, volumePath: '/destination' },
+      },
+      worker: { workerId: 'worker1' },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.timeElapsed).toBeGreaterThanOrEqual(7000); // At least 7000ms since startTime
     });
 
     it('should return job stats with migrate data', async () => {

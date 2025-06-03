@@ -64,4 +64,8 @@ export class JobRunEntity extends Base {
     eager: false,
   })
   tasks: TaskEntity[];
+
+  @ApiProperty({ description: "Time elapsed of the job" })
+  @Column({ name: "time_elapsed" })
+  timeElapsed: Date;
 }

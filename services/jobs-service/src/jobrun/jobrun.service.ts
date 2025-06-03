@@ -44,6 +44,7 @@ import { SendMailService } from "src/utils/send-email";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
 import { WorkersService } from "src/workers/workers.service";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { timeElapsed } from "src/utils/time-elapsed-calculation";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -182,7 +183,7 @@ export class JobRunService {
     );
     await this.jobRunRepo.update(
       { id: In(jobRuns) },
-      { status: JobRunStatus.Paused, pausedReason: reason }
+      { status: JobRunStatus.Paused, pausedReason: reason, timeElapsed: new Date() }
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
@@ -440,9 +441,7 @@ export class JobRunService {
             protocol: jobConfigDetails.targetPath.fileServer.protocol,
           }
         : undefined,
-      timeElapsed: jobRun.endTime
-        ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
-        : Date.now() - jobRun.startTime.getTime(),
+        timeElapsed: timeElapsed(jobRun),
     };
     if (jobRun.status === JobRunStatus.Completed) {
       this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
@@ -603,9 +602,7 @@ export class JobRunService {
                 protocol: jobRun.targetfileserverprotocol,
               }
             : undefined,
-          timeElapsed: jobRun.endtime
-            ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
-            : Date.now() - jobRun.starttime.getTime(),
+          timeElapsed: timeElapsed(jobRun),
         };
         this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
         if (String(jobRun.status).trim() == JobRunStatus.Completed) {
@@ -766,7 +763,11 @@ export class JobRunService {
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
       await this.jobRunRepo.update(
         { id: jobRunId },
-        { status: status, endTime: new Date(), jobStats: jobRunStats }
+        { status: status,
+          endTime: new Date(),
+          jobStats: jobRunStats,
+          timeElapsed: status === JobRunStatus.Completed ? null : jobRunDetails.timeElapsed
+        }
       );
     } else {
       if (

@@ -82,7 +82,7 @@ import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-
+import { timeElapsed } from "src/utils/time-elapsed-calculation";
 @Injectable()
 export class JobConfigService {
   private readonly logger = new Logger(JobConfigService.name);
@@ -985,9 +985,7 @@ export class JobConfigService {
           startTime: jobRun.startTime,
           endTime: jobRun.endTime,
           jobType: jobConfig.jobType,
-          timeElapsed: jobRun.endTime
-            ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
-            : Date.now() - jobRun.startTime.getTime(),
+          timeElapsed: timeElapsed(jobRun),
         };
         const jobRunStats = await this.calculateJobRunStats(jobRun.id); 
       

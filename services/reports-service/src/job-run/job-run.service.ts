@@ -107,6 +107,7 @@ export class JobRunService {
         isReportReady: true,
         status: true,
         endTime: true,
+        timeElapsed: true,
         // worker: {workerId: true},
         jobConfig: {
           id: true,
@@ -123,6 +124,17 @@ export class JobRunService {
         },
       },
     });
+
+    let jobRunTimeElapsed: number;
+    if (jobRun.status === JobRunStatus.Paused) {
+      jobRunTimeElapsed = jobRun.timeElapsed
+        ? jobRun?.timeElapsed?.getTime() - jobRun?.startTime.getTime()
+        : Date.now() - jobRun?.startTime?.getTime();
+    } else {
+      jobRunTimeElapsed = jobRun.endTime
+        ? jobRun?.endTime?.getTime() - jobRun?.startTime?.getTime()
+        : Date.now() - jobRun?.startTime?.getTime();
+    }
 
     if (!jobRun)
       throw new NotFoundException(`Jon Run Dues not exit for id :${id}`);
@@ -143,6 +155,7 @@ export class JobRunService {
             jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,
         },
       },
+      timeElapsed: jobRunTimeElapsed,
       worker: jobRun?.worker?.length ?? 0,
     };
 

@@ -327,8 +327,14 @@
       </rollback>
    </changeSet>
 
-     <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
+   <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
       <sqlFile path="liquibase/20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250506_01_create_time_elapsed_column.sql" author="ramyag">
+      <sqlFile path="liquibase/20250506_01_create_time_elapsed_column.sql" splitStatements="false"/>
       <rollback>
       </rollback>
    </changeSet>

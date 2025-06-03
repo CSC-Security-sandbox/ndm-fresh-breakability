@@ -86,4 +86,8 @@ export class JobRunEntity extends Base {
 
   @Column({ type: 'text', nullable: true, name: 'paused_reason' })
   pausedReason: PausedReason;
+  
+  @ApiProperty({ description: "Time elapsed for the job" })
+  @Column({ name: "time_elapsed", nullable: true })
+  timeElapsed: Date;
 }

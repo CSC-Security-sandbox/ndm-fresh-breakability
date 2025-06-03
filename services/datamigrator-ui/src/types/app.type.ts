@@ -398,6 +398,7 @@ export interface JobRunDetailsApiType {
   migrate?: JobStatsType;
   cutOver?: JobStatsType;
   worker: number;
+  timeElapsed: number;
 }
 
 export interface JobRowType {
