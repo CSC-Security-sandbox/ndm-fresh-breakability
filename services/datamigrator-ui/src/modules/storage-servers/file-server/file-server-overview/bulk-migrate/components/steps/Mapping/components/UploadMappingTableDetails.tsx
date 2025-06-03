@@ -90,6 +90,7 @@ const UploadMappingTableDetails = ({
 
           const destinationPathId = getDestinationPathIdByName(
             allFileServers,
+            rowData["Destination"],
             rowData["Protocol"],
             rowData["Destination Path"]
           );

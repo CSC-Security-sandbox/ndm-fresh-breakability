@@ -19,6 +19,7 @@ const Filters = ({
   columnsToFilter,
   setFilters,
   preSelectedFilter,
+  gotoPage,
 }: FiltersType) => {
   const [dataToFilter, setDataToFilter] = useState<any>({});
 
@@ -49,6 +50,7 @@ const Filters = ({
   );
 
   useEffect(() => {
+    gotoPage && gotoPage(0);
     setFilters && setFilters(form.formState);
   }, [form]);
 
