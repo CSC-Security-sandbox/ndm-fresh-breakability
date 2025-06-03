@@ -327,8 +327,34 @@
       </rollback>
    </changeSet>
 
-     <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
+   <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
       <sqlFile path="liquibase/20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250602_01_create_funtion_to_update_updated_at.sql" author="dineshseervi">
+      <sqlFile path="liquibase/20250602_01_create_funtion_to_update_updated_at.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+
+   <changeSet id="20250602_02_alter_volume_table_add_column_isvalid.sql" author="dineshseervi">
+      <sqlFile path="liquibase/20250602_02_alter_volume_table_add_column_isvalid.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
+
+   <changeSet id="20250602_03_create_table_path_uploads.sql" author="dineshseervi">
+      <sqlFile path="liquibase/20250602_03_create_table_path_uploads.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+  
+   <changeSet id="20250603_01_alter_table_fileserver_add_column_exportpathsource.sql" author="dineshseervi">
+      <sqlFile path="liquibase/20250603_01_alter_table_fileserver_add_column_exportpathsource.sql" splitStatements="false"/>
       <rollback>
       </rollback>
    </changeSet>

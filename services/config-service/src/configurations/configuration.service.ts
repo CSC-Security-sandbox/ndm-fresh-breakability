@@ -16,6 +16,7 @@ import {
   ConfigStatus,
   ProtocolVersionError,
   WorkerStatus,
+  ExportPathSource,
   WorkFlows,
 } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
@@ -88,6 +89,7 @@ export class ConfigurationService {
         'config.configName',
         'config.status',
         'workingDirectory.workingDirectory',
+        'fileServer.exportPathSource',
       ])
       .getMany();
 
@@ -155,6 +157,7 @@ export class ConfigurationService {
             createdAt: true,
             createdBy: true,
             protocolVersion: true,
+            exportPathSource: true,
           },
         },
         relations: {
@@ -206,6 +209,7 @@ export class ConfigurationService {
             password: true,
             isRefreshed: true,
             protocolVersion: true,
+            exportPathSource: true,
             workers: {
               workerId: true,
               workerName: true,
@@ -217,6 +221,7 @@ export class ConfigurationService {
             volumes: {
               id: true,
               volumePath: true,
+              isValid: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -252,6 +257,7 @@ export class ConfigurationService {
       if(config?.fileServers){
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
+          volumes: fileServer.volumes.filter(volume => volume.isValid),
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
@@ -343,9 +349,11 @@ export class ConfigurationService {
             host: true,
             serverType: true,
             protocol: true,
+            exportPathSource: true,
             volumes: {
               id: true,
               volumePath: true,
+              isValid: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -467,7 +475,7 @@ export class ConfigurationService {
       }
 
       return new Map(
-        volumeDetails.map((volume) => [
+        volumeDetails.filter(v => v.isValid).map((volume) => [
           volume.id,
           {
             id: volume.id,
@@ -568,6 +576,7 @@ export class ConfigurationService {
             },
             protocol: fileServer.protocol,
             workers: workers.map((it) => it.workerId),
+            exportPathSource: fileServer.exportPathSource,
           });
           return this.fileServerEntity.create({
             host: fileServer.host.trim(),
@@ -580,6 +589,7 @@ export class ConfigurationService {
             password: fileServer?.password,
             isRefreshed: false,
             volumes: [],
+            exportPathSource: fileServer.exportPathSource,
           });
         },
       );
@@ -757,6 +767,7 @@ export class ConfigurationService {
           password: update.password,
           updatedBy: userId,
           isRefreshed: false,
+          exportPathSource: update.exportPathSource,
         });
       });
 
@@ -860,6 +871,7 @@ export class ConfigurationService {
           host: fileServer?.host.trim(),
           username: fileServer?.userName,
           password: fileServer?.password,
+          exportPathSource: fileServer?.exportPathSource,
         };
         listPathPayload.push(payload);
       });

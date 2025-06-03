@@ -49,9 +49,21 @@ export enum WorkFlowType {
 export enum WorkFlows{
     VALIDATE_CONNECTION = 'ValidateConnectionsWorkflow',
     LIST_PATHS = 'ListPathsWorkflow',
-    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow'
+    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow',
+    VALIDATE_PATHS = 'ValidatePathsWorkflow',
 }
 
 export enum ProtocolVersionError{
     PROTOCOL_VERSION_ERROR = 'The server does not support to provided protocol version. Please use a valid protocol version.'
+}
+
+export enum UploadPathAction {
+    CREATE = 'CREATE',
+    DUPLICATE = 'DUPLICATE',
+    DELETE = 'DELETE',
+}
+
+export enum ExportPathSource {
+    SHOW_MOUNT = 'SHOW_MOUNT',
+    MANUAL_UPLOAD = 'MANUAL_UPLOAD',
 }

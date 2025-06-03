@@ -1,4 +1,4 @@
-import { Protocol } from "src/constants/enums";
+import { ExportPathSource, Protocol } from "src/constants/enums";
 import { WorkflowExecutionStatus } from "src/workflow/workflow.types";
 
 export interface ListPathWorkflowStatus {
@@ -44,5 +44,6 @@ export interface Credentials {
         hostname: string;
         password?: string
     }
-    workers: string[]
+    workers: string[],
+    exportPathSource?: ExportPathSource;
 }

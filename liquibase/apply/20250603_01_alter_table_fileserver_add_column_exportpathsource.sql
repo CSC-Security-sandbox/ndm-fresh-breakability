@@ -1,0 +1,1 @@
+ALTER TABLE file_server ADD COLUMN IF NOT EXISTS export_path_source varchar;
