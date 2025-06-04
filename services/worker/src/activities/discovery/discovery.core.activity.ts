@@ -10,6 +10,7 @@ import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
 import { Context } from '@temporalio/activity';
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 @Injectable()
 export class DiscoveryScanActivity {
 
@@ -55,7 +56,8 @@ export class DiscoveryScanActivity {
             return scanActivityOutput;
         }
         await jobContext.setScanTask(this.workerId, task);
-        
+        this.logger.debug(`[${jobRunId}] Task set for worker: ${this.workerId}`);
+        await delay(15000); // Delay to ensure task is set in Redis before proceeding
         scanActivityOutput.taskId = task.id;
 
         task.workerId = this.workerId;
