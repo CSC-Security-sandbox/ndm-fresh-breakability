@@ -43,12 +43,10 @@ type KeycloakCredentials struct {
 type Volume struct {
 	ID         string `json:"id"`
 	VolumePath string `json:"volumePath"`
-	// other fields omitted for brevity
 }
 type FileServer struct {
 	ID      string   `json:"id"`
 	Volumes []Volume `json:"volumes"`
-	// other fields omitted for brevity
 }
 type Response struct {
 	FileServers []FileServer `json:"fileServers"`
@@ -1014,7 +1012,7 @@ func GetVolumeID(response Response, volumePath string) (string, error) {
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
 }
 
-func GetVolumByID(volumeType string, authToken string, configId string) (string, error) {
+func GetVolumByID(volumeType string, volumeName string, authToken string, configId string) (string, error) {
 	// Build the full URL
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
 	var reqBody []byte
@@ -1040,18 +1038,8 @@ func GetVolumByID(volumeType string, authToken string, configId string) (string,
 		return "", fmt.Errorf("error unmarshalling response: %w", err)
 	}
 
-	// Determine the volume path based on the scData.Type
-	var volumePath string
-	if volumeType == "source" {
-		volumePath = NFS_SOURCE_VOLUME
-	} else if volumeType == "destination" {
-		volumePath = NFS_DESTINATION_VOLUME
-	} else {
-		return "", fmt.Errorf("invalid scData.Type: %s", volumeType)
-	}
-
 	// Find the volume ID
-	foundID, err := GetVolumeID(response, volumePath)
+	foundID, err := GetVolumeID(response, volumeName)
 	if err != nil {
 		return "", fmt.Errorf("error finding volume ID: %w", err)
 	}
