@@ -329,8 +329,8 @@ jobs:
     
     env:
       NDM_VM_PORT: 22
-      USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NDM_APP_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      NDM_APP_PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
     
     steps:
       - name: Checkout repository
@@ -422,6 +422,11 @@ jobs:
           echo "ADMIN_SERVICE_URL=https://${{ steps.deployment-info.outputs.vm_ip_address }}" >> $GITHUB_ENV
           echo "KEYCLOAK_IP=${{ steps.deployment-info.outputs.vm_ip_address }}" >> $GITHUB_ENV
           echo "NDM_VM_HOST=${{ steps.deployment-info.outputs.vm_ip_address }}" >> $GITHUB_ENV
+          echo "NDM_WORKERS_HOST=${{ steps.deployment-info.outputs.vm_ip_address }}" >> $GITHUB_ENV
+          echo "NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NDM_WORKERS_PORT=$NDM_VM_PORT" >> $GITHUB_ENV
+          echo "NDM_WORKERS_PASSWORD=$NDM_VM_PASSWORD" >> $GITHUB_ENV
+
 
       - name: Install sshpass
         run: |
