@@ -1,6 +1,11 @@
 server:
   enabled: true
   replicaCount: 2
+  metrics:
+    annotations:
+      enabled: true
+    prometheus:
+      timerType: "histogram"
   # additionalEnv:
   #   - name: TEMPORAL_UI_PUBLIC_PATH
   #     value: "/temporal/ui"
