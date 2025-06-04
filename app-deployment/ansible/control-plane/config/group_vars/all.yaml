@@ -102,6 +102,7 @@ ports_to_open:
   - tcp 30000:65535
   - tcp 9000:9005
   - tcp 16443
+  - tcp 9091
 
 postgres_version: 16.2.5
 postgres_data_volume_size: 30Gi
