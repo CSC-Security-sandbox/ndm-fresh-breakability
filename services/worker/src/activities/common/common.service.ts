@@ -187,12 +187,12 @@ export class CommonActivityService{
   async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     if(jobType === 'SCAN') {
       const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
-      this.logger.log(`[${jobContext.jobRunId}] Running scan tasks: ${JSON.stringify(runningScanTasks)}`);
-      this.logger.log((runningScanTasks));
       if(!!runningScanTasks && Object.keys(runningScanTasks).length > 0) {
-        for (const task of Object.values(runningScanTasks)) if(!task) {
-          this.logger.log(`[${jobContext.jobRunId}] Appending task to Scan task list: ${JSON.stringify(task)}`);
-          await jobContext.appendToTaskList(task as Task);
+        for (const task of Object.values(runningScanTasks)) {
+          if(!!task) {
+            this.logger.debug(`[${jobContext.jobRunId}] Appending Scan task to stream: ${JSON.stringify(task)}`);
+            await jobContext.appendToTaskList(JSON.parse(task as string) as Task);
+          }
         }
         await jobContext.deleteAllScanTasks();
       }
@@ -200,7 +200,12 @@ export class CommonActivityService{
     if(jobType === 'SYNC') {
       const runningSyncTasks = await jobContext.getAllRunningSyncTasks() as any;
       if(!!runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
-        for (const task of  Object.values(runningSyncTasks)) if(!task) await jobContext.appendToMigrationTask(task as Task);
+        for (const task of  Object.values(runningSyncTasks)) {
+          if(!!task) {
+            this.logger.debug(`[${jobContext.jobRunId}] Appending Sync task to stream: ${JSON.stringify(task)}`);
+            await jobContext.appendToMigrationTask(JSON.parse(task as string) as Task);
+          }
+        }
         await jobContext.deleteAllSyncTasks();
       }
     }

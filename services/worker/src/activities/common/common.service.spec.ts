@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
 import { JobRunStatus } from '../discovery/enums';
-import { JobStatus, Task, JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
 
 jest.mock('axios');
@@ -64,7 +64,7 @@ describe('CommonActivityService', () => {
     };
     httpService = {};
     authService = { getAccessToken: jest.fn().mockResolvedValue('token') };
-    logger = { log: jest.fn(), error: jest.fn() };
+    logger = { log: jest.fn(), error: jest.fn(), debug: jest.fn(), warn: jest.fn() } as unknown as Logger;
     redisService = {
       getJobContext: jest.fn().mockResolvedValue(mockContext),
       setJobContext: jest.fn(),
@@ -234,21 +234,6 @@ describe('CommonActivityService', () => {
     });
   });
 
-  describe('publishPendingTasksToStream', () => {
-    it('should process SCAN tasks', async () => {
-      mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue([null]);
-      await service.publishPendingTasksToStream(mockContext, 'SCAN');
-      expect(mockContext.appendToTaskList).toHaveBeenCalled();
-      expect(mockContext.deleteAllScanTasks).toHaveBeenCalled();
-    });
-    it('should process SYNC tasks', async () => {
-      mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue([null]);
-      await service.publishPendingTasksToStream(mockContext, 'SYNC');
-      expect(mockContext.appendToMigrationTask).toHaveBeenCalled();
-      expect(mockContext.deleteAllSyncTasks).toHaveBeenCalled();
-    });
-  });
-
   describe('updateWorkerResponse', () => {
     it('should update worker response successfully', async () => {
       (axios.put as jest.Mock).mockResolvedValue({});
@@ -260,5 +245,71 @@ describe('CommonActivityService', () => {
       const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
       expect(res.message).toContain('Error while updating the worker response');
     });
+
+    it('should handle missing token when updating worker response', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
+      expect(res.message).toContain('Error while updating the worker response');
+    });
   });
+
+      describe('isScanTaskRunningEmpty', () => {
+      it('should return true if scan task running is empty', async () => {
+      mockContext.isRunningScanTaskEmpty = jest.fn().mockResolvedValue(true);
+      const result = await service.isScanTaskRunningEmpty(jobRunId);
+      expect(redisService.getJobContext).toHaveBeenCalledWith(jobRunId);
+      expect(result).toBe(true);
+      });
+      it('should return false if scan task running is not empty', async () => {
+      mockContext.isRunningScanTaskEmpty = jest.fn().mockResolvedValue(false);
+      const result = await service.isScanTaskRunningEmpty(jobRunId);
+      expect(result).toBe(false);
+      });
+    });
+
+    describe('isSyncTaskRunningEmpty', () => {
+      it('should return true if sync task running is empty', async () => {
+      mockContext.isRunningSyncTaskEmpty = jest.fn().mockResolvedValue(true);
+      const result = await service.isSyncTaskRunningEmpty(jobRunId);
+      expect(redisService.getJobContext).toHaveBeenCalledWith(jobRunId);
+      expect(result).toBe(true);
+      });
+      it('should return false if sync task running is not empty', async () => {
+      mockContext.isRunningSyncTaskEmpty = jest.fn().mockResolvedValue(false);
+      const result = await service.isSyncTaskRunningEmpty(jobRunId);
+      expect(result).toBe(false);
+      });
+    });
+
+    describe('publishPendingTasksToStream', () => {
+      it('should append scan tasks to stream and delete all scan tasks', async () => {
+      const scanTasks = { t1: JSON.stringify({ id: 't1' }), t2: JSON.stringify({ id: 't2' }) };
+      mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue(scanTasks);
+      mockContext.appendToTaskList = jest.fn().mockResolvedValue(undefined);
+      mockContext.deleteAllScanTasks = jest.fn().mockResolvedValue(undefined);
+      await service.publishPendingTasksToStream(mockContext, 'SCAN');
+      expect(mockContext.appendToTaskList).toHaveBeenCalledTimes(2);
+      expect(mockContext.deleteAllScanTasks).toHaveBeenCalled();
+      });
+
+      it('should append sync tasks to stream and delete all sync tasks', async () => {
+      const syncTasks = { s1: JSON.stringify({ id: 's1' }) };
+      mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue(syncTasks);
+      mockContext.appendToMigrationTask = jest.fn().mockResolvedValue(undefined);
+      mockContext.deleteAllSyncTasks = jest.fn().mockResolvedValue(undefined);
+      await service.publishPendingTasksToStream(mockContext, 'SYNC');
+      expect(mockContext.appendToMigrationTask).toHaveBeenCalledTimes(1);
+      expect(mockContext.deleteAllSyncTasks).toHaveBeenCalled();
+      });
+
+      it('should do nothing if no running scan/sync tasks', async () => {
+      mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue({});
+      mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue({});
+      await service.publishPendingTasksToStream(mockContext, 'SCAN');
+      await service.publishPendingTasksToStream(mockContext, 'SYNC');
+      expect(mockContext.appendToTaskList).not.toHaveBeenCalled();
+      expect(mockContext.appendToMigrationTask).not.toHaveBeenCalled();
+      });
+    });
+
 });
