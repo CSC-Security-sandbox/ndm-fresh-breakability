@@ -55,7 +55,6 @@ export class DiscoveryScanActivity {
             return scanActivityOutput;
         }
         await jobContext.setScanTask(this.workerId, task);
-        this.logger.debug(`[${jobRunId}] Task set for worker: ${this.workerId}`);
 
         scanActivityOutput.taskId = task.id;
 
