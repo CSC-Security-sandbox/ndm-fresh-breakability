@@ -1,4 +1,4 @@
-name: Publish package to GitHub Packages
+name: Publish NDM libs to Github Registry
 on:
   workflow_dispatch:
     inputs:
