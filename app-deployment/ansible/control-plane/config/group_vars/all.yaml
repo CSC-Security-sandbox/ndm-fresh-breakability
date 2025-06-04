@@ -15,8 +15,8 @@ azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
 azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"
 
 vm_username: "datamigrator"
-vm_uid: 1010
-vm_gid: 1010
+vm_uid: 1030
+vm_gid: 1030
 
 # Version management
 microk8s_version: "1.32/stable"
