@@ -141,6 +141,53 @@ describe('RedisHMapCollection', () => {
             expect(result).toBeNull();
         });
 
+        describe('isEmpty', () => {
+            it('should return true if the hash map is empty', async () => {
+            redisClient.hLen = jest.fn().mockResolvedValue(0);
+            const result = await collection.isEmpty();
+            expect(redisClient.hLen).toHaveBeenCalledWith('jobRunId:mapType');
+            expect(result).toBe(true);
+            });
+
+            it('should return false if the hash map is not empty', async () => {
+            redisClient.hLen = jest.fn().mockResolvedValue(2);
+            const result = await collection.isEmpty();
+            expect(redisClient.hLen).toHaveBeenCalledWith('jobRunId:mapType');
+            expect(result).toBe(false);
+            });
+        });
+
+        describe('getSize', () => {
+            it('should return the number of items in the hash map', async () => {
+            const mockData = { key1: '{"foo":"bar"}', key2: '{"baz":"qux"}' };
+            redisClient.hGetAll.mockResolvedValue(mockData);
+            const result = await collection.getSize();
+            expect(redisClient.hGetAll).toHaveBeenCalledWith('jobRunId:mapType');
+            expect(result).toBe(2);
+            });
+
+            it('should return 0 if the hash map is empty', async () => {
+            redisClient.hGetAll.mockResolvedValue({});
+            const result = await collection.getSize();
+            expect(redisClient.hGetAll).toHaveBeenCalledWith('jobRunId:mapType');
+            expect(result).toBe(0);
+            });
+
+            it('should return 0 if hGetAll returns null', async () => {
+            redisClient.hGetAll.mockResolvedValue(null);
+            const result = await collection.getSize();
+            expect(redisClient.hGetAll).toHaveBeenCalledWith('jobRunId:mapType');
+            expect(result).toBe(0);
+            });
+        });
+
+        describe('init and close', () => {
+            it('should resolve without error', async () => {
+            await expect(collection.init()).resolves.toBeUndefined();
+            await expect(collection.close()).resolves.toBeUndefined();
+            });
+        });
+
 
     });
 });
