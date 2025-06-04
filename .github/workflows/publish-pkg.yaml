@@ -1,4 +1,4 @@
-name: Publish package to GitHub Packages
+name: Publish NDM libs to Github Registry
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +10,10 @@ on:
           - auth-lib
           - jobs-lib
           - logger-lib
+      version_to_publish:
+        description: 'Select version to publish'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -24,9 +28,38 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@NetApp-Cloud-DataMigrate'
+      - name: Get latest published version from GitHub Packages
+        id: get_latest
+        run: |
+          latest_version=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/NetApp-Cloud-DataMigrate/packages/npm/${{ github.event.inputs.lib_name }}/versions" \
+            | jq -r '.[].name' \
+            | sort -V \
+            | tail -n 1)
+          
+          echo "Latest version is $latest_version"
+          echo "latest=$latest_version" >> $GITHUB_OUTPUT
+
+      - name: Compare with provided version
+        run: |
+          latest="${{ steps.get_latest.outputs.latest }}"
+          new="${{ github.event.inputs.version_to_publish }}"
+
+          echo "Validating: new=$new vs latest=$latest"
+
+          if dpkg --compare-versions "$new" le "$latest"; then
+            echo "Provided version $new is not greater than published $latest"
+            exit 1
+          fi
+
+          echo "Version is valid"
       - name: Install dependencies
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm i && npm run build
+      - name: Update version in package.json
+        working-directory: lib/${{ github.event.inputs.lib_name }}
+        run: npm version --new-version ${{ github.event.inputs.version_to_publish }} --no-git-tag-version
       - name: Publish package
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm publish
