@@ -239,6 +239,18 @@ export abstract class JobContext {
     return await this.updatedTaskInfo.getLength();
   }
 
+  async getRunningSyncTaskLength(): Promise<number> {
+    return await this.runningSyncTask.getSize();
+  }
+  async getRunningScanTaskLength(): Promise<number> {
+    return await this.runningScanTask.getSize();
+  }
+  async isRunningSyncTaskEmpty(): Promise<boolean> {
+    return await this.runningSyncTask.isEmpty();
+  }
+  async isRunningScanTaskEmpty(): Promise<boolean> {
+    return await this.runningScanTask.isEmpty();    
+  }
 
   serialize(): string {
     const info = {

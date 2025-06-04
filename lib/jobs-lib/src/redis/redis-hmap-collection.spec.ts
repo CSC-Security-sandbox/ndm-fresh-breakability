@@ -140,5 +140,7 @@ describe('RedisHMapCollection', () => {
             expect(redisClient.hGetAll).toHaveBeenCalledWith('jobRunId:mapType');
             expect(result).toBeNull();
         });
+
+
     });
 });
