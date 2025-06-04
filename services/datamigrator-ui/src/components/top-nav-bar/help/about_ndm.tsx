@@ -37,8 +37,8 @@ const AboutNDM = ({ closeAction }) => {
           <WizardFooter>
             <Box className="flex w-full justify-end gap-4 mr-4">
               <Button
-                style={{ width: 150 }}
-                color="secondary"
+                className="w-150"
+                scolor="secondary"
                 onClick={handleClose}
               >
                 Cancel
