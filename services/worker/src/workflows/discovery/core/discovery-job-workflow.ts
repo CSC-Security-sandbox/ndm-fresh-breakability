@@ -43,7 +43,8 @@ const {
   getJobState: getJobStateActivity,
   updateStatus: updateStatusActivity,
   setJobState: setJobStateActivity,
-  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
+  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList,
+  isScanTaskRunningEmpty: isScanTaskRunningEmptyActivity
 } = proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
   heartbeatTimeout: '2m',
@@ -112,7 +113,7 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
       );
 
       const isErrored = (workers.length === failedWorkers.length);
-      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length));
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && await isScanTaskRunningEmptyActivity(jobRunId);
 
       if (isCompleted || isErrored) {
         log(jobRunId, `No tasks found. sending last entry`);

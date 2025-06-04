@@ -186,16 +186,21 @@ export class CommonActivityService{
 
   async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     if(jobType === 'SCAN') {
-      const runningScanTasks = await jobContext.getAllRunningScanTasks();
-      if(!!runningScanTasks && runningScanTasks.length > 0) {
-        for (const task of runningScanTasks) if(!task) await jobContext.appendToTaskList(task);
+      const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
+      this.logger.log(`[${jobContext.jobRunId}] Running scan tasks: ${JSON.stringify(runningScanTasks)}`);
+      this.logger.log((runningScanTasks));
+      if(!!runningScanTasks && Object.keys(runningScanTasks).length > 0) {
+        for (const task of Object.values(runningScanTasks)) if(!task) {
+          this.logger.log(`[${jobContext.jobRunId}] Appending task to Scan task list: ${JSON.stringify(task)}`);
+          await jobContext.appendToTaskList(task as Task);
+        }
         await jobContext.deleteAllScanTasks();
       }
     }
     if(jobType === 'SYNC') {
-      const runningSyncTasks = await jobContext.getAllRunningSyncTasks();
-      if(!!runningSyncTasks && runningSyncTasks.length > 0) {
-        for (const task of runningSyncTasks) if(!task) await jobContext.appendToMigrationTask(task);
+      const runningSyncTasks = await jobContext.getAllRunningSyncTasks() as any;
+      if(!!runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
+        for (const task of  Object.values(runningSyncTasks)) if(!task) await jobContext.appendToMigrationTask(task as Task);
         await jobContext.deleteAllSyncTasks();
       }
     }
@@ -213,5 +218,14 @@ export class CommonActivityService{
       this.logger.error(`[${jobRunId}] Failed to update worker response: ${error}`);
       return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
     }
+  }
+
+  async isScanTaskRunningEmpty(jobRunId: string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    return await jobContext.isRunningScanTaskEmpty();
+  }
+  async isSyncTaskRunningEmpty(jobRunId: string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    return await jobContext.isRunningSyncTaskEmpty();
   }
 }
