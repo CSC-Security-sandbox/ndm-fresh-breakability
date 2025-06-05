@@ -1,12 +1,31 @@
 import * as fs from "fs";
 import * as path from "path";
-import { getChecksum, removePrefix, getFilePermissions, shouldExclude, shouldSkipFile, shouldExcludeOlderThan, shouldExcludeOrSkip, getJobConnection, getFileType, getFileInfo, buildTask, getErrorCode, formatDate } from "./utils";
+import { getChecksum, isServerDownError, getServerInfoFromPath, extractTypes, createServerDownErrorMessage, removePrefix, getFilePermissions, shouldExclude, shouldSkipFile, shouldExcludeOlderThan, shouldExcludeOrSkip, getJobConnection, getFileType, getFileInfo, buildTask, getErrorCode, formatDate } from "./utils";
 import { FileType } from "../types/tasks";
 import { Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Protocol } from "@netapp-cloud-datamigrate/jobs-lib";
 
 // Mocked file for checksum test
 const TEST_FILE_PATH = path.join(__dirname, "testFile.txt");
 const FILE_CONTENT = "Hello, World!";
+
+class MockProtocol extends Protocol {
+  type: string;
+
+  constructor(type: string) {
+    super('testUser', 'testPass');
+    this.type = type;
+  }
+
+  serialize(): string {
+    return JSON.stringify({ type: this.type });
+  }
+
+  deserialize(json: string): void {
+    const parsed = JSON.parse(json);
+    this.type = parsed.type;
+  }
+}
 
 describe("getChecksum", () => {
     beforeAll(() => {
@@ -453,4 +472,134 @@ describe("formatDate", () => {
         const date = new Date("2024-03-27T15:05:09Z");
         expect(formatDate(date)).toBeDefined();
     });
+});
+
+describe('isServerDownError', () => {
+  it('returns true for fatal error code', () => {
+    const error = { code: 'EACCES' };
+    expect(isServerDownError(error)).toBe(true);
+  });
+
+  it('returns true if message matches known pattern', () => {
+    const error = { message: 'Connection timed out' };
+    expect(isServerDownError(error)).toBe(true);
+  });
+
+  it('returns false for non-matching error', () => {
+    const error = { code: 'SOME_CODE', message: 'Unknown issue occurred' };
+    expect(isServerDownError(error)).toBe(false);
+  });
+
+  it('handles undefined error object', () => {
+    expect(isServerDownError(undefined)).toBe(false);
+  });
+
+  it('handles missing message/code', () => {
+    expect(isServerDownError({})).toBe(false);
+  });
+});
+
+describe('getServerInfoFromPath', () => {
+  const jobContext: any = {
+    jobConfig: {
+      sourceFileServer: {
+        protocols: MockProtocol,
+        hostname: 'host123',
+        path: '/data'
+      }
+    }
+  };
+
+  it('returns server and protocol from context', () => {
+    const result = getServerInfoFromPath('/source', jobContext);
+    expect(result).toEqual({
+      protocol: MockProtocol,
+      server: 'host123/data'
+    });
+  });
+
+  it('returns fallback values on error', () => {
+    const brokenContext: any = {};
+    const result = getServerInfoFromPath('/fallbackPath', brokenContext);
+    expect(result).toEqual({
+      protocol: [],
+      server: '/fallbackPath'
+    });
+  });
+
+  it('handles missing path', () => {
+    const context = {
+      jobConfig: {
+        sourceFileServer: {
+          protocols: MockProtocol,
+          hostname: 'host123'
+        }
+      }
+    };
+    const result = getServerInfoFromPath('/src', context as any);
+    expect(result.server).toBe('host123');
+  });
+});
+
+describe('extractTypes', () => {
+  it('joins all valid types with commas', () => {
+    const protocols: Protocol[] = [
+      new MockProtocol('NFS'),
+      new MockProtocol('SMB')
+    ];
+    const result = extractTypes(protocols);
+    expect(result).toBe('NFS,SMB');
+  });
+
+  it('ignores undefined types', () => {
+    const validProtocol = new MockProtocol('NFS');
+    const undefinedTypeProtocol = new MockProtocol(undefined as any);
+    const result = extractTypes([validProtocol, undefinedTypeProtocol]);
+    expect(result).toBe('NFS');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = extractTypes([]);
+    expect(result).toBe('');
+  });
+
+  it('returns empty string if all types are undefined', () => {
+    const result = extractTypes([
+      new MockProtocol(undefined as any),
+      new MockProtocol(undefined as any)
+    ]);
+    expect(result).toBe('');
+  });
+});
+
+describe('createServerDownErrorMessage', () => {
+  const serverInfo = {
+    protocol: [new MockProtocol('NFS'), new MockProtocol('SMB')],
+    server: 'host:/share'
+  };
+
+  it('returns message with error code', () => {
+    const error = { code: 'ETIMEDOUT' };
+    const msg = createServerDownErrorMessage(error, serverInfo);
+    expect(msg).toContain('ETIMEDOUT');
+    expect(msg).toMatch(/NFS,SMB server unreachable: host:\/share \(Error: ETIMEDOUT\)/);
+  });
+
+  it('returns message with error message if no code', () => {
+    const error = { message: 'Something broke' };
+    const msg = createServerDownErrorMessage(error, serverInfo);
+    expect(msg).toMatch(/Something broke/);
+  });
+
+  it('handles undefined error object', () => {
+    const msg = createServerDownErrorMessage(undefined, serverInfo);
+    expect(msg).toMatch(/Unknown error/);
+  });
+
+  it('handles empty protocol list', () => {
+    const error = { message: 'Oops' };
+    const info = { protocol: [], server: 'x' };
+    const msg = createServerDownErrorMessage(error, info);
+    expect(msg).toMatch(/^ server unreachable: x/);
+  });
 });

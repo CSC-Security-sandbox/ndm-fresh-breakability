@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, Protocol, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -252,11 +252,72 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 }
 
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
+const FATAL_CODE = new Set<string>(['ENOTDIR', 'EHOSTDOWN', 'ESTALE', 'ENOTCONN', 'ENETUNREACH', 'EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO']);
+
+const SERVER_DOWN_ERROR_PATTERNS = [
+  'not responding',
+  'server not responding',
+  'nfs server.*not responding',
+  'Connection timed out',
+  'No route to host',
+  'Network is unreachable',
+
+  'Host is down',
+  'Connection refused',
+  'Connection reset by peer',
+  'Resource temporarily unavailable',
+  'Transport endpoint is not connected',
+  
+  'Timeout reading directory',
+  'Server unreachable',
+  'Operation timed out',
+  'I/O error',
+  'Stale file handle',
+  'Remote I/O error'
+];
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
 
+export const isServerDownError = (error: any): boolean => {
+  const errorMessage = error?.message?.toLowerCase() || '';
+  const errorCode = error?.code || '';
+
+  if (isFatalError(errorCode)) {
+    return true;
+  }
+
+  return SERVER_DOWN_ERROR_PATTERNS.some(pattern => {
+    const regex = new RegExp(pattern, 'i');
+    return regex.test(errorMessage);
+  });
+}
+
+export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {
+  try {
+    const sourceConfig = jobContext.jobConfig.sourceFileServer;
+    const protocol = sourceConfig?.protocols ?? [];
+    const server = `${sourceConfig.hostname}${sourceConfig.path || ''}`;
+
+    return { protocol, server };
+  } catch (err) {
+    return { protocol: [], server: sourcePath };
+  }
+}
+
+export const extractTypes = (data: Protocol[]) => {
+  return data
+    .map((item) => item.type)
+    .filter(type => type !== undefined)
+    .join(',');
+}
+
+export const createServerDownErrorMessage = (error: any, serverInfo: { protocol: Protocol[], server: string }): string => {
+  const baseMessage = `${extractTypes(serverInfo.protocol)} server unreachable: ${serverInfo.server}`;
+  const errorDetails = error?.code ? ` (Error: ${error.code})` : ` (${error?.message || 'Unknown error'})`;
+
+  return baseMessage + errorDetails;
+}
 
 export const getSID = (filePath: string) => {
     const getSIDCommand= `powershell.exe -Command "(Get-Acl '${filePath}').Owner"`;

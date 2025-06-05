@@ -38,6 +38,9 @@ describe('worker.config factory', () => {
 
     // core operations (number parsing)
     expect(cfg.maxRetryCount).toBe(3);
+    expect(cfg.retries).toBe(5);
+    expect(cfg.timeout).toBe(5000);
+    expect(cfg.delay).toBe(1000);
     expect(cfg.maxMigrationCommand).toBe(100);
     expect(cfg.maxScanCommand).toBe(500);
     expect(cfg.migrationTaskStreamLimit).toBe(100);
