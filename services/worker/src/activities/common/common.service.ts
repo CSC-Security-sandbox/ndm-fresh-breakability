@@ -187,11 +187,15 @@ export class CommonActivityService{
   async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     if(jobType === 'SCAN') {
       const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
-      if(!!runningScanTasks && Object.keys(runningScanTasks).length > 0) {
+      if(runningScanTasks && Object.keys(runningScanTasks).length > 0) {
         for (const task of Object.values(runningScanTasks)) {
-          if(!!task) {
-            this.logger.debug(`[${jobContext.jobRunId}] Appending Scan task to stream: ${JSON.stringify(task)}`);
-            await jobContext.appendToTaskList(JSON.parse(task as string) as Task);
+          if(task) {
+            try {
+              this.logger.debug(`[${jobContext.jobRunId}] Appending Scan task to stream: ${JSON.stringify(task)}`);
+              await jobContext.appendToTaskList(JSON.parse(task as string) as Task);
+            }catch (error) {
+              this.logger.error(`[${jobContext.jobRunId}] Failed to append Scan task to stream: ${error}`);
+            }
           }
         }
         await jobContext.deleteAllScanTasks();
@@ -199,11 +203,15 @@ export class CommonActivityService{
     }
     if(jobType === 'SYNC') {
       const runningSyncTasks = await jobContext.getAllRunningSyncTasks() as any;
-      if(!!runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
+      if(runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
         for (const task of  Object.values(runningSyncTasks)) {
-          if(!!task) {
-            this.logger.debug(`[${jobContext.jobRunId}] Appending Sync task to stream: ${JSON.stringify(task)}`);
-            await jobContext.appendToMigrationTask(JSON.parse(task as string) as Task);
+          if(task) {
+             try {
+              this.logger.debug(`[${jobContext.jobRunId}] Appending Sync task to stream: ${JSON.stringify(task)}`);
+              await jobContext.appendToMigrationTask(JSON.parse(task as string) as Task);
+            }catch (error) {
+              this.logger.error(`[${jobContext.jobRunId}] Failed to append Sync task to stream: ${error}`);
+            }
           }
         }
         await jobContext.deleteAllSyncTasks();
