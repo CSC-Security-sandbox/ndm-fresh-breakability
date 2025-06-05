@@ -3,14 +3,12 @@ import { Card, Layout, WizardHeader } from "@netapp/bxp-design-system-react";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
 import { HELP_ITEMS } from "@components/top-nav-bar/help/help.constant";
 import { useState } from "react";
-import AboutNDM from "@components/top-nav-bar/help/about_ndm.tsx";
+import AboutNDM from "@components/top-nav-bar/help/AboutNDM.tsx";
 import { Collapse } from "@mui/material";
+import RenderEach from "@components/render-each/RenderEach.tsx";
 
 const Help = () => {
   const [isHelpListVisible, setIsHelpListVisible] = useState<boolean>(true);
-  const handleClose = () => {
-    setIsHelpListVisible(true);
-  };
 
   return (
     <>
@@ -21,22 +19,26 @@ const Help = () => {
             <Layout.Content
               style={{ padding: 20, backgroundColor: "var(--light-bg)" }}
             >
-              {HELP_ITEMS.map((item) => (
-                <Box
-                  className="flex flex-row justify-between items-center p-3 border-b cursor-pointer hover:bg-slate-100 hover:text-text-title transition-all duration-100"
-                  key={item.id}
-                  onClick={() => setIsHelpListVisible(item.id !== 1)}
-                >
-                  {item.name}
-                </Box>
-              ))}
+              <RenderEach
+                renderList={HELP_ITEMS}
+                renderItem={(item) => {
+                  return (
+                    <Box
+                      className="flex flex-row justify-between items-center p-3 border-b cursor-pointer hover:bg-slate-100 hover:text-text-title transition-all duration-100"
+                      onClick={() => setIsHelpListVisible(item.id !== 1)}
+                    >
+                      {item.name}
+                    </Box>
+                  );
+                }}
+              />
             </Layout.Content>
           </Layout.Page>
         </Card>
       </Collapse>
       <Collapse in={!isHelpListVisible} mountOnEnter unmountOnExit>
         <Box className="flex justify-around">
-          <AboutNDM closeAction={handleClose}></AboutNDM>
+          <AboutNDM closeAction={() => setIsHelpListVisible(true)}></AboutNDM>
         </Box>
       </Collapse>
     </>

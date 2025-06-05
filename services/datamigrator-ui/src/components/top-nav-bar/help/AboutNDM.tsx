@@ -8,9 +8,9 @@ import {
   WizardFooter,
   WizardHeader,
 } from "@netapp/bxp-design-system-react";
-import React from "react";
+import { ReactElement } from "react";
 
-const AboutNDM = ({ closeAction }) => {
+const AboutNDM = ({ closeAction }): ReactElement => {
   const handleClose = () => {
     closeAction();
   };
