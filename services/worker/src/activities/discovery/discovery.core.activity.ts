@@ -55,7 +55,7 @@ export class DiscoveryScanActivity {
             return scanActivityOutput;
         }
         await jobContext.setScanTask(this.workerId, task);
-        
+
         scanActivityOutput.taskId = task.id;
 
         task.workerId = this.workerId;

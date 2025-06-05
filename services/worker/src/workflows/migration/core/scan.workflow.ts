@@ -29,7 +29,7 @@ const {
     setJobState: setJobStateActivity,
     updateLastEntry: updateLastEntryActivity,
     getJobStateWithStreamLoad: getJobStateWithStreamLoadActivity,
-    getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
+    hasRunningScanTask: hasRunningScanTaskActivity
 } = wf.proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
   heartbeatTimeout: '2m',
@@ -122,7 +122,11 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
         })
       );
 
-      if(workers.length === failedWorkers.length) {
+      const isErrored = (workers.length === failedWorkers.length);
+      const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && hasRunningScanTask;
+
+      if(isErrored) {
         log(jobRunId, `Fatal Error Occurred On JobRun ${jobRunId}`)
         const currentJobState = await getJobStateActivity(jobRunId);
         const updatedJobState = {...currentJobState, status: JobRunStatus.Errored};
@@ -130,7 +134,7 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
         return { jobRunId, workers, failedWorkers, status: JobRunStatus.Errored };
       }
 
-      if (taskNotFoundCount === (workers.length-failedWorkers.length)) {
+      if (isCompleted) {
         log(jobRunId, `No tasks found.`);
         const currentJobState = await getJobStateActivity(jobRunId);
         await setJobStateActivity(jobRunId, {...currentJobState, isScanCompleted: true})
