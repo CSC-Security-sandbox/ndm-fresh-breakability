@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
 import { WorkFlowType } from './worker-options.types';
 import { WorkFlowOptions } from './worker-options.factory';
 import { ConfigService } from '@nestjs/config';
@@ -86,7 +85,9 @@ const commonActivityServiceMock = {
   updateWorkerResponse: bindMock,
   cleanupJobContext: bindMock,
   getJobStateWithStreamLoad: bindMock,
-  getJobStateAndUpdateTaskList: bindMock
+  getJobStateAndUpdateTaskList: bindMock,
+  hasRunningScanTask: bindMock,
+  hasRunningSyncTask: bindMock,
 }
 
 const speedTestReadActivityMock = {

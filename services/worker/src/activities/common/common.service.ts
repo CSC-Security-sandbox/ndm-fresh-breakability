@@ -186,16 +186,34 @@ export class CommonActivityService{
 
   async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     if(jobType === 'SCAN') {
-      const runningScanTasks = await jobContext.getAllRunningScanTasks();
-      if(!!runningScanTasks && runningScanTasks.length > 0) {
-        for (const task of runningScanTasks) if(!task) await jobContext.appendToTaskList(task);
+      const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
+      if(runningScanTasks && Object.keys(runningScanTasks).length > 0) {
+        for (const task of Object.values(runningScanTasks)) {
+          if(task) {
+            try {
+              this.logger.debug(`[${jobContext.jobRunId}] Appending Scan task to stream: ${JSON.stringify(task)}`);
+              await jobContext.appendToTaskList(JSON.parse(task as string) as Task);
+            }catch (error) {
+              this.logger.error(`[${jobContext.jobRunId}] Failed to append Scan task to stream: ${error}`);
+            }
+          }
+        }
         await jobContext.deleteAllScanTasks();
       }
     }
     if(jobType === 'SYNC') {
-      const runningSyncTasks = await jobContext.getAllRunningSyncTasks();
-      if(!!runningSyncTasks && runningSyncTasks.length > 0) {
-        for (const task of runningSyncTasks) if(!task) await jobContext.appendToMigrationTask(task);
+      const runningSyncTasks = await jobContext.getAllRunningSyncTasks() as any;
+      if(runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
+        for (const task of  Object.values(runningSyncTasks)) {
+          if(task) {
+             try {
+              this.logger.debug(`[${jobContext.jobRunId}] Appending Sync task to stream: ${JSON.stringify(task)}`);
+              await jobContext.appendToMigrationTask(JSON.parse(task as string) as Task);
+            }catch (error) {
+              this.logger.error(`[${jobContext.jobRunId}] Failed to append Sync task to stream: ${error}`);
+            }
+          }
+        }
         await jobContext.deleteAllSyncTasks();
       }
     }
@@ -213,5 +231,14 @@ export class CommonActivityService{
       this.logger.error(`[${jobRunId}] Failed to update worker response: ${error}`);
       return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
     }
+  }
+
+  async hasRunningScanTask(jobRunId: string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    return await jobContext.isRunningScanTaskEmpty();
+  }
+  async hasRunningSyncTask(jobRunId: string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobContext(jobRunId);
+    return await jobContext.isRunningSyncTaskEmpty();
   }
 }

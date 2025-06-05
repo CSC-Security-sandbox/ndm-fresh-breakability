@@ -1,4 +1,7 @@
 name: Publish NDM libs to Github Registry
+
+env:
+  SEMVER_VERSION: '7.7.2'
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +13,10 @@ on:
           - auth-lib
           - jobs-lib
           - logger-lib
+      version_to_publish:
+        description: 'Select version to publish'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -18,15 +25,54 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Install semver
+        run: npm install semver@${{ env.SEMVER_VERSION }}
+
+      - name: Validate version
+        run: |
+          version="${{ github.event.inputs.version_to_publish }}"
+          if ! npx semver "$version" > /dev/null; then
+            echo "Provided version '$version' is not a valid semantic version."
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20.x'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@NetApp-Cloud-DataMigrate'
+      - name: Get latest published version from GitHub Packages
+        id: get_latest
+        run: |
+          latest_version=$(curl -s -H "Authorization: token ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/NetApp-Cloud-DataMigrate/packages/npm/${{ github.event.inputs.lib_name }}/versions" \
+            | jq -r '.[].name' \
+            | sort -V \
+            | tail -n 1)
+          
+          echo "Latest version is $latest_version"
+          echo "latest=$latest_version" >> $GITHUB_OUTPUT
+
+      - name: Compare with provided version
+        run: |
+          latest="${{ steps.get_latest.outputs.latest }}"
+          new="${{ github.event.inputs.version_to_publish }}"
+
+          echo "Validating: new=$new vs latest=$latest"
+
+          if dpkg --compare-versions "$new" le "$latest"; then
+            echo "Provided version $new is not greater than published $latest"
+            exit 1
+          fi
+
+          echo "Version is valid"
       - name: Install dependencies
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm i && npm run build
+      - name: Update version in package.json
+        working-directory: lib/${{ github.event.inputs.lib_name }}
+        run: npm version --new-version ${{ github.event.inputs.version_to_publish }} --no-git-tag-version
       - name: Publish package
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm publish

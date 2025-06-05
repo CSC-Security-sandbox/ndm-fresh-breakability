@@ -533,6 +533,276 @@ describe('JobContext Class', () => {
       const result = await jobContext.getUpdatedTaskLength();
       expect(result).toEqual(0);
     });
+
+    it('get RunningSyncTask stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningSyncTask = {
+        getSize: jest.fn().mockResolvedValue(2),
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getRunningSyncTaskLength();
+      expect(result).toEqual(2);
+    });
+
+    it('get RunningScanTask stream length', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningScanTask = {
+        getSize: jest.fn().mockResolvedValue(3),
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getRunningScanTaskLength();
+      expect(result).toEqual(3);
+    });
+
+    it('is RunningSyncTask empty', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningSyncTask = {
+        isEmpty: jest.fn().mockResolvedValue(true),
+        getSize: jest.fn(),
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+      } as any;
+      const result = await jobContext.isRunningSyncTaskEmpty();
+      expect(result).toBe(true);
+    });
+
+    it('is RunningScanTask empty', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningScanTask = {
+        isEmpty: jest.fn().mockResolvedValue(false),
+        getSize: jest.fn(),
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+      } as any;
+      const result = await jobContext.isRunningScanTaskEmpty();
+      expect(result).toBe(false);
+    });
+
+    it('getSyncTask should call runningSyncTask.getValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTask = { id: 'syncTask' } as any;
+      jobContext.runningSyncTask = {
+        getValue: jest.fn().mockResolvedValue(mockTask),
+        getSize: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getSyncTask('key1');
+      expect(jobContext.runningSyncTask.getValue).toHaveBeenCalledWith('key1');
+      expect(result).toBe(mockTask);
+    });
+
+    it('getScanTask should call runningScanTask.getValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTask = { id: 'scanTask' } as any;
+      jobContext.runningScanTask = {
+        getValue: jest.fn().mockResolvedValue(mockTask),
+        getSize: jest.fn(),
+        setValue: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getScanTask('key2');
+      expect(jobContext.runningScanTask.getValue).toHaveBeenCalledWith('key2');
+      expect(result).toBe(mockTask);
+    });
+
+    it('setSyncTask should call runningSyncTask.setValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningSyncTask = {
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const task = { id: 'syncTask' } as any;
+      await jobContext.setSyncTask('key3', task);
+      expect(jobContext.runningSyncTask.setValue).toHaveBeenCalledWith('key3', task);
+    });
+
+    it('setScanTask should call runningScanTask.setValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningScanTask = {
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        deleteValue: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const task = { id: 'scanTask' } as any;
+      await jobContext.setScanTask('key4', task);
+      expect(jobContext.runningScanTask.setValue).toHaveBeenCalledWith('key4', task);
+    });
+
+    it('deleteSyncTask should call runningSyncTask.deleteValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningSyncTask = {
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      await jobContext.deleteSyncTask('key5');
+      expect(jobContext.runningSyncTask.deleteValue).toHaveBeenCalledWith('key5');
+    });
+
+    it('deleteScanTask should call runningScanTask.deleteValue', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningScanTask = {
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        assignToSelf: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      await jobContext.deleteScanTask('key6');
+      expect(jobContext.runningScanTask.deleteValue).toHaveBeenCalledWith('key6');
+    });
+
+    it('assignScanTaskToSelf should call runningScanTask.assignToSelf', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTask = { id: 'scanTask' } as any;
+      jobContext.runningScanTask = {
+        assignToSelf: jest.fn().mockResolvedValue(mockTask),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.assignScanTaskToSelf('key7');
+      expect(jobContext.runningScanTask.assignToSelf).toHaveBeenCalledWith('key7');
+      expect(result).toBe(mockTask);
+    });
+
+    it('assignSyncTaskToSelf should call runningSyncTask.assignToSelf', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTask = { id: 'syncTask' } as any;
+      jobContext.runningSyncTask = {
+        assignToSelf: jest.fn().mockResolvedValue(mockTask),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        getAll: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.assignSyncTaskToSelf('key8');
+      expect(jobContext.runningSyncTask.assignToSelf).toHaveBeenCalledWith('key8');
+      expect(result).toBe(mockTask);
+    });
+
+    it('getAllRunningScanTasks should call runningScanTask.getAll', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTasks = [{ id: 'scanTask1' }, { id: 'scanTask2' }] as any;
+      jobContext.runningScanTask = {
+        getAll: jest.fn().mockResolvedValue(mockTasks),
+        assignToSelf: jest.fn(),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getAllRunningScanTasks();
+      expect(jobContext.runningScanTask.getAll).toHaveBeenCalled();
+      expect(result).toBe(mockTasks);
+    });
+
+    it('getAllRunningSyncTasks should call runningSyncTask.getAll', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockTasks = [{ id: 'syncTask1' }, { id: 'syncTask2' }] as any;
+      jobContext.runningSyncTask = {
+        getAll: jest.fn().mockResolvedValue(mockTasks),
+        assignToSelf: jest.fn(),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        deleteAll: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      const result = await jobContext.getAllRunningSyncTasks();
+      expect(jobContext.runningSyncTask.getAll).toHaveBeenCalled();
+      expect(result).toBe(mockTasks);
+    });
+
+    it('deleteAllScanTasks should call runningScanTask.deleteAll', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningScanTask = {
+        deleteAll: jest.fn(),
+        getAll: jest.fn(),
+        assignToSelf: jest.fn(),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      await jobContext.deleteAllScanTasks();
+      expect(jobContext.runningScanTask.deleteAll).toHaveBeenCalled();
+    });
+
+    it('deleteAllSyncTasks should call runningSyncTask.deleteAll', async () => {
+      const jobContext = new TestJobContext('job1');
+      jobContext.runningSyncTask = {
+        deleteAll: jest.fn(),
+        getAll: jest.fn(),
+        assignToSelf: jest.fn(),
+        deleteValue: jest.fn(),
+        setValue: jest.fn(),
+        getValue: jest.fn(),
+        getSize: jest.fn(),
+        isEmpty: jest.fn(),
+      } as any;
+      await jobContext.deleteAllSyncTasks();
+      expect(jobContext.runningSyncTask.deleteAll).toHaveBeenCalled();
+    });
   });
 
 });
