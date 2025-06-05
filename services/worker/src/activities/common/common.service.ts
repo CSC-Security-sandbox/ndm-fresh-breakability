@@ -235,10 +235,10 @@ export class CommonActivityService{
 
   async hasRunningScanTask(jobRunId: string): Promise<boolean> {
     const jobContext = await this.redisService.getJobContext(jobRunId);
-    return await jobContext.isRunningScanTaskEmpty();
+    return !(await jobContext.isRunningScanTaskEmpty());
   }
   async hasRunningSyncTask(jobRunId: string): Promise<boolean> {
     const jobContext = await this.redisService.getJobContext(jobRunId);
-    return await jobContext.isRunningSyncTaskEmpty();
+    return !(await jobContext.isRunningSyncTaskEmpty());
   }
 }
