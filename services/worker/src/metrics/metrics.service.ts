@@ -98,10 +98,20 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
+    const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
+    if (!metricsEnabled) {
+      this.logger.warn('[MetricsService] Metrics collection is disabled.');
+      return;
+    }
     this.logger.log('[MetricsService] Starting metrics collection');
-    this.collectSystemMetrics();
-    this.collectSystemMetricsInterval = setInterval(() => this.collectSystemMetrics(), 5000);
-    this.pushInterval = setInterval(() => this.pushMetrics(), 15000);
+    this.collectSystemMetricsInterval = setInterval(
+      () => this.collectSystemMetrics(),
+      parseInt(process.env.METRICS_COLLECTION_INTERVAL || '5000')
+    );
+    this.pushInterval = setInterval(
+      () => this.pushMetrics(),
+      parseInt(process.env.METRICS_PUSH_INTERVAL || '15000')
+    );
   }
 
   async onModuleDestroy() {
