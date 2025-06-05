@@ -5,6 +5,7 @@ interface ShellTask {
   command: string;
   resolve: (output: string) => void;
   reject: (error: Error) => void;
+  another ?: any; // Placeholder for additional properties if needed
 }
 
 class ShellWorker {
