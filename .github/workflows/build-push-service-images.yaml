@@ -5,7 +5,13 @@ on:
     branches:
       - main
     paths:
-      - 'services/**'
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/datamigrator-ui/**'
+      - 'services/jobs-service/**'
+      - 'services/keycloak-customizations/**'
+      - 'services/reports-service/**'
       - 'liquibase/**'
   workflow_dispatch:
 
@@ -30,17 +36,21 @@ jobs:
         run: |
           services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
 
-          # services
-          targets=()
-          for service in "${services[@]}"; do
-            if git diff --name-only HEAD~1 HEAD | grep -q "^services/$service/"; then
-              targets+=("$service")
-            fi
-          done
-          
-          # liquibase 
-          if git diff --name-only HEAD~1 HEAD | grep -q "^liquibase/"; then
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            targets=("${services[@]}")
             targets+=("db-migrations")
+          else
+            # services
+            for service in "${services[@]}"; do
+              if git diff --name-only HEAD~1 HEAD | grep -q "^services/$service/"; then
+                targets+=("$service")
+              fi
+            done
+            # liquibase
+            if git diff --name-only HEAD~1 HEAD | grep -q "^liquibase/"; then
+              targets+=("db-migrations")
+            fi
           fi
 
           # Convert to JSON for the matrix
