@@ -124,7 +124,7 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
 
       const isErrored = (workers.length === failedWorkers.length);
       const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
-      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && hasRunningScanTask;
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && !hasRunningScanTask;
 
       if(isErrored) {
         log(jobRunId, `Fatal Error Occurred On JobRun ${jobRunId}`)
