@@ -104,7 +104,7 @@ export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanComp
 
             const isErrored = (workers.length === failedWorkers.length) && isScanCompleted ;
             const hasRunningSyncTask = await hasRunningSyncTaskActivity(jobRunId);
-            const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && isScanCompleted && hasRunningSyncTask;
+            const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && isScanCompleted && !hasRunningSyncTask;
        
             if (isCompleted || isErrored) {
                 log(jobRunId, `No tasks found. sending last entry`);

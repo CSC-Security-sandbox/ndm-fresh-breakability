@@ -254,30 +254,30 @@ describe('CommonActivityService', () => {
   });
 
       describe('hasRunningScanTask', () => {
-      it('should return true if scan task running is empty', async () => {
+      it('should return false if scan task running is empty', async () => {
       mockContext.isRunningScanTaskEmpty = jest.fn().mockResolvedValue(true);
       const result = await service.hasRunningScanTask(jobRunId);
       expect(redisService.getJobContext).toHaveBeenCalledWith(jobRunId);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
       });
-      it('should return false if scan task running is not empty', async () => {
+      it('should return true if scan task running is not empty', async () => {
       mockContext.isRunningScanTaskEmpty = jest.fn().mockResolvedValue(false);
       const result = await service.hasRunningScanTask(jobRunId);
-      expect(result).toBe(false);
+      expect(result).toBe(true);
       });
     });
 
     describe('hasRunningSyncTask', () => {
-      it('should return true if sync task running is empty', async () => {
+      it('should return false if sync task running is empty', async () => {
       mockContext.isRunningSyncTaskEmpty = jest.fn().mockResolvedValue(true);
       const result = await service.hasRunningSyncTask(jobRunId);
       expect(redisService.getJobContext).toHaveBeenCalledWith(jobRunId);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
       });
-      it('should return false if sync task running is not empty', async () => {
+      it('should return true if sync task running is not empty', async () => {
       mockContext.isRunningSyncTaskEmpty = jest.fn().mockResolvedValue(false);
       const result = await service.hasRunningSyncTask(jobRunId);
-      expect(result).toBe(false);
+      expect(result).toBe(true);
       });
     });
 
