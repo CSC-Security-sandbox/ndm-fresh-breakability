@@ -1,9 +1,9 @@
 import { continueAsNew, ContinueAsNew, proxyActivities } from '@temporalio/workflow';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
-import { DiscoverPathOutput } from 'src/activities/discovery/discovery.type';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { CommonActivityService } from '../../../activities/common/common.service';
+import { DiscoveryActivity } from '../../../activities/discovery/discovery.activities';
+import { DiscoveryScanActivity } from '../../../activities/discovery/discovery.core.activity';
+import { DiscoverPathOutput } from '../../../activities/discovery/discovery.type';
+import { JobRunStatus } from '../../../activities/discovery/enums';
 import * as wf from '@temporalio/workflow';
 import { ActivityFailure } from '@temporalio/workflow';
 
