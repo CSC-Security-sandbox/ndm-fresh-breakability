@@ -113,7 +113,9 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
       );
 
       const isErrored = (workers.length === failedWorkers.length);
-      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && await hasRunningScanTaskActivity(jobRunId);
+      const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && hasRunningScanTask;
+
 
       if (isCompleted || isErrored) {
         log(jobRunId, `No tasks found. sending last entry`);
