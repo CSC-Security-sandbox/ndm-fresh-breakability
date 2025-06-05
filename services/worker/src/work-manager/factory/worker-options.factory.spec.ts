@@ -86,8 +86,8 @@ const commonActivityServiceMock = {
   cleanupJobContext: bindMock,
   getJobStateWithStreamLoad: bindMock,
   getJobStateAndUpdateTaskList: bindMock,
-  isScanTaskRunningEmpty: bindMock,
-  isSyncTaskRunningEmpty: bindMock,
+  hasRunningScanTask: bindMock,
+  hasRunningSyncTask: bindMock,
 }
 
 const speedTestReadActivityMock = {

@@ -32,7 +32,7 @@ const {
     getJobState: getJobStateActivity,
     setJobState: setJobStateActivity,
     getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList,
-    isSyncTaskRunningEmpty: isSyncTaskRunningEmptyActivity
+    hasRunningSyncTask: hasRunningSyncTaskActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m',});
   
 
@@ -103,7 +103,7 @@ export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanComp
             }
 
             const isErrored = (workers.length === failedWorkers.length) && isScanCompleted ;
-            const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && isScanCompleted && await isSyncTaskRunningEmptyActivity(jobRunId);
+            const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && isScanCompleted && await hasRunningSyncTaskActivity(jobRunId);
       
             if (isCompleted || isErrored) {
                 log(jobRunId, `No tasks found. sending last entry`);
