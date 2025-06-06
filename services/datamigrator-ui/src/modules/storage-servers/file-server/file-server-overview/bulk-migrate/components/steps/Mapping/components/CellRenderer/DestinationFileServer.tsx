@@ -17,6 +17,7 @@ const DestinationFileServer = ({
     mappingStepForm,
     sourceFileServerDetails,
     protocolForm,
+    listOfFileServersWithZeroExportPaths,
   } = useContext(BulkMigrateContext);
 
   // UPDATE FORM VALUE
@@ -49,6 +50,7 @@ const DestinationFileServer = ({
   const optionsForDestination = useMemo(() => {
     return allFileServers.filter(
       (row) =>
+        !listOfFileServersWithZeroExportPaths.includes(row.id) &&
         row.id !== sourceFileServerDetails.id &&
         row.status === FILE_SERVER_STATUS.ACTIVE &&
         row.fileServers.find(
@@ -60,7 +62,7 @@ const DestinationFileServer = ({
     allFileServers,
     sourceFileServerDetails.id,
   ]);
-
+  
   return (
     <>
       <Autocomplete
