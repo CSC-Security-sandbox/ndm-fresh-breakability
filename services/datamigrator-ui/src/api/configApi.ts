@@ -1,6 +1,10 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { prepareHeaders } from "@api/api.utils";
 import { SpeedTestConfigType } from "@modules/speed-test/types/speed-test.types";
+import {
+  UploadedFilePropsType,
+  UploadExportPathSourceFileProps,
+} from "@/modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 
 export const configApi = createApi({
   reducerPath: "configApi",
@@ -76,6 +80,31 @@ export const configApi = createApi({
       query: ({ projectId, configName }) =>
         `servers/check-unique?projectId=${projectId}&configName=${configName}`,
     }),
+
+    downloadExportPathSourceTemplate: builder.query<Blob, void>({
+      query: () => ({
+        url: `path-upload/download/template`,
+        responseHandler: async (response) => response.blob(),
+      }),
+    }),
+
+    uploadExportPathSourceFile: builder.mutation<
+      UploadedFilePropsType,
+      UploadExportPathSourceFileProps
+    >({
+      query: ({ fileServerId, body }) => ({
+        url: `path-upload/${fileServerId}`,
+        method: "POST",
+        body,
+      }),
+    }),
+    submitExportPathSourceFile: builder.mutation<void, { uploadId: string }>({
+      query: ({ uploadId }) => ({
+        url: `path-upload/confirm/${uploadId}`,
+        method: "POST",
+      }),
+      invalidatesTags: ["GET_FILE_SERVER_BY_ID"],
+    }),
   }),
 });
 
@@ -92,4 +121,7 @@ export const {
   useLazyGetAllCutOverPathsQuery,
   useGetSpeedTestFileServersQuery,
   useLazyGetUniqueFileServerNamesQuery,
+  useLazyDownloadExportPathSourceTemplateQuery,
+  useUploadExportPathSourceFileMutation,
+  useSubmitExportPathSourceFileMutation,
 } = configApi;
