@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 import { WorkflowService } from '../workflow/workflow.service';
@@ -12,6 +12,8 @@ import { UserDetails } from '../configurations/configuration.types';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { ImportVolumePathsDto } from './dto/path-upload.dto';
 import { ExportPathSource, UploadPathAction, WorkFlows } from 'src/constants/enums';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class PathUploadService {
@@ -28,6 +30,12 @@ export class PathUploadService {
     
     @InjectRepository(VolumeEntity)
     private readonly volumeRepo: Repository<VolumeEntity>,
+
+    @InjectRepository(JobConfigEntity)
+    private readonly jobConfigRepo: Repository<JobConfigEntity>,
+
+    @InjectRepository(JobRunEntity)
+    private readonly jobRunRepo: Repository<JobRunEntity>,
   ) {
     this.logger = this.loggerFactory.create(PathUploadService.name);
   }
@@ -110,21 +118,11 @@ export class PathUploadService {
     return savedUpload;
   }
 
-  async confirmPathUpload(uploadId: string, userDetails?: UserDetails): Promise<any> {
-    const upload = await this.uploadRepo.findOneBy({ id: uploadId });
-    if (!upload) {
-      this.logger.error(`Upload with ID ${uploadId} not found`);
-      throw new NotFoundException(`Upload with ID ${uploadId} not found`);
-    }
-
-    return {
-      status: 'success',
-      message: 'Path upload confirmed successfully',
-      uploadId: upload.id
-    };
+  async confirmPathUpload(uploadId: string): Promise<any> {
+    return await this.processUploadPathValidation(uploadId);
   }
 
-  async processExportPathUpload(uploadId: string): Promise<{ status: string, message: string, workflowId?: string }> {
+  async processUploadPathValidation(uploadId: string): Promise<{ status: string, message: string, workflowId?: string }> {
     const upload = await this.uploadRepo.find({ where: { uploadId } });
     if (!upload.length) {
       this.logger.error(`Upload with ID ${uploadId} not found`);
@@ -142,7 +140,9 @@ export class PathUploadService {
         traceId: traceId,
         payload: {
           traceId,
-          paths: upload.map(path => path.volumePath),
+          paths: upload.map(path => {
+            return { pathId: path.id, path: path.volumePath }
+          }),
           fileServer: {
             type: fileServer?.protocol,
             protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
@@ -155,11 +155,162 @@ export class PathUploadService {
         options: {},
       }]
     };
-    await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_PATHS, startWorkFlowPayload);
+    const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_PATHS, startWorkFlowPayload);
     return {
       status: 'success',
       message: 'Export path upload processed successfully',
-      workflowId: 'workflow.workflowId',
+      workflowId: workflow.workflowId,
     }
+  }
+
+  async processUploadUpdate(validationResult: any[], uploadId: string) {
+    const updateResult = await this.uploadRepo.findOne({ where: { uploadId } });
+    if (!updateResult) {
+      this.logger.error(`Upload with ID ${uploadId} not found`);
+      throw new NotFoundException(`Upload with ID ${uploadId} not found`);
+    }
+    if (!validationResult || !Array.isArray(validationResult) || validationResult.length === 0) {
+      this.logger.error('Validation result is empty or invalid');
+      throw new BadRequestException('Validation result is empty or invalid');
+    }
+
+    const fileServerId = updateResult.fileServerId;
+    const result = await this.processValidationResult(fileServerId, validationResult);
+    if (!result) {
+      throw new BadRequestException('Failed to process validation result');
+    }
+
+    for (const validPath of result.validPaths) {
+      const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: validPath.volumePath, fileServerId } });
+      if (existingVolume) {
+        existingVolume.reachableCount = validPath.reachableCount;
+        existingVolume.isValid = true;
+        existingVolume.createdBy = validPath.createdBy || null;
+        await this.volumeRepo.save(existingVolume);
+      }
+      else {
+        const newVolume = this.volumeRepo.create({
+          id: validPath.id,
+          volumePath: validPath.volumePath,
+          fileServerId,
+          reachableCount: validPath.reachableCount,
+          isValid: true,
+          createdBy: validPath.createdBy || null,
+        });
+        await this.volumeRepo.save(newVolume);
+      }
+    }
+
+    for (const invalidPath of result.invalidPaths) {
+      const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: invalidPath.volumePath, fileServerId } });
+      if (existingVolume) {
+        existingVolume.isValid = false;
+        existingVolume.createdBy = invalidPath.createdBy || null;
+        await this.volumeRepo.save(existingVolume);
+      }
+      else {
+        const newVolume = this.volumeRepo.create({
+          id: invalidPath.id,
+          volumePath: invalidPath.volumePath,
+          fileServerId,
+          isValid: false,
+          createdBy: invalidPath.createdBy || null,
+        });
+        await this.volumeRepo.save(newVolume);
+      }
+    }
+    return result;
+  }
+
+  async createVolumeForFileServer(data: Partial<VolumeEntity>): Promise<VolumeEntity> {
+    const fileServer = await this.fileServerRepo.findOne({ where: { id: data.fileServerId } });
+    if (!fileServer) {
+      this.logger.error(`File server with ID ${data.fileServerId} not found`);
+      throw new Error(`File server with ID ${data.fileServerId} not found`);
+    }
+
+    const volumeEntity = this.volumeRepo.create(data);
+    return await this.volumeRepo.save(volumeEntity);
+  }
+
+  async processValidationResult(fileServerId: string, validationResult: any[]) {
+    const validPaths = new Map<string, any>();
+    const invalidPaths = new Map<string, any>();
+    
+    const pathGroupedResults = validationResult.reduce((acc, item: any) => {
+      item.validationResult.forEach(result => {
+        const path = result.result.path;
+        if (!acc[result.result.path]) {
+          acc[path] = {
+            id: result.result.pathId,
+            volumePath: path,
+            reachableCount: 0,
+            fileServerId,
+          };
+        }
+        if (result.result.status === 'success') {
+          acc[path].reachableCount += 1;
+          validPaths.set(path, acc[path]);
+        } else {
+          invalidPaths.set(path, { ...acc[path], id: result.result.pathId, message: result.result.message || 'Unknown error' });
+        }
+      });
+      return acc;
+    }, {});
+
+    return {
+      validPaths: Array.from(validPaths.values()),
+      invalidPaths: Array.from(invalidPaths.values()),
+      totalValidPaths: validPaths.size,
+      totalInvalidPaths: invalidPaths.size,
+      totalPaths: Object.keys(pathGroupedResults).length,
+    };
+  }
+
+  async isRefreshPossible(fileServerId: string): Promise<boolean> {
+    const fileServer = await this.fileServerRepo.findOne({
+      where: { id: fileServerId },
+      relations: { volumes: true },
+    });
+    if (!fileServer) {
+      this.logger.error(`File server with ID ${fileServerId} not found`);
+      throw new NotFoundException(`File server with ID ${fileServerId} not found`);
+    }
+
+    const volumeIds = fileServer.volumes.map(volume => volume.id);
+    // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
+    const jobConfigs = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .where('jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds)', { volumeIds })
+      .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+      .getMany();
+    
+    // check if any job config has schedule as SCHEDULING if yes then return false
+    if (jobConfigs.some(jc => jc.scheduler === 'SCHEDULING')) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with SCHEDULING status`);
+      return false;
+    }
+    
+    // check if futureScheduleAt is not null for any job config, if yes then return false
+    if (jobConfigs.some(jc => !!jc.futureScheduleAt)) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with futureScheduleAt set`);
+      return false;
+    }
+
+    // fetch all the jobs that are in running state for above job configurations
+    const runningJobs = await this.jobRunRepo.count({
+      where: {
+        jobConfigId: In(jobConfigs.map(jc => jc.id)),
+        status: JobRunStatus.Running,
+      }
+    })
+
+    if (runningJobs > 0) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are running jobs`);
+      return false;
+    }
+    
+    this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
+    return true;
   }
 }

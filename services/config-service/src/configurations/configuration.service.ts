@@ -16,15 +16,15 @@ import {
   ConfigStatus,
   ProtocolVersionError,
   WorkerStatus,
-  ExportPathSource,
   WorkFlows,
+  ScheduleStatus,
 } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
+import { JobConfigEntity, JobStatus, JobType } from 'src/entities/jobconfig.entity';
 import { JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
@@ -257,7 +257,7 @@ export class ConfigurationService {
       if(config?.fileServers){
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
-          volumes: fileServer.volumes.filter(volume => volume.isValid),
+          volumes: fileServer.volumes,
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
@@ -871,7 +871,7 @@ export class ConfigurationService {
           host: fileServer?.host.trim(),
           username: fileServer?.userName,
           password: fileServer?.password,
-          exportPathSource: fileServer?.exportPathSource,
+          exportPathSource: fileServer.exportPathSource,
         };
         listPathPayload.push(payload);
       });
@@ -975,6 +975,7 @@ export class ConfigurationService {
           type: fileServer.protocol,
           username: fileServer.userName,
           password: fileServer.password,
+          exportPathSource: fileServer.exportPathSource,
         });
         fileServer?.workers?.forEach((worker) => {
           if (!payload.workerIds.includes(worker.workerId))
@@ -1127,6 +1128,39 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to update paths.');
+    }
+  }
+
+  async isFileServerRefreshEligible(fileServerId: string): Promise<boolean> {
+    try {
+      const fileServer = await this.fileServerEntity.findOne({ where: { id: fileServerId }});
+      if (!fileServer) {
+        throw new NotFoundException(`File server with ID ${fileServerId} not found.`);
+      }
+      const volumes = await this.volumes.find({
+        where: { fileServerId: fileServer.id, isValid: true },
+        relations: ['jobConfig'],
+      });
+      if (volumes.length === 0) {
+        this.logger.warn(`No valid volumes found for file server ID ${fileServerId}.`);
+        return true;
+      }
+      // should not refresh if any volume has active job config with schedular === 'SCHEDULING' or futureScheduledAt is not null;
+      const hasActiveJobConfig = volumes.some(volume =>
+        volume.jobConfig.some(job => 
+          job.status === JobStatus.Active && 
+          (job.scheduler === ScheduleStatus.SCHEDULING || job.futureScheduleAt !== null)
+        )
+      );
+     
+      if (hasActiveJobConfig) {
+        this.logger.warn(`File server ID ${fileServerId} has active job configurations. Refresh not eligible.`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.error(`Error checking file server refresh eligibility: ${error.message}`);
+      throw new InternalServerErrorException('Failed to check file server refresh eligibility.');
     }
   }
 }

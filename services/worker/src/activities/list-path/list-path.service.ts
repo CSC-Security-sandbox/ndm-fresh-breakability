@@ -29,8 +29,11 @@ export class ListPathActivity {
     };
 
     try {
-      const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-      response.paths = await protocol.listPaths(traceId, payload);
+      if(payload.exportPathSource !== 'MANUAL_UPLOAD') {
+        const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+        response.paths = await protocol.listPaths(traceId, payload);
+        return response;
+      }
       return response;
     } catch (error) {
       return {

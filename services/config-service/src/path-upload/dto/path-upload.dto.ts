@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsString, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class PathUploadDto {
@@ -32,4 +32,13 @@ export class ImportVolumePathsDto {
     @ApiProperty({ description: 'File Size in bytes', example: 1024 })
     @IsNumber()
     fileSize: number;
+}
+
+export class UpdateValidationResultDto {
+    @ApiProperty({
+      description: 'Validation result array',
+      type: [Object],
+    })
+    @IsArray()
+    validationResult: [];
 }

@@ -67,3 +67,9 @@ export enum ExportPathSource {
     SHOW_MOUNT = 'SHOW_MOUNT',
     MANUAL_UPLOAD = 'MANUAL_UPLOAD',
 }
+
+export enum ScheduleStatus {
+    SCHEDULING = 'SCHEDULING',
+    SCHEDULED = 'SCHEDULED',
+    READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
+}

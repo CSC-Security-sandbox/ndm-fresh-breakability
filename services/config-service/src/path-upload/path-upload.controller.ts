@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import { join } from 'path';
 import { Response } from "express";
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { Controller, Post, Body, Param, Request, Get, Res } from '@nestjs/common';
+import { Controller, Post, Body, Param, Request, Get, Res, Patch } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
+import { UpdateValidationResultDto, ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
 import { UserDetails } from '../configurations/configuration.types';
 import { PathUploadService } from './path-upload.service';
 
@@ -42,11 +42,20 @@ export class PathUploadController {
     @ApiBearerAuth()
     @Auth(Permission.ManageConfig)
     @Post('confirm/:uploadId')
-    async confirmPathUpload(
+    async confirmPathUpload(@Param('uploadId') uploadId: string) {
+        return await this.pathUploadService.confirmPathUpload(uploadId);
+    }
+
+    @ApiOperation({ summary: 'Update Upload Validation Result' })
+    @ApiOkResponse({ description: 'Upload Validation Result Updated Successfully' })
+    @ApiNotFoundResponse({ description: 'Upload Not Found' })
+    @ApiBadRequestResponse({ description: 'Invalid Upload ID or Validation Result' })
+    @Patch(':uploadId')
+    async updateUploadValidationResult(
         @Param('uploadId') uploadId: string,
-        @Request() userDetails: UserDetails
+        @Body() body: UpdateValidationResultDto,
     ) {
-        return await this.pathUploadService.confirmPathUpload(uploadId, userDetails);
+        return await this.pathUploadService.processUploadUpdate(body.validationResult, uploadId);
     }
 
     @ApiOperation({ summary: 'Download CSV File' })
@@ -71,5 +80,16 @@ export class PathUploadController {
         res.sendFile(filePath);
         const fileStream = fs.createReadStream(filePath);
         fileStream.pipe(res)
+    }
+
+    @ApiOperation({ summary: 'Check if Refresh is Possible' })
+    @ApiOkResponse({ description: 'Refresh Check Completed Successfully' })
+    @ApiNotFoundResponse({ description: 'File Server Not Found' })
+    @ApiBadRequestResponse({ description: 'Invalid File Server ID' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Get('refresh-possible/:fileServerId')
+    async isRefreshPossible(@Param('fileServerId') fileServerId: string) {
+        return await this.pathUploadService.isRefreshPossible(fileServerId);
     }
 }

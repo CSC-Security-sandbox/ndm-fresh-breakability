@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsString, IsArray, IsObject, IsOptional, ValidateNested, IsUUID } from 'class-validator';
 import { Trim } from '../../utils/transformers';
+import { ExportPathSource } from 'src/constants/enums';
 
 class Protocol {
   @ApiProperty({ enum: ['NFS', 'SMB'], description: 'The type of protocol (NFS or SMB)' })
@@ -16,6 +17,12 @@ class Protocol {
   @IsOptional()
   @IsString()
   password?: string;
+
+  // exportPathSource
+  @ApiProperty({ description: 'export path source' })
+  @IsOptional()
+  @IsString()
+  exportPathSource: ExportPathSource
 }
 
 class FileServer {
