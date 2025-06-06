@@ -85,7 +85,7 @@ const FileServer = () => {
     rows: configByProject?.serverConfig,
     isSorting: true,
     pageSize: 10,
-    defaultSortState: { sortOrder: "desc", column: 8 },
+    defaultSortState: { sortOrder: "desc", column: 9 },
   };
 
   return (

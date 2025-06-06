@@ -9,11 +9,13 @@ import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-se
 import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
+import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
+import { hasManualUploadPath } from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -97,6 +99,11 @@ const ExportPathsTable = ({
     };
   }, []);
 
+  const isManualUploadPath = useMemo(() => {
+    if (fileServerDetails?.fileServers)
+      return hasManualUploadPath(fileServerDetails);
+  }, [fileServerDetails?.fileServers]);
+
   const FETCHING_DETAILS = (
     <Box className="flex gap-3 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
@@ -110,10 +117,21 @@ const ExportPathsTable = ({
     </Box>
   );
 
+  const contentValue = useMemo(() => {
+    if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
+
+    return (
+      <BulkManualUploadFile
+        fileServerDetails={fileServerDetails}
+        allExportPaths={allExportPaths}
+      />
+    );
+  }, [isManualUploadPath, showRefetch, fileServerDetails]);
+
   return (
     <TableWrapper
       tableStateProps={tableStateProps}
-      content={showRefetch ? FETCHING_DETAILS : ""}
+      content={contentValue}
       showLabel={false}
       refetchTableData={refetch}
       isRefreshing={isFetching}
