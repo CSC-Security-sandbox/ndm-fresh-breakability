@@ -301,11 +301,13 @@ export const getDestinationFileServerIdByName = (
 
 export const getDestinationPathIdByName = (
   allDestinationPaths: AllFileServerWithVolumesApiType[],
+  configName: string,
   protocol: "NFS" | "SMB",
   destinationPathName: string
 ): string => {
   return (
     allDestinationPaths
+      .filter((destination) => destination.configName === configName)
       .flatMap((destination) => destination.fileServers)
       .filter((fileServer) => fileServer.protocol === protocol)
       .flatMap((fileServer) => fileServer.volumes)
