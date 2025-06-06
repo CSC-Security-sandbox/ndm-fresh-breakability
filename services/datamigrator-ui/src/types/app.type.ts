@@ -154,6 +154,7 @@ export interface FileServerApiType {
   protocolVersion: string;
   workers: WorkerApiType[];
   volumes: VolumeType[]; // Adjust this type if you have specific volume data structure
+  exportPathSource?: string;
 }
 
 export type ConfigListTypeApiType = {
