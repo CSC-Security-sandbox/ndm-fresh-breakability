@@ -18,8 +18,8 @@ const WizardProvider = () => {
         initialStep="server-type"
         initialPath="default"
       >
-        <AppFooter footerContent={<FileServerFooter />} />
         <CustomStepLayout />
+        <AppFooter footerContent={<FileServerFooter />} />
       </Wizard>
     </Box>
   );

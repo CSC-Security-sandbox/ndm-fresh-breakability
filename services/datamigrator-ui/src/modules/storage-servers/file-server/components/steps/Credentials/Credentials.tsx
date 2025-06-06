@@ -12,7 +12,7 @@ const Credentials = () => {
   );
 
   return (
-    <Box className="flex flex-col gap-3">
+    <>
       <FormFrame>
         <Box className="mt-4 flex flex-col p-6 w-3/6">
           <FormFieldInputNew
@@ -33,7 +33,7 @@ const Credentials = () => {
 
       <NFSCredentials />
       <SMBCredentials />
-    </Box>
+    </>
   );
 };
 
