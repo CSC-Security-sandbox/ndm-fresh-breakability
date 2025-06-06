@@ -40,6 +40,7 @@
     "class-validator": "^0.14.1",
     "fast-csv": "^5.0.2",
     "hbs": "^4.2.0",
+    "multer": "^2.0.1",
     "pg": "^8.13.0",
     "puppeteer": "^23.11.1",
     "reflect-metadata": "^0.2.0",
@@ -113,5 +114,8 @@
       "/entities/",
       "/dto/"
     ]
+  },
+  "overrides": {
+    "multer": "^2.0.1"
   }
 }
