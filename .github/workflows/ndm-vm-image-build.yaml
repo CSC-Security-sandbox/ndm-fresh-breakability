@@ -32,6 +32,10 @@ on:
           - azure
           - vsphere
           - gcp
+      worker_tag:
+        description: 'Tag for worker'
+        required: false
+        type: string
       admin_service_tag:
         description: 'Tag for admin-service'
         required: false
@@ -187,27 +191,39 @@ jobs:
         if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}
         id: worker-binary
         run: |
-          REPO="NetApp-Cloud-DataMigrate/worker"
+          REPO="NetApp-Cloud-DataMigrate/ndm"
           API_URL="https://api.github.com/repos/$REPO/releases"
 
-          LATEST_RELEASE=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+          # Fetch all release tags
+          RELEASE_TAGS=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
+            "$API_URL" | jq -r '.[].tag_name')
 
-          if [[ "$LATEST_RELEASE" == "null" || -z "$LATEST_RELEASE" ]]; then
-            echo "Error: Unable to fetch latest release tag."
-            exit 1
+          # Use custom tag if provided, else use latest
+          CUSTOM_TAG="${{ github.event.inputs.worker_tag }}"
+          if [[ -n "$CUSTOM_TAG" ]]; then
+            if echo "$RELEASE_TAGS" | grep -Fxq "$CUSTOM_TAG"; then
+              SELECTED_TAG="$CUSTOM_TAG"
+              echo "Using custom worker tag: $SELECTED_TAG"
+            else
+              echo "Error: Provided worker_tag '$CUSTOM_TAG' does not exist in releases."
+              exit 1
+            fi
+          else
+            SELECTED_TAG=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
+            echo "No custom worker tag provided. Using latest: $SELECTED_TAG"
           fi
 
-          echo "Latest release tag: $LATEST_RELEASE"
-          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+          echo "SELECTED_TAG=$SELECTED_TAG" >> $GITHUB_ENV
 
           # Get release by tag
-          WORKER_BINARY_URL="https://api.github.com/repos/NetApp-Cloud-DataMigrate/worker/releases/tags/$LATEST_RELEASE"
+          WORKER_BINARY_URL="$API_URL/tags/$SELECTED_TAG"
 
           ASSET_URL=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$LATEST_RELEASE'-worker.zip") | .url')
+            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$SELECTED_TAG'-worker.zip") | .url')
 
           echo "Asset URL: $ASSET_URL"
 
@@ -216,13 +232,13 @@ jobs:
             -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/octet-stream" \
             "$ASSET_URL"
-          
+
           echo "Worker binary downloaded successfully."
-      
+
           # Create directory in the workspace
           mkdir -p $GITHUB_WORKSPACE/worker_bin
           unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
-      
+
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
             echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
           else
