@@ -78,6 +78,7 @@ for service_entry in "${services[@]}"; do
         fi
         if [[ -z "$tag" ]]; then
             echo "[ERROR] No tag found for repository '$repo'."
+            exit 1
         else
             echo "${service}_tag: \"$tag\""
             TAG_LINES+=("${service}_tag: \"$tag\"")

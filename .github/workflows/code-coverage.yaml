@@ -6,7 +6,12 @@ on:
       - main
       - 'release*'
     paths:
-      - 'services/**'
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/jobs-service/**'
+      - 'services/reports-service/**'
+      - 'services/worker/**'
 
 permissions:
   contents: read
@@ -26,7 +31,7 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" "datamigrator-ui" )
+          all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" )
 
           base_sha="${{ github.event.pull_request.base.sha }}"
           head_sha="${{ github.sha }}"
