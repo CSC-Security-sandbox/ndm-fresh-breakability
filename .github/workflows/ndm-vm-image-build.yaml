@@ -32,6 +32,34 @@ on:
           - azure
           - vsphere
           - gcp
+      admin_service_tag:
+        description: 'Tag for admin-service'
+        required: false
+        type: string
+      config_service_tag:
+        description: 'Tag for config-service'
+        required: false
+        type: string
+      datamigrator_ui_tag:
+        description: 'Tag for datamigrator-ui'
+        required: false
+        type: string
+      db_writer_service_tag:
+        description: 'Tag for db-writer'
+        required: false
+        type: string
+      jobs_service_tag:
+        description: 'Tag for jobs-service'
+        required: false
+        type: string
+      keycloak_customizations_tag:
+        description: 'Tag for keycloak-customizations'
+        required: false
+        type: string
+      reports_service_tag:
+        description: 'Tag for reports-service'
+        required: false
+        type: string
   schedule:
     - cron: '30 18 * * *'
 
@@ -143,6 +171,14 @@ jobs:
       
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh

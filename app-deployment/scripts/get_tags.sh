@@ -63,15 +63,28 @@ for service_entry in "${services[@]}"; do
     repos="${service_entry#*:}"
     echo "[INFO] Repositories for service '$service': $repos"
     for repo in $repos; do
-        latest_tag=$(get_latest_commit_tag "$repo")
-        if [ -z "$latest_tag" ]; then
-            echo "[ERROR] No commit-hash tag found for repository '$repo'."
+        # Map service to env var
+        env_var_name="${service^^}_TAG"
+        tag="${!env_var_name}"
+        if [[ -n "$tag" ]]; then
+            if az acr repository show-tags --name "$ACR_NAME" --repository "$repo" --output tsv | grep -Fxq "$tag"; then
+                echo "[INFO] Using custom tag '$tag' for repository '$repo'."
+            else
+                echo "[ERROR] Provided custom tag '$tag' does not exist in repository '$repo'."
+                exit 1
+            fi
         else
-            echo "${service}_tag: \"$latest_tag\""
-            TAG_LINES+=("${service}_tag: \"$latest_tag\"")
+            tag=$(get_latest_commit_tag "$repo")
+        fi
+        if [[ -z "$tag" ]]; then
+            echo "[ERROR] No tag found for repository '$repo'."
+        else
+            echo "${service}_tag: \"$tag\""
+            TAG_LINES+=("${service}_tag: \"$tag\"")
         fi
     done
 done
+
 
 VARS_YAML="app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 {
