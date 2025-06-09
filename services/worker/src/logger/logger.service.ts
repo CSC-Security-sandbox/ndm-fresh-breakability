@@ -100,13 +100,13 @@ export class Logger implements LoggerService {
     }
   }
 
-  sanitizeLogMessage(message: string): string {
+  private sanitizeLogMessage(message: string): string {
     return message
     .replace(/(password\s*[:=]?\s*)\S+/gi, '$1[REDACTED]')
     .replace(/(token\s*[:=]?\s*)\S+/gi, '$1[REDACTED]')
     .replace(/(email\s*[:=]?\s*)\S+/gi, '$1[REDACTED]');
   }
-  
+
   log(message: string) {
     this.loggerInstance.info(this.sanitizeLogMessage(message));
   }

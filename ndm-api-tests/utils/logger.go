@@ -4,15 +4,15 @@ import (
     "log"
     "regexp"
 )
- 
+
+var compiledPatterns = []*regexp.Regexp{
+   regexp.MustCompile(`(?i)(password\s*[:=]?\s*)\S+`),
+   regexp.MustCompile(`(?i)(token\s*[:=]?\s*)\S+`),
+   regexp.MustCompile(`(?i)(email\s*[:=]?\s*)\S+`),
+}
+
 func sanitize(msg string) string {
-    patterns := []string{
-        `(?i)(password\s*[:=]?\s*)\S+`,
-        `(?i)(token\s*[:=]?\s*)\S+`,
-        `(?i)(email\s*[:=]?\s*)\S+`,
-    }
-    for _, pattern := range patterns {
-        re := regexp.MustCompile(pattern)
+    for _, re := range compiledPatterns {
         msg = re.ReplaceAllString(msg, "$1[REDACTED]")
     }
  
@@ -20,8 +20,8 @@ func sanitize(msg string) string {
 }
     
 func LogDebug(msg string) {
-    safeMsg := sanitize(msg)
-    log.Print("[DEBUG] " + safeMsg)
+    sanitisedMessage := sanitize(msg)
+    log.Print("[DEBUG] " + sanitisedMessage)
 }
 
 func LogError(msg string, err ...error) {
