@@ -118,8 +118,7 @@ export function withBulkMigrateCreateForm(
       onSubmit: () => {},
     });
 
-    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<any>([]);
-    // const [listOfFileServersWithZeroExportPaths, setListOfFileServersWithZeroExportPaths] = useState<any>([]);
+    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<string[]>([]);
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -554,7 +553,6 @@ export function withBulkMigrateCreateForm(
       setFileName,
       fileName,
       listOfNotReachableExportPaths,
-      // listOfFileServersWithZeroExportPaths,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
