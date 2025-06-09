@@ -48,6 +48,7 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { SendMailService } from 'src/util/send-email';
 import { ConfigService } from '@nestjs/config';
 import { isWorkerHealthy } from 'src/utils/transformers';
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -75,6 +76,9 @@ export class ConfigurationService {
 
     @InjectRepository(JobRunEntity)
     private readonly jobRunRepo: Repository<JobRunEntity>,
+
+    @InjectRepository(PathUploadsEntity)
+    private readonly pathUploadsRepo: Repository<PathUploadsEntity>,
   ) {
     this.logger = this.loggerFactory.create(ConfigurationService.name);
     this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
@@ -289,7 +293,10 @@ export class ConfigurationService {
         }
       }
 
-      return { ...config, isRefreshAvailable: await this.isRefreshPossible(config.id) };
+      const isUploadInProgress = await this.isUploadInProgress(config.fileServers.map(fs => fs.id));
+      const isRefreshAvailable = await this.isRefreshPossible(config.id);
+
+      return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
       this.logger.error(`Error fetching config by ID: ${error.message}`);
       if (
@@ -1220,5 +1227,34 @@ export class ConfigurationService {
     
     this.logger.log(`Refresh is possible for configuration ${configId}`); 
     return true;
+  }
+
+  async isUploadInProgress(fileServerIds: string[]): Promise<boolean> {
+    try {
+      const latestUpload = await this.pathUploadsRepo
+        .createQueryBuilder('upload')
+        .where('upload.fileServerId IN (:...fileServerIds)', { fileServerIds })
+        .orderBy('upload.createdAt', 'DESC')
+        .getOne();
+
+      const uploadId = latestUpload?.uploadId;
+      if (!uploadId) {
+        this.logger.warn(`No uploads found for file server IDs: ${fileServerIds.join(', ')}`);
+        return false;
+      }
+
+      const workflowId = WorkFlows.VALIDATE_PATHS + '-' + uploadId;
+      const workflowRes = await this.workFlowService.getWorkFlowRes(workflowId);
+      if (!workflowRes) {
+        this.logger.warn(`No workflow found for upload ID: ${uploadId}`);
+        return false;
+      }
+      const isUploadInProgress = workflowRes.status === WorkflowExecutionStatus.RUNNING;
+      this.logger.log(`Upload with ID ${uploadId} is in progress: ${isUploadInProgress}`);
+      return isUploadInProgress;
+    } catch (error) {
+      this.logger.error(`Error checking upload in progress: ${error.message}`);
+      return false;
+    }
   }
 }
