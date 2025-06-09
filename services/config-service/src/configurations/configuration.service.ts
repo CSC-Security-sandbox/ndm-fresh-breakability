@@ -1184,6 +1184,10 @@ export class ConfigurationService {
       this.logger.error(`File server with ID ${fileServerId} not found`);
       throw new NotFoundException(`File server with ID ${fileServerId} not found`);
     }
+    if(fileServer.volumes.length === 0) {
+      this.logger.warn(`File server ${fileServerId} has no volumes, refresh is possible`);
+      return true;
+    }
 
     const volumeIds = fileServer.volumes.map(volume => volume.id);
     // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
