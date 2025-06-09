@@ -33,6 +33,7 @@ const TableWrapper = ({
   secondaryLabel,
   isRefreshing,
   refetchTableData,
+  noDataLabel = "No Data",
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -165,6 +166,7 @@ const TableWrapper = ({
           rowMenu={rowMenu}
           originalColumns={originalColumns || tableState.columns}
           isTogglingColumns={isTogglingColumns || false}
+          noDataLabel={noDataLabel}
         />
         {!isLoading && pagination?.pageRows && (
           <TablePager

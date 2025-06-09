@@ -24,6 +24,7 @@ const ExportPathsTable = ({
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
   defaultColumnState,
+  jobType,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
@@ -115,6 +116,8 @@ const ExportPathsTable = ({
   );
 
   const contentValue = useMemo(() => {
+    if (jobType === "bulk_discover") return "";
+
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
     return (
@@ -132,6 +135,11 @@ const ExportPathsTable = ({
       showLabel={false}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
+      }
+      noDataLabel={
+        fileServerDetails?.isUploadInProgress
+          ? "File upload is in progress..."
+          : "No Data"
       }
     />
   );

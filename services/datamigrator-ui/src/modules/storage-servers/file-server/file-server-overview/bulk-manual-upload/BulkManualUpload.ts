@@ -9,7 +9,7 @@ import {
   useSubmitExportPathSourceFileMutation,
   useUploadExportPathSourceFileMutation,
 } from "@/api/configApi";
-import { useModalManager } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/useModalManager";
+import { useModalManager } from "@/hooks/useModalManager";
 import { useEffect, useMemo, useState } from "react";
 import { getFileServerId } from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
 import { notify } from "@/components/notification/NotificationWrapper";
@@ -17,7 +17,7 @@ import { BulkManualUploadModalContent } from "@modules/storage-servers/file-serv
 import { BulkManualUploadModalFooter } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadModalFooter";
 import { ConfigListTypeApiType, VolumeType } from "@/types/app.type";
 
-const useBulkManualUpload = (
+export const BulkManualUpload = (
   fileServerDetails: ConfigListTypeApiType,
   allExportPaths: VolumeType[]
 ) => {
@@ -25,6 +25,7 @@ const useBulkManualUpload = (
   const form = useForm(INITIAL_VALUE_FORM, VALIDATION_SCHEMA);
   const [exportPathSourceData, setExportPathSourceData] =
     useState<UploadedFilePropsType>();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // API hooks
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
@@ -58,10 +59,15 @@ const useBulkManualUpload = (
 
   useEffect(() => {
     if (form?.formState?.exportPathSource?.fileName) openUploadModal();
-  }, [form?.formState?.exportPathSource?.fileName, exportPathSourceData]);
+  }, [
+    form?.formState?.exportPathSource?.fileName,
+    exportPathSourceData,
+    isLoading,
+  ]);
 
   const submitUploadExportPathSourceFile = async () => {
     try {
+      setIsLoading(true);
       await submitExportPathSourceFile({
         uploadId: exportPathSourceData.uploadId,
       }).unwrap();
@@ -73,12 +79,15 @@ const useBulkManualUpload = (
       }`;
       console.error(errorMessage);
       notify.error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const uploadFile = async () => {
     const { exportPathSource } = form?.formState;
     try {
+      setIsLoading(true);
       const _exportPathSourceData = await uploadExportPathSourceFile({
         fileServerId,
         body: exportPathSource,
@@ -88,6 +97,8 @@ const useBulkManualUpload = (
       console.error(
         `Failed to upload file: ${error?.data?.message || error?.message}`
       );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -98,7 +109,8 @@ const useBulkManualUpload = (
       modalFooter: BulkManualUploadModalFooter(
         form,
         onSubmit,
-        handleResetAndClose
+        handleResetAndClose,
+        isLoading
       ),
     });
   };
@@ -109,5 +121,3 @@ const useBulkManualUpload = (
     buttonName,
   };
 };
-
-export default useBulkManualUpload;
