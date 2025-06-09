@@ -71,15 +71,11 @@ func ValidateReport(
 			if err != nil {
 				return nil, fmt.Errorf("create temp PDF: %w", err)
 			}
-			defer func() {
-				tmpPDF.Close()
-				os.Remove(tmpPDF.Name())
-			}()
+			defer cleanup(tmpPDF)
 			if _, err := tmpPDF.Write(data); err != nil {
 				return nil, fmt.Errorf("write temp PDF: %w", err)
 			}
-
-			// call your existing PDF‐vs‐JSON validator
+			// validate PDF against JSON spec
 			ferr = validatePDFAgainstJSON(tmpPDF.Name(), spec)
 
 		case FormatCSV:
@@ -94,15 +90,12 @@ func ValidateReport(
 			if err != nil {
 				return nil, fmt.Errorf("create temp CSV: %w", err)
 			}
-			defer func() {
-				tmpCSV.Close()
-				os.Remove(tmpCSV.Name())
-			}()
+			defer cleanup(tmpCSV)
 			if _, err := tmpCSV.Write(csvBytes); err != nil {
 				return nil, fmt.Errorf("write temp CSV: %w", err)
 			}
 
-			// 3) Validate
+			// 3) validate CSV against JSON spec
 			ferr = validateCSVAgainstJSON(tmpCSV.Name(), spec)
 
 		default:
@@ -136,17 +129,11 @@ func fetchReport(
 	switch fmtType {
 	case FormatCSV:
 		url = ADMIN_SERVICE_URL + "/api/v1/report/inventory/download"
-		var jobRun interface{}
-		var reportTypeVal interface{}
-
+		jobRun := []string{jobRunID}
+		reportTypeVal := "COC"
 		if reportType == string(JobTypeDiscovery) {
-			jobRun = []string{jobRunID}
 			reportTypeVal = reportType
-		} else {
-			jobRun = []string{jobRunID}
-			reportTypeVal = "COC"
 		}
-
 		payload = map[string]interface{}{
 			"jobRunId":    jobRun,
 			"report-type": reportTypeVal,
@@ -185,11 +172,11 @@ func fetchReport(
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
-	// 6) expect 200 OK
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected HTTP %d: %s",
-			resp.StatusCode, string(respBytes))
-	}
+	// 6) expect 201 CREATED
+	if resp.StatusCode != http.StatusCreated {
+    return nil, fmt.Errorf("unexpected HTTP %d: %s",
+        resp.StatusCode, string(respBytes))
+}
 
 	return respBytes, nil
 }
@@ -399,4 +386,10 @@ func extractCSVFromZip(zipData []byte) ([]byte, string, error) {
 		}
 	}
 	return nil, "", fmt.Errorf("no CSV file found in zip")
+}
+
+// cleanup closes the file and removes it from disk.
+func cleanup(f *os.File) {
+	f.Close()
+	os.Remove(f.Name())
 }
