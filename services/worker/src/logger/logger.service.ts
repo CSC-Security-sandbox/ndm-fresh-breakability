@@ -104,9 +104,13 @@ export class Logger implements LoggerService {
     const sensitiveKeys = ['password', 'token', 'email', 'apikey', 'secret'];
     let sanitizedMessage = message;
 
+    // Remove newline characters to prevent log injection
+    sanitizedMessage = sanitizedMessage.replace(/[\r\n]/g, ' ');
+
+    // Redact sensitive values
     sensitiveKeys.forEach((key) => {
       const regex = new RegExp(`\\b(${key})\\b\\s*[:=]?\\s*\\S+`, 'gi');
-      sanitizedMessage = sanitizedMessage.replace(regex, (_, matchedKey) => `${matchedKey} [REDACTED]`);
+      sanitizedMessage = sanitizedMessage.replace(regex, `${key}: [REDACTED]`);
     });
 
     return sanitizedMessage;
