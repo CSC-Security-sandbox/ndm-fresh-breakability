@@ -81,8 +81,16 @@ const CreateUserForm = ({
       }
       notify.success(`Users added successfully.`);
       setShowTemporaryPassword(true);
-    } catch (err) {
-      notify.error("Failed to add User.");
+    } catch (err: any) {
+      let errorMsg = "Failed to add User.";
+      if (
+        err?.data?.message &&
+        err.data.message.toLowerCase().includes("email id") &&
+        err.data.message.toLowerCase().includes("already exists")
+      ) {
+        errorMsg = err.data.message;
+      }
+      notify.error(errorMsg);
       console.error({ err, level: "Add user" });
     }
   };
