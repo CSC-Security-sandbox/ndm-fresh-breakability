@@ -159,10 +159,12 @@ const BulkDiscover = () => {
         </Card>
         <Box className="mb-4">
           <ExportPathsTable
+            jobType="bulk_discover"
             defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
             allExportPaths={allExportPaths.filter(
               (row) =>
-                row.protocol === bulkDiscoveryForm.formState.protocol.value
+                row.protocol === bulkDiscoveryForm.formState.protocol.value &&
+                row.isValid
             )}
             fileServerDetails={fileServerDetails}
             showRefetch={false}
