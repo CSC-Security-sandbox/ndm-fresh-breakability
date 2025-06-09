@@ -60,6 +60,7 @@ import {
   setModalClose,
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
+import useFetchWorkers from "@hooks/useFetchWorkers";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -303,6 +304,29 @@ export function withBulkMigrateCreateForm(
       </>
     );
 
+    // Use the hook to get workers
+    const { workers } = useFetchWorkers();
+
+    // Helper to check if any worker is offline
+    // Proceed with remaining workers even if some are offline; just warn
+    const checkAnyWorkerOffline = () => {
+      const offlineWorkers = (workers || []).filter(
+      (w: any) => w.status && w.status.toLowerCase() === "offline"
+      );
+      if (offlineWorkers.length === (workers || []).length && workers.length > 0) {
+      throw new Error(
+        `All workers are offline. Please ensure at least one worker is online before proceeding.`
+      );
+      }
+      if (offlineWorkers.length > 0) {
+      notify.warning(
+        `Some workers are offline: ${offlineWorkers
+        .map((w: any) => w.workerName || w.workerId)
+        .join(", ")}. Proceeding with available workers.`
+      );
+      }
+    };
+
     const handlePrecheck = (onSuccessfulSubmit?: () => void) => {
       let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
@@ -310,6 +334,13 @@ export function withBulkMigrateCreateForm(
       setIsPrecheckSuccessful(false);
       setPreCheckStatus(PRECHECK_STATUS);
       setIsSubmitting(true);
+      // Check worker status before proceeding
+      try {
+        checkAnyWorkerOffline();
+      } catch (err: any) {
+        showErrorOnFailure(err);
+        return;
+      }
       const body = {
         migrateConfigs: createPathMapping(
           mappingStepForm?.values?.migrationDetailsTableConfigurationValue,
