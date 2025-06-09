@@ -108,6 +108,12 @@ export class JobRunInitService {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
 
+    // check if source and target paths are flagged as valid
+    if(!details.connection.sourceCredential.isValidPath || (details.connection.targetCredential && !details.connection.targetCredential.isValidPath)) {
+      this.logger.warn(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);
+      return;
+    }
+
     if (details.workers.length === 0) {
       this.logger.warn(
         `Unable to create Job Run for Job Config ${jobConfigId} does not has workers`,
@@ -174,6 +180,7 @@ export class JobRunInitService {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
           pathId: jobConfig?.sourcePath?.id,
+          isValidPath: jobConfig?.sourcePath?.isValid,
           protocol: jobConfig?.sourcePath?.fileServer?.protocol,
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
@@ -213,6 +220,7 @@ export class JobRunInitService {
       connection: {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
+          isValidPath: jobConfig?.sourcePath?.isValid,
           pathId: jobConfig?.sourcePath?.id,
           protocol: jobConfig?.sourcePath?.fileServer?.protocol,
           username: jobConfig?.sourcePath?.fileServer?.userName,
@@ -254,6 +262,7 @@ export class JobRunInitService {
       details.connection["targetCredential"] = {
         path: jobConfig?.targetPath?.volumePath,
         pathId: jobConfig?.targetPath?.id,
+        isValidPath: jobConfig?.targetPath?.isValid,
         protocol: jobConfig?.targetPath?.fileServer?.protocol,
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,

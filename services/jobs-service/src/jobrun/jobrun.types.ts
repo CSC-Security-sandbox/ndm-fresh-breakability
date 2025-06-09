@@ -13,6 +13,7 @@ interface Credential {
     pathId: string,
     username: string,
     path:string,
+    isValidPath: boolean,
     host: string,
     workingDirectory:string,
     protocolVersion: string

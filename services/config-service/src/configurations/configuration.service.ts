@@ -25,7 +25,7 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobConfigEntity, JobStatus, JobType } from 'src/entities/jobconfig.entity';
-import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
@@ -69,6 +69,12 @@ export class ConfigurationService {
     private readonly workFlowService: WorkflowService,
     private readonly sendMailService: SendMailService,
     private readonly configService: ConfigService,
+
+    @InjectRepository(JobConfigEntity)
+    private readonly jobConfigRepo: Repository<JobConfigEntity>,
+
+    @InjectRepository(JobRunEntity)
+    private readonly jobRunRepo: Repository<JobRunEntity>,
   ) {
     this.logger = this.loggerFactory.create(ConfigurationService.name);
     this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
@@ -255,14 +261,19 @@ export class ConfigurationService {
         throw new NotFoundException(`Config for id ${id} not found.`);
 
       if(config?.fileServers){
-        config.fileServers = config.fileServers.map((fileServer) => ({
-          ...fileServer,
-          volumes: fileServer.volumes,
-          workers: fileServer.workers.map((worker) => ({
-            ...worker,
-            status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
-          }))
-        }))
+        let fileServers = []
+        for(const fileServer of config.fileServers) {
+          fileServers.push({
+            ...fileServer,
+            isRefreshAvailable: await this.isRefreshPossible(fileServer.id),
+            volumes: fileServer.volumes,
+            workers: fileServer.workers.map((worker) => ({
+              ...worker,
+              status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
+            }))
+          })
+        }
+        config.fileServers = fileServers;
       }
 
       if (
@@ -1162,5 +1173,52 @@ export class ConfigurationService {
       this.logger.error(`Error checking file server refresh eligibility: ${error.message}`);
       throw new InternalServerErrorException('Failed to check file server refresh eligibility.');
     }
+  }
+
+  async isRefreshPossible(fileServerId: string): Promise<boolean> {
+    const fileServer = await this.fileServerEntity.findOne({
+      where: { id: fileServerId },
+      relations: { volumes: true },
+    });
+    if (!fileServer) {
+      this.logger.error(`File server with ID ${fileServerId} not found`);
+      throw new NotFoundException(`File server with ID ${fileServerId} not found`);
+    }
+
+    const volumeIds = fileServer.volumes.map(volume => volume.id);
+    // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
+    const jobConfigs = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .where('jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds)', { volumeIds })
+      .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+      .getMany();
+    
+    // check if any job config has schedule as SCHEDULING if yes then return false
+    if (jobConfigs.some(jc => jc.scheduler === 'SCHEDULING')) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with SCHEDULING status`);
+      return false;
+    }
+    
+    // check if futureScheduleAt is not null for any job config, if yes then return false
+    if (jobConfigs.some(jc => !!jc.futureScheduleAt)) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with futureScheduleAt set`);
+      return false;
+    }
+
+    // fetch all the jobs that are in running state for above job configurations
+    const runningJobs = await this.jobRunRepo.count({
+      where: {
+        jobConfigId: In(jobConfigs.map(jc => jc.id)),
+        status: JobRunStatus.Running,
+      }
+    })
+
+    if (runningJobs > 0) {
+      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are running jobs`);
+      return false;
+    }
+    
+    this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
+    return true;
   }
 }

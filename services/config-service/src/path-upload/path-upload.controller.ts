@@ -43,7 +43,7 @@ export class PathUploadController {
     @Auth(Permission.ManageConfig)
     @Post('confirm/:uploadId')
     async confirmPathUpload(@Param('uploadId') uploadId: string) {
-        return await this.pathUploadService.confirmPathUpload(uploadId);
+        return await this.pathUploadService.processUploadPathValidation(uploadId);
     }
 
     @ApiOperation({ summary: 'Update Upload Validation Result' })
@@ -80,16 +80,5 @@ export class PathUploadController {
         res.sendFile(filePath);
         const fileStream = fs.createReadStream(filePath);
         fileStream.pipe(res)
-    }
-
-    @ApiOperation({ summary: 'Check if Refresh is Possible' })
-    @ApiOkResponse({ description: 'Refresh Check Completed Successfully' })
-    @ApiNotFoundResponse({ description: 'File Server Not Found' })
-    @ApiBadRequestResponse({ description: 'Invalid File Server ID' })
-    @ApiBearerAuth()
-    @Auth(Permission.ManageConfig)
-    @Get('refresh-possible/:fileServerId')
-    async isRefreshPossible(@Param('fileServerId') fileServerId: string) {
-        return await this.pathUploadService.isRefreshPossible(fileServerId);
     }
 }

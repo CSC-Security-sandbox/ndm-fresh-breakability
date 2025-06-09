@@ -101,14 +101,20 @@ export class PathUploadService {
     }
 
     // all the paths with fileServerId from the volume entity which are not in the uploadData, increment noLongerAvailablePaths count by number of such paths
+    const existingPaths = await this.volumeRepo.find({
+      where: { fileServerId },
+      select: ['volumePath'],
+    });
+    const noLongerExistingPaths = existingPaths.filter(path => !parsedData.some(row => row[0].trim() === path.volumePath.trim()));
+    uploadStats.noLongerAvailablePaths = noLongerExistingPaths.length;
 
     return {
-        status: 'success',
-        message: 'File upload processed successfully',
-        uploadId,
-        newPaths: uploadStats.newPaths,
-        alreadyExitingPaths: uploadStats.alreadyExitingPaths,
-        noLongerAvailablePaths: uploadStats.noLongerAvailablePaths,
+      status: 'success',
+      message: 'File upload processed successfully',
+      uploadId,
+      newPaths: uploadStats.newPaths,
+      alreadyExitingPaths: uploadStats.alreadyExitingPaths,
+      noLongerAvailablePaths: uploadStats.noLongerAvailablePaths,
     };
   }
 
@@ -116,10 +122,6 @@ export class PathUploadService {
     const newUpload = this.uploadRepo.create(uploadData);
     const savedUpload = await this.uploadRepo.save(newUpload);
     return savedUpload;
-  }
-
-  async confirmPathUpload(uploadId: string): Promise<any> {
-    return await this.processUploadPathValidation(uploadId);
   }
 
   async processUploadPathValidation(uploadId: string): Promise<{ status: string, message: string, workflowId?: string }> {
@@ -131,6 +133,9 @@ export class PathUploadService {
     const fileServerId = upload[0].fileServerId;
     const fileServer = await this.fileServerRepo.findOne({ where: { id: fileServerId }, relations: ['workers'] });
     this.logger.log(`Processing export path upload with ID ${uploadId}`);
+
+    // mark all the current paths as invalid
+    await this.volumeRepo.update({ fileServerId, isValid: true }, { isValid: false });
 
     const traceId = uploadId;
     const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -311,6 +316,10 @@ export class PathUploadService {
     }
     
     this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
+    return true;
+  }
+
+  async isUploadInProgress(fileServerId: string): Promise<boolean> {
     return true;
   }
 }

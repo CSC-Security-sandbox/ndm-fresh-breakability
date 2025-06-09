@@ -21,8 +21,8 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
-import { JobType } from 'src/entities/jobconfig.entity';
-import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { JobConfigEntity, JobType } from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigurationService } from './configuration.service';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
@@ -30,6 +30,7 @@ import { WorkflowExecutionStatus } from 'src/workflow/workflow.types';
 import { ListPathWorkflowStatus } from './configuration.types';
 import { SendMailService } from 'src/util/send-email';
 import { ConfigService } from '@nestjs/config';
+import { get } from 'http';
 
 const mockConfig = {
   id: uuidv4(),
@@ -167,6 +168,22 @@ describe('ConfigurationService', () => {
         {
           provide: getRepositoryToken(FileServerWorkingDirectoryMappingEntity),
           useValue: mockMappingRepository,
+        },
+        {
+          provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn(),
+          },
         },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         {

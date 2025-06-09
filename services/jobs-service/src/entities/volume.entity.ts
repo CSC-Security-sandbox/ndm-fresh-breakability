@@ -43,4 +43,8 @@ export class VolumeEntity extends Base {
 
     @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: false})
     inventory: InventoryEntity[]
+
+    @ApiProperty({ description: 'isValid' })
+    @Column({ type: 'boolean', nullable: true, default: true, name: 'is_valid' })
+    isValid: boolean;
 }
