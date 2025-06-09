@@ -265,7 +265,6 @@ export class ConfigurationService {
         for(const fileServer of config.fileServers) {
           fileServers.push({
             ...fileServer,
-            isRefreshAvailable: await this.isRefreshPossible(fileServer.id),
             volumes: fileServer.volumes,
             workers: fileServer.workers.map((worker) => ({
               ...worker,
@@ -290,7 +289,7 @@ export class ConfigurationService {
         }
       }
 
-      return config;
+      return { ...config, isRefreshAvailable: await this.isRefreshPossible(config.id) };
     } catch (error) {
       this.logger.error(`Error fetching config by ID: ${error.message}`);
       if (
@@ -1175,21 +1174,18 @@ export class ConfigurationService {
     }
   }
 
-  async isRefreshPossible(fileServerId: string): Promise<boolean> {
-    const fileServer = await this.fileServerEntity.findOne({
-      where: { id: fileServerId },
-      relations: { volumes: true },
+  async isRefreshPossible(configId: string): Promise<boolean> {
+    const fileServers = await this.configEntity.find({
+      where: { id: configId },
+      relations: { fileServers: { volumes: true } },
     });
-    if (!fileServer) {
-      this.logger.error(`File server with ID ${fileServerId} not found`);
-      throw new NotFoundException(`File server with ID ${fileServerId} not found`);
-    }
-    if(fileServer.volumes.length === 0) {
-      this.logger.warn(`File server ${fileServerId} has no volumes, refresh is possible`);
-      return true;
+
+    const volumeIds = fileServers.flatMap(fs => fs.fileServers.flatMap(v => v.volumes.map(vol => vol.id))); // volume ids from all file servers
+    if (volumeIds.length === 0) {
+      this.logger.warn(`No valid volumes found for config ID ${configId}.`);
+      return true; // No volumes means no jobs, so refresh is possible
     }
 
-    const volumeIds = fileServer.volumes.map(volume => volume.id);
     // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
     const jobConfigs = await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
@@ -1199,13 +1195,13 @@ export class ConfigurationService {
     
     // check if any job config has schedule as SCHEDULING if yes then return false
     if (jobConfigs.some(jc => jc.scheduler === 'SCHEDULING')) {
-      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with SCHEDULING status`);
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`);
       return false;
     }
     
     // check if futureScheduleAt is not null for any job config, if yes then return false
     if (jobConfigs.some(jc => !!jc.futureScheduleAt)) {
-      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with futureScheduleAt set`);
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`);
       return false;
     }
 
@@ -1218,11 +1214,11 @@ export class ConfigurationService {
     })
 
     if (runningJobs > 0) {
-      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are running jobs`);
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are running jobs`);
       return false;
     }
     
-    this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
+    this.logger.log(`Refresh is possible for configuration ${configId}`); 
     return true;
   }
 }
