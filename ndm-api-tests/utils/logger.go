@@ -1,9 +1,27 @@
 package utils
 
-import "log"
-
+import (
+    "log"
+    "regexp"
+)
+ 
+func sanitize(msg string) string {
+    patterns := []string{
+        `(?i)(password\s*[:=]?\s*)\S+`,
+        `(?i)(token\s*[:=]?\s*)\S+`,
+        `(?i)(email\s*[:=]?\s*)\S+`,
+    }
+    for _, pattern := range patterns {
+        re := regexp.MustCompile(pattern)
+        msg = re.ReplaceAllString(msg, "$1[REDACTED]")
+    }
+ 
+    return msg
+}
+    
 func LogDebug(msg string) {
-	log.Print("[DEBUG] " + msg)
+    safeMsg := sanitize(msg)
+    log.Print("[DEBUG] " + safeMsg)
 }
 
 func LogError(msg string, err ...error) {
