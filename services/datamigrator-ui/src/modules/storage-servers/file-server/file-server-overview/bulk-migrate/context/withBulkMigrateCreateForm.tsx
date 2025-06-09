@@ -119,7 +119,7 @@ export function withBulkMigrateCreateForm(
     });
 
     const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<any>([]);
-    const [listOfFileServersWithZeroExportPaths, setListOfFileServersWithZeroExportPaths] = useState<any>([]);
+    // const [listOfFileServersWithZeroExportPaths, setListOfFileServersWithZeroExportPaths] = useState<any>([]);
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -168,10 +168,8 @@ export function withBulkMigrateCreateForm(
           });
 
           const notReachableVolumes = [];
-          const fileServersWithZeroReachableExportPaths = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
-            let downVolumesCount = 0;
 
             config?.fileServers?.flatMap((fileServer) => 
               fileServer?.volumes?.map((volume) => {
@@ -180,17 +178,12 @@ export function withBulkMigrateCreateForm(
                   pathId: volume?.id,
                   pathName: volume?.volumePath,
                 })
-                downVolumesCount = volume?.reachableCount === 0 ? downVolumesCount + 1 : downVolumesCount;
                 if (volume?.reachableCount === 0) {
                   notReachableVolumes.push(volume.id);
                 }
               })
             );
-            if (downVolumesCount === config?.fileServers?.length || config.id === '8db219f6-7469-4f8c-95a4-262c52cfb1e4') {
-              fileServersWithZeroReachableExportPaths.push(config.id);
-            }
             setListOfNotReachableExportPaths(notReachableVolumes);
-            setListOfFileServersWithZeroExportPaths(fileServersWithZeroReachableExportPaths);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
 
@@ -561,7 +554,7 @@ export function withBulkMigrateCreateForm(
       setFileName,
       fileName,
       listOfNotReachableExportPaths,
-      listOfFileServersWithZeroExportPaths,
+      // listOfFileServersWithZeroExportPaths,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

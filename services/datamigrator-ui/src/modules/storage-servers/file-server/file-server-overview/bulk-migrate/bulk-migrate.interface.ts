@@ -134,7 +134,6 @@ export interface BulkMigrateContextType {
   setFileName: (arg: string) => void;
   fileName: string;
   listOfNotReachableExportPaths: string[];
-  listOfFileServersWithZeroExportPaths: string[];
 }
 
 export interface ErrorsValidateMappingStepFormType {
