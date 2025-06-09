@@ -53,16 +53,16 @@ func InitTestEnv() {
 	scenarioConfigPath := filepath.Join(projectRoot, "scenario_config.yml")
 	configBytes, err := ioutil.ReadFile(scenarioConfigPath)
 	if err != nil {
-		LogError("Error reading configuration file: %v", err)
+		LogFatalf("Error reading configuration file: %v", err)
 	}
 
 	var scConfig scenario.ScenarioConfig
 	if err = yaml.Unmarshal(configBytes, &scConfig); err != nil {
-		LogError("Error parsing scenario configuration file: %v", err)
+		LogFatalf("Error parsing scenario configuration file: %v", err)
 	}
 
 	if len(scConfig.Files) == 0 {
-		LogError("Scenario configuration file does not list any files")
+		LogFatalf("Scenario configuration file does not list any files")
 	}
 
 	ScenarioFileNames = scConfig.Files
