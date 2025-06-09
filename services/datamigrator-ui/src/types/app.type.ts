@@ -613,6 +613,7 @@ export type FiltersType = {
   columnsToFilter?: ColumnFilterType[];
   setFilters?: Function;
   preSelectedFilter?: any;
+  gotoPage?: (page: number) => void;
 };
 
 export type LegendWrapperPropsType = {

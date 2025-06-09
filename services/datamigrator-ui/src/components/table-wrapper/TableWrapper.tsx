@@ -103,6 +103,7 @@ const TableWrapper = ({
           columnsToFilter={columnsToFilter}
           setFilters={setCurrentFilters}
           preSelectedFilter={preSelectedFilter}
+          gotoPage={pagination?.gotoPage}
         />
       )}
       <Box

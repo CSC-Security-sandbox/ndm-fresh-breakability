@@ -111,6 +111,8 @@ export class WorkerOptionsService {
           getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
           updateWorkerResponse: this.commonActivityService.updateWorkerResponse.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
+          hasRunningScanTask: this.commonActivityService.hasRunningScanTask.bind(this.commonActivityService),
+          hasRunningSyncTask: this.commonActivityService.hasRunningSyncTask.bind(this.commonActivityService),
         }, this.jobTaskActivityConcurrency);
       default:
         return undefined;

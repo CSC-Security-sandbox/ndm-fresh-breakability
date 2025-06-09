@@ -1,9 +1,9 @@
 import { continueAsNew, ContinueAsNew, proxyActivities } from '@temporalio/workflow';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
-import { DiscoverPathOutput } from 'src/activities/discovery/discovery.type';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { CommonActivityService } from '../../../activities/common/common.service';
+import { DiscoveryActivity } from '../../../activities/discovery/discovery.activities';
+import { DiscoveryScanActivity } from '../../../activities/discovery/discovery.core.activity';
+import { DiscoverPathOutput } from '../../../activities/discovery/discovery.type';
+import { JobRunStatus } from '../../../activities/discovery/enums';
 import * as wf from '@temporalio/workflow';
 import { ActivityFailure } from '@temporalio/workflow';
 
@@ -43,7 +43,8 @@ const {
   getJobState: getJobStateActivity,
   updateStatus: updateStatusActivity,
   setJobState: setJobStateActivity,
-  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
+  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList,
+  hasRunningScanTask: hasRunningScanTaskActivity
 } = proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
   heartbeatTimeout: '2m',
@@ -112,7 +113,9 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
       );
 
       const isErrored = (workers.length === failedWorkers.length);
-      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length));
+      const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && !hasRunningScanTask;
+
 
       if (isCompleted || isErrored) {
         log(jobRunId, `No tasks found. sending last entry`);
