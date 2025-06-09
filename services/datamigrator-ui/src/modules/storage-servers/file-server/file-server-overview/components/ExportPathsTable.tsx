@@ -27,6 +27,7 @@ const ExportPathsTable = ({
   notReachableExportPaths,
   refetch,
   isFetching,
+  jobType,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
@@ -118,6 +119,8 @@ const ExportPathsTable = ({
   );
 
   const contentValue = useMemo(() => {
+    if (jobType === "bulk_discover") return "";
+
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
     return (
@@ -139,6 +142,11 @@ const ExportPathsTable = ({
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
       notReachableExportPaths={notReachableExportPaths}
+      noDataLabel={
+        fileServerDetails?.isUploadInProgress
+          ? "File upload is in progress..."
+          : "No Data"
+      }
     />
   );
 };

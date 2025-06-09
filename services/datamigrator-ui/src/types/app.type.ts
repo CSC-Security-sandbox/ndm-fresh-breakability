@@ -60,6 +60,7 @@ export interface VolumeType {
   volumePath: string;
   jobConfig: JobConfig[];
   protocol: string;
+  isValid?: boolean;
 }
 
 interface DataType {
@@ -172,6 +173,8 @@ export type ConfigListTypeApiType = {
   fileServers: FileServerApiType[];
   workingDirectory: WorkingDirectoryDetailsType;
   status: FILE_SERVER_STATUS;
+  isRefreshAvailable?: boolean;
+  isUploadInProgress?: boolean;
 };
 
 export type FileServerDetailsType = ConfigListTypeApiType;

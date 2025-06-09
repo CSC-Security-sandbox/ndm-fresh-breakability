@@ -5,7 +5,8 @@ import { BulkManualUploadModalContentPropsType } from "@modules/storage-servers/
 export const BulkManualUploadModalFooter = (
   form: BlueXpFormType<BulkManualUploadModalContentPropsType>,
   onSubmit: () => Promise<void>,
-  handleResetAndClose: () => void
+  handleResetAndClose: () => void,
+  isLoading: boolean
 ) => {
   return (
     <>
@@ -15,6 +16,7 @@ export const BulkManualUploadModalFooter = (
       <Button
         disabled={!form?.formState?.exportPathSource || !form?.isValid}
         onClick={onSubmit}
+        isSubmitting={isLoading}
       >
         Submit
       </Button>
