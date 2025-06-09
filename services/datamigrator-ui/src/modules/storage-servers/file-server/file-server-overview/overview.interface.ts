@@ -14,6 +14,7 @@ export interface ExportPathsTablePropsType {
   notReachableExportPaths: string[];
   refetch?: () => void;
   isFetching?: boolean;
+  jobType?: string;
 }
 
 export interface TableRendererPropsType {
