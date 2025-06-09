@@ -42,7 +42,7 @@ common_content_library_destroy     = true
 common_content_library_skip_export = false
 
 // OVF Export Settings
-common_ovf_export_enabled   = false
+common_ovf_export_enabled   = true
 common_ovf_export_overwrite = true
 
 // Removable Media Settings

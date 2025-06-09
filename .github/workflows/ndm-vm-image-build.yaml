@@ -148,7 +148,7 @@ jobs:
           ./app-deployment/scripts/get_tags.sh
 
       - name: Download Worker Binary
-        if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}
+        if: ${{ matrix.component == 'worker' || matrix.component == 'unified-plane' }}
         id: worker-binary
         run: |
           REPO="NetApp-Cloud-DataMigrate/worker"
@@ -193,6 +193,12 @@ jobs:
             echo "Binary not found!" && exit 1
           fi
           echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" >> $GITHUB_OUTPUT
+
+      - name: Add ovftool to PATH
+        run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
+
+      - name: Print PATH 
+        run: echo $PATH
 
       - name: Packer Init
         run: |
@@ -313,6 +319,22 @@ jobs:
             echo "GCP Image ID: $IMAGE_ID"
             ;;
           esac
+
+      - name: Upload OVA file to Artifactory
+        if: ${{ matrix.provider == 'vsphere' && (matrix.component == 'unified-plane' || matrix.component == 'control-plane') }}
+        run: |
+          echo "Uploading OVA file to Artifactory..."
+          OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
+          if [ -f "$OVA_FILE" ]; then
+            echo "Found OVA file: $OVA_FILE"
+            curl --silent --show-error --request PUT --upload-file \
+              "$OVA_FILE" \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases/alpha/${{ steps.image-info.outputs.image_name }}.ova" -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "OVA file uploaded successfully."
+          else
+            echo "Error: OVA file not found at $OVA_FILE"
+            exit 1
+          fi
 
   deploy-and-test:
     if: ${{ needs.packer.outputs.provider == 'vsphere' && needs.packer.outputs.component == 'unified-plane' }}
