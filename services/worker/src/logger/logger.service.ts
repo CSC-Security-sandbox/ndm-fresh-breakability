@@ -101,10 +101,15 @@ export class Logger implements LoggerService {
   }
 
   private sanitizeLogMessage(message: string): string {
-    return message
-    .replace(/(password\s*[:=]?\s*)\S+/gi, '$1[REDACTED]')
-    .replace(/(token\s*[:=]?\s*)\S+/gi, '$1[REDACTED]')
-    .replace(/(email\s*[:=]?\s*)\S+/gi, '$1[REDACTED]');
+    const sensitiveKeys = ['password', 'token', 'email', 'apikey', 'secret'];
+    let sanitizedMessage = message;
+
+    sensitiveKeys.forEach((key) => {
+      const regex = new RegExp(`\\b(${key})\\b\\s*[:=]?\\s*\\S+`, 'gi');
+      sanitizedMessage = sanitizedMessage.replace(regex, (_, matchedKey) => `${matchedKey} [REDACTED]`);
+    });
+
+    return sanitizedMessage;
   }
 
   log(message: string) {
