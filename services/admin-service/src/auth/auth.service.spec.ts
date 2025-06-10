@@ -5,6 +5,7 @@ import { User } from '../entities/user.entity';
 import {
   InternalServerErrorException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from 'src/utils/axios-request-utils';
@@ -148,10 +149,33 @@ describe('AuthService', () => {
     );
   });
 
+  it('should throw a ConflictException if user already exists in the database', async () => {
+    const username = 'existing@example.com';
+    const firstName = 'Jane';
+    const lastName = 'Smith';
+
+    mockUserRepository.findOne.mockResolvedValue({ email: username });
+
+    await expect(
+      service.inviteUser(
+        username,
+        firstName,
+        lastName,
+        userPermissionResponseMock,
+      ),
+    ).rejects.toThrow(
+      new ConflictException(
+        `Cannot create user: the email id '${username}' already exists.`
+      ),
+    );
+  });
+
   it('should call getKeycloakToken and handle errors gracefully', async () => {
     const username = 'user@example.com';
     const firstName = 'John';
     const lastName = 'Doe';
+
+    mockUserRepository.findOne.mockResolvedValue(null); // Ensure user does not exist
 
     jest
       .spyOn(service, 'getKeycloakToken')
@@ -173,6 +197,9 @@ describe('AuthService', () => {
     const username = 'user@example.com';
     const firstName = 'John';
     const lastName = 'Doe';
+
+    mockUserRepository.findOne.mockResolvedValue(null); // Ensure user does not exist
+
 
     (makeAxiosRequest as jest.Mock).mockResolvedValue({});
 

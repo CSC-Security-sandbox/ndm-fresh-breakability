@@ -125,12 +125,9 @@ export class AuthService {
 
       return { user: savedUser, tempPassword };
     } catch (error) {
-      if (
-        error instanceof ConflictException ||
-        (error.response && error.response.status === 409)
-      ) {
+      if (error instanceof ConflictException) {
         throw new ConflictException(
-          error.response?.data?.errorMessage || 'User already exists.'
+          error.message 
         );
       }
       throw new InternalServerErrorException(
