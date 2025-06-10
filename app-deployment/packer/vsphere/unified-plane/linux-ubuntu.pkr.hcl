@@ -553,7 +553,6 @@ locals {
   manifest_path   = "${path.cwd}/manifests/"
   manifest_output = "${local.manifest_path}${local.manifest_date}.json"
   ovf_export_path = "${path.cwd}/artifacts/${local.vm_name}"
-  # ovf_export_path = "/ova/${local.vm_name}"
   data_source_content = {
     "/meta-data" = file("${abspath(path.root)}/data/meta-data")
     "/user-data" = templatefile("${abspath(path.root)}/data/user-data.pkrtpl.hcl", {

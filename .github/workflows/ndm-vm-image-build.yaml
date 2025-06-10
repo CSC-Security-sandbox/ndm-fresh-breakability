@@ -321,16 +321,29 @@ jobs:
           esac
 
       - name: Upload OVA file to Artifactory
-        if: ${{ matrix.provider == 'vsphere' && (matrix.component == 'unified-plane' || matrix.component == 'control-plane') }}
+        if: ${{ matrix.provider == 'vsphere' && (matrix.component == 'unified-plane' || matrix.component == 'control-plane' || matrix.component == 'worker') }}
         run: |
           echo "Uploading OVA file to Artifactory..."
+
           OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
+          BUILD_TYPE="${{ github.event_name }}"
+          DATE=$(date -u +'%Y-%m-%d')
+          TIME=$(date -u +'%H%M%S')
+          COMMIT_HASH="${GITHUB_SHA::6}"
+
+          if [ "$BUILD_TYPE" = "schedule" ]; then
+            ARTIFACTORY_PATH="builds/nightly/${DATE}/${{ matrix.component }}/${{ matrix.component }}-nightly-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          else
+            ARTIFACTORY_PATH="builds/daily-builds/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          fi
+
           if [ -f "$OVA_FILE" ]; then
             echo "Found OVA file: $OVA_FILE"
             curl --silent --show-error --fail --request PUT --upload-file \
               "$OVA_FILE" \
-              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases/alpha/${{ steps.image-info.outputs.image_name }}.ova" -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "OVA file uploaded successfully."
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "OVA file uploaded successfully to ${ARTIFACTORY_PATH}."
           else
             echo "Error: OVA file not found at $OVA_FILE"
             exit 1
