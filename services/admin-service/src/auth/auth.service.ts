@@ -130,7 +130,7 @@ export class AuthService {
         (error.response && error.response.status === 409)
       ) {
         throw new ConflictException(
-          error.response?.data?.errorMessage || 'User already exists in Keycloak.'
+          error.response?.data?.errorMessage || 'User already exists.'
         );
       }
       throw new InternalServerErrorException(
