@@ -74,7 +74,7 @@ async onModuleInit(): Promise<void> {
   }
 
   isValidTraceId(traceId) {
-    // Example: allow only alphanumeric characters and limit length
+    //Validating traceId: It must be alphanumeric and max 64 characters
     const traceIdRegex = /^[a-zA-Z0-9_-]{1,64}$/;
     return traceIdRegex.test(traceId);
   }
