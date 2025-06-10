@@ -28,6 +28,7 @@ import {
   SKIP_FILE_OPTIONS,
   WEEK_OPTIONS,
   WEEKDAY_OPTIONS,
+  OFFLINE_STATUS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import {
   BulkMigrateContextType,
@@ -318,19 +319,19 @@ export function withBulkMigrateCreateForm(
     const validateWorkerStatus = () => {
       const availableWorkers = workers || [];
       const offlineWorkers = availableWorkers.filter(
-      (w: WorkerType) => w.status && w.status.toLowerCase() === "offline"
+        (w: WorkerType) => w.status && w.status.toLowerCase() === OFFLINE_STATUS
       );
-      if (offlineWorkers.length === availableWorkers.length && availableWorkers.length > 0) {
-      throw new Error(
-        `All workers are offline. Please ensure at least one worker is online before proceeding.`
-      );
+      if (availableWorkers.length > 0 && offlineWorkers.length === availableWorkers.length) {
+        throw new Error(
+          `All workers are offline. Please ensure at least one worker is online before proceeding.`
+        );
       }
       if (offlineWorkers.length > 0) {
-      notify.warning(
-        `Some workers are offline: ${offlineWorkers
-        .map((w: WorkerType) => w.workerName || w.workerId)
-        .join(", ")}. Proceeding with available workers.`
-      );
+        notify.warning(
+          `Some workers are offline: ${offlineWorkers
+            .map((w: WorkerType) => w.workerName || w.workerId)
+            .join(", ")}. Proceeding with available workers.`
+        );
       }
     };
 
