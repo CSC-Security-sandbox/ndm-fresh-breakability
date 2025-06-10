@@ -8,6 +8,7 @@ import {
   Runtime,
 } from '@temporalio/worker';
 import { support as fluentSupport } from 'fluent-logger';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class Logger implements LoggerService {
@@ -99,6 +100,18 @@ export class Logger implements LoggerService {
       Logger.isRuntimeInstalled = true; // Prevent future calls to Runtime.install()
     }
   }
+  private encryptLogMessage(message: string): string {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.createHash('sha256').update(String(process.env.ENCRYPTION_KEY || 'default_key')).digest();
+    const iv = crypto.randomBytes(16); // Generate a unique IV for each encryption operation
+    
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    let encrypted = cipher.update(message, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    // Ensure IV is securely included with the encrypted message
+    return `${iv.toString('hex')}:${encrypted}`;
+  }
 
   private sanitizeLogMessage(message: string): string {
     const sensitiveKeys = ['password', 'token', 'email', 'apikey', 'secret'];
@@ -109,8 +122,16 @@ export class Logger implements LoggerService {
 
     // Redact sensitive values
     sensitiveKeys.forEach((key) => {
-      const regex = new RegExp(`\\b(${key})\\b\\s*[:=]?\\s*\\S+`, 'gi');
-      sanitizedMessage = sanitizedMessage.replace(regex, `${key}: [REDACTED]`);
+      if (['password', 'email', 'apikey', 'secret', 'token'].includes(key.toLowerCase())) {
+        const regex = new RegExp(`\\b(${key})\\b\\s*[:=]?\\s*\\S+`, 'gi');
+        sanitizedMessage = sanitizedMessage.replace(regex, (match) => {
+          const encryptedValue = this.encryptLogMessage(match.split(':')[1]?.trim() || match.split('=')[1]?.trim() || '');
+          return `${key}: [ENCRYPTED:${encryptedValue}]`;
+        });
+      } else {
+        const regex = new RegExp(`\\b(${key})\\b\\s*[:=]?\\s*\\S+`, 'gi');
+        sanitizedMessage = sanitizedMessage.replace(regex, `${key}: [REDACTED]`);
+      }
     });
 
     return sanitizedMessage;
