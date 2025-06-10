@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -174,9 +173,9 @@ func fetchReport(
 
 	// 6) expect 201 CREATED
 	if resp.StatusCode != http.StatusCreated {
-    return nil, fmt.Errorf("unexpected HTTP %d: %s",
-        resp.StatusCode, string(respBytes))
-}
+		return nil, fmt.Errorf("unexpected HTTP %d: %s",
+			resp.StatusCode, string(respBytes))
+	}
 
 	return respBytes, nil
 }
@@ -192,16 +191,8 @@ func validateCSVAgainstJSON(csvPath, jsonPath string) error {
 	}
 
 	var expectedRows []map[string]interface{}
-
-	// Try to unmarshal as an array of objects first
 	if err := json.Unmarshal(raw, &expectedRows); err != nil {
-		// If it fails, try to unmarshal as a single object
-		var single map[string]interface{}
-		if err2 := json.Unmarshal(raw, &single); err2 != nil {
-			return fmt.Errorf("parse JSON %q: %w", jsonPath, err)
-		}
-		
-		expectedRows = []map[string]interface{}{single}
+		return fmt.Errorf("parse JSON %q: %w", jsonPath, err)
 	}
 
 	// 2) Open CSV and read header
@@ -254,21 +245,9 @@ func validateCSVAgainstJSON(csvPath, jsonPath string) error {
 					break
 				}
 				cell := strings.TrimSpace(record[idx])
-				switch v := val.(type) {
-				case float64:
-					expectedInt := int(v)
-					cleaned := strings.ReplaceAll(cell, ",", "")
-					got, err := strconv.Atoi(cleaned)
-					if err != nil || got != expectedInt {
-						match = false
-					}
-				default:
-					want := fmt.Sprint(v)
-					if cell != want {
-						match = false
-					}
-				}
-				if !match {
+				want := strings.TrimSpace(fmt.Sprint(val))
+				if cell != want {
+					match = false
 					break
 				}
 			}
@@ -287,67 +266,34 @@ func validateCSVAgainstJSON(csvPath, jsonPath string) error {
 
 // validatePDFAgainstJSON extracts text from the PDF and validates it against the JSON spec.
 func validatePDFAgainstJSON(pdfPath, jsonPath string) error {
-	// 1) extract PDF text
-	txt, err := extractTextFromPDF(pdfPath)
-	if err != nil {
-		return fmt.Errorf("extract PDF text: %w", err)
-	}
-	raw, err := os.ReadFile(jsonPath)
-	if err != nil {
-		return fmt.Errorf("read JSON: %w", err)
-	}
-	var flat map[string]interface{}
+    // 1) Extract PDF text
+    txt, err := extractTextFromPDF(pdfPath)
+    if err != nil {
+        return fmt.Errorf("extract PDF text: %w", err)
+    }
 
-	if err := json.Unmarshal(raw, &flat); err != nil {
-		return fmt.Errorf("parse JSON: %w", err)
-	}
+    // 2) Read and parse JSON as a list of maps with string values
+    raw, err := os.ReadFile(jsonPath)
+    if err != nil {
+        return fmt.Errorf("read JSON: %w", err)
+    }
+    var rows []map[string]string
+    if err := json.Unmarshal(raw, &rows); err != nil {
+        return fmt.Errorf("parse JSON: %w", err)
+    }
 
-	// 3) iterate each key/value
-	for key, val := range flat {
-		// 3a) key must appear
-		if !strings.Contains(txt, key) {
-			return fmt.Errorf("validation failed: missing key %q", key)
-		}
-
-		switch v := val.(type) {
-		case float64:
-			// numeric comparison
-			// build regex: key followed by optional spaces/colon, then capture digits+commas
-			pattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*([\d,]+)`
-			re := regexp.MustCompile(pattern)
-			m := re.FindStringSubmatch(txt)
-			if len(m) < 2 {
-				return fmt.Errorf("validation failed: cannot find numeric after %q", key)
-			}
-			foundRaw := m[1]
-			// strip commas
-			foundRaw = strings.ReplaceAll(foundRaw, ",", "")
-			foundInt, err := strconv.Atoi(foundRaw)
-			if err != nil {
-				return fmt.Errorf("validation failed: cannot parse %q as int", m[1])
-			}
-			expected := int(v)
-			if foundInt != expected {
-				return fmt.Errorf("validation failed: for %q expected %d but found %d",
-					key, expected, foundInt)
-			}
-
-		case string:
-			// simple substring match
-			if !strings.Contains(txt, v) {
-				return fmt.Errorf("validation failed: missing value %q for key %q", v, key)
-			}
-
-		default:
-			// fallback to sprint
-			s := fmt.Sprint(v)
-			if s != "" && !strings.Contains(txt, s) {
-				return fmt.Errorf("validation failed: missing value %q for key %q", s, key)
-			}
-		}
-	}
-	// all keys & values matched
-	return nil
+    // 3) For each row, check all key-value pairs in PDF text
+    for _, row := range rows {
+        for key, val := range row {
+            // Build regex: key, optional spaces, optional colon or equals, optional spaces, value
+            pattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*` + regexp.QuoteMeta(val)
+            re := regexp.MustCompile(pattern)
+            if !re.MatchString(txt) {
+                return fmt.Errorf("validation failed: missing key-value pair %q in format for key %q", val, key)
+            }
+        }
+    }
+    return nil
 }
 
 // extractTextFromPDF uses the `pdftotext` command to extract text from a PDF file.
