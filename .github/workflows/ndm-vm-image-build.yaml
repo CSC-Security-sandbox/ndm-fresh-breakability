@@ -33,7 +33,7 @@ on:
           - vsphere
           - gcp
       worker_tag:
-        description: 'Tag for worker'
+        description: 'Tag for worker (Worker GitHub release tag, e.g., f6d523)'
         required: false
         type: string
       admin_service_tag:
