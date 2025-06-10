@@ -138,7 +138,8 @@ export class Logger implements LoggerService {
   }
 
   log(message: string) {
-    this.loggerInstance.info(this.sanitizeLogMessage(message));
+    const sanitizedMessage = this.sanitizeLogMessage(message);
+    this.loggerInstance.info(sanitizedMessage);
   }
 
   info(message: string) {
