@@ -87,8 +87,9 @@ async onModuleInit(): Promise<void> {
     }
     const serializedContext = jobContext.serialize();
     
+    //Added this validation to ensure that traceId is sanitized and does not contain any malicious input.
     if (!this.isValidTraceId(traceId)) {
-      throw new Error("Invalid trace ID format.");
+      throw new Error("Invalid trace ID format. TraceId should be alphanumeric and up to 64 characters long.");
     }
 
     await this.client.set(traceId, serializedContext);
