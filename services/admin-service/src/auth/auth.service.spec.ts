@@ -151,8 +151,8 @@ describe('AuthService', () => {
 
   it('should throw a ConflictException if user already exists in the database', async () => {
     const username = 'existing@example.com';
-    const firstName = 'Jane';
-    const lastName = 'Smith';
+    const firstName = 'John';
+    const lastName = 'Doe';
 
     mockUserRepository.findOne.mockResolvedValue({ email: username });
 
