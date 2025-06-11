@@ -388,7 +388,7 @@ export class ConfigurationService {
           fileServers: {
             volumes: {
               isValid: true,
-              isDisabled: true,
+              isDisabled: false,
               jobConfig: {
                 status: JobStatus.Active,
               },
