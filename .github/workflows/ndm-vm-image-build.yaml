@@ -197,9 +197,6 @@ jobs:
       - name: Add ovftool to PATH
         run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
 
-      - name: Print PATH 
-        run: echo $PATH
-
       - name: Packer Init
         run: |
           cd ${{ steps.packer-path.outputs.path }}
