@@ -4,7 +4,6 @@ import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReportType } from 'src/constants/enums';
 
-
 @ApiTags('Generate PDF')
 @Controller('pdf')
 export class PdfController {
@@ -40,7 +39,14 @@ export class PdfController {
         res.setHeader('Content-Length', pdf.length);  
         res.send(pdf);
       } catch (error) {
-        res.status(500).send(error);
+        const sanitizedError = {
+          response: error.response || 'Failed to generate the PDF report. Please try again later.',
+          status: error.status || 500,
+          message: error.message || 'Failed to generate the PDF report. Please try again later.',
+          name: error.name || 'Error',
+        };
+        
+        res.status(sanitizedError.status).send(sanitizedError);
       } 
     } 
   
