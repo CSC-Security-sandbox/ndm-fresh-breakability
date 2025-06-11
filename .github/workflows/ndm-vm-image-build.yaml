@@ -334,7 +334,7 @@ jobs:
           if [ "$BUILD_TYPE" = "schedule" ]; then
             ARTIFACTORY_PATH="builds/nightly/${DATE}/${{ matrix.component }}/${{ matrix.component }}-nightly-${DATE}-${TIME}-${COMMIT_HASH}.ova"
           else
-            ARTIFACTORY_PATH="builds/daily-builds/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+            ARTIFACTORY_PATH="builds/adhoc/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
           fi
 
           if [ -f "$OVA_FILE" ]; then
