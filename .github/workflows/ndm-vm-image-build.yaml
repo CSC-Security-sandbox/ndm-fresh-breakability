@@ -35,6 +35,9 @@ on:
   schedule:
     - cron: '30 18 * * *'
 
+permissions: 
+  contents: read
+
 jobs:
   determine-matrix:
     runs-on: openlab
