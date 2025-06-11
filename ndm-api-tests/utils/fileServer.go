@@ -85,9 +85,9 @@ type GetServerResponse struct {
 	} `json:"fileServers"`
 }
 
-// GetSourcePathID fetches the source file server by config ID, validates the response,
+// GetSourcePathID fetches the source file server by Volume Name, validates the response,
 // and returns the first volume ID (sourcePathID)
-func GetSourcePathID(
+func GetExportPathID(
 	volumeType string,
 	volumeName string,
 	configID string,
@@ -100,8 +100,6 @@ func GetSourcePathID(
 		return "", GetServerResponse{}, err
 	}
 	defer resp.Body.Close()
-
-	CheckResponse(resp, http.StatusOK)
 
 	volumeID, err := GetVolumeIDByName(volumeType, volumeName, AuthToken, configID)
 	if err != nil {

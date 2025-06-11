@@ -1,13 +1,10 @@
 package utils
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-
-	. "github.com/onsi/gomega"
 )
 
 type GetJobResponse struct {
@@ -26,22 +23,6 @@ type BulkCutoverJobParams struct {
 	DestinationPathIDs []string
 }
 
-// CheckResponse will check if the expected status code is fetched
-func CheckResponse(resp *http.Response, expected int) {
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	Expect(err).NotTo(HaveOccurred(), "Error reading response body")
-
-	resp.Body = ioutil.NopCloser(bytes.NewReader(bodyBytes))
-	if resp.StatusCode != expected {
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-			fmt.Printf("Expected status %d, but got %d. Response body: %s\n", expected, resp.StatusCode, string(bodyBytes))
-		} else {
-			fmt.Printf("Expected status %d, but got %d.\n", expected, resp.StatusCode)
-		}
-	}
-	Expect(resp.StatusCode).To(Equal(expected))
-}
-
 type DiscoveryJobParams struct {
 	SourcePathIDs            []string
 	ExcludeOlderThan         interface{}
@@ -57,7 +38,7 @@ type DiscoveryJobParams struct {
 	Extra map[string]interface{}
 }
 
-// createDiscoveryJobForDestination creates a discovery job using the provided parameters and headers,
+// CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
 // parses the response, and returns the destination job configuration ID.
 func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([]string, *http.Response, error) {
 	createDiscoveryURL := JOB_SERVICE_URL + CREATE_DISCOVERY_ENDPOINT
@@ -254,39 +235,9 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 	return resp, nil
 }
 
-// GetJobRunIDForSource sends a GET request using the given job configuration ID (sourceJobConfigID)
-func GetJobRunIDForSource(jobConfigID string, headers map[string]string) (string, *http.Response, error) {
-	getJobSourceURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
-
-	resp, err := SendAPIRequest(http.MethodGet, getJobSourceURL, nil, headers)
-	if err != nil {
-		return "", nil, err
-	}
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", resp, err
-	}
-
-	var getJobResp GetJobResponse
-	err = json.Unmarshal(bodyBytes, &getJobResp)
-	if err != nil {
-		return "", resp, err
-	}
-
-	// Defensive: check if there is at least one job run
-	if len(getJobResp.JobRuns) == 0 {
-		return "", resp, fmt.Errorf("no jobRuns found in response")
-	}
-
-	jobRunID := getJobResp.JobRuns[0].JobRunId
-
-	return jobRunID, resp, nil
-}
-
-// GetBlockedJobRunID fetches job runs for a given jobConfigID, asserts the first run is BLOCKED,
-// and returns the jobRunId.
-func GetBlockedJobRunID(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
+// GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
+// other details from response by modifying the GetJobResponse struct
+func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
 	getJobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
 	resp, err := SendAPIRequest(http.MethodGet, getJobsURL, nil, headers)
 	if err != nil {
@@ -301,6 +252,11 @@ func GetBlockedJobRunID(jobConfigID string, headers map[string]string) (GetJobRe
 	var getJobsResp GetJobResponse
 	err = json.Unmarshal(bodyBytes, &getJobsResp)
 	if err != nil {
+		return GetJobResponse{}, resp, err
+	}
+
+	// Defensive: check if there is at least one job run
+	if len(getJobsResp.JobRuns) == 0 {
 		return GetJobResponse{}, resp, err
 	}
 
