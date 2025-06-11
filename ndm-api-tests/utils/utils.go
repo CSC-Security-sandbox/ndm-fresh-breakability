@@ -43,10 +43,12 @@ type KeycloakCredentials struct {
 type Volume struct {
 	ID         string `json:"id"`
 	VolumePath string `json:"volumePath"`
+	// other fields omitted for brevity
 }
 type FileServer struct {
 	ID      string   `json:"id"`
 	Volumes []Volume `json:"volumes"`
+	// other fields omitted for brevity
 }
 type Response struct {
 	FileServers []FileServer `json:"fileServers"`
@@ -383,17 +385,17 @@ func sendPostAPIRequest(url string, data map[string]string, authToken string) (m
 func createAccount(authToken string) (string, error) {
 	// var fullURL = os.Getenv("ADMIN_SERVICE_URL") + "/api/v1/accounts"
 	// data := map[string]string{
-	// 	"account_name": os.Getenv("BASE_ACCOUNT_NAME"),
+	//  "account_name": os.Getenv("BASE_ACCOUNT_NAME"),
 	// }
 
 	// jsonResponse, err := sendPostAPIRequest(fullURL, data, authToken)
 	// if err != nil {
-	// 	log.Printf("Error sending API request: %v", err)
-	// 	return "", err
+	//  log.Printf("Error sending API request: %v", err)
+	//  return "", err
 	// }
 	// accountId, ok := jsonResponse["id"].(string)
 	// if !ok {
-	// 	return "", errors.New("id not found in response in createAccount")
+	//  return "", errors.New("id not found in response in createAccount")
 	// }
 
 	// return accountId, nil
@@ -1012,7 +1014,7 @@ func GetVolumeID(response Response, volumePath string) (string, error) {
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
 }
 
-func GetVolumByID(volumeType string, volumeName string, authToken string, configId string) (string, error) {
+func GetVolumeIDByName(volumeType string, volumeName string, authToken string, configId string) (string, error) {
 	// Build the full URL
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
 	var reqBody []byte
@@ -1020,7 +1022,7 @@ func GetVolumByID(volumeType string, volumeName string, authToken string, config
 	// Get extra headers
 	headers := GetHeaders(authToken, ContentTypeForm)
 	// Send the API request
-	resp, err := SendAPIRequest("get", fullURL, reqBody, headers)
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, reqBody, headers)
 	if err != nil {
 		return "", fmt.Errorf("error sending API request: %w", err)
 	}

@@ -2,10 +2,9 @@ package utils
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-
-	. "github.com/onsi/gomega"
 )
 
 type CreateServerResponse struct {
@@ -26,8 +25,9 @@ type CreateServereParams struct {
 	WorkingDirectory string
 }
 
-func CreateFileServer(params CreateServereParams, headers map[string]string) string {
-	createSourceURL := CONFIG_SERVICE_URL + "/api/v1/servers"
+// CreateFileServer creates a File server with different config details
+func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
+	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
 
 	payload := map[string]interface{}{
 		"configName": params.ConfigName,
@@ -53,24 +53,73 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) str
 	}
 
 	payloadBytes, err := json.Marshal(payload)
-	LogError("Error marshaling create-source-file-server payload", err)
-	Expect(err).NotTo(HaveOccurred(), "Error marshaling create source file server payload")
+	if err != nil {
+		return "", nil, err
+	}
 
-	resp, err := SendAPIRequest("POST", createSourceURL, payloadBytes, headers)
-	LogError("Error sending create-source-file-server API request", err)
-	Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-	defer resp.Body.Close()
-	checkResponse(resp, http.StatusCreated)
+	resp, err := SendAPIRequest(http.MethodPost, createSourceURL, payloadBytes, headers)
+	if err != nil {
+		return "", nil, err
+	}
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	Expect(err).NotTo(HaveOccurred(), "Error reading create-source response body")
+	if err != nil {
+		return "", resp, err
+	}
+
 	var createSourceResp CreateServerResponse
 	err = json.Unmarshal(bodyBytes, &createSourceResp)
-	LogError("Error unmarshaling create-source response", err)
-	Expect(err).NotTo(HaveOccurred(), "Error unmarshaling create source response")
+	if err != nil {
+		return "", resp, err
+	}
 
 	sourceConfigID := createSourceResp.ID
-	Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
+	return sourceConfigID, resp, nil
+}
 
-	return sourceConfigID
+type GetServerResponse struct {
+	FileServers []struct {
+		Volumes []struct {
+			ID string `json:"id"`
+		} `json:"volumes"`
+	} `json:"fileServers"`
+}
+
+// GetSourcePathID fetches the source file server by config ID, validates the response,
+// and returns the first volume ID (sourcePathID)
+func GetSourcePathID(
+	volumeType string,
+	volumeName string,
+	configID string,
+	headers map[string]string,
+) (string, GetServerResponse, error) {
+	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
+
+	resp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+	if err != nil {
+		return "", GetServerResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	CheckResponse(resp, http.StatusOK)
+
+	volumeID, err := GetVolumeIDByName(volumeType, volumeName, AuthToken, configID)
+	if err != nil {
+		return "", GetServerResponse{}, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
+	}
+
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", GetServerResponse{}, err
+	}
+
+	var getSourceResp GetServerResponse
+	err = json.Unmarshal(bodyBytes, &getSourceResp)
+	if err != nil {
+		return "", GetServerResponse{}, err
+	}
+
+	sourcePathID := volumeID
+
+	return sourcePathID, getSourceResp, nil
 }
