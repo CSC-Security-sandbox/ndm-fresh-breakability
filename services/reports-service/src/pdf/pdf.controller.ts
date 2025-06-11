@@ -45,7 +45,6 @@ export class PdfController {
           message: error.message || 'Failed to generate the PDF report. Please try again later.',
           name: error.name || 'Error',
         };
-        
         res.status(sanitizedError.status).send(sanitizedError);
       } 
     } 
