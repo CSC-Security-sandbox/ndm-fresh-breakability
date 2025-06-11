@@ -43,7 +43,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Source Name",
     accessor: "sourceServer.serverName",
     id: "sourceServerName",
-    width: 100,
+    width: 180,
   },
   {
     header: "Source Path",
@@ -71,7 +71,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
-    width: 100,
+    width: 180,
   },
   {
     header: "Destination Path",
@@ -134,7 +134,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Errors",
     accessor: "errors",
     id: "errors",
-    width: 80,
+    width: 100,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
@@ -146,7 +146,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Created On",
     accessor: "createdAt",
     id: "createdAt",
-    width: 90,
+    width: 150,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["createdAt"]>) =>

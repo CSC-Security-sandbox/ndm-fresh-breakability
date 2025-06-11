@@ -16,7 +16,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
   {
     header: "Job Run ID",
     accessor: "jobRunId",
-    width: 100,
+    width: 120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) =>
@@ -26,7 +26,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Job Type",
     accessor: "jobType",
     id: "type",
-    width: 100,
+    width: 110,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobType"]>) =>
@@ -36,7 +36,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Start Time",
     accessor: "startTime",
     id: "startTime",
-    width: 100,
+    width: 120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["startTime"]>) =>
@@ -46,7 +46,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "End Time",
     accessor: "endTime",
     id: "endTime",
-    width: 100,
+    width: 120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["endTime"]>) =>
@@ -72,7 +72,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Source Name",
     accessor: "sourceServer.serverName",
     id: "sourceServerName",
-    width: 100,
+    width: 150,
   },
   {
     header: "Source Path",
@@ -100,7 +100,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
-    width: 100,
+    width: 150,
   },
   {
     header: "Destination Path",
@@ -118,7 +118,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Directories",
     accessor: "scannedDirectoriesCount",
     id: "directories",
-    width: 80,
+    width: 130,
   },
   {
     header: "Size",
@@ -134,7 +134,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Protocol",
     accessor: "sourceServer.protocol",
     id: "protocol",
-    width: 100,
+    width: 120,
   },
   {
     header: "Status",
@@ -152,7 +152,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Errors",
     accessor: "errors",
     id: "errors",
-    width: 80,
+    width: 100,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["errors"]>) =>
