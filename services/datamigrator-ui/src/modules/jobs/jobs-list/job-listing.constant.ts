@@ -15,6 +15,7 @@ import {
 } from "@/utils/common.utils";
 import { Span } from "@netapp/bxp-design-system-react";
 import React from "react";
+import { COLUMN_WIDTH_180 } from "@modules/jobs/job-run-list/grid.constants";
 
 export const JOB_LIST_COLUMN_DEFS = [
   {
@@ -27,7 +28,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Source",
     accessor: "sourceServer",
     id: "source",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -43,19 +44,19 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Source Name",
     accessor: "sourceServer.serverName",
     id: "sourceServerName",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Source Path",
     accessor: "sourceServer.path",
     id: "sourcePath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Destination",
     accessor: "destinationServer",
     id: "destination",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -71,13 +72,13 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Destination Path",
     accessor: "destinationServer.path",
     id: "destinationPath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Protocol",

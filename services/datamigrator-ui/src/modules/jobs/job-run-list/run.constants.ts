@@ -11,12 +11,16 @@ import {
 import { getJobType, toTitleCase } from "@/utils/common.utils";
 import React from "react";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
+import {
+  COLUMN_WIDTH_120,
+  COLUMN_WIDTH_180,
+} from "@modules/jobs/job-run-list/grid.constants";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
   {
     header: "Job Run ID",
     accessor: "jobRunId",
-    width: 120,
+    width: COLUMN_WIDTH_120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) =>
@@ -36,7 +40,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Start Time",
     accessor: "startTime",
     id: "startTime",
-    width: 120,
+    width: COLUMN_WIDTH_120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["startTime"]>) =>
@@ -46,7 +50,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "End Time",
     accessor: "endTime",
     id: "endTime",
-    width: 120,
+    width: COLUMN_WIDTH_120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["endTime"]>) =>
@@ -56,7 +60,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Source",
     accessor: "sourceServer",
     id: "source",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -78,13 +82,13 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Source Path",
     accessor: "sourceServer.path",
     id: "sourcePath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Destination",
     accessor: "destinationServer",
     id: "destination",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -106,7 +110,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Destination Path",
     accessor: "destinationServer.path",
     id: "destinationPath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Files",
@@ -134,13 +138,13 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Protocol",
     accessor: "sourceServer.protocol",
     id: "protocol",
-    width: 120,
+    width: COLUMN_WIDTH_120,
   },
   {
     header: "Status",
     accessor: "status",
     id: "status",
-    width: 120,
+    width: COLUMN_WIDTH_120,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["status"]>) =>
