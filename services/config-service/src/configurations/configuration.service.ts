@@ -232,6 +232,7 @@ export class ConfigurationService {
               id: true,
               volumePath: true,
               isValid: true,
+              isDisabled: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -294,7 +295,7 @@ export class ConfigurationService {
       }
 
       const isUploadInProgress = await this.isUploadInProgress(config.fileServers.map(fs => fs.id));
-      const isRefreshAvailable = await this.isRefreshPossible(config.id);
+      const isRefreshAvailable = !isUploadInProgress && await this.isRefreshPossible(config.id);
 
       return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
@@ -371,6 +372,7 @@ export class ConfigurationService {
               id: true,
               volumePath: true,
               isValid: true,
+              isDisabled: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -385,6 +387,8 @@ export class ConfigurationService {
           id: configId,
           fileServers: {
             volumes: {
+              isValid: true,
+              isDisabled: true,
               jobConfig: {
                 status: JobStatus.Active,
               },
@@ -477,6 +481,8 @@ export class ConfigurationService {
         select: {
           id: true,
           volumePath: true,
+          isValid: true,
+          isDisabled: true,
           fileServer: {
             id: true,
             config: {
@@ -492,7 +498,7 @@ export class ConfigurationService {
       }
 
       return new Map(
-        volumeDetails.filter(v => v.isValid).map((volume) => [
+        volumeDetails.filter(v => v.isValid && !v.isDisabled).map((volume) => [
           volume.id,
           {
             id: volume.id,
@@ -965,6 +971,12 @@ export class ConfigurationService {
     if (!isUUID(configId)) {
       throw new BadRequestException('Invalid UUID format');
     }
+    // check refresh eligibility
+    const isRefreshAvailable = await this.isRefreshPossible(configId);
+    if(!isRefreshAvailable) {
+      this.logger.warn(`Refresh not available for configId: ${configId}`);
+      throw new BadRequestException('Refresh not available for this configuration.');
+    }
     try {
       const config = await this.configEntity.findOne({
         where: { id: configId },
@@ -1019,6 +1031,12 @@ export class ConfigurationService {
         ],
         ...payload.options,
       };
+
+      // make all the current source paths invalid and disabled
+      await this.volumes.update(
+        { fileServerId: In(config.fileServers.map((it) => it.id)) },
+        { isValid: false, isDisabled: true },
+      );
 
       const workflow = await this.workFlowService.startWorkflow(
         WorkFlows.LIST_PATHS,
@@ -1103,14 +1121,14 @@ export class ConfigurationService {
         },
       });
       const fileServersIds = config.fileServers.map(it=>it.id)
-      await this.volumes.update({fileServerId: In(fileServersIds)}, {reachableCount: 0})     
+      await this.volumes.update({fileServerId: In(fileServersIds)}, { reachableCount: 0, isValid: true, isDisabled: false })     
       for (let fileServer of config.fileServers) {
         await this.volumes.update(
           {
             fileServerId: fileServer.id,
             volumePath: In(pathsMap[fileServer.protocol].paths),
           },
-          { reachableCount: pathsMap[fileServer.protocol].workers },
+          { reachableCount: pathsMap[fileServer.protocol].workers, isValid: true, isDisabled: false },
         );
 
         const existingPaths = new Set(
@@ -1124,6 +1142,8 @@ export class ConfigurationService {
                 fileServerId: fileServer.id,
                 reachableCount: pathsMap[fileServer.protocol].workers,
                 volumePath: path,
+                isValid: true,
+                isDisabled: false,
                 createdBy: config.updatedBy ?? config.createdBy,
               }),
             );
@@ -1133,6 +1153,26 @@ export class ConfigurationService {
           { id: fileServer.id },
           { isRefreshed: true },
         );
+      }
+
+      // update job configurations to inactive if any volume is disabled or invalid associated with it
+      const volumeIds = await this.volumes.
+        createQueryBuilder('volume')
+        .select('volume.id')
+        .where('volume.file_server_id IN (:...fileServersIds)', { fileServersIds: fileServersIds })
+        .andWhere('volume.is_valid = :isValid', { isValid: false })
+        .orWhere('volume.is_disabled = :isDisabled', { isDisabled: true })
+        .getMany();
+
+      if( volumeIds.length > 0) {
+        const volumeIdList = volumeIds.map(vol => vol.id);
+        await this.jobConfigRepo
+        .createQueryBuilder('jobConfig')
+        .update()
+        .set({ status:  JobStatus.InActive })
+        .where('jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)', { volumeIds: volumeIdList })
+        .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+        .execute();
       }
 
       await this.configEntity.update({ id }, { scannedDate: new Date() });
@@ -1196,7 +1236,7 @@ export class ConfigurationService {
     // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
     const jobConfigs = await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
-      .where('jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds)', { volumeIds })
+      .where('jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)', { volumeIds })
       .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
       .getMany();
     
@@ -1216,7 +1256,7 @@ export class ConfigurationService {
     const runningJobs = await this.jobRunRepo.count({
       where: {
         jobConfigId: In(jobConfigs.map(jc => jc.id)),
-        status: JobRunStatus.Running,
+        status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Paused]),
       }
     })
 

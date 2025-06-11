@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -12,7 +12,7 @@ import { UserDetails } from '../configurations/configuration.types';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { ImportVolumePathsDto } from './dto/path-upload.dto';
 import { ExportPathSource, UploadPathAction, WorkFlows } from 'src/constants/enums';
-import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { JobConfigEntity, JobStatus } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 
 @Injectable()
@@ -76,7 +76,7 @@ export class PathUploadService {
         uploadStats.alreadyExitingPaths++;
         // createUpload
         await this.createUpload({
-          id: uuid(),
+          id: existingPath.id,
           uploadId,
           volumePath: trimmedPath,
           fileServerId: fileServerId,
@@ -105,8 +105,26 @@ export class PathUploadService {
       where: { fileServerId },
       select: ['volumePath'],
     });
-    const noLongerExistingPaths = existingPaths.filter(path => !parsedData.some(row => row[0].trim() === path.volumePath.trim()));
-    uploadStats.noLongerAvailablePaths = noLongerExistingPaths.length;
+
+    existingPaths.filter(async path => {
+      const isPathNoLongerAvailable = !parsedData.some(row => row[0].trim() === path.volumePath);
+      if (isPathNoLongerAvailable) {
+        uploadStats.noLongerAvailablePaths++;
+        this.logger.warn(`Path ${path.volumePath} is no longer available for file server ${fileServerId}`);
+        await this.createUpload({
+          id: path.id,
+          uploadId,
+          volumePath: path.volumePath,
+          fileServerId: fileServerId,
+          fileName: fileName || '',
+          action: UploadPathAction.DELETE,
+          createdBy: userDetails?.user?.id || null,
+        });
+        // await this.volumeRepo.update({ id: path.id }, { isDisabled: true })
+        return true;
+      }
+      return false;
+    });
 
     return {
       status: 'success',
@@ -135,7 +153,10 @@ export class PathUploadService {
     this.logger.log(`Processing export path upload with ID ${uploadId}`);
 
     // mark all the current paths as invalid
-    await this.volumeRepo.update({ fileServerId, isValid: true }, { isValid: false });
+    for(const path of upload) {
+      const isDisabled = path.action === UploadPathAction.DELETE ? true : false;
+      await this.volumeRepo.update({ volumePath: path.volumePath, fileServerId: path.fileServerId }, { isValid: false, isDisabled })
+    }
 
     const traceId = uploadId;
     const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -145,7 +166,7 @@ export class PathUploadService {
         traceId: traceId,
         payload: {
           traceId,
-          paths: upload.map(path => {
+          paths: upload.filter(up => up.action !== UploadPathAction.DELETE).map(path => {
             return { pathId: path.id, path: path.volumePath }
           }),
           fileServer: {
@@ -184,14 +205,16 @@ export class PathUploadService {
     if (!result) {
       throw new BadRequestException('Failed to process validation result');
     }
-
+    const invalidVolumePaths = [];
+    const createdBy = updateResult.createdBy || null;
     for (const validPath of result.validPaths) {
       const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: validPath.volumePath, fileServerId } });
       if (existingVolume) {
         existingVolume.reachableCount = validPath.reachableCount;
         existingVolume.isValid = true;
-        existingVolume.createdBy = validPath.createdBy || null;
+        existingVolume.createdBy = createdBy;
         await this.volumeRepo.save(existingVolume);
+        if(existingVolume.isDisabled) invalidVolumePaths.push(existingVolume.id);
       }
       else {
         const newVolume = this.volumeRepo.create({
@@ -200,7 +223,7 @@ export class PathUploadService {
           fileServerId,
           reachableCount: validPath.reachableCount,
           isValid: true,
-          createdBy: validPath.createdBy || null,
+          createdBy: createdBy,
         });
         await this.volumeRepo.save(newVolume);
       }
@@ -210,8 +233,9 @@ export class PathUploadService {
       const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: invalidPath.volumePath, fileServerId } });
       if (existingVolume) {
         existingVolume.isValid = false;
-        existingVolume.createdBy = invalidPath.createdBy || null;
+        existingVolume.createdBy = createdBy;
         await this.volumeRepo.save(existingVolume);
+        invalidVolumePaths.push(existingVolume.id);
       }
       else {
         const newVolume = this.volumeRepo.create({
@@ -219,11 +243,23 @@ export class PathUploadService {
           volumePath: invalidPath.volumePath,
           fileServerId,
           isValid: false,
-          createdBy: invalidPath.createdBy || null,
+          createdBy: createdBy,
         });
         await this.volumeRepo.save(newVolume);
       }
     }
+
+    // Inactivate all the job configurations that are using invalid paths as sourcePathId or targetPathId 
+    if(invalidVolumePaths.length) {
+      await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .update()
+      .set({ status:  JobStatus.InActive })
+      .where('jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)', { invalidVolumePaths })
+      .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+      .execute();
+    }
+
     return result;
   }
 
