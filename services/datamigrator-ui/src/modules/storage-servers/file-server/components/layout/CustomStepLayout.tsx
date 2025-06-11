@@ -24,7 +24,7 @@ const CustomStepLayout = () => {
         <WizardContent>
           <WizardStepTransitionRenderer>
             {(Content: any) => (
-              <Box className="py-4">
+              <Box className="py-8">
                 <Content />
               </Box>
             )}
