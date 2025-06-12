@@ -207,16 +207,4 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  async batchAck(ids: string[]): Promise<boolean> {
-    for (const id of ids) {
-      const ackCount = await this.redisClient.hIncrBy(this.ackCounterKey, id, 1);
-      if (ackCount >= (this.consumerGroupCount || 2)) { 
-        await this.redisClient.xDel(this.streamKey, id);
-        await this.redisClient.hDel(this.ackCounterKey, id);
-        console.log(`✓ Deleted message ${id} from stream (both consumers ACKed) for ${this.streamKey}`);
-      }
-    }
-    return true;
-  }
-
 }
