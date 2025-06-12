@@ -85,8 +85,8 @@ export class DiscoveryScanActivity {
         task.workerId = this.workerId;
         task.status = TaskStatus.RUNNING;
         for (let i = 0; i < task.commands.length; i++)
-        if (task.commands[i].status !== CommandStatus.COMPLETED)
-            task.commands[i].status = CommandStatus.IN_PROCESS
+            if (task.commands[i].status !== CommandStatus.COMPLETED)
+                task.commands[i].status = CommandStatus.IN_PROCESS
 
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
@@ -144,7 +144,7 @@ export class DiscoveryScanActivity {
                         command,
                         jobContext,
                         skipFile,
-                        errorType: command.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+                        errorType: command.retryCount+1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
                     };
 
                     const scanOutput = await this.scanDirCommand(scanInput);
@@ -277,7 +277,6 @@ export class DiscoveryScanActivity {
             }
 
         } catch (error: any) {
-            this.logger.error(`[${jobContext.jobRunId}] Error scanning directory1 ${sourcePath}: ${JSON.stringify(error)}`);
             this.logger.error(`[${jobContext.jobRunId}] Error scanning directory ${sourcePath}: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
             
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, scanDirOutput.errorType, command.commandId, error, {
