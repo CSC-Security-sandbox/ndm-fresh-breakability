@@ -47,6 +47,7 @@ export class DiscoveryScanActivity {
         }
         
         let task = await jobContext.getScanTask(this.workerId);
+        if(task) this.logger.debug(`[${jobRunId}] Task already fetched: ${JSON.stringify(task)}`);
         if(!task) task = await this.commonService.fetchOneTask(jobContext);
 
         this.logger.debug(`[${jobRunId}] Task fetched: ${JSON.stringify(task)}`);
@@ -102,7 +103,7 @@ export class DiscoveryScanActivity {
                 batch.map(async (command) => {
                     if (command.status === CommandStatus.COMPLETED) return;
 
-                    this.logger.debug(`[${jobContext.jobRunId}] Processing command: ${JSON.stringify(command)}`);
+                    this.logger.debug(`[${jobContext.jobRunId}] Processing scan for path: ${command?.fPath}`);
 
                     const scanInput: ScanDirCommandInput = {
                         excludePatterns: excludePatterns,
@@ -115,10 +116,11 @@ export class DiscoveryScanActivity {
                     };
 
                     const scanOutput = await this.scanDirCommand(scanInput);
+                    
+                    this.logger.debug(`[${jobContext.jobRunId}] Scan output for path ${command?.fPath}: ${JSON.stringify(scanOutput)}`);
 
                     scanPath.files += scanOutput.files;
                     scanPath.folders += scanOutput.directory;
-                    this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
 
                     if (scanOutput.error) {
                         command.retryCount++;
@@ -222,12 +224,13 @@ export class DiscoveryScanActivity {
                 const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
+                    this.logger.debug(`[${jobContext.jobRunId}] Adding directory to stream: ${fileInfo.path}`);
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;
                     scanDirOutput.directory++;
                 }
                 else scanDirOutput.files++;
-
+                this.logger.debug(`[${jobContext.jobRunId}] Adding file to stream: ${fileInfo.path}`);
                 jobContext.dirsInfo.lastId = await jobContext.appendToFileList(fileInfo);
                 jobContext.dirsInfo.numMessages++;
             }
