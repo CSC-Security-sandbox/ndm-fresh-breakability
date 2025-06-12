@@ -256,8 +256,8 @@ export abstract class JobContext {
     return await this.dirsInfo.ackAndCreateTask(groupType, ids, tasks);
   }
 
-  async *groupReadAndWithoutAckDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: FileInfo; id: string; }> {
-    yield* this.dirsInfo.groupReadAndWithoutAck(readerName, batchSize,groupType);
+  async *groupReadWithoutAckDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: FileInfo; id: string; }> {
+    yield* this.dirsInfo.groupReadWithoutAck(readerName, batchSize,groupType);
   }
 
   serialize(): string {

@@ -95,7 +95,6 @@ export class RedisDirectoryCollection
 
   async ackAndCreateTask(groupType: GroupReaderType, ids: string[], tasks: Task[]) {
     const multi = this.redisClient.multi();
-    console.info(`Acknowledging ${ids.length} messages for group ${groupType} in stream ${this.streamKey}`);
     multi.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, ids);
     const taskStreamKey = JobUtils.getRedisKey(this.jobRunId, 'tasks');
     tasks.forEach(task => {

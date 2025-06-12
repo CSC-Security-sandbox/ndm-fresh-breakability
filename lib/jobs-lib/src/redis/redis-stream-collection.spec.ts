@@ -187,7 +187,7 @@ describe('RedisStreamCollection', () => {
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Closing collection'));
     });
 
-    describe('groupReadAndWithoutAck()', () => {
+    describe('groupReadWithoutAck()', () => {
       it('should yield messages from xReadGroup if present', async () => {
       const encoded = encode(mockRecord).toString('base64');
       mockRedis.xReadGroup.mockResolvedValue([
@@ -198,7 +198,7 @@ describe('RedisStreamCollection', () => {
         }
       ]);
       const items: any[] = [];
-      for await (const item of collection.groupReadAndWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
         items.push(item);
       }
       expect(items).toHaveLength(1);
@@ -214,7 +214,7 @@ describe('RedisStreamCollection', () => {
         ]
       });
       const items: any[] = [];
-      for await (const item of collection.groupReadAndWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
         items.push(item);
       }
       expect(mockRedis.xAutoClaim).toHaveBeenCalled();
@@ -226,7 +226,7 @@ describe('RedisStreamCollection', () => {
       mockRedis.xReadGroup.mockResolvedValue(null);
       mockRedis.xAutoClaim = jest.fn().mockResolvedValue({ messages: [] });
       const items: any[] = [];
-      for await (const item of collection.groupReadAndWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
         items.push(item);
       }
       expect(items).toHaveLength(0);

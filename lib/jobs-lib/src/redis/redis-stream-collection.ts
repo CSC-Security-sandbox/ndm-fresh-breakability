@@ -134,7 +134,7 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  async *groupReadAndWithoutAck(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }> {
+  async *groupReadWithoutAck(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }> {
     let results: any;
     results = await this.redisClient.xReadGroup(
       `${this.jobRunId}-${groupType}`,

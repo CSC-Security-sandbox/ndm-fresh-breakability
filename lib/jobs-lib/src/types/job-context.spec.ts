@@ -23,7 +23,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
-      groupReadAndWithoutAck: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.dirsInfo =  {
@@ -41,7 +41,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
       ackAndCreateTask: jest.fn(),
-      groupReadAndWithoutAck: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.errorsInfo =   {
@@ -58,7 +58,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
-      groupReadAndWithoutAck: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.tasksInfo =  {
@@ -75,7 +75,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
-      groupReadAndWithoutAck: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.migrateTask =  {
@@ -92,7 +92,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
-       groupReadAndWithoutAck: jest.fn(),
+       groupReadWithoutAck: jest.fn(),
     };
 
     this.taskStats =  {
@@ -109,7 +109,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
-      groupReadAndWithoutAck: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.updatedTaskInfo =  {
@@ -126,7 +126,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
-       groupReadAndWithoutAck: jest.fn(),
+       groupReadWithoutAck: jest.fn(),
     };
   }
   async init() {}
@@ -824,12 +824,12 @@ describe('JobContext Class', () => {
       expect(result).toBe(mockReturn);
     });
 
-    it('groupReadAndWithoutAckDirs should yield values from dirsInfo.groupReadAndWithoutAck', async () => {
+    it('groupReadWithoutAckDirs should yield values from dirsInfo.groupReadWithoutAck', async () => {
       const jobContext = new TestJobContext('job1');
       const mockData = { data: { id: 'file1' }, id: 'id1' };
-      jobContext.dirsInfo.groupReadAndWithoutAck = jest.fn().mockReturnValue((async function* () { yield mockData; })());
+      jobContext.dirsInfo.groupReadWithoutAck = jest.fn().mockReturnValue((async function* () { yield mockData; })());
       const results = [];
-      for await (const item of jobContext.groupReadAndWithoutAckDirs('reader1', 10, GroupReaderType.DB_WRITER)) {
+      for await (const item of jobContext.groupReadWithoutAckDirs('reader1', 10, GroupReaderType.DB_WRITER)) {
       results.push(item);
       }
       expect(results).toEqual([mockData]);
