@@ -83,7 +83,7 @@ export const configApi = createApi({
 
     downloadExportPathSourceTemplate: builder.query<Blob, void>({
       query: () => ({
-        url: `path-upload/download/template`,
+        url: "path-upload/download/template",
         responseHandler: async (response) => response.blob(),
       }),
     }),
