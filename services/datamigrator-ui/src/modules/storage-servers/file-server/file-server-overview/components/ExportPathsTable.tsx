@@ -111,7 +111,7 @@ const ExportPathsTable = ({
       <Button
         variant="text"
         onClick={handleRefetchExportPaths}
-        disabled={disableRefresh}
+        disabled={!fileServerDetails?.isRefreshAvailable || disableRefresh}
       >
         Click here to refresh
       </Button>
@@ -126,15 +126,21 @@ const ExportPathsTable = ({
   );
 
   const contentValue = useMemo(() => {
+    if (jobType === "bulk-discovery") return "";
+
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
     return allExportPaths.length > 0 ? getBulkManualUpload() : "";
   }, [isManualUploadPath, showRefetch, fileServerDetails]);
 
-  const showDataLabel = useCallback(
-    () => (isManualUploadPath ? getBulkManualUpload() : "No Data"),
-    [isManualUploadPath, fileServerDetails]
-  );
+  const getDataLabel = useCallback(() => {
+    if (jobType === "bulk-discovery") return "No Data";
+
+    if (fileServerDetails?.isUploadInProgress)
+      return "Export Paths File upload is in progress...";
+
+    return isManualUploadPath ? getBulkManualUpload() : "No Data";
+  }, [jobType, fileServerDetails, isManualUploadPath]);
 
   return (
     <TableWrapper
@@ -147,11 +153,7 @@ const ExportPathsTable = ({
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
       notReachableExportPaths={notReachableExportPaths}
-      noDataLabel={
-        fileServerDetails?.isUploadInProgress
-          ? "Export Paths File upload is in progress..."
-          : showDataLabel()
-      }
+      noDataLabel={getDataLabel()}
     />
   );
 };
