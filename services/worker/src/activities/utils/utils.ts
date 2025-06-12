@@ -254,44 +254,8 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
 const FATAL_CODE = new Set<string>(['ENOTDIR', 'EHOSTDOWN', 'ESTALE', 'ENOTCONN', 'ENETUNREACH', 'EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO']);
 
-const SERVER_DOWN_ERROR_PATTERNS = [
-  'not responding',
-  'server not responding',
-  'nfs server.*not responding',
-  'Connection timed out',
-  'No route to host',
-  'Network is unreachable',
-
-  'Host is down',
-  'Connection refused',
-  'Connection reset by peer',
-  'Resource temporarily unavailable',
-  'Transport endpoint is not connected',
-  
-  'Timeout reading directory',
-  'Server unreachable',
-  'Operation timed out',
-  'I/O error',
-  'Stale file handle',
-  'Remote I/O error'
-];
-
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
-
-export const isServerDownError = (error: any): boolean => {
-  const errorMessage = error?.message?.toLowerCase() || '';
-  const errorCode = error?.code || '';
-
-  if (isFatalError(errorCode)) {
-    return true;
-  }
-
-  return SERVER_DOWN_ERROR_PATTERNS.some(pattern => {
-    const regex = new RegExp(pattern, 'i');
-    return regex.test(errorMessage);
-  });
-}
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {
   try {

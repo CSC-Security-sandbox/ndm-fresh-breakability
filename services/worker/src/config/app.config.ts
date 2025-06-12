@@ -20,9 +20,7 @@ export default registerAs(
 
     //core operations
     maxRetryCount: parseInt(process.env.MAX_OPERATION_RETRY || '3'),
-    retries: parseInt(process.env.OPERATION_RETRIES || '5'),
-    timeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
-    delay: parseInt(process.env.OPERATION_DELAY || '1000'),
+    operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
 
     maxMigrationCommand: parseInt(process.env.MAX_MIGRATION_COMMAND || '100'),
     maxScanCommand: parseInt(process.env.MAX_SCAN_COMMAND || '500'),

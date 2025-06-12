@@ -16,7 +16,7 @@ export class DiscoveryScanActivity {
     readonly workerId: string;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
-    readonly timeout: number;
+    readonly operationTimeout: number;
     constructor(
         private readonly logger: Logger,
         private readonly redisService: RedisService,
@@ -26,7 +26,7 @@ export class DiscoveryScanActivity {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 250; 
-        this.timeout = this.configService.get('worker.timeout');
+        this.operationTimeout = this.configService.get('worker.operationTimeout');
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<fs.Dirent[]> {
@@ -42,7 +42,7 @@ export class DiscoveryScanActivity {
                 const errorMessage = createServerDownErrorMessage('ETIMEDOUT', serverInfo);
                 const err = new Error(errorMessage);
                 (err as any).code = 'ETIMEDOUT';
-                setTimeout(() => reject(err), this.timeout);
+                setTimeout(() => reject(err), this.operationTimeout);
             })
         ]);
 

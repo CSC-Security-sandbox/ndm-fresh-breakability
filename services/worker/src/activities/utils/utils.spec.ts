@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { getChecksum, isServerDownError, getServerInfoFromPath, extractTypes, createServerDownErrorMessage, removePrefix, getFilePermissions, shouldExclude, shouldSkipFile, shouldExcludeOlderThan, shouldExcludeOrSkip, getJobConnection, getFileType, getFileInfo, buildTask, getErrorCode, formatDate } from "./utils";
+import { getChecksum, getServerInfoFromPath, extractTypes, createServerDownErrorMessage, removePrefix, getFilePermissions, shouldExclude, shouldSkipFile, shouldExcludeOlderThan, shouldExcludeOrSkip, getJobConnection, getFileType, getFileInfo, buildTask, getErrorCode, formatDate } from "./utils";
 import { FileType } from "../types/tasks";
 import { Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Protocol } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -472,31 +472,6 @@ describe("formatDate", () => {
         const date = new Date("2024-03-27T15:05:09Z");
         expect(formatDate(date)).toBeDefined();
     });
-});
-
-describe('isServerDownError', () => {
-  it('returns true for fatal error code', () => {
-    const error = { code: 'EACCES' };
-    expect(isServerDownError(error)).toBe(true);
-  });
-
-  it('returns true if message matches known pattern', () => {
-    const error = { message: 'Connection timed out' };
-    expect(isServerDownError(error)).toBe(true);
-  });
-
-  it('returns false for non-matching error', () => {
-    const error = { code: 'SOME_CODE', message: 'Unknown issue occurred' };
-    expect(isServerDownError(error)).toBe(false);
-  });
-
-  it('handles undefined error object', () => {
-    expect(isServerDownError(undefined)).toBe(false);
-  });
-
-  it('handles missing message/code', () => {
-    expect(isServerDownError({})).toBe(false);
-  });
 });
 
 describe('getServerInfoFromPath', () => {
