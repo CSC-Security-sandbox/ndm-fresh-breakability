@@ -2,9 +2,9 @@ import { memo } from "react";
 import Box from "@components/container/Box";
 import { Tooltip } from "@netapp/bxp-design-system-react";
 import { ListComponentPropsType } from "@/components/list/list-component.types";
-import RenderEach from "../render-each/RenderEach";
+import RenderEach from "@components/render-each/RenderEach";
 
-const ListComponent = ({ itemsList, styles }: ListComponentPropsType) => {
+const ListComponent = ({ itemsList }: ListComponentPropsType) => {
   return (
     <>
       <RenderEach
