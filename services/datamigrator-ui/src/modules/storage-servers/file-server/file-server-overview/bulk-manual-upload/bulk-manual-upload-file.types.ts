@@ -35,3 +35,7 @@ export type UploadExportPathSourceFileProps = {
   fileServerId: string;
   body: BlueXpFormType<BulkManualUploadModalContentPropsType>;
 };
+
+export type BulkManualUploadErrorPropsType {
+  error: string;
+}
