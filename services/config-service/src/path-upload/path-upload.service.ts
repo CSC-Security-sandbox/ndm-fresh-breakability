@@ -178,7 +178,11 @@ export class PathUploadService {
           },
           workerIds: fileServer.workers.map(worker => worker.workerId),
         },
-        options: {},
+        options: {
+          workflowExecutionTimeout: '1h',
+          workflowTaskTimeout: '120s',
+          workflowRunTimeout: '120s',
+        },
       }]
     };
     const workflow = await this.workFlowService.startWorkflow(WorkFlows.VALIDATE_PATHS, startWorkFlowPayload);
