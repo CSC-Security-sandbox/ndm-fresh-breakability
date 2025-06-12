@@ -10,10 +10,12 @@ import {
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 import UploadFileDetails from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/UploadFileDetails";
 import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import BulkManualUploadError from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadError";
 
 export const BulkManualUploadModalContent = (
   form: BlueXpFormType<BulkManualUploadModalContentPropsType>,
   exportPathSourceData: UploadedFilePropsType,
+  error: string,
   downloadTemplate: () => void
 ) => {
   const hasError = form?.formErrors?.["exportPathSource.fileName"];
@@ -28,6 +30,7 @@ export const BulkManualUploadModalContent = (
         errorMessage={hasError}
         showError={hasError}
       />
+      {error && <BulkManualUploadError error={error} />}
 
       <Box
         className={`text-sm font-extralight flex gap-2 items-center ${

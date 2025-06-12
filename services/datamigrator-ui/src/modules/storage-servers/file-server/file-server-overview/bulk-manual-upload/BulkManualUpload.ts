@@ -23,6 +23,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
   const [exportPathSourceData, setExportPathSourceData] =
     useState<UploadedFilePropsType>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
   // API hooks
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
@@ -41,6 +42,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
   const handleResetAndClose = () => {
     form.resetForm(INITIAL_VALUE_FORM);
     setExportPathSourceData(undefined);
+    setError("");
     closeModal();
   };
 
@@ -88,6 +90,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
       }).unwrap();
       setExportPathSourceData(_exportPathSourceData);
     } catch (error) {
+      setError(error?.data?.message || error?.message);
       console.error(
         `Failed to upload file: ${error?.data?.message || error?.message}`
       );
@@ -102,6 +105,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
       modalContent: BulkManualUploadModalContent(
         form,
         exportPathSourceData,
+        error,
         downloadTemplate
       ),
       modalFooter: BulkManualUploadModalFooter(
