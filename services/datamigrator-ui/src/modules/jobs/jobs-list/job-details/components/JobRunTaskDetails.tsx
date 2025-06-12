@@ -32,7 +32,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.PENDING} />
         }
         value={pending}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.PENDING}`}
+        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.PENDING}&count=${pending}`}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -40,7 +40,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.RUNNING} />
         }
         value={running}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.RUNNING}`}
+        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.RUNNING}&count=${running}`}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -48,7 +48,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.COMPLETED} />
         }
         value={completed}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.COMPLETED}`}
+        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.COMPLETED}&count=${completed}`}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -56,7 +56,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.ERRORED} />
         }
         value={errored}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.ERRORED}`}
+        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.ERRORED}&count=${errored}`}
       />
     </Card>
   );
