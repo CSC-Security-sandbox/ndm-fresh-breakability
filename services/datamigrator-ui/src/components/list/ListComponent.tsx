@@ -18,7 +18,7 @@ const ListComponent = ({ itemsList, styles }: ListComponentPropsType) => {
               </Box>
             )}
 
-            <Box className="flex items-center gap-1">
+            <Box className="flex items-center gap-1 text-sm">
               {label && <span>{label}: </span>}
               <span className="font-light">{value}</span>
             </Box>
