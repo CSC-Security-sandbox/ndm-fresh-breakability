@@ -26,10 +26,10 @@ const UploadFileDetails = ({
         extraContent: <InfoIcon className="w-4" />,
       },
       {
-        label: "Missing Paths",
+        label: "Path Difference",
         value: noLongerAvailablePaths,
         extraContent: <NoticeTriangleIcon className="w-4" color="warning" />,
-        tooltip: "Missing paths will be considered invalid.",
+        tooltip: "Path difference will be considered disabled.",
       },
     ];
   }, [newPaths, alreadyExitingPaths, noLongerAvailablePaths]);

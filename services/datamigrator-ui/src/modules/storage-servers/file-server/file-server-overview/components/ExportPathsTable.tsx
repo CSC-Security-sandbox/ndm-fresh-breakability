@@ -9,7 +9,7 @@ import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-se
 import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
@@ -118,18 +118,23 @@ const ExportPathsTable = ({
     </Box>
   );
 
-  const contentValue = useMemo(() => {
-    if (jobType === "bulk_discover") return "";
+  const getBulkManualUpload = () => (
+    <BulkManualUploadFile
+      fileServerDetails={fileServerDetails}
+      allExportPaths={allExportPaths}
+    />
+  );
 
+  const contentValue = useMemo(() => {
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
-    return (
-      <BulkManualUploadFile
-        fileServerDetails={fileServerDetails}
-        allExportPaths={allExportPaths}
-      />
-    );
+    return allExportPaths.length > 0 ? getBulkManualUpload() : "";
   }, [isManualUploadPath, showRefetch, fileServerDetails]);
+
+  const showDataLabel = useCallback(
+    () => (isManualUploadPath ? getBulkManualUpload() : "No Data"),
+    [isManualUploadPath, fileServerDetails]
+  );
 
   return (
     <TableWrapper
@@ -144,8 +149,8 @@ const ExportPathsTable = ({
       notReachableExportPaths={notReachableExportPaths}
       noDataLabel={
         fileServerDetails?.isUploadInProgress
-          ? "File upload is in progress..."
-          : "No Data"
+          ? "Export Paths File upload is in progress..."
+          : showDataLabel()
       }
     />
   );

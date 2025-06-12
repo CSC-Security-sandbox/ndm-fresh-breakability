@@ -17,10 +17,7 @@ import { BulkManualUploadModalContent } from "@modules/storage-servers/file-serv
 import { BulkManualUploadModalFooter } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadModalFooter";
 import { ConfigListTypeApiType, VolumeType } from "@/types/app.type";
 
-export const BulkManualUpload = (
-  fileServerDetails: ConfigListTypeApiType,
-  allExportPaths: VolumeType[]
-) => {
+export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
   // Initialize form handling
   const form = useForm(INITIAL_VALUE_FORM, VALIDATION_SCHEMA);
   const [exportPathSourceData, setExportPathSourceData] =
@@ -47,10 +44,6 @@ export const BulkManualUpload = (
     closeModal();
   };
 
-  const buttonName = useMemo(() => {
-    return allExportPaths.length > 0 ? "Replace File" : "Upload File";
-  }, [allExportPaths]);
-
   const onSubmit = async () => {
     exportPathSourceData?.uploadId
       ? submitUploadExportPathSourceFile()
@@ -61,6 +54,7 @@ export const BulkManualUpload = (
     if (form?.formState?.exportPathSource?.fileName) openUploadModal();
   }, [
     form?.formState?.exportPathSource?.fileName,
+    form?.formErrors,
     exportPathSourceData,
     isLoading,
   ]);
@@ -85,8 +79,8 @@ export const BulkManualUpload = (
   };
 
   const uploadFile = async () => {
-    const { exportPathSource } = form?.formState;
     try {
+      const { exportPathSource } = form?.formState;
       setIsLoading(true);
       const _exportPathSourceData = await uploadExportPathSourceFile({
         fileServerId,
@@ -104,20 +98,23 @@ export const BulkManualUpload = (
 
   const openUploadModal = () => {
     openModal({
-      modalHeader: "File Upload",
-      modalContent: BulkManualUploadModalContent(form, exportPathSourceData),
+      modalHeader: "Upload Export Paths File",
+      modalContent: BulkManualUploadModalContent(
+        form,
+        exportPathSourceData,
+        downloadTemplate
+      ),
       modalFooter: BulkManualUploadModalFooter(
         form,
+        exportPathSourceData,
+        isLoading,
         onSubmit,
-        handleResetAndClose,
-        isLoading
+        handleResetAndClose
       ),
     });
   };
 
   return {
     openUploadModal,
-    downloadTemplate,
-    buttonName,
   };
 };
