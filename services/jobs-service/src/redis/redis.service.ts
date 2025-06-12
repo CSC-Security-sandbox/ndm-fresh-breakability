@@ -74,18 +74,18 @@ async onModuleInit(): Promise<void> {
   }
 
   async setJobContext(traceId: string, jobContext: any) {
+    //Added this validation to ensure that traceId is sanitized and does not contain any malicious input.
+    if (!traceIdValidation(traceId)) {
+      this.logger.error(`[Job-Service] Invalid trace ID format: ${traceId}`);
+      throw new Error("Invalid trace ID format. TraceId should be alphanumeric and 36 characters long.");
+    }
+
     if (!this.client) {
       this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
       this.client = await this.getClient()
       this.logger.log('[Job-Service] Redis client reconnected');
     }
     const serializedContext = jobContext.serialize();
-
-    //Added this validation to ensure that traceId is sanitized and does not contain any malicious input.
-    if (!traceIdValidation(traceId)) {
-      this.logger.error(`[Job-Service] Invalid trace ID format: ${traceId}`);
-      throw new Error("Invalid trace ID format. TraceId should be alphanumeric and 36 characters long.");
-    }
 
     await this.client.set(traceId, serializedContext);
     this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
