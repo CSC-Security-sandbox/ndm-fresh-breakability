@@ -28,6 +28,10 @@ const JobConfig = () => {
             form={jobConfigForm}
             options={mountPaths}
             isOptional
+            /* Disabling this field and making it as default disabled by adding true,
+            as this is related to speedtest and it is not included in Alpha release.
+            remove the below line when we want to enable speedtest functionality */
+            disabled={true}
           />
         ) : (
           // SELECT BOX IF WE ARE CREATING AND WE DON"T HAVE MOUNT PATHS
@@ -37,15 +41,23 @@ const JobConfig = () => {
             form={jobConfigForm}
             placeholder="Enter Export Path"
             isOptional
+            /* Disabling this field and making it as default disabled by adding true,
+            as this is related to speedtest and it is not included in Alpha release.
+            remove the below line when we want to enable speedtest functionality */
+            disabled={true}
           />
         )}
         <FormFieldInputNew
           form={jobConfigForm}
-          disabled={
+          /* Disabling this field and making it as default disabled by adding true,
+          as this is related to speedtest and it is not included in Alpha release.
+          When we want to enable speedtest functionality then uncomment below code and remove the disabled true */
+          /*disabled={
             isEditMode
               ? jobConfigForm?.formState?.pathId?.value?.length === 0
               : jobConfigForm?.formState?.pathName?.length === 0
-          }
+          }*/
+          disabled={true}
           name="workingDirectory"
           placeholder="Working Directory"
           label="Working Directory"

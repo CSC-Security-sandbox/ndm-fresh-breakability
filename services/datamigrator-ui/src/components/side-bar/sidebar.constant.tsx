@@ -59,5 +59,8 @@ export const MENU_ITEMS = [
     label: <Box className="text-sm font-semibold">Speed Test</Box>,
     icon: <MoveIcon size="24" color="text-main-nav-icon-text-selected" />,
     path: "/speed-test",
+    /* Disabling this menu item which is related to speed-test as it is not included in Alpha release.
+    When we want to enable this menu item then remove this comment and below line of code. */
+    disabled: true,
   },
 ];
