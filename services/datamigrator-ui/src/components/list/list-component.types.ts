@@ -7,5 +7,4 @@ export type ListComponentPropsType = {
     extraContent?: ReactNode;
     tooltip?: string;
   }[];
-  styles?: string;
 };
