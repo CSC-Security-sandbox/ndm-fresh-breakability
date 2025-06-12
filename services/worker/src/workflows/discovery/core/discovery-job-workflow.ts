@@ -105,16 +105,10 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       } 
 
-      // await Promise.all(
-      //   workers.map(
-      //     async() => {
-     await publishTaskActivity(jobRunId)
-      //     })
-      // );
+      await publishTaskActivity(jobRunId)
 
       const isErrored = (workers.length === failedWorkers.length);
       const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
-      console.log(`isErrored: ${isErrored}, hasRunningScanTask: ${hasRunningScanTask}, taskNotFoundCount: ${taskNotFoundCount}, workers.length: ${workers.length}, failedWorkers.length: ${failedWorkers.length}`);
       const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && !hasRunningScanTask;
 
 
@@ -129,7 +123,6 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         log(jobRunId, `Sync completed with finalJobState: ${JSON.stringify(finalJobState)}`);
         return { jobRunId, workers, failedWorkers, status: isCompleted ? JobRunStatus.Completed : JobRunStatus.Errored };
       }
-
 
       if(iteration >= 100) {
         log(jobRunId, `Iteration limit reached. Continuing as new...`);

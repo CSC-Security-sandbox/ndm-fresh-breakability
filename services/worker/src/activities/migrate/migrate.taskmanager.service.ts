@@ -35,7 +35,7 @@ export class MigrationTaskService{
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
       let commands: Command[] = [], streamIds: string[] = [],tasks: Task[] = [];
       const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-      for await (const { data, id } of jobContext.groupReadAndWithoutAckDirs(jobRunId, this.pushTaskDirSize*5, GroupReaderType.WORKER)) {
+      for await (const { data, id } of jobContext.groupReadWithoutAckDirs(jobRunId, this.pushTaskDirSize*5, GroupReaderType.WORKER)) {
         const command = new Command(data.path, ops, uuid4(), 0);
        commands.push(command);
         streamIds.push(id);

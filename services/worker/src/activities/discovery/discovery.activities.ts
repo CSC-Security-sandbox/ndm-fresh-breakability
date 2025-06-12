@@ -39,7 +39,7 @@ export class DiscoveryActivity {
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
       let commandsBatch: Command[] = [], streamIds: string[] = [], tasks: Task[] = [];
       const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-      for await (const { data, id } of jobContext.groupReadAndWithoutAckDirs(traceId, this.directoryBatchSize*5, GroupReaderType.WORKER)) {
+      for await (const { data, id } of jobContext.groupReadWithoutAckDirs(traceId, this.directoryBatchSize*5, GroupReaderType.WORKER)) {
         const command = new Command(data.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
         streamIds.push(id);
