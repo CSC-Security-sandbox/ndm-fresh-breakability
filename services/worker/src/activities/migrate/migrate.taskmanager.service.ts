@@ -37,7 +37,7 @@ export class MigrationTaskService{
       const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
       for await (const { data, id } of jobContext.groupReadWithoutAckDirs(jobRunId, this.pushTaskDirSize*5, GroupReaderType.WORKER)) {
         const command = new Command(data.path, ops, uuid4(), 0);
-       commands.push(command);
+        commands.push(command);
         streamIds.push(id);
         if (commands && commands.length >= this.pushTaskDirSize) {
           const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
