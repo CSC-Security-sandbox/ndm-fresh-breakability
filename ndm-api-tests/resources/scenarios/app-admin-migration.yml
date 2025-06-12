@@ -1,0 +1,19 @@
+scenarios:
+  - name: create-migration-job
+    url: /api/v1/jobs/bulk-migrate
+    method: post
+    service_name: job_service
+    data:
+      firstRunAt: "2025-03-20T09:51:01.230Z"
+      futureRunSchedule: ""
+      migrateConfigs:
+        - sourcePathId: $sourcePathId
+          destinationPathId: 
+            - "$destinationPathId"
+      sid_mapping: false
+      options:
+        excludeFilePatterns: "*/snapshots/*,*/logs/*,*/tmp/*"
+        preserveAccessTime: true
+        skipFile: "15-M"
+    response:
+      - status_code: 201

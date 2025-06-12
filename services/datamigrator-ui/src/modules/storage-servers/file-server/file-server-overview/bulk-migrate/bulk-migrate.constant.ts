@@ -199,3 +199,5 @@ export const PRECHECK_STATUS = {
   failed: [],
   errors: [],
 };
+
+export const OFFLINE_STATUS = "offline";

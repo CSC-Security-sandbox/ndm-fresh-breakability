@@ -1,0 +1,54 @@
+scenarios:
+  - name: create-user
+    url: /api/v1/create-user
+    method: POST
+    service_name: admin_service
+    data:
+      username: "testprojectadmin@email.com"
+      firstName: "test"
+      lastName: "user"
+    response:
+      - status_code: 201
+      - user.first_name: "test"
+    parse:
+      user: user
+      userid: user.id
+
+  - name: create-new-user-role
+    url: /api/v1/user-roles
+    method: post
+    service_name: admin_service
+    data:
+      project_id: "$project_id"
+      account_id: "$account_id"
+      user_id: "$userid"
+      role_id: "$project_admin_id"
+    response:
+      - status_code: 201
+    parse:
+      user_role_id: id
+
+  - name: keycloak-reset-password
+    method: post
+    data:
+      username: "$user.email"
+      password: "Root@123"
+    response:
+      - status_code: 201
+    parse: {}
+
+  - name: new-login
+    method: post
+    data:
+      username: "$user.email"
+      password: "Root@123"
+    response:
+      - status_code: 201
+    parse: { }
+
+  - name: logout-user 
+    method: post
+    data: {}
+    response:
+      - status_code: 204
+    parse: {}

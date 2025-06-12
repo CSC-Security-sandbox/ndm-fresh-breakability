@@ -1,4 +1,3 @@
-import { RedisClientType } from "redis";
 import { Serializable } from "src/types/serializable";
 
 export interface WorkerRunningTaskMapCollection<T extends Serializable> {
@@ -16,6 +15,8 @@ export interface WorkerRunningTaskMapCollection<T extends Serializable> {
     deleteValue(key: string): Promise<void>;
     deleteAll(): Promise<void>;
     assignToSelf(key: string): Promise<T | null>;
+    isEmpty(): Promise<boolean>;
+    getSize(): Promise<number>;
 }
 
 export interface RunningScanTaskCollection extends WorkerRunningTaskMapCollection<any> {}

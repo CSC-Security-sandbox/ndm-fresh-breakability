@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 )
@@ -79,6 +80,13 @@ func ResolveDataRecursive(v interface{}, sharedVars map[string]interface{}) inte
 
 	switch x := v.(type) {
 	case string:
+		if strings.TrimSpace(x) == "$autogen_project_name" {
+			generated := AutoGenerateProjectName("test")
+			log.Printf("Generated project name: %s\n", generated)
+			// Optionally, store the generated value into sharedVars if you want to use it later.
+			sharedVars["autogen_project_name"] = generated
+			return generated
+		}
 		if matches := varRe.FindStringSubmatch(x); len(matches) == 2 {
 			varName := matches[1]
 			if resolved, ok := resolveValue(varName, sharedVars); ok {

@@ -4,8 +4,12 @@ on:
   push:
     branches:
       - main
-  # For manual trigger
+    paths:
+      - 'services/worker/**'
   workflow_dispatch:
+
+permissions: 
+  contents: read
 
 jobs:
   Worker-package:
@@ -128,6 +132,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [Worker-package, build]
+    permissions: 
+      contents: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

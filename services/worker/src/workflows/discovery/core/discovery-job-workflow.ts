@@ -1,9 +1,9 @@
 import { continueAsNew, ContinueAsNew, proxyActivities } from '@temporalio/workflow';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
-import { DiscoverPathOutput } from 'src/activities/discovery/discovery.type';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { CommonActivityService } from '../../../activities/common/common.service';
+import { DiscoveryActivity } from '../../../activities/discovery/discovery.activities';
+import { DiscoveryScanActivity } from '../../../activities/discovery/discovery.core.activity';
+import { DiscoverPathOutput } from '../../../activities/discovery/discovery.type';
+import { JobRunStatus } from '../../../activities/discovery/enums';
 import * as wf from '@temporalio/workflow';
 import { ActivityFailure } from '@temporalio/workflow';
 
@@ -43,7 +43,8 @@ const {
   getJobState: getJobStateActivity,
   updateStatus: updateStatusActivity,
   setJobState: setJobStateActivity,
-  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList
+  getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList,
+  hasRunningScanTask: hasRunningScanTaskActivity
 } = proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '24h', 
   heartbeatTimeout: '2m',
@@ -104,15 +105,12 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       } 
 
-      await Promise.all(
-        workers.map(
-          async() => {
-            return await publishTaskActivity(jobRunId)
-          })
-      );
+      await publishTaskActivity(jobRunId)
 
       const isErrored = (workers.length === failedWorkers.length);
-      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length));
+      const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
+      const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && !hasRunningScanTask;
+
 
       if (isCompleted || isErrored) {
         log(jobRunId, `No tasks found. sending last entry`);
@@ -125,7 +123,6 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         log(jobRunId, `Sync completed with finalJobState: ${JSON.stringify(finalJobState)}`);
         return { jobRunId, workers, failedWorkers, status: isCompleted ? JobRunStatus.Completed : JobRunStatus.Errored };
       }
-
 
       if(iteration >= 100) {
         log(jobRunId, `Iteration limit reached. Continuing as new...`);

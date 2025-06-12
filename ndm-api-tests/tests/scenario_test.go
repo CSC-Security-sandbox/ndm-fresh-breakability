@@ -2,144 +2,128 @@ package tests
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
+	"ndm-api-tests/internal/scenario"
+	. "ndm-api-tests/utils"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
-
-	"ndm-api-tests/internal/scenario"
-	"ndm-api-tests/utils"
-
-	"testing"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gopkg.in/yaml.v2"
 )
 
-// Global variables and settings.
-var (
-	isDebug = true
+// sharedVars holds the common variables used in scenario tests.
+var sharedVars map[string]interface{}
 
-	scenariosDir      = filepath.Join("..", "resources", "scenarios")
-	scenarioFileNames []string
-	scenarioFiles     []string
-
-	authToken string
-	// sharedVars holds default values and any values parsed from prior API responses.
-	sharedVars map[string]interface{}
-)
-
-// Logging helper functions.
-func logDebug(msg string) {
-	if isDebug {
-		log.Print("[DEBUG] " + msg)
-	}
-}
-
-func init() {
-	var tokenErr error
-	authToken, tokenErr = utils.GetBearerToken("", "")
-	if tokenErr != nil {
-		log.Fatalf("Error getting bearer token: %v", tokenErr)
-	}
-	scenarioConfigPath := filepath.Join("..", "scenario_config.yml")
-
-	// Load the scenario config file.
-	configBytes, err := ioutil.ReadFile(scenarioConfigPath)
-	if err != nil {
-		log.Fatalf("Error reading scenario configuration file: %v", err)
-	}
-	var scConfig scenario.ScenarioConfig
-	if err = yaml.Unmarshal(configBytes, &scConfig); err != nil {
-		log.Fatalf("Error parsing scenario configuration file: %v", err)
-	}
-	if len(scConfig.Files) == 0 {
-		log.Fatal("Scenario configuration file does not list any files")
-	}
-	scenarioFileNames = scConfig.Files
-	log.Printf("Using scenario files: %+v\n", scenarioFileNames)
-
-	// Build full file paths.
-	scenarioFiles = make([]string, len(scenarioFileNames))
-	for i, name := range scenarioFileNames {
-		scenarioFiles[i] = filepath.Join(scenariosDir, name)
-	}
-}
-
-// delayBetweenCalls pauses execution for the given number of seconds.
-func delayBetweenCalls(delay int) {
-	time.Sleep(time.Duration(delay) * time.Second)
-}
-
-// TestAPIScenarios is the main entry point for Ginkgo tests.
-func TestAPIScenarios(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "API Scenarios Suite")
-}
-
-// Main Describe block: iterate over each YAML file and execute its scenarios sequentially.
+// OrderedDescribe ensures that the specs run in order.
 var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
-	var projectId, accountId, workerId string
-	It("Should Attach a worker successfully", func() {
-		var err error
-		accountId, projectId, workerId, err = utils.AttachWorker(authToken)
-		Expect(err).To(BeNil(), "Failed to Attach a worker")
+
+	It("executes initialization", func() {
+		projectId, workerIds, err := SetupTestEnv(1)
+		Expect(err).To(BeNil(), "Error during test environment setup")
+		Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+		workerId := workerIds[0]
+
+		sharedVars = map[string]interface{}{
+			"account_id":          AccountId,
+			"project_id":          projectId,
+			"workerId":            workerId,
+			"app_admin_id":        AppAdminId,
+			"project_admin_id":    ProjectAdminId,
+			"project_viewer_id":   ProjectViewerId,
+			"source_host_IP":      SOURCE_HOST_IP,
+			"destination_host_IP": DESTINATION_HOST_IP,
+		}
+		fmt.Println("Initialization complete.")
 	})
-	for _, filePath := range scenarioFiles {
-		fp := filePath
-		It(fmt.Sprintf("should execute scenario from file: %s", filepath.Base(fp)), func() {
-			// Initialize sharedVars with default values.
-			sharedVars = map[string]interface{}{
-				"account_id": accountId,
-				"project_id": projectId,
-				"workerId":   workerId,
-			}
+
+	for _, filePath := range ScenarioFiles {
+		fp := filePath // capture current value of filePath
+		It(fmt.Sprintf("executes scenario from file: %s", filepath.Base(fp)), func() {
+			localAuthToken := AuthToken
+
+			// Use the global sharedVars established during initialization.
+			Expect(sharedVars).NotTo(BeNil(), "sharedVars should be initialized")
+
+			// Parse the scenario definition from the YAML file.
 			sd, err := scenario.ParseScenarioDefinition(fp)
-			Expect(err).To(BeNil(), "Failed to parse scenario file: %s", fp)
-			// Iterate over scenarios in order.
+			Expect(err).To(BeNil(), fmt.Sprintf("Failed to parse scenario file: %s", fp))
+
 			for _, scData := range sd.Scenarios {
 				By(fmt.Sprintf("Executing API call: %s", scData.Name))
 				if scData.Delay != "" {
 					delay, err := strconv.Atoi(scData.Delay)
-					Expect(err).To(BeNil(), "Error converting delay for '%s'", scData.Name)
-					delayBetweenCalls(delay)
+					Expect(err).To(BeNil(), fmt.Sprintf("Error converting delay for '%s'", scData.Name))
+					DelayBetweenCalls(delay)
 				}
-				if scData.Name == "new-login" {
-					converted, ok := utils.ConvertToStringMap(scData.Data)
-					if !ok {
-						fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
-					}
-					username, usernameOk := converted["username"].(string)
-					password, passwordOk := converted["password"].(string)
-					if !usernameOk || !passwordOk {
-						fmt.Errorf("username or password is not a string")
-					}
-					authToken, err = utils.GetBearerToken(username, password)
-					Expect(err).To(BeNil(), "Error Getting Bearer Token '%s'", scData.Name)
 
+				switch scData.Name {
+				case "new-login":
+					var localToken, refreshToken string
+					localToken, refreshToken, err = HandleNewLogin(scData, sharedVars)
+					Expect(err).To(BeNil(), fmt.Sprintf("Error handling new-login for '%s'", scData.Name))
+					localAuthToken = localToken
+					RefreshToken = refreshToken
+					continue
+				case "keycloak-reset-password":
+					err = HandleKeycloakResetPassword(scData, sharedVars, KeycloakUser, KeycloakPassword)
+					Expect(err).To(BeNil(), fmt.Sprintf("Error handling keycloak-reset-password for '%s'", scData.Name))
+					continue
+				case "get-file-server-by-id":
+					rawMap := scData.Data.(map[interface{}]interface{})
+					volumeTypeStr := fmt.Sprintf("%v", rawMap["type"])
+					configId := sharedVars["configId"].(string)
+					volumeID, err := GetVolumByID(volumeTypeStr, localAuthToken, configId)
+					if err != nil {
+						fmt.Printf("Error handling volume for '%s': %v\n", scData.Name, err)
+						continue
+					}
+					switch volumeTypeStr {
+					case "source":
+						sharedVars["sourcePathId"] = volumeID
+					case "destination":
+						sharedVars["destinationPathId"] = volumeID
+					default:
+						fmt.Printf("Unexpected scData.Type: %s\n", volumeTypeStr)
+						continue
+					}
+					fmt.Printf("Successfully handled volume for '%s', found ID: %s\n", scData.Name, volumeID)
+					continue
+
+				case LOGOUT_USER:
+					_, err = LogoutUser(RefreshToken)
+					Expect(err).To(BeNil(), fmt.Sprintf("Error logging out user for '%s'", scData.Name))
 					continue
 				}
-				fullURL := utils.BuildFullURL(scData, sharedVars)
-				logDebug(fmt.Sprintf("Request URL: %s\nHTTP Method: %s\n", fullURL, strings.ToUpper(scData.Method)))
+
+				fullURL := BuildFullURL(scData, sharedVars)
+				LogDebug(fmt.Sprintf("Request URL: %s\nHTTP Method: %s\n", fullURL, strings.ToUpper(scData.Method)))
 				var reqBody []byte
-				if strings.ToLower(scData.Method) == "post" ||
-					strings.ToLower(scData.Method) == "put" ||
-					strings.ToLower(scData.Method) == "patch" {
-					// Build the JSON payload from the YAML "data" field.
-					reqBody, err = utils.BuildRequestBody(scData, sharedVars)
-					Expect(err).To(BeNil(), "Error building request body for '%s'", scData.Name)
-					logDebug(fmt.Sprintf("Constructed Request Body: %s\n", string(reqBody)))
+				lowerMethod := strings.ToLower(scData.Method)
+				if lowerMethod == "post" || lowerMethod == "put" || lowerMethod == "patch" {
+					reqBody, err = BuildRequestBody(scData, sharedVars)
+					Expect(err).To(BeNil(), fmt.Sprintf("Error building request body for '%s'", scData.Name))
+					LogDebug(fmt.Sprintf("Constructed Request Body: %s\n", string(reqBody)))
 				} else {
-					logDebug("No request body for this HTTP method\n")
+					LogDebug("No request body for this HTTP method\n")
 				}
-				resp, err := utils.SendAPIRequest(scData.Method, fullURL, reqBody, authToken)
-				Expect(err).To(BeNil(), "Error sending API request for '%s'", scData.Name)
-				sharedVars, err = utils.HandleResponse(resp, scData, scData.Name, sharedVars)
-				Expect(err).To(BeNil(), "Error handling response for '%s'", scData.Name)
+
+				headers := GetExtraHeaders(localAuthToken, scData.Headers, sharedVars)
+				resp, err := SendAPIRequest(scData.Method, fullURL, reqBody, headers)
+				Expect(err).To(BeNil(), fmt.Sprintf("Error sending API request for '%s'", scData.Name))
+				sharedVars, err = HandleResponse(resp, scData, scData.Name, sharedVars)
+				Expect(err).To(BeNil(), fmt.Sprintf("Error handling response for '%s'", scData.Name))
 			}
+
+			// Retrieve Keycloak token and clean up users between scenarios.
+			keycloakAuthToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			Expect(err).To(BeNil(), "Error getting Keycloak Access Token")
+			CleanupUsers(AuthToken, keycloakAuthToken)
 		})
 	}
+
+	It("executes cleanup", func() {
+		err := CleanupTestEnv()
+		Expect(err).To(BeNil(), "Error during test environment cleanup")
+		fmt.Println("Cleanup complete.")
+	})
 })
