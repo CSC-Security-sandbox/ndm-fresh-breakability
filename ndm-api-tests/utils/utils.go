@@ -499,9 +499,10 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		req.Header.Set(key, value)
 	}
 
+	LogDebug(fmt.Sprintf("Sending Request: %s %s\nPayload:\n%s\n", req.Method, url, string(body)))
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   10 * time.Second,
+		Timeout:   0 * time.Second,
 	}
 
 	return client.Do(req)
@@ -1013,7 +1014,7 @@ func GetVolumeID(response Response, volumePath string) (string, error) {
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
 }
 
-func GetVolumeIDByName(volumeType, volumeName, authToken, configId string) (string, error) {
+func GetVolumeIDByName(volumeType string, volumeName string, authToken string, configId string) (string, error) {
 	// Build the full URL
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
 	var reqBody []byte

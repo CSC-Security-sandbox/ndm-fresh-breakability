@@ -25,9 +25,8 @@ type CreateServereParams struct {
 	WorkingDirectory string
 }
 
-// CreateFileServer creates a File server with different config details
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
-	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
+	createSourceURL := CONFIG_SERVICE_URL + "/api/v1/servers"
 
 	payload := map[string]interface{}{
 		"configName": params.ConfigName,
@@ -57,7 +56,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", nil, err
 	}
 
-	resp, err := SendAPIRequest(http.MethodPost, createSourceURL, payloadBytes, headers)
+	resp, err := SendAPIRequest("POST", createSourceURL, payloadBytes, headers)
 	if err != nil {
 		return "", nil, err
 	}
@@ -85,9 +84,7 @@ type GetServerResponse struct {
 	} `json:"fileServers"`
 }
 
-// GetSourcePathID fetches the source file server by Volume Name, validates the response,
-// and returns the first volume ID (sourcePathID)
-func GetExportPathID(
+func GetSourcePathID(
 	volumeType string,
 	volumeName string,
 	configID string,
@@ -95,26 +92,49 @@ func GetExportPathID(
 ) (string, GetServerResponse, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 
-	resp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
-	if err != nil {
-		return "", GetServerResponse{}, err
-	}
-	defer resp.Body.Close()
+	const maxRetries = 10
+	var getSourceResp GetServerResponse
+	var resp *http.Response
+	var err error
 
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+		defer resp.Body.Close()
+
+		CheckResponse(resp, http.StatusOK)
+
+		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+
+		err = json.Unmarshal(bodyBytes, &getSourceResp)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+
+		// Check if volumes exist
+		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
+			break // Volumes found, proceed
+		}
+
+		if attempt < maxRetries {
+			DelayBetweenCalls(5) // Wait before retrying
+		}
+	}
+
+	// After retries, check again
+	if len(getSourceResp.FileServers) == 0 || len(getSourceResp.FileServers[0].Volumes) == 0 {
+		return "", getSourceResp, fmt.Errorf("no volumes found after %d attempts", maxRetries)
+	}
+
+	// Now fetch the volume ID
 	volumeID, err := GetVolumeIDByName(volumeType, volumeName, AuthToken, configID)
 	if err != nil {
-		return "", GetServerResponse{}, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
-	}
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", GetServerResponse{}, err
-	}
-
-	var getSourceResp GetServerResponse
-	err = json.Unmarshal(bodyBytes, &getSourceResp)
-	if err != nil {
-		return "", GetServerResponse{}, err
+		return "", getSourceResp, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
 	}
 
 	sourcePathID := volumeID
