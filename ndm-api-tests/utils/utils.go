@@ -898,7 +898,7 @@ func AutoGenerateProjectName(prefix string) string {
 	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
 }
 
-func DelayBetweenCalls(delay int) {
+func Delay(delay int) {
 	time.Sleep(time.Duration(delay) * time.Second)
 }
 
@@ -1014,7 +1014,7 @@ func GetVolumeID(response Response, volumePath string) (string, error) {
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
 }
 
-func GetVolumeIDByName(volumeType string, volumeName string, authToken string, configId string) (string, error) {
+func GetVolumeIDByName(volumeName string, authToken string, configId string) (string, error) {
 	// Build the full URL
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
 	var reqBody []byte

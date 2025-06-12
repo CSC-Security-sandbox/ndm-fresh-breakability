@@ -56,7 +56,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", nil, err
 	}
 
-	resp, err := SendAPIRequest("POST", createSourceURL, payloadBytes, headers)
+	resp, err := SendAPIRequest(http.MethodPost, createSourceURL, payloadBytes, headers)
 	if err != nil {
 		return "", nil, err
 	}
@@ -122,7 +122,7 @@ func GetSourcePathID(
 		}
 
 		if attempt < maxRetries {
-			DelayBetweenCalls(5) // Wait before retrying
+			Delay(5) // Wait before retrying
 		}
 	}
 
@@ -132,7 +132,7 @@ func GetSourcePathID(
 	}
 
 	// Now fetch the volume ID
-	volumeID, err := GetVolumeIDByName(volumeType, volumeName, AuthToken, configID)
+	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
 	if err != nil {
 		return "", getSourceResp, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
 	}

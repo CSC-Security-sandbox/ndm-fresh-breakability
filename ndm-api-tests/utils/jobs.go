@@ -50,7 +50,6 @@ type JobStatus struct {
 	Status string `json:"status"`
 }
 
-
 func CheckResponse(resp *http.Response, expected int) {
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -279,34 +278,73 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 	return resp, nil
 }
 
+// func GetJobRunIDForSource(jobConfigID string, headers map[string]string) (string, *http.Response, error) {
+//     getJobSourceURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
+
+//     var lastErr error
+//     var resp *http.Response
+
+//     for attempt := 1; attempt <= GetJobRunIDMaxRetries; attempt++ {
+//         resp, err := SendAPIRequest(http.MethodGet, getJobSourceURL, nil, headers)
+//         if err != nil {
+//             lastErr = err
+//             time.Sleep(GetJobRunIDRetryInterval * time.Second)
+//             continue
+//         }
+
+//         bodyBytes, err := ioutil.ReadAll(resp.Body)
+//         if err != nil {
+//             lastErr = err
+//             resp.Body.Close()
+//             time.Sleep(GetJobRunIDRetryInterval * time.Second)
+//             continue
+//         }
+//         resp.Body.Close()
+
+//         var getJobResp GetJobResponse
+//         err = json.Unmarshal(bodyBytes, &getJobResp)
+//         if err != nil {
+//             lastErr = err
+//             time.Sleep(GetJobRunIDRetryInterval * time.Second)
+//             continue
+//         }
+
+//         if len(getJobResp.JobRuns) > 0 && getJobResp.JobRuns[0].JobRunId != "" {
+//             return getJobResp.JobRuns[0].JobRunId, resp, nil
+//         }
+
+//         lastErr = fmt.Errorf("no jobRuns found in response")
+//         time.Sleep(GetJobRunIDRetryInterval * time.Second)
+//     }
+
+//     return "", resp, fmt.Errorf("failed to get jobRunID after %d retries: %v", GetJobRunIDMaxRetries, lastErr)
+// }
+
 func GetJobRunIDForSource(jobConfigID string, headers map[string]string) (string, *http.Response, error) {
 	getJobSourceURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
-
-	var lastErr error
 	var resp *http.Response
+	var parseErr error
 
-	for attempt := 1; attempt <= GetJobRunIDMaxRetries; attempt++ {
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
 		resp, err := SendAPIRequest(http.MethodGet, getJobSourceURL, nil, headers)
 		if err != nil {
-			lastErr = err
-			time.Sleep(GetJobRunIDRetryInterval * time.Second)
-			continue
+			// If the API call fails, return immediately (no retry)
+			return "", resp, fmt.Errorf("failed while calling API: %w", err)
 		}
 
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
-			lastErr = err
-			resp.Body.Close()
-			time.Sleep(GetJobRunIDRetryInterval * time.Second)
+			parseErr = fmt.Errorf("error reading response body: %w", err)
+			time.Sleep(DefaultPollInterval * time.Second)
 			continue
 		}
-		resp.Body.Close()
 
 		var getJobResp GetJobResponse
 		err = json.Unmarshal(bodyBytes, &getJobResp)
 		if err != nil {
-			lastErr = err
-			time.Sleep(GetJobRunIDRetryInterval * time.Second)
+			parseErr = fmt.Errorf("error unmarshaling response: %w", err)
+			time.Sleep(DefaultPollInterval * time.Second)
 			continue
 		}
 
@@ -314,11 +352,11 @@ func GetJobRunIDForSource(jobConfigID string, headers map[string]string) (string
 			return getJobResp.JobRuns[0].JobRunId, resp, nil
 		}
 
-		lastErr = fmt.Errorf("no jobRuns found in response")
-		time.Sleep(GetJobRunIDRetryInterval * time.Second)
+		parseErr = fmt.Errorf("no jobRuns found in response")
+		time.Sleep(DefaultPollInterval * time.Second)
 	}
 
-	return "", resp, fmt.Errorf("failed to get jobRunID after %d retries: %v", GetJobRunIDMaxRetries, lastErr)
+	return "", resp, fmt.Errorf("failed to get jobRunID after %d retries: %v", MaxPollRetries, parseErr)
 }
 
 // getBlockedJobRunID fetches job runs for a given jobConfigID, asserts the first run is BLOCKED,
@@ -352,7 +390,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 	if len(pollRetries) > 0 && pollRetries[0] > 0 {
 		retryCount = pollRetries[0]
 	} else {
-		retryCount = MaxJobPollRetries
+		retryCount = MaxPollRetries
 	}
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
@@ -367,10 +405,10 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
-		time.Sleep(time.Duration(DefaultJobPollInterval) * time.Second)
+		time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
 	}
-	time.Sleep(time.Duration(DefaultJobPollInterval) * time.Second)
-	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, MaxJobPollRetries)
+	time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, MaxPollRetries)
 }
 
 // ChangeJobRunState changes the state of a job run (PAUSE, RESUME, STOP).
@@ -397,13 +435,11 @@ func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunID
 		startTime := time.Now()
 		for {
 			apiResp, err := checkJobRunStatus(jobStatusURL, headers)
-			fmt.Printf("[DEBUG] Pause polling response: %+v, error: %v\n", apiResp, err)
 			if err != nil {
 				return err
 			}
-			LogDebug(fmt.Sprintf("Status check response: %+v", apiResp))
 			if apiResp.Status == RUNNING_JOBRUN {
-				LogDebug("Job is running. Pausing operation.")
+				LogDebug("Job is running. Pausing JobRun.")
 				return ChangeJobRunStateAPI(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", apiResp.Status))
@@ -422,8 +458,6 @@ func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunID
 // checkJobRunStatus fetches the job run status from the API.
 func checkJobRunStatus(url string, headers map[string]string) (JobStatus, error) {
 	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
-	fmt.Println("[DEBUG] check api url:", url)
-	fmt.Println("[DEBUG] check response api response:", resp)
 	if err != nil {
 		return JobStatus{}, fmt.Errorf("error calling API: %v", err)
 	}
@@ -447,9 +481,7 @@ func ChangeJobRunStateAPI(action string, jobRunIDs []string) error {
 		"action":  action,
 		"jobRuns": jobRunIDs,
 	}
-	fmt.Println("[DEBUG] payload for change jobrun status 1:", payload)
 	payloadBytes, err := json.Marshal(payload)
-	fmt.Println("[DEBUG] payload for change jobrun status 2:", payloadBytes)
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)
 	}

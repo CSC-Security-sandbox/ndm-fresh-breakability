@@ -53,13 +53,17 @@ const (
 	COMPLETED_JOBRUN                 = "COMPLETED"
 	RESUME_JOBRUN                    = "RESUME"
 	STOP_JOBRUN                      = "STOP"
-	READY_JOBRUN					 = "READY"
-	BLOCKED_JOBRUN				     = "BLOCKED"
+	READY_JOBRUN                     = "READY"
+	BLOCKED_JOBRUN                   = "BLOCKED"
 	JobTypeDiscovery         JobType = "DISCOVER"
 	JobTypeCutover           JobType = "CUTOVER"
 	JobTypeMigration         JobType = "MIGRATE"
 	FormatPDF                Format  = "pdf"
 	FormatCSV                Format  = "csv"
+	DefaultPollInterval              = 5
+	MaxPollRetries                   = 30
+	// DefaultPollInterval = 5
+	// MaxPollRetries = 5
 )
 
 func init() {
