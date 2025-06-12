@@ -123,7 +123,6 @@ const BulkDiscover = () => {
           </Box>
         </Card>
         <ExportPathsTable
-          jobType="bulk_discover"
           defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
           allExportPaths={allExportPaths.filter(
             (row) =>

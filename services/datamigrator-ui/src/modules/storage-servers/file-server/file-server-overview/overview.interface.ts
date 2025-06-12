@@ -11,7 +11,6 @@ export interface ExportPathsTablePropsType {
   isRowSelectingEnabled?: boolean;
   setSelectedExportPathsIds: (ids: string[]) => void;
   defaultColumnState?: any;
-  jobType?: string;
 }
 
 export interface TableRendererPropsType {
