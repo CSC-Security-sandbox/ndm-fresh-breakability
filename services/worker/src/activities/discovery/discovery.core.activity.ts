@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
-import { basePrefix, dmError, getFileInfo, isServerDownError, getServerInfoFromPath, createServerDownErrorMessage, removePrefix, shouldExcludeOrSkip } from '../utils/utils';
+import { basePrefix, dmError, getFileInfo, getServerInfoFromPath, createServerDownErrorMessage, isFatalError, removePrefix, shouldExcludeOrSkip } from '../utils/utils';
 import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
 import { Context } from '@temporalio/activity';
@@ -16,9 +16,7 @@ export class DiscoveryScanActivity {
     readonly workerId: string;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
-    readonly retries: number;
     readonly timeout: number;
-    readonly delay: number;
     constructor(
         private readonly logger: Logger,
         private readonly redisService: RedisService,
@@ -32,42 +30,24 @@ export class DiscoveryScanActivity {
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<fs.Dirent[]> {
-        try {
-            this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
+        this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
 
-            await fs.promises.access(directoryPath, fs.constants.R_OK);
-            
-            const result = await Promise.race<fs.Dirent[]>([
-                fs.promises.readdir(directoryPath, { withFileTypes: true }),
+        await fs.promises.access(directoryPath, fs.constants.R_OK);
 
-                new Promise<never>((_, reject) => {
-                    const err = new Error('Timeout reading directory');
-                    (err as any).code = 'ETIMEDOUT';
-                    setTimeout(() => reject(err), this.timeout);
-                })
-            ]);
+        const result = await Promise.race<fs.Dirent[]>([
+            fs.promises.readdir(directoryPath, { withFileTypes: true }),
 
-            this.logger.debug(`[${jobContext.jobRunId}] Successfully read directory: ${directoryPath}`);
-            return result;
-        } catch (error) {
-            const serverInfo = getServerInfoFromPath(directoryPath, jobContext);
+            new Promise<never>((_, reject) => {
+                const serverInfo = getServerInfoFromPath(directoryPath, jobContext);
+                const errorMessage = createServerDownErrorMessage('ETIMEDOUT', serverInfo);
+                const err = new Error(errorMessage);
+                (err as any).code = 'ETIMEDOUT';
+                setTimeout(() => reject(err), this.timeout);
+            })
+        ]);
 
-            if (isServerDownError(error)) {
-                const errorMessage = createServerDownErrorMessage(error, serverInfo);
-                this.logger.error(`[${jobContext.jobRunId}] ${errorMessage}`);
-
-                const enhancedError = new Error(errorMessage);
-                enhancedError.name = 'ServerDownError';
-                (enhancedError as any).code = error?.code || 'SERVER_UNREACHABLE';
-                (enhancedError as any).originalError = error?.message;
-                (enhancedError as any).serverInfo = serverInfo;
-
-                throw enhancedError;
-            }
-
-            this.logger.error(`[${jobContext.jobRunId}] Directory access failed: ${directoryPath}, Error: ${error.message}`);
-            throw error;
-        }
+        this.logger.debug(`[${jobContext.jobRunId}] Successfully read directory: ${directoryPath}`);
+        return result;
     }
 
     async scanTaskActivity({ jobRunId, failedWorkers }: DiscoverPathInput): Promise<DiscoverPathOutput> {
@@ -104,36 +84,24 @@ export class DiscoveryScanActivity {
 
         task.workerId = this.workerId;
         task.status = TaskStatus.RUNNING;
-        for (let i = 0; i < task.commands.length; i++) {
-            if (task.commands[i].status !== CommandStatus.COMPLETED) {
-                task.commands[i].status = CommandStatus.IN_PROCESS;
-            }
-        }
+        for (let i = 0; i < task.commands.length; i++)
+        if (task.commands[i].status !== CommandStatus.COMPLETED)
+            task.commands[i].status = CommandStatus.IN_PROCESS
 
         jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
-        try {
-            const discoverOutput = await this.discover({ task, jobContext });
+        const discoverOutput = await this.discover({ task, jobContext });
 
-            scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
-            scanActivityOutput.files = discoverOutput.files;
-            scanActivityOutput.folders = discoverOutput.folders;
+        scanActivityOutput.isFatalErrored = discoverOutput.isFatal;
+        scanActivityOutput.files = discoverOutput.files;
+        scanActivityOutput.folders = discoverOutput.folders;
 
-            this.logger.debug(`[${jobRunId}] Discovery Scan Activity completed with ${discoverOutput.errors.size} errors and ${discoverOutput.success} success.`);
-            
-            if (discoverOutput.errors.size === 0) {
-                this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
-            } else {
-                this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
-            }
-            
-        } catch (fatalError) {
-            this.logger.error(`[${jobRunId}] Fatal error in discovery process: ${JSON.stringify(fatalError)}`);
-            this.logger.error(`[${jobRunId}] Fatal error in discovery process: ${JSON.stringify(fatalError, Object.getOwnPropertyNames(fatalError))}`);
-            scanActivityOutput.isFatalErrored = true;
-        }
-
+        this.logger.debug(`[${jobRunId}] Discovery Scan Activity completed with ${discoverOutput.errors.size} errors and ${discoverOutput.success} success.`);
+        if (discoverOutput.errors.size === 0)
+            this.logger.log(`[${task.jobRunId}] Discovery Scan Activity Completed.`);
+        else
+            this.logger.error(`[${task.jobRunId}] Discovery Scan Activity ERRORED.`);
         await this.redisService.setJobContext(task.jobRunId, jobContext);
 
         this.logger.debug(`[${jobRunId}] Discovery Scan Activity Completed ${JSON.stringify(scanActivityOutput)}`);
@@ -144,26 +112,26 @@ export class DiscoveryScanActivity {
 
 
     async discover({ task, jobContext }: DiscoveryInput): Promise<DiscoveryOutput> {
-        const scanPath: DiscoveryOutput = { 
-            errors: new Set<string>(), 
-            success: 0, 
-            error: 0, 
-            retryCount: 0, 
-            isFatal: false, 
-            files: 0, 
-            folders: 0 
+        const scanPath: DiscoveryOutput = {
+            errors: new Set<string>(),
+            success: 0,
+            error: 0,
+            retryCount: 0,
+            isFatal: false,
+            files: 0,
+            folders: 0
         };
-        
+
         const basePrefixPath = basePrefix(jobContext.jobRunId, jobContext.jobConfig.sourceFileServer.pathId);
-        const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? 
+        const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ?
             jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
-        const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ? 
+        const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ?
             jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
 
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             const batch = task.commands.slice(i, i + this.maxConcurrency);
 
-            const results = await Promise.allSettled(
+            await Promise.allSettled(
                 batch.map(async (command) => {
                     if (command.status === CommandStatus.COMPLETED) return;
 
@@ -176,96 +144,61 @@ export class DiscoveryScanActivity {
                         command,
                         jobContext,
                         skipFile,
-                        errorType: ErrorType.FATAL_ERROR
+                        errorType: command.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
                     };
 
-                    try {
-                        const scanOutput = await this.scanDirCommand(scanInput);
-                        
-                        scanPath.files += scanOutput.files;
-                        scanPath.folders += scanOutput.directory;
-                        
-                        if (scanOutput.error) {
-                            command.retryCount++;
-                            command.status = CommandStatus.ERROR;
-                            scanPath.errors.add(scanOutput.error);
-                            scanPath.error++;
-    
-                            if (scanOutput.isFatal) {
-                                this.logger.error(`[${jobContext.jobRunId}] Fatal server connectivity error detected`);
-                                scanPath.isFatal = true;
-                                task.status = TaskStatus.ERRORED;
-                                return;
-                            }
-                        } else {
-                            scanPath.success++;
-                            command.status = CommandStatus.COMPLETED;
-                            await jobContext.setScanTask(this.workerId, task);
-                        }
-                        
-                        scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
-                        
-                    } catch (fatalError) {
-                        this.logger.error(`[${jobContext.jobRunId}] Fatal error during scanDirCommand1: ${JSON.stringify(fatalError)}`);
-                        this.logger.error(`[${jobContext.jobRunId}] Fatal error during scanDirCommand: ${JSON.stringify(fatalError, Object.getOwnPropertyNames(fatalError))}`);
-                        scanPath.isFatal = true;
-                        task.status = TaskStatus.ERRORED;
-                        
-                        if (isServerDownError(fatalError)) {
-                            const serverInfo = getServerInfoFromPath(scanInput.sourcePath, jobContext);
-                            scanPath.errors.add(createServerDownErrorMessage(fatalError, serverInfo));
-                        } else {
-                            scanPath.errors.add(fatalError?.message || 'Unknown fatal error');
-                        }
-                        
-                        throw fatalError;
+                    const scanOutput = await this.scanDirCommand(scanInput);
+
+                    scanPath.files += scanOutput.files;
+                    scanPath.folders += scanOutput.directory;
+                    this.logger.debug(`Result of scanContent: ${JSON.stringify(scanOutput)}`);
+
+                    if (scanOutput.error) {
+                        command.retryCount++;
+                        command.status = CommandStatus.ERROR;
+                        scanPath.errors.add(scanOutput.error);
+                        scanPath.error++;
+                    } else {
+                        scanPath.success++;
+                        command.status = CommandStatus.COMPLETED;
+                        await jobContext.setScanTask(this.workerId, task);
                     }
+                    scanPath.retryCount = Math.max(command.retryCount, scanPath.retryCount);
                 })
             );
-
-            const rejectedResults = results.filter(result => result.status === 'rejected');
-            if (rejectedResults.length > 0) {
-                this.logger.error(`[${jobContext.jobRunId}] ${rejectedResults.length} fatal errors occurred in batch processing`);
-                scanPath.isFatal = true;
-                break;
-            }
         }
 
-        if (scanPath.isFatal) {
-            task.status = TaskStatus.ERRORED;
-        } else if (scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount) {
-            task.status = TaskStatus.ERRORED;
-        } else if (scanPath.retryCount > 0) {
-            task.status = TaskStatus.COMPLETED_WITH_ERROR;
-        } else {
-            task.status = TaskStatus.COMPLETED;
-        }
+        if (scanPath.error > 0 && scanPath.retryCount >= this.maxRetryCount)
+            task.status = TaskStatus.ERRORED
+        else if (scanPath.retryCount > 0)
+            task.status = TaskStatus.COMPLETED_WITH_ERROR
+        else
+            task.status = TaskStatus.COMPLETED
 
-        if (scanPath.error > 0 || scanPath.isFatal) {
-            const errorType = scanPath.isFatal ? ErrorType.FATAL_ERROR : 
-                            scanPath.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : 
-                            ErrorType.RECOVERABLE_ERROR;
-            
-            const errorMessages = Array.from(scanPath.errors);
-            
+        if (scanPath.error > 0) {
+            for (const error of scanPath.errors)
+                if (isFatalError(error)) {
+                    scanPath.isFatal = true;
+                    break;
+                }
+            const errorType = scanPath.isFatal ? ErrorType.FATAL_ERROR : scanPath.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
             const dmErr = dmError("TASK", Origin.SOURCE, Operation.READ_DIR, errorType, task.id, undefined, undefined, {
-                errorCode: errorMessages,
-                message: scanPath.isFatal ? 
-                    `Server connectivity failure: ${errorMessages.join('; ')}` :
-                    `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
+                errorCode: scanPath.errors.size > 0 ? Array.from(scanPath.errors) : [],
+                message: `Task ${task.id} has ${scanPath.error} errors and ${scanPath.success} success during scan`
             });
-
-            await jobContext.appendToErrorList(dmErr);
-            
-            if (scanPath.isFatal || errorType === ErrorType.TRANSIENT_ERROR) {
+            if (errorType === ErrorType.TRANSIENT_ERROR || errorType === ErrorType.FATAL_ERROR)
                 task.status = TaskStatus.ERRORED;
-                this.logger.error(`[${jobContext.jobRunId}] Task ${task.id} marked as ERRORED due to ${scanPath.isFatal ? 'fatal server error' : 'max retries exceeded'}`);
-                jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
-            } else if (scanPath.retryCount < this.maxRetryCount) {
-                this.logger.debug(`[${jobContext.jobRunId}] Appending task ${task.id} to retry queue`);
+            await jobContext.appendToErrorList(dmErr);
+            if (scanPath.retryCount < this.maxRetryCount && !scanPath.isFatal) {
+                this.logger.debug(`Appending to Retry => ${JSON.stringify(task)}`)
                 jobContext.tasksInfo.lastId = await jobContext.appendToTaskList(task);
             }
-        } else {
+            else if (scanPath.isFatal) {
+                this.logger.debug(`Fatal Error Detected for task ${task.id}`)
+                jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
+            }
+        }
+        else {
             jobContext.updatedTaskInfo.lastId = await jobContext.appendToUpdatedTaskList(task);
         }
 
@@ -273,13 +206,13 @@ export class DiscoveryScanActivity {
         return scanPath;
     }
 
-    async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
+    async scanDirCommand({ excludePatterns = [], jobContext, sourcePath, sourcePrefix, command, skipFile, errorType }: ScanDirCommandInput): Promise<ScanDirCommandOutput> {
         const scanDirOutput: ScanDirCommandOutput = {
             files: 0, 
             directory: 0, 
             isFatal: false, 
             error: undefined, 
-            errorType: command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR,
+            errorType: errorType,
         };
 
         try {
@@ -297,10 +230,12 @@ export class DiscoveryScanActivity {
                     continue;
                 }
 
+                let resolvedTarget = '';
+
                 if (sourceStat.isSymbolicLink()) {
                     try {
                         const linkTarget = await fs.promises.readlink(sourceContentPath);
-                        const resolvedTarget = path.resolve(path.dirname(sourceContentPath), linkTarget);
+                        resolvedTarget = path.resolve(path.dirname(sourceContentPath), linkTarget);
                         if (!fs.existsSync(resolvedTarget)) {
                             this.logger.debug(`[${jobContext.jobRunId}] Broken symbolic link: "${sourceContentPath}" → "${resolvedTarget}" (target does not exist)`);
                         }
@@ -334,9 +269,8 @@ export class DiscoveryScanActivity {
                     jobContext.dirsInfo.lastId = await jobContext.appendToDirList(fileInfo);
                     jobContext.dirsInfo.numMessages++;
                     scanDirOutput.directory++;
-                } else {
-                    scanDirOutput.files++;
                 }
+                else scanDirOutput.files++;
 
                 jobContext.dirsInfo.lastId = await jobContext.appendToFileList(fileInfo);
                 jobContext.dirsInfo.numMessages++;
@@ -345,34 +279,14 @@ export class DiscoveryScanActivity {
         } catch (error: any) {
             this.logger.error(`[${jobContext.jobRunId}] Error scanning directory1 ${sourcePath}: ${JSON.stringify(error)}`);
             this.logger.error(`[${jobContext.jobRunId}] Error scanning directory ${sourcePath}: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
-              
-            const serverInfo = getServerInfoFromPath(sourcePath, jobContext);
-            const isServerDown = isServerDownError(error);
-  
-            const errorType = isServerDown ? ErrorType.FATAL_ERROR : 
-                             command.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : 
-                             ErrorType.RECOVERABLE_ERROR;
             
-            const errorMessage = isServerDown ? 
-                createServerDownErrorMessage(error, serverInfo) : 
-                error?.originalError || 'Unknown error';
-            
-            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, scanDirOutput.errorType, command.commandId, error, {
                 name: command.fPath,
                 path: sourcePath,
             });
 
             jobContext.errorsInfo.lastId = await jobContext.appendToErrorList(dmErr);
-            
-            scanDirOutput.error = errorMessage;
-            scanDirOutput.isFatal = isServerDown;
-            scanDirOutput.errorType = errorType;
-            
-            this.logger.error(`[${jobContext.jobRunId}] ${isServerDown ? 'FATAL SERVER ERROR' : 'ERROR'}: ${errorMessage}`);
-            
-            if (isServerDown) {
-                throw error;
-            }
+            scanDirOutput.error = error?.code || '';
         }
 
         return scanDirOutput;
