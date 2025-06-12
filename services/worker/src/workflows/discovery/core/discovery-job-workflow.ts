@@ -105,15 +105,16 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       } 
 
-      await Promise.all(
-        workers.map(
-          async() => {
-            return await publishTaskActivity(jobRunId)
-          })
-      );
+      // await Promise.all(
+      //   workers.map(
+      //     async() => {
+     await publishTaskActivity(jobRunId)
+      //     })
+      // );
 
       const isErrored = (workers.length === failedWorkers.length);
       const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
+      console.log(`isErrored: ${isErrored}, hasRunningScanTask: ${hasRunningScanTask}, taskNotFoundCount: ${taskNotFoundCount}, workers.length: ${workers.length}, failedWorkers.length: ${failedWorkers.length}`);
       const isCompleted = (taskNotFoundCount === (workers.length-failedWorkers.length)) && !hasRunningScanTask;
 
 

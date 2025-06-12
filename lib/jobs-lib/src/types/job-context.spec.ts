@@ -23,22 +23,25 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
+      groupReadAndWithoutAck: jest.fn(),
     };
 
     this.dirsInfo =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
+      jobRunId: 'job1',
+      streamKey: 'stream1',
+      numMessages: 0,
+      lastId: '0-0',
+      init: jest.fn(),
+      cleanup: jest.fn(),
+      close: jest.fn(),
+      append: jest.fn(),
+      read: jest.fn(),
+      groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
+      getLength: jest.fn(),
+      ackAndCreateTask: jest.fn(),
+      groupReadAndWithoutAck: jest.fn(),
     };
 
     this.errorsInfo =   {
@@ -55,6 +58,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
+      groupReadAndWithoutAck: jest.fn(),
     };
 
     this.tasksInfo =  {
@@ -71,6 +75,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+      groupReadAndWithoutAck: jest.fn(),
     };
 
     this.migrateTask =  {
@@ -87,6 +92,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+       groupReadAndWithoutAck: jest.fn(),
     };
 
     this.taskStats =  {
@@ -103,6 +109,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+      groupReadAndWithoutAck: jest.fn(),
     };
 
     this.updatedTaskInfo =  {
@@ -119,6 +126,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+       groupReadAndWithoutAck: jest.fn(),
     };
   }
   async init() {}

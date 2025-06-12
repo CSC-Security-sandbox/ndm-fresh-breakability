@@ -1,14 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, GroupReaderType, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { Command, GroupReaderType, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
-import { CommonActivityService } from '../common/common.service';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
+
 
 @Injectable()
 export class DiscoveryActivity {
@@ -22,7 +21,6 @@ export class DiscoveryActivity {
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
-    private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
@@ -39,42 +37,25 @@ export class DiscoveryActivity {
     try {
       const jobContext = await this.redisService.getJobContext(traceId);
       this.logger.log(`[${traceId}] JobContext retrieved. Processing files.`);
-      const jobState = await this.commonService.getJobState(traceId);
-      let commandsBatch: Command[] = [];
-      for await (const directory of jobContext.readDirs(this.workerId, this.directoryBatchSize, GroupReaderType.WORKER)) {
-        const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-        const command = new Command(directory.path, ops, `${uuid4()}`,0);
+      let commandsBatch: Command[] = [], streamIds: string[] = [], tasks: Task[] = [];
+      const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
+      for await (const { data, id } of jobContext.groupReadAndWithoutAckDirs(traceId, this.directoryBatchSize*5, GroupReaderType.WORKER)) {
+        const command = new Command(data.path, ops, `${uuid4()}`,0);
         commandsBatch.push(command);
-        // this.logger.log(`[${traceId}] Task created for publishing.`)
+        streamIds.push(id);
         if (commandsBatch && commandsBatch.length >= this.directoryBatchSize) {
           const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
-          const id = await jobContext.appendToTaskList(task);
-          jobContext.tasksInfo.lastId = id;
-          const newJobState = {
-            ...jobState,
-            tasks_total: jobState.tasks_total + 1,
-            status: jobState.status,
-          }
-          jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status, []);
-          await this.redisService.setJobContext(traceId, jobContext);
-          this.logger.log(`[${traceId}] Task published.`);
+          tasks.push(task);
           commandsBatch = [];
         }
       }
       if (commandsBatch.length > 0) {
-        this.logger.log(`[${traceId}] Publishing tasks.`);
         const task = buildTask(TaskType.SCAN, traceId, jobContext, commandsBatch);
-        const id = await jobContext.appendToTaskList(task);
-        this.logger.log(`[${traceId}] Task published.`)
-        jobContext.tasksInfo.lastId = id;
-        const newJobState = {
-          ...jobState,
-          tasks_total: jobState.tasks_total + 1,
-        }
-        jobContext.jobState = new JobState(newJobState.workers, newJobState.tasks_completed, newJobState.tasks_total, newJobState.workers_agreed, newJobState.status, []);
-        await this.redisService.setJobContext(traceId, jobContext);
-        this.logger.log(`[${traceId}] Task published successfully.`)
+        tasks.push(task);
       }
+      this.logger.log(`[${traceId}] Total commands to publish: ${streamIds.length}`);
+      if(tasks.length > 0)
+        await jobContext.ackDirAndCreateTask(GroupReaderType.WORKER, streamIds, tasks);
       return { status: 'success', message: 'Task published successfully' };
     } catch (error) {
       this.logger.error(`[${traceId}] Error in publishing task: ${error.message}`);
@@ -117,8 +98,6 @@ export class DiscoveryActivity {
       return { message: 'Error while marking the job as completed : ' + traceId };
     }
   }
-
-
 
   async generateDiscoveryReport(jobRunId: string) {
     try {

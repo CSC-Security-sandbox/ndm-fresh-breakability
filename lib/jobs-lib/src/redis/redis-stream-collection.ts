@@ -14,8 +14,7 @@ export class RedisStreamCollection<T extends Serializable>
   numMessages: number;
   lastId: string;
   consumerGroupCount: number;
-
-
+  ackCounterKey: string;
   
   constructor(
     jobRunId: string,
@@ -30,6 +29,7 @@ export class RedisStreamCollection<T extends Serializable>
     this.lastId = lastId;
     this.redisClient = redisClient;
     this.consumerGroupCount = Object.values(GroupReaderType).length;
+    this.ackCounterKey = `${this.streamKey}:ackCounter`;
   }
 
   async init(): Promise<void> {
@@ -106,9 +106,7 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  async *groupRead(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {
-    const ackCounterKey = `${this.streamKey}:ackCounter`;
-  
+  async *groupRead(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {  
     const results = await this.redisClient.xReadGroup(
       `${this.jobRunId}-${groupType}`,
       readerName,
@@ -121,21 +119,60 @@ export class RedisStreamCollection<T extends Serializable>
       return;
     }
 
-
     for (const { messages } of results) {
       for (const { id, message } of messages) {
         const data = decode(Buffer.from(message.obj, 'base64')) as T;
         yield data;
         await this.redisClient.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, id);
-        const ackCount = await this.redisClient.hIncrBy(ackCounterKey, id, 1);
+        const ackCount = await this.redisClient.hIncrBy(this.ackCounterKey, id, 1);
         if (ackCount >= (this.consumerGroupCount || 2)) { 
           await this.redisClient.xDel(this.streamKey, id);
-          await this.redisClient.hDel(ackCounterKey, id);
+          await this.redisClient.hDel(this.ackCounterKey, id);
           console.log(`✓ Deleted message ${id} from stream (both consumers ACKed) for ${this.streamKey}`);
         }
       }
     }
   }
+
+  async *groupReadAndWithoutAck(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }> {
+    let results: any;
+    results = await this.redisClient.xReadGroup(
+      `${this.jobRunId}-${groupType}`,
+      readerName,
+      [{ key: this.streamKey, id: '>' }],
+      { COUNT: batchSize, BLOCK: 500 }
+    );
+    
+    if (!results || results.length === 0) {
+      console.debug(`Finding no messages to read, trying xAutoClaim`);
+       results = await this.redisClient.xAutoClaim(
+        this.streamKey,
+        `${this.jobRunId}-${groupType}`,
+        readerName,
+        50000,
+        '0-0',
+        { COUNT: batchSize }
+      )
+      if (!results || results.length === 0) {
+        console.info(`>> No messages to read right now`);
+        return;
+      }
+
+      for (const { id, message } of results.messages) {
+        const data = decode(Buffer.from(message.obj, 'base64')) as T;
+        yield {data, id};
+      }
+
+    }else {
+      for (const { messages } of results) {
+        for (const { id, message } of messages) {
+          const data = decode(Buffer.from(message.obj, 'base64')) as T;
+          yield {data, id};
+        }
+    }
+  }
+
+  } 
   
   async *readAndPurge(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {
     const results = await this.redisClient.xReadGroup(
@@ -169,4 +206,17 @@ export class RedisStreamCollection<T extends Serializable>
       return -1;
     }
   }
+
+  async batchAck(ids: string[]): Promise<boolean> {
+    for (const id of ids) {
+      const ackCount = await this.redisClient.hIncrBy(this.ackCounterKey, id, 1);
+      if (ackCount >= (this.consumerGroupCount || 2)) { 
+        await this.redisClient.xDel(this.streamKey, id);
+        await this.redisClient.hDel(this.ackCounterKey, id);
+        console.log(`✓ Deleted message ${id} from stream (both consumers ACKed) for ${this.streamKey}`);
+      }
+    }
+    return true;
+  }
+
 }

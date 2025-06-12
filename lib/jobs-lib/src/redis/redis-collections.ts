@@ -1,3 +1,4 @@
+import { GroupReaderType } from 'src/types/enums';
 import { DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
 import {
   DirectoryCollection,
@@ -11,6 +12,7 @@ import {
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
+import { encode } from 'msgpack-lite';
 
 export class RedisFileCollection
   extends RedisStreamCollection<FileInfo>
@@ -90,6 +92,26 @@ export class RedisDirectoryCollection
       redisClient,
     );
   }
+
+  async ackAndCreateTask(groupType: GroupReaderType, ids: string[], tasks: Task[]) {
+    const multi = this.redisClient.multi();
+    console.info(`Acknowledging ${ids.length} messages for group ${groupType} in stream ${this.streamKey}`);
+    multi.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, ids);
+    const taskStreamKey = JobUtils.getRedisKey(this.jobRunId, 'tasks');
+    tasks.forEach(task => {
+      const buffer = encode(task);
+      multi.xAdd(taskStreamKey, '*', { obj: buffer.toString('base64') });
+    });
+    multi.xDel(this.streamKey, ids);
+    try {
+      const result = await multi.exec();
+      return result;
+    } catch (error) {
+      console.error('Redis multi.exec error:', error);
+      return false;
+    }
+  }
+  
 }
 
 export class RedisTaskStatsCollection
