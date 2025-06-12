@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
@@ -77,6 +78,13 @@ export class AuthService {
     lastName: string,
     userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
+    // Check if user already exists in the database
+    const existingUser = await this.userRepository.findOne({ where: { email: username } });
+    if (existingUser) {
+      throw new ConflictException(
+        `Cannot create user: the email id '${username}' already exists.`
+      );
+    }
     const tempPassword = this.generateRandomPassword(12);
     const token = await this.getKeycloakToken();
 
@@ -117,6 +125,9 @@ export class AuthService {
 
       return { user: savedUser, tempPassword };
     } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Failed to create user in Keycloak, error: ${error.message}`,
       );
