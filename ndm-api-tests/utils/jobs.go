@@ -246,7 +246,7 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
 func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
-	jobsURL := fmt.Sprintf("%s/JOBS_ENDPOINT/%s", JOB_SERVICE_URL, jobConfigID)
+	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
 	var lastErr error
 	var resp *http.Response
 
