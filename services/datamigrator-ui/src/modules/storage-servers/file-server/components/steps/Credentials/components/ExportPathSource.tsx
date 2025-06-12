@@ -1,18 +1,27 @@
-import { Box } from "@components/container/index";
+import { Box } from "@components/container";
 import { Text } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import ExportPathSourceInfo from "@modules/storage-servers/file-server/components/steps/Credentials/components/ExportPathSourceInfo";
 import { RADIO_OPTIONS } from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
 import RadioButtonGroup from "@components/RadioButton/RadioButtonGroup";
+import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
 
 const ExportPathSource = () => {
   const { nfsCredentialsForm } = useContext(CommonFileServerContext);
+  const isManualUpload =
+    nfsCredentialsForm.formState.exportPathSource ===
+    EXPORT_PATH_SOURCE_ENUM.MANUAL_UPLOAD;
+
   return (
     <>
       <ExportPathSourceInfo />
-      <Box className="flex gap-20 border-2 border-gray-300 rounded-md p-5">
-        <Text>Path Retrieval Mechanism</Text>
+      <Box
+        className={`border-2 border-gray-300 flex items-center p-5 rounded-md ${
+          isManualUpload ? "justify-between" : "gap-20"
+        }`}
+      >
+        <Text> Export Paths Retrieval Mechanism</Text>
         <Box className="flex gap-16">
           <RadioButtonGroup
             options={RADIO_OPTIONS}
@@ -21,6 +30,13 @@ const ExportPathSource = () => {
             style="flex gap-16"
           />
         </Box>
+        {isManualUpload && (
+          <Box className="bg-blue-50 flex font-light items-center p-2 text-xs w-2/6">
+            To manually add export paths, complete the file server setup first.
+            Then, go to the File Overview page to upload the file containing the
+            required export paths.
+          </Box>
+        )}
       </Box>
     </>
   );

@@ -14,7 +14,7 @@ export const EXPORT_PATHS_TABLE_COLS_DEF = [
   },
   {
     id: 2,
-    header: "Valid Paths",
+    header: "Status",
     Renderer: PathsInfoCellRenderer,
   },
   {
