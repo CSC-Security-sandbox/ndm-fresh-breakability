@@ -499,7 +499,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		req.Header.Set(key, value)
 	}
 
-	LogDebug(fmt.Sprintf("Sending Request: %s %s\nPayload:\n%s\n", req.Method, url, string(body)))
 	client := &http.Client{
 		Transport: tr,
 		Timeout:   10 * time.Second,
