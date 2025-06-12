@@ -98,7 +98,7 @@ const TableWrapper = ({
 
 
   const checkDisabled = (row) => {
-    return notReachableExportPaths.includes(row.id);
+    return notReachableExportPaths.includes(row?.id);
   };
 
   return (
