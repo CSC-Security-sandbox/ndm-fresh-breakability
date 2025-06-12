@@ -44,7 +44,7 @@ const (
 	DEFAULT_ACCOUNT_ID                      = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                              = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                             = "logout-user"
-	NFS_SOURCE_VOLUME                       = "/vol_vasu_nfs_src"
+	NFS_SOURCE_VOLUME                       = "/volSrcEDA"
 	NFS_DESTINATION_VOLUME                  = "/vol_vasu_nfs_dest"
 	NFS_SOURCE_VOLUME_1                     = "/volSrcGenomics"
 	NFS_DESTINATION_VOLUME_1                = "/volEDAs"
@@ -53,11 +53,23 @@ const (
 	CREATE_MIGRATION_ENDPOINT               = "/api/v1/jobs/bulk-migrate"
 	CREATE_CUTOVER_ENDPOINT                 = "/api/v1/jobs/bulk-cutover"
 	CUTOVER_APPROVE_REJECT_ENDPOINT         = "/api/v1/job-run/cutover/approve"
+	JOB_RUN_ACTION_ENDPOINT                 = "/api/v1/job-run/action"
+	JOB_RUN_ENDPOINT                        = "/api/v1/job-run"
+	JOBS_ENDPOINT                			=  "/api/v1/jobs"
 	JobTypeDiscovery                JobType = "DISCOVER"
 	JobTypeCutover                  JobType = "CUTOVER"
 	JobTypeMigration                JobType = "MIGRATE"
 	FormatPDF                       Format  = "pdf"
 	FormatCSV                       Format  = "csv"
+	DefaultPollInterval                     = 5
+	MaxPollRetries                          = 30
+	RUNNING_JOBRUN                          = "RUNNING"
+	PAUSE_JOBRUN                            = "PAUSE"
+	COMPLETED_JOBRUN                        = "COMPLETED"
+	RESUME_JOBRUN                           = "RESUME"
+	STOP_JOBRUN                             = "STOP"
+	READY_JOBRUN                            = "READY"
+	BLOCKED_JOBRUN                          = "BLOCKED"
 )
 
 func init() {

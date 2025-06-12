@@ -1,13 +1,13 @@
 package tests
 
 import (
-	"testing"
-	"os"
 	. "ndm-api-tests/utils"
+	"os"
+	"testing"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
 
 func TestMain(m *testing.M) {
 	InitTestEnv()
@@ -19,4 +19,3 @@ func TestAPIScenarios(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "API Scenarios Suite")
 }
-

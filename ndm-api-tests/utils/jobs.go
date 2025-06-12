@@ -3,8 +3,10 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 type GetJobResponse struct {
@@ -21,6 +23,12 @@ type JobResponse []struct {
 type BulkCutoverJobParams struct {
 	SourcePathIDs      []string
 	DestinationPathIDs []string
+}
+
+// JobCounts holds the counts of directories and files.
+
+type JobStatus struct {
+	Status string `json:"status"`
 }
 
 type DiscoveryJobParams struct {
@@ -194,7 +202,7 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -228,7 +236,7 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 		return nil, err
 	}
 
-	resp, err := SendAPIRequest("PUT", approveJobURL, approveBytes, headers)
+	resp, err := SendAPIRequest(http.MethodPut, approveJobURL, approveBytes, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -238,27 +246,152 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
 func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
-	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
-	resp, err := SendAPIRequest(http.MethodGet, jobsURL, nil, headers)
+	jobsURL := fmt.Sprintf("%s/JOBS_ENDPOINT/%s", JOB_SERVICE_URL, jobConfigID)
+	var lastErr error
+	var resp *http.Response
+
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		resp, err := SendAPIRequest(http.MethodGet, jobsURL, nil, headers)
+		if err != nil {
+			lastErr = fmt.Errorf("failed while calling API: %w", err)
+			time.Sleep(DefaultPollInterval * time.Second)
+			continue
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("error reading response body: %w", err)
+			time.Sleep(DefaultPollInterval * time.Second)
+			continue
+		}
+
+		var getJobsResp GetJobResponse
+		err = json.Unmarshal(bodyBytes, &getJobsResp)
+		if err != nil {
+			lastErr = fmt.Errorf("error unmarshaling response: %w", err)
+			time.Sleep(DefaultPollInterval * time.Second)
+			continue
+		}
+
+		if len(getJobsResp.JobRuns) > 0 {
+			return getJobsResp, resp, nil
+		}
+
+		lastErr = fmt.Errorf("no jobRuns found in response")
+		time.Sleep(DefaultPollInterval * time.Second)
+	}
+
+	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d retries: %v", MaxPollRetries, lastErr)
+}
+
+// WaitForJobState polls the job run status until it matches the desired state or times out.
+
+func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int) error {
+	var retryCount int
+	if len(pollRetries) > 0 && pollRetries[0] > 0 {
+		retryCount = pollRetries[0]
+	} else {
+		retryCount = MaxPollRetries
+	}
+
+	for i := 0; i < retryCount; i++ {
+		status, err := checkJobRunStatus(jobRunID)
+		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
+
+		if err != nil {
+			return err
+		}
+		if status == desiredJobState {
+			LogDebug("Job reached desired state: " + desiredJobState + ".")
+			return nil
+		}
+		time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+	}
+	time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, MaxPollRetries)
+}
+
+// ChangeJobRunState changes the state of a job run (PAUSE, RESUME, STOP).
+func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunIDs []string) error {
+
+	switch stateType {
+	case RESUME_JOBRUN, STOP_JOBRUN:
+		status, err := checkJobRunStatus(jobRunID)
+		if err != nil {
+			return err
+		}
+		if stateType == RESUME_JOBRUN && status == PAUSE_JOBRUN {
+			LogDebug("Job is paused. Resuming operation.")
+			return ChangeJobRunStateAPI(stateType, jobRunIDs)
+		}
+		LogDebug("No paused job run found or not RESUME. Sending state change.")
+		return ChangeJobRunStateAPI(stateType, jobRunIDs)
+
+	case PAUSE_JOBRUN:
+		for i := 0; i < MaxPollRetries; i++ {
+			status, err := checkJobRunStatus(jobRunID)
+			if err != nil {
+				return err
+			}
+			if status == RUNNING_JOBRUN {
+				LogDebug("Job is running. Pausing JobRun.")
+				return ChangeJobRunStateAPI(stateType, jobRunIDs)
+			}
+			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
+
+		}
+		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
+	default:
+		return fmt.Errorf("unsupported job run state: %s", stateType)
+	}
+}
+
+// checkJobRunStatus fetches the job run status from the API.
+func checkJobRunStatus(jobRunID string) (string, error) {
+	url := fmt.Sprintf("%s%s/%s", JOB_SERVICE_URL, JOB_RUN_ENDPOINT, jobRunID)
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
 	if err != nil {
-		return GetJobResponse{}, nil, err
+		return "", fmt.Errorf("error calling API: %v", err)
 	}
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return GetJobResponse{}, resp, err
+		return "", fmt.Errorf("error reading response body: %v", err)
 	}
+	var temp struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &temp); err != nil {
+		return "", fmt.Errorf("error parsing JSON: %v", err)
+	}
+	LogDebug(fmt.Sprintf("Status check response: %s", temp.Status))
+	return temp.Status, nil
+}
 
-	var getJobsResp GetJobResponse
-	err = json.Unmarshal(bodyBytes, &getJobsResp)
+// ChangeJobRunStateAPI sends the actual state change request to the API.
+func ChangeJobRunStateAPI(action string, jobRunIDs []string) error {
+
+	apiURL := fmt.Sprintf("%s%s", JOB_SERVICE_URL, JOB_RUN_ENDPOINT)
+	payload := map[string]interface{}{
+		"action":  action,
+		"jobRuns": jobRunIDs,
+	}
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return GetJobResponse{}, resp, err
+		return fmt.Errorf("error marshaling JSON: %v", err)
 	}
-
-	// Defensive: check if there is at least one job run
-	if len(getJobsResp.JobRuns) == 0 {
-		return GetJobResponse{}, resp, err
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	resp, err := SendAPIRequest(http.MethodPut, apiURL, payloadBytes, headers)
+	if err != nil {
+		return fmt.Errorf("error calling API: %v", err)
 	}
-
-	return getJobsResp, resp, nil
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body: %v", err)
+	}
+	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
+	return nil
 }
