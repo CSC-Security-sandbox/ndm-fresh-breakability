@@ -1,12 +1,16 @@
 import { Button } from "@netapp/bxp-design-system-react";
 import { BlueXpFormType } from "@/types/app.type";
-import { BulkManualUploadModalContentPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
+import {
+  BulkManualUploadModalContentPropsType,
+  UploadedFilePropsType,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 
 export const BulkManualUploadModalFooter = (
   form: BlueXpFormType<BulkManualUploadModalContentPropsType>,
+  exportPathSourceData: UploadedFilePropsType,
+  isLoading: boolean,
   onSubmit: () => Promise<void>,
-  handleResetAndClose: () => void,
-  isLoading: boolean
+  handleResetAndClose: () => void
 ) => {
   return (
     <>
@@ -18,7 +22,7 @@ export const BulkManualUploadModalFooter = (
         onClick={onSubmit}
         isSubmitting={isLoading}
       >
-        Submit
+        {exportPathSourceData?.uploadId ? "Submit" : "Upload"}
       </Button>
     </>
   );
