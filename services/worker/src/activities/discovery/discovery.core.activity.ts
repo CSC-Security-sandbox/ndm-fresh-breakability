@@ -28,59 +28,43 @@ export class DiscoveryScanActivity {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 250; 
-        this.retries = this.configService.get('worker.retries');
         this.timeout = this.configService.get('worker.timeout');
-        this.delay = this.configService.get('worker.delay');
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<fs.Dirent[]> {
         try {
             this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
-            
+
             await fs.promises.access(directoryPath, fs.constants.R_OK);
-               
-            for (let i = 1; i <= this.retries; i++) {
-                try {
-                    const result = await Promise.race<fs.Dirent[]>([
-                        fs.promises.readdir(directoryPath, { withFileTypes: true }),
-                       
-                        new Promise<never>((_, reject) => {
-                            const err = new Error('Timeout reading directory');
-                            (err as any).code = 'ETIMEDOUT';
-                            setTimeout(() => reject(err), this.timeout);
-                        })
-                    ]);
-                    
-                    this.logger.debug(`[${jobContext.jobRunId}] Successfully read directory: ${directoryPath}`);
-                    return result;
-                } catch (err) {
-                    this.logger.warn(`[${jobContext.jobRunId}] Attempt ${i}/${this.retries} failed for ${directoryPath}: ${err.message}`);
-                    
-                    if (isServerDownError(err)) {
-                        this.logger.error(`[${jobContext.jobRunId}] Server connectivity issue detected, stopping retries`);
-                        throw err;
-                    }
-                    
-                    if (i === this.retries) throw err;
-                    await new Promise(res => setTimeout(res, this.delay));
-                }
-            }
-        } catch (error) { 
-            const serverInfo = getServerInfoFromPath(directoryPath, jobContext);
             
+            const result = await Promise.race<fs.Dirent[]>([
+                fs.promises.readdir(directoryPath, { withFileTypes: true }),
+
+                new Promise<never>((_, reject) => {
+                    const err = new Error('Timeout reading directory');
+                    (err as any).code = 'ETIMEDOUT';
+                    setTimeout(() => reject(err), this.timeout);
+                })
+            ]);
+
+            this.logger.debug(`[${jobContext.jobRunId}] Successfully read directory: ${directoryPath}`);
+            return result;
+        } catch (error) {
+            const serverInfo = getServerInfoFromPath(directoryPath, jobContext);
+
             if (isServerDownError(error)) {
                 const errorMessage = createServerDownErrorMessage(error, serverInfo);
                 this.logger.error(`[${jobContext.jobRunId}] ${errorMessage}`);
-                
+
                 const enhancedError = new Error(errorMessage);
                 enhancedError.name = 'ServerDownError';
                 (enhancedError as any).code = error?.code || 'SERVER_UNREACHABLE';
                 (enhancedError as any).originalError = error?.message;
                 (enhancedError as any).serverInfo = serverInfo;
- 
+
                 throw enhancedError;
             }
-            
+
             this.logger.error(`[${jobContext.jobRunId}] Directory access failed: ${directoryPath}, Error: ${error.message}`);
             throw error;
         }
