@@ -126,9 +126,7 @@ export class AuthService {
       return { user: savedUser, tempPassword };
     } catch (error) {
       if (error instanceof ConflictException) {
-        throw new ConflictException(
-          error.message 
-        );
+        throw error;
       }
       throw new InternalServerErrorException(
         `Failed to create user in Keycloak, error: ${error.message}`,
