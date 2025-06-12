@@ -20,7 +20,7 @@ const ExportPathSource = () => {
     <>
       <ExportPathSourceInfo />
       <Box
-        className={`border-2 border-gray-300 flex items-center p-4 rounded-md ${
+        className={`border-2 border-gray-300 flex items-center p-5 rounded-md ${
           isManualUpload ? "justify-between" : "gap-20"
         }`}
       >
