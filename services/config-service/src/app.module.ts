@@ -7,7 +7,7 @@ import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate
 import { ConfigurationModule } from './configurations/configuration.module';
 import { WorkManagerModule } from './work-manager/work-manager.module';
 import { WorkflowModule } from './workflow/workflow.module';
-import { PathUploadModule } from './path-upload/path-upload-module';
+import { PathUploadModule } from './path-upload/path-upload.module';
 
 @Module({
   imports: [

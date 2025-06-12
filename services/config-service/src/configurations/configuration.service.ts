@@ -1188,39 +1188,6 @@ export class ConfigurationService {
     }
   }
 
-  async isFileServerRefreshEligible(fileServerId: string): Promise<boolean> {
-    try {
-      const fileServer = await this.fileServerEntity.findOne({ where: { id: fileServerId }});
-      if (!fileServer) {
-        throw new NotFoundException(`File server with ID ${fileServerId} not found.`);
-      }
-      const volumes = await this.volumes.find({
-        where: { fileServerId: fileServer.id, isValid: true },
-        relations: ['jobConfig'],
-      });
-      if (volumes.length === 0) {
-        this.logger.warn(`No valid volumes found for file server ID ${fileServerId}.`);
-        return true;
-      }
-      // should not refresh if any volume has active job config with schedular === 'SCHEDULING' or futureScheduledAt is not null;
-      const hasActiveJobConfig = volumes.some(volume =>
-        volume.jobConfig.some(job => 
-          job.status === JobStatus.Active && 
-          (job.scheduler === ScheduleStatus.SCHEDULING || job.futureScheduleAt !== null)
-        )
-      );
-     
-      if (hasActiveJobConfig) {
-        this.logger.warn(`File server ID ${fileServerId} has active job configurations. Refresh not eligible.`);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      this.logger.error(`Error checking file server refresh eligibility: ${error.message}`);
-      throw new InternalServerErrorException('Failed to check file server refresh eligibility.');
-    }
-  }
-
   async isRefreshPossible(configId: string): Promise<boolean> {
     const fileServers = await this.configEntity.find({
       where: { id: configId },

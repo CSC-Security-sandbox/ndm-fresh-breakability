@@ -1,129 +1,185 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { PathUploadController } from './path-upload.controller';
+import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { PathUploadService } from './path-upload.service';
-import { ImportVolumePathsDto } from './dto/path-upload.dto';
-import { Response } from 'express';
+import { ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
 import * as fs from 'fs';
-import * as path from 'path';
-import { Logger } from '@nestjs/common';
-import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
-import { ConfigModule } from '@nestjs/config';
-import appConfig from 'src/config/app.config';
-import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
-import { WorkflowModule } from 'src/workflow/workflow.module';
 
-jest.mock('fs');
 
 describe('PathUploadController', () => {
   let controller: PathUploadController;
   let service: PathUploadService;
 
+  const mockPathUploadService = {
+    processFileUpload: jest.fn(),
+    createUpload: jest.fn(),
+    processUploadPathValidation: jest.fn(),
+    processUploadUpdate: jest.fn(),
+    createVolumeForFileServer: jest.fn(),
+    processValidationResult: jest.fn(),
+    isRefreshPossible: jest.fn()
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PathUploadController],
       providers: [
-        PathUploadService
+        {
+          provide: PathUploadService,
+          useValue: mockPathUploadService,
+         
+        },
+        {
+          provide: JwtService,
+          useValue: {},
+        }
       ],
-      imports: [LoggerModule.forRoot(), ConfigModule.forRoot({ load: [appConfig] }), AuthKeycloakModule, WorkflowModule],
     }).compile();
 
     controller = module.get<PathUploadController>(PathUploadController);
     service = module.get<PathUploadService>(PathUploadService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  describe('POST /path-upload:fileServerId', () => {
+    it('should call processFileUpload with correct parameters', async () => {
+      const mockUploadData: UploadVolumePathsDto = {
+        fileName: 'test.csv',
+        contents: 'path\r\n/srv/nfs_share\r\n/srv/nfs_share/data/1',
+        fileSize: 1024
+      }
+      const mockFileServerId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockUserDetails: any = { userId: 'user123', username: 'testuser' };
+      jest.spyOn(service, 'processFileUpload').mockResolvedValue({ success: true });
+      const result = await controller.importVolumePaths(mockUploadData, mockFileServerId, mockUserDetails);
+      expect(service.processFileUpload).toHaveBeenCalledWith(mockUploadData, mockFileServerId, mockUserDetails);
+      expect(result).toEqual({ success: true });
+    });
 
-  describe('importVolumePaths', () => {
-  it('should call processFileUpload with correct ImportVolumePathsDto', async () => {
-    const dto: ImportVolumePathsDto = {
-      fileName: 'volume_paths.csv',
-      contents: 'path\n/path/to/data',
-      fileSize: 1024,
-    };
-    const fileServerId = 'server123';
-    const userDetails = { id: 'user1' } as any;
-    const expectedResult = { success: true };
+    it('should throw an error if processFileUpload fails', async () => {
+      const mockUploadData: UploadVolumePathsDto = {
+        fileName: 'test.csv',
+        contents: 'path\r\n/srv/nfs_share\r\n/srv/nfs_share/data/1',
+        fileSize: 1024
+      }
+      const mockFileServerId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockUserDetails: any = { userId: 'user123', username: 'testuser' };
+      jest.spyOn(service, 'processFileUpload').mockRejectedValue(new Error('Upload failed'));
+      await expect(controller.importVolumePaths(mockUploadData, mockFileServerId, mockUserDetails)).rejects.toThrow('Upload failed');
+    });
 
-      jest.spyOn(service, 'processUploadPathValidation').mockResolvedValue(expectedResult as any);
+    it('should call processUploadPathValidation with correct parameters', async () => {
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockResponse: any = { success: true };
+      jest.spyOn(service, 'processUploadPathValidation').mockResolvedValue(mockResponse);
+      const result = await controller.confirmPathUpload(mockUploadId);
+      expect(service.processUploadPathValidation).toHaveBeenCalledWith(mockUploadId);
+      expect(result).toEqual({ success: true });
+    });
 
+    it('should throw an error if processUploadPathValidation fails', async () => {
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      jest.spyOn(service, 'processUploadPathValidation').mockRejectedValue(new Error('Upload confirmation failed'));
+      await expect(controller.confirmPathUpload(mockUploadId)).rejects.toThrow('Upload confirmation failed');
+    });
+  })
 
-    // service.processFileUpload.mockResolvedValue(expectedResult);
-
-    const result = await controller.importVolumePaths(dto, fileServerId, userDetails);
-
-    expect(result).toEqual(expectedResult);
-    expect(service.processFileUpload).toHaveBeenCalledWith(dto, fileServerId, userDetails);
-  });
-});
-  describe('confirmPathUpload', () => {
+  describe('POST confirm/:uploadId', () => {
     it('should call processUploadPathValidation with correct uploadId', async () => {
-      const uploadId = 'upload123';
-      const expectedResult = { confirmed: true };
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockResponse: any = { success: true };
+      jest.spyOn(service, 'processUploadPathValidation').mockResolvedValue(mockResponse);
+      const result = await controller.confirmPathUpload(mockUploadId);
+      expect(service.processUploadPathValidation).toHaveBeenCalledWith(mockUploadId);
+      expect(result).toEqual({ success: true }); 
+    });
 
-      jest.spyOn(service, 'processUploadPathValidation').mockResolvedValue(expectedResult as any);
-
-      // service.processUploadPathValidation.mockResolvedValue(expectedResult);
-
-      const result = await controller.confirmPathUpload(uploadId);
-      expect(result).toEqual(expectedResult);
-      expect(service.processUploadPathValidation).toHaveBeenCalledWith(uploadId);
+    it('should throw an error if processUploadPathValidation fails', async () => {
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      jest.spyOn(service, 'processUploadPathValidation').mockRejectedValue(new Error('Upload confirmation failed'));
+      await expect(controller.confirmPathUpload(mockUploadId)).rejects.toThrow('Upload confirmation failed');
     });
   });
 
- describe('updateUploadValidationResult', () => {
-  it('should call processUploadUpdate with correct validationResult', async () => {
-    const uploadId = 'upload-789';
-    const dto: any = {
-      validationResult: [
-        {
-          result: {
-            traceId: '2c5de068-2ecc-49fe-a2da-1c4e3f96db2b',
-            status: 'success',
-            workerId: '4edbd212-f443-469f-beee-04d02d8a36cc',
-            path: '/srv/nfs_share',
-            pathId: '5cea4762-769e-438a-8194-34c5dbe9b564',
-            message: 'Paths validated successfully by worker 4edbd212-f443-469f-beee-04d02d8a36cc'
-          }
-        }
-      ],
-    };
-      const expectedResult = { updated: true };
+  describe('PATCH /:uploadId', () => {
+    it('should call processUploadUpdate with correct parameters', async () => {
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockValidationResult: any = {
+        validationResult: [{ path: '/srv/nfs_share', valid: true }]
+      };
+      const mockResult: any = { success: true };
+      jest.spyOn(service, 'processUploadUpdate').mockResolvedValue(mockResult);
+      const result = await controller.updateUploadValidationResult(mockUploadId, mockValidationResult);
+      expect(service.processUploadUpdate).toHaveBeenCalledWith(mockValidationResult.validationResult, mockUploadId);
+      expect(result).toEqual({ success: true });
+    });
 
-      jest.spyOn(service, 'processUploadPathValidation').mockResolvedValue(expectedResult as any);
-
-
-      // service.processUploadUpdate.mockResolvedValue(expectedResult);
-
-      const result = await controller.updateUploadValidationResult(uploadId, dto);
-      expect(result).toEqual(expectedResult);
-      expect(service.processUploadUpdate).toHaveBeenCalledWith(dto.validationResult, uploadId);
+    it('should throw an error if processUploadUpdate fails', async () => {
+      const mockUploadId = '123e4567-e89b-12d3-a456-426614174000';
+      const mockValidationResult: any = {
+        validationResult: [{ path: '/srv/nfs_share', valid: true }]
+      };
+      jest.spyOn(service, 'processUploadUpdate').mockRejectedValue(new Error('Update failed'));
+      await expect(controller.updateUploadValidationResult(mockUploadId, mockValidationResult)).rejects.toThrow('Update failed');
     });
   });
+  describe('GET /download/template', () => {
+    // below is the method 
+    // const headers = ['path'];
+    // const records = [{ path: 'example/path/to/volume' }];
+    // const csvContent = [headers.join(','), ...records.map(row => Object.values(row).join(','))].join('\n');
+    // const fileName = 'volume_paths_template.csv';
+    
+    // // create the uploads directory if it doesn't exist
+    // if (!fs.existsSync(join(process.cwd(), './uploads'))) {
+    //     fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
+    // }
 
-  describe('downloadCsvFile', () => {
-    it('should create a CSV file and send it as a response', async () => {
-      const res = {
+    // const filePath = join(process.cwd(), './uploads', fileName);
+    // fs.writeFileSync(filePath, csvContent);
+    // res.setHeader('Content-Type', 'text/csv');
+    // res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    // res.sendFile(filePath);
+    // const fileStream = fs.createReadStream(filePath);
+    // fileStream.pipe(res)
+
+    it('should download a CSV file with correct headers and content', async () => {
+      const mockResponse: any = {
         setHeader: jest.fn(),
         sendFile: jest.fn(),
-      } as unknown as Response;
+        pipe: jest.fn()
+      };
+      const headers = ['path'];
+      const records = [{ path: 'example/path/to/volume' }];
+      const csvContent = [headers.join(','), ...records.map(row => Object.values(row).join(','))].join('\n');
+      const fileName = 'volume_paths_template.csv';
+      
+      // Mock the file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      jest.spyOn(fs, 'createReadStream').mockReturnValue({ pipe: jest.fn()} as any);
 
-      const csvContent = 'path\nexample/path/to/volume';
-      const filePath = path.join(process.cwd(), './uploads/volume_paths_template.csv');
+      await controller.downloadCsvFile(mockResponse);
 
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
-      (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
-
-      await controller.downloadCsvFile(res);
-
-      expect(fs.existsSync).toHaveBeenCalledWith(path.join(process.cwd(), './uploads'));
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.join(process.cwd(), './uploads'), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(filePath, csvContent);
-      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
-      expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename=volume_paths_template.csv');
-      expect(res.sendFile).toHaveBeenCalledWith(filePath);
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Disposition', `attachment; filename=${fileName}`);
+      expect(mockResponse.sendFile).toHaveBeenCalled();
     });
-  });
+
+    it('should handle errors during file download', async () => {
+      const mockResponse: any = {
+        setHeader: jest.fn(),
+        sendFile: jest.fn(),
+        pipe: jest.fn()
+      };
+      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+        throw new Error('File not found');
+      });
+
+      await expect(controller.downloadCsvFile(mockResponse)).rejects.toThrow('File not found');
+    });
+  })
 });

@@ -19,6 +19,7 @@ import { PrecheckActivity } from 'src/activities/precheck/precheck-activity';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activities';
 import { RedisMemoryCheckActivity } from 'src/activities/redis/redis.mem.usage.check.activity';
+import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
@@ -127,6 +128,7 @@ describe('WorkerOptionsService', () => {
         { provide: SpeedTestActivities, useValue: speedTestReadActivityMock },
         { provide: RedisMemoryCheckActivity, useValue: redismeorycheckactivityMock },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide:  ValidatePathActivity, useValue: {  validatePath: bindMock,  postValidationResult: bindMock } },
       ],
     }).compile();
 

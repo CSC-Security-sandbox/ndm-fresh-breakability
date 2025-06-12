@@ -205,7 +205,6 @@ export class PathUploadService {
     if (!result) {
       throw new BadRequestException('Failed to process validation result');
     }
-    const invalidVolumePaths = [];
     const createdBy = updateResult.createdBy || null;
     for (const validPath of result.validPaths) {
       const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: validPath.volumePath, fileServerId } });
@@ -214,7 +213,6 @@ export class PathUploadService {
         existingVolume.isValid = true;
         existingVolume.createdBy = createdBy;
         await this.volumeRepo.save(existingVolume);
-        if(existingVolume.isDisabled) invalidVolumePaths.push(existingVolume.id);
       }
       else {
         const newVolume = this.volumeRepo.create({
@@ -235,7 +233,6 @@ export class PathUploadService {
         existingVolume.isValid = false;
         existingVolume.createdBy = createdBy;
         await this.volumeRepo.save(existingVolume);
-        invalidVolumePaths.push(existingVolume.id);
       }
       else {
         const newVolume = this.volumeRepo.create({
@@ -250,12 +247,16 @@ export class PathUploadService {
     }
 
     // Inactivate all the job configurations that are using invalid paths as sourcePathId or targetPathId 
-    if(invalidVolumePaths.length) {
+    const inValidPaths = await this.volumeRepo.find({
+      where: [{ fileServerId, isValid: false }, { fileServerId, isDisabled: true }],
+      select: ['id'],
+    })
+    if(inValidPaths.length) {
       await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
       .update()
       .set({ status:  JobStatus.InActive })
-      .where('jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)', { invalidVolumePaths })
+      .where('jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)', { invalidVolumePaths: inValidPaths.map(path => path.id) })
       .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
       .execute();
     }
@@ -352,10 +353,6 @@ export class PathUploadService {
     }
     
     this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
-    return true;
-  }
-
-  async isUploadInProgress(fileServerId: string): Promise<boolean> {
     return true;
   }
 }

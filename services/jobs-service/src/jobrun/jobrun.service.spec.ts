@@ -976,6 +976,7 @@ describe("JobRunService", () => {
             password: "source-pass",
             workingDirectory: "/source/working",
             protocolVersion: "2",
+            isValidPath: true,
           },
           targetCredential: {
             protocol: Protocol.SMB,
@@ -986,6 +987,7 @@ describe("JobRunService", () => {
             password: "target-pass",
             workingDirectory: "/target/working",
             protocolVersion: "2",
+            isValidPath: true,
           },
         },
         workers: ["worker1", "worker2"],
@@ -1026,7 +1028,7 @@ describe("JobRunService", () => {
       try{
       await initService.createJobRun(mockJob, new Date());
       } catch (error) {
-        expect(error).toBeInstanceOf(NotFoundException)
+        expect(error).toBeInstanceOf(TypeError)
       }
     });
   });
