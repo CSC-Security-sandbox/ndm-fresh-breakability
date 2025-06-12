@@ -6,7 +6,12 @@ on:
       - main
       - 'release*'
     paths:
-      - 'services/**'
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/jobs-service/**'
+      - 'services/reports-service/**'
+      - 'services/worker/**'
 
 permissions:
   contents: read

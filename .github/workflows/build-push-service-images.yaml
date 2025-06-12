@@ -25,7 +25,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       matrix_count: ${{ steps.set-matrix.outputs.matrix_count }}
     steps:
-      - name: Checkout Code with full history
+      - name: Checkout last 2 commits
         uses: actions/checkout@v3
         with:
           fetch-depth: 2
