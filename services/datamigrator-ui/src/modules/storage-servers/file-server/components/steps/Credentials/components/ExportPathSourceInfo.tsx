@@ -8,7 +8,7 @@ const ExportPathSourceInfo = () => (
     <Text className="text-base font-semibold">Note:</Text>
     <Text className="text-base">
       Use manual upload if showmount is not supported, such as with GCNV Flex
-      service, or if you prefer to upload the files manually.
+      service, or if you prefer to upload the export paths manually.
     </Text>
   </Box>
 );
