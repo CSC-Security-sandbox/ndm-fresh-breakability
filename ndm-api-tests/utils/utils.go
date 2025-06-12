@@ -385,17 +385,17 @@ func sendPostAPIRequest(url string, data map[string]string, authToken string) (m
 func createAccount(authToken string) (string, error) {
 	// var fullURL = os.Getenv("ADMIN_SERVICE_URL") + "/api/v1/accounts"
 	// data := map[string]string{
-	// 	"account_name": os.Getenv("BASE_ACCOUNT_NAME"),
+	//  "account_name": os.Getenv("BASE_ACCOUNT_NAME"),
 	// }
 
 	// jsonResponse, err := sendPostAPIRequest(fullURL, data, authToken)
 	// if err != nil {
-	// 	log.Printf("Error sending API request: %v", err)
-	// 	return "", err
+	//  log.Printf("Error sending API request: %v", err)
+	//  return "", err
 	// }
 	// accountId, ok := jsonResponse["id"].(string)
 	// if !ok {
-	// 	return "", errors.New("id not found in response in createAccount")
+	//  return "", errors.New("id not found in response in createAccount")
 	// }
 
 	// return accountId, nil
@@ -499,7 +499,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		req.Header.Set(key, value)
 	}
 
-	LogDebug(fmt.Sprintf("Sending Request: %s %s\nPayload:\n%s\n", req.Method, url, string(body)))
 	client := &http.Client{
 		Transport: tr,
 		Timeout:   10 * time.Second,
@@ -1014,7 +1013,7 @@ func GetVolumeID(response Response, volumePath string) (string, error) {
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
 }
 
-func GetVolumByID(volumeType string, authToken string, configId string) (string, error) {
+func GetVolumeIDByName(volumeType, volumeName, authToken, configId string) (string, error) {
 	// Build the full URL
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
 	var reqBody []byte
@@ -1022,7 +1021,7 @@ func GetVolumByID(volumeType string, authToken string, configId string) (string,
 	// Get extra headers
 	headers := GetHeaders(authToken, ContentTypeForm)
 	// Send the API request
-	resp, err := SendAPIRequest("get", fullURL, reqBody, headers)
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, reqBody, headers)
 	if err != nil {
 		return "", fmt.Errorf("error sending API request: %w", err)
 	}
@@ -1040,18 +1039,8 @@ func GetVolumByID(volumeType string, authToken string, configId string) (string,
 		return "", fmt.Errorf("error unmarshalling response: %w", err)
 	}
 
-	// Determine the volume path based on the scData.Type
-	var volumePath string
-	if volumeType == "source" {
-		volumePath = NFS_SOURCE_VOLUME
-	} else if volumeType == "destination" {
-		volumePath = NFS_DESTINATION_VOLUME
-	} else {
-		return "", fmt.Errorf("invalid scData.Type: %s", volumeType)
-	}
-
 	// Find the volume ID
-	foundID, err := GetVolumeID(response, volumePath)
+	foundID, err := GetVolumeID(response, volumeName)
 	if err != nil {
 		return "", fmt.Errorf("error finding volume ID: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"ndm-api-tests/internal/scenario"
 	"os"
 	"path/filepath"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -96,14 +97,13 @@ func SetupTestEnv(workerCount int) (string, []string, error) {
 	return projectId, workerIds, nil
 }
 
-
 func CleanupTestEnv() error {
 
 	output, err := DetachWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)
 	}
-	
+
 	LogDebug(fmt.Sprintf("Detach workers output: %s", output))
 	LogDebug("Test environment deletion complete.")
 	return nil
