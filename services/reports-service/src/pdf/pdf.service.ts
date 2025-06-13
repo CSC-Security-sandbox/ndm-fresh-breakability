@@ -26,8 +26,9 @@ export class PdfService {
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
-      const filePath = path.join(this.reportsDirectory, fileName);
+      const sanitizedFileName = `${jobRunId.replace(/[^a-zA-Z0-9_-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
+      const filePath = path.join(this.reportsDirectory, sanitizedFileName);
+
       if (reportType === ReportType.JOBS_RREPORT)
         {
           let response =  await this.generateJobsReportPdf(jobRunId);
@@ -36,7 +37,7 @@ export class PdfService {
        
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
-          return fs.readFileSync(filePath);
+          return fs.readFileSync(filePath); 
       } else {
         throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
       }
