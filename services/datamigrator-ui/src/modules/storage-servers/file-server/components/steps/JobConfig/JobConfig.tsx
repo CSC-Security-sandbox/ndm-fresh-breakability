@@ -28,9 +28,8 @@ const JobConfig = () => {
             form={jobConfigForm}
             options={mountPaths}
             isOptional
-            /* Disabling this field and making it as default disabled by adding true,
-            as this is related to speedtest and it is not included in Alpha release.
-            remove the below line when we want to enable speedtest functionality */
+            /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. */
             disabled={true}
           />
         ) : (
@@ -41,17 +40,15 @@ const JobConfig = () => {
             form={jobConfigForm}
             placeholder="Enter Export Path"
             isOptional
-            /* Disabling this field and making it as default disabled by adding true,
-            as this is related to speedtest and it is not included in Alpha release.
-            remove the below line when we want to enable speedtest functionality */
+            /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. */
             disabled={true}
           />
         )}
         <FormFieldInputNew
           form={jobConfigForm}
-          /* Disabling this field and making it as default disabled by adding true,
-          as this is related to speedtest and it is not included in Alpha release.
-          When we want to enable speedtest functionality then uncomment below code and remove the disabled true */
+          /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. Enable below commented code. */
           /*disabled={
             isEditMode
               ? jobConfigForm?.formState?.pathId?.value?.length === 0
@@ -62,7 +59,6 @@ const JobConfig = () => {
           placeholder="Working Directory"
           label="Working Directory"
         />
-
       </Box>
     </FormFrame>
   );
