@@ -57,7 +57,17 @@ data:
         verifyEmail: false,
         loginWithEmailAllowed: true,
         duplicateEmailsAllowed: false,
-        resetPasswordAllowed: true
+        resetPasswordAllowed: true,
+
+        // Brute force detection settings
+        bruteForceProtected: true,                 // Enables brute force protection
+        permanentLockout: false,                   // If true, user must be unlocked by admin; if false, lockout is temporary
+        maxFailureWaitSeconds: 900,                // 15 minutes maximum wait time after repeated failures
+        minimumQuickLoginWaitSeconds: 60,          // 1 minute minimum wait time after quick login failures
+        waitIncrementSeconds: 60,                  // 1 minute increment per failure
+        quickLoginCheckMilliSeconds: 1000,         // 1 second window for quick login detection
+        maxDeltaTimeSeconds: 43200,                // 12 hours before failure count resets
+        failureFactor: 5                           // Number of failures before lockout or delay
     });
     ")
 
