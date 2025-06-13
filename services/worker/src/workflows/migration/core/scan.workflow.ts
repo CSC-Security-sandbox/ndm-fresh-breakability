@@ -116,11 +116,7 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
         if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       }
 
-      await Promise.all(
-        workers.map(async () => {
-          return await publishTaskActivity({jobRunId})
-        })
-      );
+      await publishTaskActivity({jobRunId})
 
       const isErrored = (workers.length === failedWorkers.length);
       const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);

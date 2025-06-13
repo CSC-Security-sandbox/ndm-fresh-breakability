@@ -105,12 +105,7 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         if(output.noTaskFound && !failedWorkers.includes(output.workerId)) taskNotFoundCount++;
       } 
 
-      await Promise.all(
-        workers.map(
-          async() => {
-            return await publishTaskActivity(jobRunId)
-          })
-      );
+      await publishTaskActivity(jobRunId)
 
       const isErrored = (workers.length === failedWorkers.length);
       const hasRunningScanTask = await hasRunningScanTaskActivity(jobRunId);
@@ -128,7 +123,6 @@ export async function DiscoveryJobWorkflow({jobRunId, failedWorkers, workers}: D
         log(jobRunId, `Sync completed with finalJobState: ${JSON.stringify(finalJobState)}`);
         return { jobRunId, workers, failedWorkers, status: isCompleted ? JobRunStatus.Completed : JobRunStatus.Errored };
       }
-
 
       if(iteration >= 100) {
         log(jobRunId, `Iteration limit reached. Continuing as new...`);

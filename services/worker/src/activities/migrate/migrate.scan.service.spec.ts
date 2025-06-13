@@ -61,6 +61,9 @@ const stream = {
   consumerGroupCount:2,
   readAndPurge: jest.fn(),
   getLength: jest.fn(),
+  groupReadWithoutAck: jest.fn(),
+  groupReadWithoutAckDirs: jest.fn(),
+  ackAndCreateTask: jest.fn(),
 }
 
 describe('MigrationScanService', () => {
