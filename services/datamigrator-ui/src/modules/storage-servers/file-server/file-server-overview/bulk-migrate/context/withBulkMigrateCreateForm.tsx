@@ -190,7 +190,7 @@ export function withBulkMigrateCreateForm(
           });
 
           _migrationTableDetails = _migrationTableDetails.filter(
-            (row) => row.isValid
+            (row) => row?.isValid
           );
 
           mappingStepForm.setValues({
