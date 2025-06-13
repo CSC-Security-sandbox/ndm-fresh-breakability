@@ -87,7 +87,7 @@ async onModuleInit(): Promise<void> {
     }
     const serializedContext = jobContext.serialize();
 
-    await this.client.set(traceId, serializedContext);
+    await this.client.set(traceId, serializedContext); 
     this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
   }
 
