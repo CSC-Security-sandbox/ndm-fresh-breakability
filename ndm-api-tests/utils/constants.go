@@ -56,6 +56,7 @@ const (
 	JOB_RUN_ACTION_ENDPOINT                 = "/api/v1/job-run/action"
 	JOB_RUN_ENDPOINT                        = "/api/v1/job-run"
 	JOBS_ENDPOINT                           = "/api/v1/jobs"
+	FILE_SERVER_REFRESH_URL                 = "/api/v1/servers/refresh"
 	JobTypeDiscovery                JobType = "DISCOVER"
 	JobTypeCutover                  JobType = "CUTOVER"
 	JobTypeMigration                JobType = "MIGRATE"

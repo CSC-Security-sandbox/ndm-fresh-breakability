@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"time"
 )
 
 type GetJobResponse struct {
@@ -291,14 +290,15 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
-		time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+		IntroduceDelay(DefaultPollInterval)
+
 	}
 
 	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
 }
 
-// ChangeJobRunState changes the state of a job run (PAUSE, RESUME, STOP).
-func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunIDs []string) error {
+// HandleJobRunStateChange changes the state of a job run (PAUSE, RESUME, STOP).
+func HandleJobRunStateChange(jobRunID, stateType string, intervalSeconds int, jobRunIDs []string) error {
 
 	switch stateType {
 	case RESUME_JOBRUN, STOP_JOBRUN:
@@ -308,10 +308,10 @@ func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunID
 		}
 		if stateType == RESUME_JOBRUN && status == PAUSE_JOBRUN {
 			LogDebug("Job is paused. Resuming operation.")
-			return ChangeJobRunStateAPI(stateType, jobRunIDs)
+			return ChangeJobRunState(stateType, jobRunIDs)
 		}
 		LogDebug("No paused job run found or not RESUME. Sending state change.")
-		return ChangeJobRunStateAPI(stateType, jobRunIDs)
+		return ChangeJobRunState(stateType, jobRunIDs)
 
 	case PAUSE_JOBRUN:
 		for i := 0; i < MaxPollRetries; i++ {
@@ -321,7 +321,7 @@ func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunID
 			}
 			if status == RUNNING_JOBRUN {
 				LogDebug("Job is running. Pausing JobRun.")
-				return ChangeJobRunStateAPI(stateType, jobRunIDs)
+				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
 			IntroduceDelay(intervalSeconds)
@@ -355,18 +355,16 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 	return temp.Status, nil
 }
 
-// ChangeJobRunStateAPI sends the actual state change request to the API.
-func ChangeJobRunStateAPI(action string, jobRunIDs []string) error {
+// ChangeJobRunState sends the actual state change request to the API.
+func ChangeJobRunState(action string, jobRunIDs []string) error {
 
 	apiURL := fmt.Sprintf("%s%s", JOB_SERVICE_URL, JOB_RUN_ACTION_ENDPOINT)
-
-	fmt.Println("change job run state api : ", apiURL)
 	payload := map[string]interface{}{
 		"action":  action,
 		"jobRuns": jobRunIDs,
 	}
 
-	fmt.Println("change job run payload  : ", payload)
+	LogDebug(fmt.Sprintf("change job run status payload: %v", payload))
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)

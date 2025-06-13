@@ -94,18 +94,20 @@ func GetExportPathID(
 	headers map[string]string,
 ) (string, GetServerResponse, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
+//     Added an extra URL because sometimes the export path is not retrieved without hitting this refresh URL.
+	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
 	var getSourceResp GetServerResponse
 	var resp *http.Response
 	var err error
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return "", GetServerResponse{}, err
 		}
 		defer resp.Body.Close()
-
 
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
