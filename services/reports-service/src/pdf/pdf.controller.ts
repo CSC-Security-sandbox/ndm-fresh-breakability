@@ -3,6 +3,7 @@ import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReportType } from 'src/constants/enums';
+import { sanitisedeErrorResponse } from 'src/utils/sanitised-error-response';
 
 @ApiTags('Generate PDF')
 @Controller('pdf')
@@ -39,13 +40,7 @@ export class PdfController {
         res.setHeader('Content-Length', pdf.length);  
         res.send(pdf);
       } catch (error) {
-        const sanitizedError = {
-          response: error.response || 'Failed to generate the PDF report. Please try again later.',
-          status: error.status || 500,
-          message: error.message || 'Failed to generate the PDF report. Please try again later.',
-          name: error.name || 'Error',
-        };
-        
+        const sanitizedError = sanitisedeErrorResponse(error);
         res.status(sanitizedError.status).send(sanitizedError);
       } 
     } 
