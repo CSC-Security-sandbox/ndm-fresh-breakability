@@ -28,7 +28,6 @@ export class PdfService {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, fileName);
-      
       if (reportType === ReportType.JOBS_RREPORT)
         {
           let response =  await this.generateJobsReportPdf(jobRunId);
