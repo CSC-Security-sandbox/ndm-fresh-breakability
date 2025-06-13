@@ -95,7 +95,6 @@ func GetExportPathID(
 ) (string, GetServerResponse, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 
-	// const maxRetries = 10
 	var getSourceResp GetServerResponse
 	var resp *http.Response
 	var err error
@@ -124,7 +123,7 @@ func GetExportPathID(
 		}
 
 		if attempt < MaxPollRetries {
-			Delay(5) // Wait before retrying
+			IntroduceDelay(5) // Wait before retrying
 		}
 	}
 

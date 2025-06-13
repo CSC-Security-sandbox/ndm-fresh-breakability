@@ -55,7 +55,7 @@ const (
 	CUTOVER_APPROVE_REJECT_ENDPOINT         = "/api/v1/job-run/cutover/approve"
 	JOB_RUN_ACTION_ENDPOINT                 = "/api/v1/job-run/action"
 	JOB_RUN_ENDPOINT                        = "/api/v1/job-run"
-	JOBS_ENDPOINT                			=  "/api/v1/jobs"
+	JOBS_ENDPOINT                           = "/api/v1/jobs"
 	JobTypeDiscovery                JobType = "DISCOVER"
 	JobTypeCutover                  JobType = "CUTOVER"
 	JobTypeMigration                JobType = "MIGRATE"

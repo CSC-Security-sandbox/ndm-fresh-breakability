@@ -358,11 +358,15 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 // ChangeJobRunStateAPI sends the actual state change request to the API.
 func ChangeJobRunStateAPI(action string, jobRunIDs []string) error {
 
-	apiURL := fmt.Sprintf("%s%s", JOB_SERVICE_URL, JOB_RUN_ENDPOINT)
+	apiURL := fmt.Sprintf("%s%s", JOB_SERVICE_URL, JOB_RUN_ACTION_ENDPOINT)
+
+	fmt.Println("change job run state api : ", apiURL)
 	payload := map[string]interface{}{
 		"action":  action,
 		"jobRuns": jobRunIDs,
 	}
+
+	fmt.Println("change job run payload  : ", payload)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)
