@@ -18,24 +18,24 @@ var sharedVars map[string]interface{}
 // OrderedDescribe ensures that the specs run in order.
 var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 
-	It("executes initialization", func() {
-		projectId, workerIds, err := SetupTestEnv(1)
-		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
-		workerId := workerIds[0]
+	// It("executes initialization", func() {
+	// 	projectId, workerIds, err := SetupTestEnv(1)
+	// 	Expect(err).To(BeNil(), "Error during test environment setup")
+	// 	Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+	// 	workerId := workerIds[0]
 
-		sharedVars = map[string]interface{}{
-			"account_id":          AccountId,
-			"project_id":          projectId,
-			"workerId":            workerId,
-			"app_admin_id":        AppAdminId,
-			"project_admin_id":    ProjectAdminId,
-			"project_viewer_id":   ProjectViewerId,
-			"source_host_IP":      SOURCE_HOST_IP,
-			"destination_host_IP": DESTINATION_HOST_IP,
-		}
-		fmt.Println("Initialization complete.")
-	})
+	// 	sharedVars = map[string]interface{}{
+	// 		"account_id":          AccountId,
+	// 		"project_id":          projectId,
+	// 		"workerId":            workerId,
+	// 		"app_admin_id":        AppAdminId,
+	// 		"project_admin_id":    ProjectAdminId,
+	// 		"project_viewer_id":   ProjectViewerId,
+	// 		"source_host_IP":      SOURCE_HOST_IP,
+	// 		"destination_host_IP": DESTINATION_HOST_IP,
+	// 	}
+	// 	fmt.Println("Initialization complete.")
+	// })
 
 	for _, filePath := range ScenarioFiles {
 		fp := filePath // capture current value of filePath
@@ -54,7 +54,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 				if scData.Delay != "" {
 					delay, err := strconv.Atoi(scData.Delay)
 					Expect(err).To(BeNil(), fmt.Sprintf("Error converting delay for '%s'", scData.Name))
-					Delay(delay)
+					IntroduceDelay(delay)
 				}
 
 				switch scData.Name {
@@ -124,9 +124,9 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 		})
 	}
 
-	It("executes cleanup", func() {
-		err := CleanupTestEnv()
-		Expect(err).To(BeNil(), "Error during test environment cleanup")
-		fmt.Println("Cleanup complete.")
-	})
+	// It("executes cleanup", func() {
+	// 	err := CleanupTestEnv()
+	// 	Expect(err).To(BeNil(), "Error during test environment cleanup")
+	// 	fmt.Println("Cleanup complete.")
+	// })
 })

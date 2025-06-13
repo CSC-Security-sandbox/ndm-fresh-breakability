@@ -897,7 +897,7 @@ func AutoGenerateProjectName(prefix string) string {
 	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
 }
 
-func Delay(delay int) {
+func IntroduceDelay(delay int) {
 	time.Sleep(time.Duration(delay) * time.Second)
 }
 

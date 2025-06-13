@@ -25,12 +25,6 @@ type BulkCutoverJobParams struct {
 	DestinationPathIDs []string
 }
 
-// JobCounts holds the counts of directories and files.
-
-// type JobStatus struct {
-// 	Status string `json:"status"`
-// }
-
 type DiscoveryJobParams struct {
 	SourcePathIDs            []string
 	ExcludeOlderThan         interface{}
@@ -288,28 +282,27 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResp
 // WaitForJobState polls the job run status until it matches the desired state or times out.
 
 func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int) error {
-	var retryCount int
-	if len(pollRetries) > 0 && pollRetries[0] > 0 {
-		retryCount = pollRetries[0]
-	} else {
-		retryCount = MaxPollRetries
-	}
+    // Determine the number of retries to use
+    retryCount := MaxPollRetries
+    if len(pollRetries) > 0 && pollRetries[0] > 0 {
+        retryCount = pollRetries[0]
+    }
 
-	for i := 0; i < retryCount; i++ {
-		status, err := checkJobRunStatus(jobRunID)
-		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
+    for i := 0; i < retryCount; i++ {
+        status, err := checkJobRunStatus(jobRunID)
+        LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 
-		if err != nil {
-			return err
-		}
-		if status == desiredJobState {
-			LogDebug("Job reached desired state: " + desiredJobState + ".")
-			return nil
-		}
-		time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
-	}
-	time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
-	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, MaxPollRetries)
+        if err != nil {
+            return err
+        }
+        if status == desiredJobState {
+            LogDebug("Job reached desired state: " + desiredJobState + ".")
+            return nil
+        }
+        time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+    }
+
+    return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
 }
 
 // ChangeJobRunState changes the state of a job run (PAUSE, RESUME, STOP).
@@ -339,7 +332,7 @@ func ChangeJobRunState(jobRunID, stateType string, intervalSeconds int, jobRunID
 				return ChangeJobRunStateAPI(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-
+			IntroduceDelay(intervalSeconds)
 		}
 		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
