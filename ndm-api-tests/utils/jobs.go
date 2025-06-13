@@ -241,68 +241,60 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 // other details from response by modifying the GetJobResponse struct
 func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
 	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
-	var lastErr error
 	var resp *http.Response
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
 		resp, err := SendAPIRequest(http.MethodGet, jobsURL, nil, headers)
 		if err != nil {
-			lastErr = fmt.Errorf("failed while calling API: %w", err)
-			time.Sleep(DefaultPollInterval * time.Second)
-			continue
+			return GetJobResponse{}, resp, fmt.Errorf("error while sending api request , err : %v", err)
 		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Errorf("error reading response body: %w", err)
-			time.Sleep(DefaultPollInterval * time.Second)
-			continue
+			return GetJobResponse{}, resp, fmt.Errorf("error reading response body: %w", err)
 		}
 
 		var getJobsResp GetJobResponse
 		err = json.Unmarshal(bodyBytes, &getJobsResp)
 		if err != nil {
-			lastErr = fmt.Errorf("error unmarshaling response: %w", err)
-			time.Sleep(DefaultPollInterval * time.Second)
-			continue
+			return GetJobResponse{}, resp, fmt.Errorf("error unmrashling response: %w", err)
 		}
 
 		if len(getJobsResp.JobRuns) > 0 {
 			return getJobsResp, resp, nil
 		}
 
-		lastErr = fmt.Errorf("no jobRuns found in response")
-		time.Sleep(DefaultPollInterval * time.Second)
+		IntroduceDelay(DefaultPollInterval)
 	}
 
-	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d retries: %v", MaxPollRetries, lastErr)
+	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d ", MaxPollRetries)
 }
 
 // WaitForJobState polls the job run status until it matches the desired state or times out.
 
 func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int) error {
-    // Determine the number of retries to use
-    retryCount := MaxPollRetries
-    if len(pollRetries) > 0 && pollRetries[0] > 0 {
-        retryCount = pollRetries[0]
-    }
+	// Determine the number of retries to use
+	retryCount := MaxPollRetries
+	if len(pollRetries) > 0 && pollRetries[0] > 0 {
+		retryCount = pollRetries[0]
+	}
 
-    for i := 0; i < retryCount; i++ {
-        status, err := checkJobRunStatus(jobRunID)
-        LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
+	for i := 0; i < retryCount; i++ {
+		status, err := checkJobRunStatus(jobRunID)
+		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 
-        if err != nil {
-            return err
-        }
-        if status == desiredJobState {
-            LogDebug("Job reached desired state: " + desiredJobState + ".")
-            return nil
-        }
-        time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
-    }
+		if err != nil {
+			return err
+		}
+		if status == desiredJobState {
+			LogDebug("Job reached desired state: " + desiredJobState + ".")
+			return nil
+		}
+		time.Sleep(time.Duration(DefaultPollInterval) * time.Second)
+	}
 
-    return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
+	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
 }
 
 // ChangeJobRunState changes the state of a job run (PAUSE, RESUME, STOP).
