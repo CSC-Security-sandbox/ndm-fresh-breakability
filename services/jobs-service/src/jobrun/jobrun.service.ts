@@ -313,17 +313,13 @@ export class JobRunService {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Running;
       jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      // append dummy file entry to appendToFileList to close consumers and then start new consumers
-      await jobContext.appendToFileList(this.dummyFileEntry());
-      // wait for 5 seconds to close consumers
-      this.logger.debug(
-        `Resuming Job Run ${jobRunId} and appended Last file entry to file list to clone old consumers`
-      );
+      this.logger.debug( `Resuming Job Run ${jobRunId}`);
       await this.redisService.setJobContext(jobRunId, jobContext);
       await this.resumeJobRun(jobRunId);
     }
     return { details: "Operation Completed Successfully" };
   }
+
 
   async resumeJobRun(jobRunId: string) {
     try {

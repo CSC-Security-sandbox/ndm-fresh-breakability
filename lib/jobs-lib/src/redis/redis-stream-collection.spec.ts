@@ -17,6 +17,8 @@ const mockRedis = {
   hDel: jest.fn(),
   set: jest.fn(),
   get: jest.fn(),
+  xAutoClaim: jest.fn(), // Added missing mock
+  xLen: jest.fn(),       // Added missing mock
 };
 
 const mockRecord: Serializable = { foo: 'bar' } as any
@@ -183,6 +185,52 @@ describe('RedisStreamCollection', () => {
       const logSpy = jest.spyOn(console, 'info').mockImplementation();
       await collection.close();
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Closing collection'));
+    });
+
+    describe('groupReadWithoutAck()', () => {
+      it('should yield messages from xReadGroup if present', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup.mockResolvedValue([
+        {
+        messages: [
+          { id: '1-0', message: { obj: encoded } }
+        ]
+        }
+      ]);
+      const items: any[] = [];
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+      expect(items).toHaveLength(1);
+      expect(items[0]).toEqual({ data: mockRecord, id: '1-0' });
+      });
+
+      it('should fallback to xAutoClaim if xReadGroup returns no messages', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xAutoClaim = jest.fn().mockResolvedValue({
+        messages: [
+        { id: '2-0', message: { obj: encoded } }
+        ]
+      });
+      const items: any[] = [];
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+      expect(mockRedis.xAutoClaim).toHaveBeenCalled();
+      expect(items).toHaveLength(1);
+      expect(items[0]).toEqual({ data: mockRecord, id: '2-0' });
+      });
+
+      it('should return early if neither xReadGroup nor xAutoClaim returns messages', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+      mockRedis.xAutoClaim = jest.fn().mockResolvedValue({ messages: [] });
+      const items: any[] = [];
+      for await (const item of collection.groupReadWithoutAck('readerE', 1, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+      expect(items).toHaveLength(0);
+      });
     });
   });
 });
