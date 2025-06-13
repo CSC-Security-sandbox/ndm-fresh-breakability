@@ -94,7 +94,7 @@ func GetExportPathID(
 	headers map[string]string,
 ) (string, GetServerResponse, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
-//     Added an extra URL because sometimes the export path is not retrieved without hitting this refresh URL.
+// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
 	var getSourceResp GetServerResponse
@@ -125,7 +125,7 @@ func GetExportPathID(
 		}
 
 		if attempt < MaxPollRetries {
-			IntroduceDelay(5) // Wait before retrying
+			IntroduceDelay(DefaultPollInterval) // Wait before retrying
 		}
 	}
 

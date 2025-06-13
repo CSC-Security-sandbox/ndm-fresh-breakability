@@ -298,7 +298,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 }
 
 // HandleJobRunStateChange changes the state of a job run (PAUSE, RESUME, STOP).
-func HandleJobRunStateChange(jobRunID, stateType string, intervalSeconds int, jobRunIDs []string) error {
+func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) error {
 
 	switch stateType {
 	case RESUME_JOBRUN, STOP_JOBRUN:
@@ -324,7 +324,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, intervalSeconds int, jo
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-			IntroduceDelay(intervalSeconds)
+			IntroduceDelay(DefaultPollInterval)
 		}
 		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
