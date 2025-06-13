@@ -277,7 +277,8 @@ export const extractTypes = (data: Protocol[]) => {
 }
 
 export const createServerDownErrorMessage = (error: any, serverInfo: { protocol: Protocol[], server: string }): string => {
-  const baseMessage = `${extractTypes(serverInfo.protocol)} server unreachable: ${serverInfo.server}`;
+  const types = extractTypes(serverInfo.protocol);
+  const baseMessage = `${types ? types + ' ' : ''}server unreachable: ${serverInfo.server}`;
   const errorDetails = error?.code ? ` (Error: ${error.code})` : ` (${error?.message || 'Unknown error'})`;
 
   return baseMessage + errorDetails;

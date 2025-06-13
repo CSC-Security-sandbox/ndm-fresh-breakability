@@ -478,7 +478,7 @@ describe('getServerInfoFromPath', () => {
   const jobContext: any = {
     jobConfig: {
       sourceFileServer: {
-        protocols: MockProtocol,
+        protocols: [new MockProtocol('NFS')],
         hostname: 'host123',
         path: '/data'
       }
