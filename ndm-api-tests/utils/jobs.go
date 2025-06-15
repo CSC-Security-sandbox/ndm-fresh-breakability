@@ -56,6 +56,15 @@ type DiscoveryJobParams struct {
 	Extra map[string]interface{}
 }
 
+type AdHocJobRunRequest struct {
+	JobConfigId string `json:"jobConfigId"`
+}
+
+// Struct for response (top-level id is jobRunId)
+type AdHocJobRunResponse struct {
+	ID string `json:"id"`
+}
+
 // CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
 // parses the response, and returns the destination job configuration ID.
 func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([]string, *http.Response, error) {
@@ -302,6 +311,8 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
+
+		fmt.Println("response waiting :: : ", status)
 		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 
 		if err != nil {
@@ -402,4 +413,44 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 	}
 	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
 	return nil
+}
+
+func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
+	url := "https://10.192.7.98/api/v1/job-run/ad-hoc"
+
+	// Prepare request body
+	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId}
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Prepare headers
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+
+	// Send request using your utility
+	resp, err := SendAPIRequest(http.MethodPost, url, payloadBytes, headers)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp, err
+	}
+
+	// Parse response
+	var jobRunResp AdHocJobRunResponse
+	err = json.Unmarshal(bodyBytes, &jobRunResp)
+	if err != nil {
+		return "", resp, err
+	}
+
+	if jobRunResp.ID == "" {
+		return "", resp, fmt.Errorf("jobRunId not found in response")
+	}
+
+	return jobRunResp.ID, resp, nil
 }
