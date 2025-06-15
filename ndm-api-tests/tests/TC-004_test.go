@@ -198,7 +198,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 		Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
 		err = WaitForJobState(destinationDiscoveryJobRunID1, COMPLETED_JOBRUN, 25)
 		Expect(err).NotTo(HaveOccurred(), "Source discovery job 1 did not complete")
-		ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/aa.json")
+		ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
@@ -257,7 +257,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 25)
 			Expect(err).NotTo(HaveOccurred(), " migration job did not complete")
 			IntroduceDelay(30)
-			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/bb.json")
+			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/COCDetails.json")
 			Expect(err).NotTo(HaveOccurred(), "Error while validate coc report")
 			LogDebug(fmt.Sprintf("validate report result : %s",res))
 		}
