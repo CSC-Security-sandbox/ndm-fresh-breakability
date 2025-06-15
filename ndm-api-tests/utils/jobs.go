@@ -312,7 +312,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
 
-		fmt.Println("response waiting :: : ", status)
+		
 		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 
 		if err != nil {

@@ -147,7 +147,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		// Wait for both discovery jobs to complete
 		err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 		Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-		ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/aa.json")	
+		ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")	
 
 		err = WaitForJobState(sourceDiscoveryJobRunID1, COMPLETED_JOBRUN)
 		Expect(err).NotTo(HaveOccurred(), "Source discovery job 1 did not complete")
@@ -191,7 +191,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		// Wait for both discovery jobs to complete
 		err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN, 25)
 		Expect(err).NotTo(HaveOccurred(), "destination discovery job did not complete")
-		ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "./validator/aa.json")	
+		ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")	
 
 		err = WaitForJobState(destinationDiscoveryJobRunID1, COMPLETED_JOBRUN, 25)
 		Expect(err).NotTo(HaveOccurred(), "destination discovery job 1 did not complete")
@@ -226,7 +226,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 			IntroduceDelay(30)
-			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/aa.json")	
+			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")	
 			Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 			LogDebug(fmt.Sprintf("validate report result : %s",res))
 
