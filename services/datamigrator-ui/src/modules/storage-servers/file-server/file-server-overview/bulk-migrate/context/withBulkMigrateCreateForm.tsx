@@ -134,7 +134,7 @@ export function withBulkMigrateCreateForm(
           const resp = await getAllFileServersApi({ projectId }).unwrap();
           const allFileServers: AllFileServerWithVolumesApiType[] =
             resp?.configs;
-          let _migrationTableDetails: MigrationDetailsTableConfigurationType[] =
+          const _migrationTableDetails: MigrationDetailsTableConfigurationType[] =
             [];
 
           const _fileServerDetailsMap = new Map<
@@ -188,10 +188,6 @@ export function withBulkMigrateCreateForm(
             setListOfNotReachableExportPaths(notReachableVolumes);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
-
-          _migrationTableDetails = _migrationTableDetails.filter(
-            (row) => row?.isValid
-          );
 
           mappingStepForm.setValues({
             selectedMountPathsId: [],
