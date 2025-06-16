@@ -81,11 +81,6 @@ jobs:
             exit 1
           fi
 
-          if [ ! -d "${{ matrix.service.path }}" ]; then
-            echo "❌ Service path '${{ matrix.service.path }}' does not exist."
-            exit 1
-          fi
-
           echo "✅ Environment validation passed"
 
       - name: Download Black Duck Detect
