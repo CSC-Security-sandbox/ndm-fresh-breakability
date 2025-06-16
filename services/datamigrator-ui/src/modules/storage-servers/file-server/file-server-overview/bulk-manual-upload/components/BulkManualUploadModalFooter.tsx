@@ -7,14 +7,13 @@ import {
 
 export const BulkManualUploadModalFooter = (
   form: BlueXpFormType<BulkManualUploadModalContentPropsType>,
-  exportPathSourceData: UploadedFilePropsType,
   isLoading: boolean,
   onSubmit: () => Promise<void>,
-  handleResetAndClose: () => void
+  resetStateAndCloseModal: () => void
 ) => {
   return (
     <>
-      <Button color="secondary" onClick={handleResetAndClose}>
+      <Button color="secondary" onClick={resetStateAndCloseModal}>
         Cancel
       </Button>
       <Button
@@ -22,7 +21,7 @@ export const BulkManualUploadModalFooter = (
         onClick={onSubmit}
         isSubmitting={isLoading}
       >
-        {exportPathSourceData?.uploadId ? "Submit" : "Upload"}
+        Submit
       </Button>
     </>
   );
