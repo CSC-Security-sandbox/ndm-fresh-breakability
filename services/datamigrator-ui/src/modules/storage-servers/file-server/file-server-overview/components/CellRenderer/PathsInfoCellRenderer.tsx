@@ -3,9 +3,6 @@ import { BlueXpTableRowType } from "@/types/app.type";
 import { memo } from "react";
 
 const PathsInfoCellRenderer = ({ row }: BlueXpTableRowType<any, string>) => {
-  if (row?.isDisabled) {
-    return "-";
-  }
   return <Box>{row?.isValid ? "Valid" : "Invalid"}</Box>;
 };
 
