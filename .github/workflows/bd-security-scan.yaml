@@ -73,10 +73,29 @@ jobs:
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
 
+      # SOLUTION 1: Use GitHub Actions pre-installed tools or install without sudo
       - name: Install jq for JSON parsing
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+          # Check if jq is already available (most GitHub runners have it pre-installed)
+          if command -v jq >/dev/null 2>&1; then
+            echo "✅ jq is already installed: $(jq --version)"
+          else
+            echo "📥 Installing jq without sudo..."
+            # Install jq locally without sudo
+            mkdir -p ~/bin
+            curl -L -o ~/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+            chmod +x ~/bin/jq
+            echo "$HOME/bin" >> $GITHUB_PATH
+            echo "✅ jq installed locally"
+          fi
+
+          # Check if curl is available (should be pre-installed)
+          if command -v curl >/dev/null 2>&1; then
+            echo "✅ curl is already available: $(curl --version | head -1)"
+          else
+            echo "❌ curl is not available"
+            exit 1
+          fi
 
       - name: Download Black Duck Detect
         run: |
@@ -179,7 +198,7 @@ jobs:
 
           # Improved function to get project ID
           get_project_id() {
-            echo "🔍 Searching for project: $PROJECT_NAME"
+            echo "🔍 Searching for project: $PROJECT_NAME" >&2
             
             # Method 1: Try exact name search
             PROJECT_RESPONSE=$(curl -s -k -X GET \
@@ -187,42 +206,69 @@ jobs:
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
               "$BLACKDUCK_URL/api/projects?q=name:$PROJECT_NAME")
             
+            # Debug: Show raw response
+            echo "Raw project response:" >&2
+            echo "$PROJECT_RESPONSE" | jq '.' >&2 2>/dev/null || echo "Invalid JSON response: $PROJECT_RESPONSE" >&2
+            
             PROJECT_ID=$(echo "$PROJECT_RESPONSE" | jq -r '.items[0]._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1)
             
             if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
-              echo "✅ Found project via exact search: $PROJECT_ID"
+              echo "✅ Found project via exact search: $PROJECT_ID" >&2
               echo "$PROJECT_ID"
               return
             fi
             
             # Method 2: Try without query parameter (get all projects and filter)
-            echo "🔍 Trying alternative search method..."
+            echo "🔍 Trying alternative search method..." >&2
             ALL_PROJECTS=$(curl -s -k -X GET \
               -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
               "$BLACKDUCK_URL/api/projects?limit=1000")
             
+            # Debug: Show all projects response
+            echo "All projects response:" >&2
+            echo "$ALL_PROJECTS" | jq '.items[]?.name' >&2 2>/dev/null || echo "No projects found or invalid response" >&2
+            
             PROJECT_ID=$(echo "$ALL_PROJECTS" | jq -r --arg name "$PROJECT_NAME" '.items[] | select(.name == $name) | ._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1 | head -1)
             
             if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
-              echo "✅ Found project via full list search: $PROJECT_ID"
+              echo "✅ Found project via full list search: $PROJECT_ID" >&2
               echo "$PROJECT_ID"
               return
             fi
             
             # Method 3: Try case-insensitive search
-            echo "🔍 Trying case-insensitive search..."
+            echo "🔍 Trying case-insensitive search..." >&2
             PROJECT_ID=$(echo "$ALL_PROJECTS" | jq -r --arg name "${PROJECT_NAME,,}" '.items[] | select(.name | ascii_downcase == $name) | ._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1 | head -1)
             
             if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
-              echo "✅ Found project via case-insensitive search: $PROJECT_ID"
+              echo "✅ Found project via case-insensitive search: $PROJECT_ID" >&2
+              echo "$PROJECT_ID"
+              return
+            fi
+            
+            # Method 4: Try different Accept header
+            echo "🔍 Trying with different Accept header..." >&2
+            ALT_PROJECTS=$(curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$BLACKDUCK_URL/api/projects")
+            
+            echo "Alternative projects response:" >&2
+            echo "$ALT_PROJECTS" | jq '.items[]?.name' >&2 2>/dev/null || echo "No projects found with alt header" >&2
+            
+            PROJECT_ID=$(echo "$ALT_PROJECTS" | jq -r --arg name "$PROJECT_NAME" '.items[] | select(.name == $name) | ._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1 | head -1)
+            
+            if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
+              echo "✅ Found project via alternative header: $PROJECT_ID" >&2
               echo "$PROJECT_ID"
               return
             fi
             
             # Debug: Show available projects
-            echo "❌ Project not found. Available projects:"
-            echo "$ALL_PROJECTS" | jq -r '.items[]? | select(.name != null) | .name' 2>/dev/null | head -10 | sed 's/^/  - /'
+            echo "❌ Project not found. Available projects from all methods:" >&2
+            echo "$ALL_PROJECTS" | jq -r '.items[]? | select(.name != null) | .name' 2>/dev/null | head -20 | sed 's/^/  - /' >&2
+            echo "$ALT_PROJECTS" | jq -r '.items[]? | select(.name != null) | .name' 2>/dev/null | head -20 | sed 's/^/  - /' >&2
             
             echo "null"
           }
@@ -230,7 +276,7 @@ jobs:
           # Improved function to get version ID
           get_version_id() {
             local project_id=$1
-            echo "🔍 Searching for version: $VERSION_NAME in project: $project_id"
+            echo "🔍 Searching for version: $VERSION_NAME in project: $project_id" >&2
             
             # Method 1: Try with query parameter
             VERSION_RESPONSE=$(curl -s -k -X GET \
@@ -238,32 +284,59 @@ jobs:
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
               "$BLACKDUCK_URL/api/projects/$project_id/versions?q=versionName:$VERSION_NAME")
             
+            # Debug: Show raw response
+            echo "Raw version response:" >&2
+            echo "$VERSION_RESPONSE" | jq '.' >&2 2>/dev/null || echo "Invalid JSON response: $VERSION_RESPONSE" >&2
+            
             VERSION_ID=$(echo "$VERSION_RESPONSE" | jq -r '.items[0]._meta.href' 2>/dev/null | sed 's/.*versions\///' | cut -d'/' -f1)
             
             if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
-              echo "✅ Found version via query search: $VERSION_ID"
+              echo "✅ Found version via query search: $VERSION_ID" >&2
               echo "$VERSION_ID"
               return
             fi
             
             # Method 2: Get all versions and filter
-            echo "🔍 Trying alternative version search..."
+            echo "🔍 Trying alternative version search..." >&2
             ALL_VERSIONS=$(curl -s -k -X GET \
               -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
               "$BLACKDUCK_URL/api/projects/$project_id/versions?limit=1000")
             
+            # Debug: Show all versions
+            echo "All versions response:" >&2
+            echo "$ALL_VERSIONS" | jq '.items[]?.versionName' >&2 2>/dev/null || echo "No versions found or invalid response" >&2
+            
             VERSION_ID=$(echo "$ALL_VERSIONS" | jq -r --arg name "$VERSION_NAME" '.items[] | select(.versionName == $name) | ._meta.href' 2>/dev/null | sed 's/.*versions\///' | cut -d'/' -f1 | head -1)
             
             if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
-              echo "✅ Found version via full list search: $VERSION_ID"
+              echo "✅ Found version via full list search: $VERSION_ID" >&2
+              echo "$VERSION_ID"
+              return
+            fi
+            
+            # Method 3: Try with different Accept header
+            echo "🔍 Trying with different Accept header..." >&2
+            ALT_VERSIONS=$(curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$BLACKDUCK_URL/api/projects/$project_id/versions")
+            
+            echo "Alternative versions response:" >&2
+            echo "$ALT_VERSIONS" | jq '.items[]?.versionName' >&2 2>/dev/null || echo "No versions found with alt header" >&2
+            
+            VERSION_ID=$(echo "$ALT_VERSIONS" | jq -r --arg name "$VERSION_NAME" '.items[] | select(.versionName == $name) | ._meta.href' 2>/dev/null | sed 's/.*versions\///' | cut -d'/' -f1 | head -1)
+            
+            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
+              echo "✅ Found version via alternative header: $VERSION_ID" >&2
               echo "$VERSION_ID"
               return
             fi
             
             # Debug: Show available versions
-            echo "❌ Version not found. Available versions:"
-            echo "$ALL_VERSIONS" | jq -r '.items[]? | select(.versionName != null) | .versionName' 2>/dev/null | head -10 | sed 's/^/  - /'
+            echo "❌ Version not found. Available versions from all methods:" >&2
+            echo "$ALL_VERSIONS" | jq -r '.items[]? | select(.versionName != null) | .versionName' 2>/dev/null | head -20 | sed 's/^/  - /' >&2
+            echo "$ALT_VERSIONS" | jq -r '.items[]? | select(.versionName != null) | .versionName' 2>/dev/null | head -20 | sed 's/^/  - /' >&2
             
             echo "null"
           }
@@ -295,15 +368,39 @@ jobs:
               ' 2>/dev/null || echo "No detailed vulnerability data available"
           }
 
+          # Test different API endpoints to understand what's available
+          echo "🔧 Testing various API endpoints..." >&2
+
+          # Test 1: Basic projects endpoint
+          echo "Testing basic projects endpoint:" >&2
+          curl -s -k -X GET \
+            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$BLACKDUCK_URL/api/projects" | jq '.items[0:3] | .[] | {name, _meta}' 2>/dev/null || echo "Failed to get projects with application/json"
+
+          # Test 2: Projects with BlackDuck specific header
+          echo "Testing projects with BD header:" >&2
+          curl -s -k -X GET \
+            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+            -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
+            "$BLACKDUCK_URL/api/projects" | jq '.items[0:3] | .[] | {name, _meta}' 2>/dev/null || echo "Failed to get projects with BD header"
+
+          # Test 3: Current user permissions
+          echo "Testing current user:" >&2
+          curl -s -k -X GET \
+            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$BLACKDUCK_URL/api/current-user" | jq '{userName, firstName, lastName, roles}' 2>/dev/null || echo "Failed to get current user"
+
           # Try to get project and vulnerability information
           PROJECT_ID=$(get_project_id)
 
-          if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ]; then
+          if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
             echo "✅ Found project ID: $PROJECT_ID"
             
             VERSION_ID=$(get_version_id "$PROJECT_ID")
             
-            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ]; then
+            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
               echo "✅ Found version ID: $VERSION_ID"
               
               # Get vulnerability count
@@ -332,7 +429,7 @@ jobs:
               echo "# Black Duck Vulnerability Summary" > vulnerability_summary.md
               echo "" >> vulnerability_summary.md
               echo "**Project:** $PROJECT_NAME" >> vulnerability_summary.md
-              echo "**Version:** $VERSION_NAME" >> vulnerability_summary.md
+              echo "**Version:** $VERSION_NAME" >> vulnerability_summary.md  
               echo "**Service:** $SERVICE_NAME" >> vulnerability_summary.md
               echo "**Total Vulnerabilities:** $VULN_COUNT" >> vulnerability_summary.md
               echo "" >> vulnerability_summary.md
