@@ -71,15 +71,19 @@ jobs:
           if [ -s blackduck.crt ]; then
             echo "✅ Certificate extracted successfully"
             
-            # Use full path to keytool
-            echo "Java Home: $JAVA_HOME"
+            # Create a custom truststore instead of modifying system one
+            cp $JAVA_HOME/lib/security/cacerts ./custom-truststore.jks
             
-            # Add certificate to Java trust store using full path
-            sudo $JAVA_HOME/bin/keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
+            # Add certificate to custom trust store (no sudo needed)
+            $JAVA_HOME/bin/keytool -import -trustcacerts -keystore ./custom-truststore.jks -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
             
-            echo "✅ Certificate installed to Java trust store"
+            # Set Java system property to use custom truststore
+            echo "JAVA_OPTS=-Djavax.net.ssl.trustStore=$(pwd)/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" >> $GITHUB_ENV
+            
+            echo "✅ Certificate installed to custom trust store"
           else
-            echo "⚠️ Could not extract certificate, will rely on --blackduck.trust.cert=true"
+            echo "⚠️ Could not extract certificate, will rely on Java SSL bypass options"
+            echo "JAVA_OPTS=-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true" >> $GITHUB_ENV
           fi
 
       - name: Download Black Duck Detect
