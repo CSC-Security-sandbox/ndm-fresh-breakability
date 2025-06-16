@@ -9,7 +9,6 @@ folder_path      = "ova-build"
 content_library_name = "datamigrator-ovf-builds"
 
 # VM hardware variables
-num_cpus               = 8
 num_cores_per_socket   = 1
 memory_mb              = 32768
 cpu_hot_add_enabled    = false
@@ -27,9 +26,26 @@ network_interfaces = [
 # VM customization and tools settings
 sync_time_with_host  = true
 tools_upgrade_policy = "manual"
+vm_firmware = "efi"
 
-# VM disk settings
-disk = {
+# Control plane configuration and Worker configuration
+control_plane = {
+  num_cpus  = 8
+  memory_mb = 32768
+}
+
+worker = {
+  num_cpus  = 4
+  memory_mb = 16384
+}
+
+worker_disks = {
+  label       = "disk0"
+  size        = 100
+  unit_number = 0
+}
+
+control_plane_disks = {
   label       = "disk0"
   size        = 200
   unit_number = 0
