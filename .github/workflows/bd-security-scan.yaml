@@ -73,10 +73,10 @@ jobs:
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
 
-      - name: Install jq for JSON parsing
-        run: |
-          apt-get update
-          apt-get install -y jq curl
+      # - name: Install jq for JSON parsing
+      #   run: |
+      #     apt-get update
+      #     apt-get install -y jq curl
 
       - name: Download Black Duck Detect
         run: |
