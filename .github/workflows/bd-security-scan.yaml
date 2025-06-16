@@ -16,58 +16,140 @@ env:
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
 
 jobs:
-  Black-Duck-SCA-Scan:
+  black-duck-sca-scan:
     name: Black Duck SCA Scan
     runs-on: openlab
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for better analysis
 
-      - name: Set up Java (required for Black Duck Detect)
-        uses: actions/setup-java@v3
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Print debug variables
+      - name: Validate environment
         run: |
-          echo "PROJECT_NAME -->  $PROJECT_NAME"
-          echo "Running on -->  $RUNNER_OS"
-          echo "Service Name -->  $SERVICE_NAME"
-          echo "Service Path -->  $SERVICE_PATH"
-          echo "Project Version -->  $VERSION_NAME"
-          echo "Black Duck URL -->  $BLACKDUCK_URL"
-          echo "Workspace -->  ${{ github.workspace }}"
-          echo "$BLACKDUCK_API_TOKEN"
+          if [ -z "$BLACKDUCK_API_TOKEN" ]; then
+            echo "❌ BLACKDUCK_API_TOKEN is not set. Please add it to GitHub Secrets."
+            exit 1
+          fi
+
+          if [ ! -d "$SERVICE_PATH" ]; then
+            echo "❌ Service path '$SERVICE_PATH' does not exist."
+            exit 1
+          fi
+
+          echo "✅ Environment validation passed"
+
+      - name: Print scan configuration
+        run: |
+          echo "🔍 Black Duck Scan Configuration:"
+          echo "PROJECT_NAME: $PROJECT_NAME"
+          echo "VERSION_NAME: $VERSION_NAME"
+          echo "SERVICE_NAME: $SERVICE_NAME"
+          echo "SERVICE_PATH: $SERVICE_PATH"
+          echo "BLACKDUCK_URL: $BLACKDUCK_URL"
+          echo "RUNNER_OS: $RUNNER_OS"
+          echo "WORKSPACE: ${{ github.workspace }}"
+          echo "GITHUB_REF: ${{ github.ref }}"
+          echo "GITHUB_SHA: ${{ github.sha }}"
+
+      - name: Install Black Duck Server Certificate
+        run: |
+          echo "🔐 Installing Black Duck server certificate..."
+
+          # Extract certificate from your Black Duck server
+          echo | openssl s_client -servername blackduck.eng.netapp.com -connect blackduck.eng.netapp.com:443 2>/dev/null | openssl x509 > blackduck.crt
+
+          # Verify certificate was extracted
+          if [ -s blackduck.crt ]; then
+            echo "✅ Certificate extracted successfully"
+            
+            # Add certificate to Java trust store
+            sudo keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
+            
+            echo "✅ Certificate installed to Java trust store"
+          else
+            echo "⚠️ Could not extract certificate, will rely on --blackduck.trust.cert=true"
+          fi
+
+      - name: Download Black Duck Detect
+        run: |
+          echo "📥 Downloading Black Duck Detect..."
+          curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
+          chmod +x detect10.sh
+          echo "✅ Black Duck Detect downloaded successfully"
 
       - name: Run Black Duck Detect
         shell: bash
         env:
-          BLACKDUCK_API_TOKEN: "$BLACKDUCK_API_TOKEN"
+          BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
         run: |
-          if [ -z "$BLACKDUCK_API_TOKEN" ]; then
-            echo "❌ BLACKDUCK_API_TOKEN is not set. Please provide it via GitHub Secrets or act --secret-file."
-            exit 1
+          echo "🚀 Starting Black Duck scan..."
+
+          # Set unique code location name based on context
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CODE_LOCATION_NAME="NetApp-Data_Migrator-${SERVICE_NAME}-PR_${{ github.event.number }}"
+          else
+            CODE_LOCATION_NAME="NetApp-Data_Migrator-${SERVICE_NAME}-${{ github.run_id }}"
           fi
 
-          curl -s https://detect.blackduck.com/detect10.sh -o detect10.sh
-          chmod +x detect10.sh
-          echo "-------------------"
-          echo pwd
-          echo "-------------------"
+          echo "Code location: $CODE_LOCATION_NAME"
 
           ./detect10.sh \
-            --detect.project.name="$PROJECT_NAME" \
-            --blackduck.url=https://blackduck.eng.netapp.com \
+            --detect.project.name="NetApp Data Migrator - $SERVICE_NAME" \
+            --blackduck.url="$BLACKDUCK_URL" \
             --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
             --detect.project.version.name="$VERSION_NAME" \
+            --detect.source.path="$SERVICE_PATH" \
+            --detect.blackduck.signature.scanner.paths="$SERVICE_PATH" \
+            --detect.code.location.name="$CODE_LOCATION_NAME" \
             --detect.cleanup=false \
-            --detect.source.path=services/admin-service \ 
-            --detect.code.location.name="Test_NDM_${{ github.run_id }}" \
-            --detect.accuracy.required=NONE
             --detect.tools=DETECTOR,SIGNATURE_SCAN \
             --detect.detector.search.depth=50 \
             --detect.detector.search.continue=true \
             --blackduck.trust.cert=true \
-            --blackduck.offline.mode=false
+            --blackduck.offline.mode=false \
+            --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
+            --detect.risk.report.pdf=true \
+            --detect.notices.report=true \
+            --detect.cleanup.bdio.files=false \
+            --logging.level.com.synopsys.integration=DEBUG \
+            --blackduck.trust.cert=true
+
+      - name: Upload Black Duck Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blackduck-reports-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/blackduck-output/
+            **/blackduck-output/
+          retention-days: 30
+
+      - name: Check for policy violations
+        if: always()
+        run: |
+          # Check if there are any policy violation files
+          if find . -name "*PolicyViolation*" -type f | grep -q .; then
+            echo "⚠️ Policy violations detected. Check the uploaded artifacts for details."
+            exit 1
+          else
+            echo "✅ No policy violations found."
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "📊 Black Duck Scan Summary:"
+          echo "- Project: $PROJECT_NAME"
+          echo "- Version: $VERSION_NAME"
+          echo "- Service: $SERVICE_NAME ($SERVICE_PATH)"
+          echo "- Scan completed at: $(date)"
+          echo "- Reports uploaded as artifacts"
