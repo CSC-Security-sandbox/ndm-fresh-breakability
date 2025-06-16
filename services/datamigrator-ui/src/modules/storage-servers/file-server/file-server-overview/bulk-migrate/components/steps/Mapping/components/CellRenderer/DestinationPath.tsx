@@ -70,16 +70,14 @@ const DestinationFileServer = ({
           helperText={error ? "" : ""}
         />
       )}
-      renderOption={(props, option) => (
-        <>
-          {row?.protocol === option.protocol && (
-            <li {...props} key={option?.pathId}>
-              <Tooltip nowrap>{option?.pathName}</Tooltip>
-              {option?.pathName}
-            </li>
-          )}
-        </>
-      )}
+      renderOption={(props, option) =>
+        row?.protocol === option.protocol ? (
+          <li {...props} key={option?.pathId}>
+            <Tooltip nowrap>{option?.pathName}</Tooltip>
+            {option?.pathName}
+          </li>
+        ) : null
+      }
     />
   );
 };
