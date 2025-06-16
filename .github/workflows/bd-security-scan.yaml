@@ -61,7 +61,9 @@ jobs:
 
       - name: Replace GitHub Token Placeholder in .npmrc
         run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+          if [ -f ".npmrc" ]; then
+            sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+          fi
 
       - name: Install dependencies and pkg
         run: npm install && npm install pkg -g
