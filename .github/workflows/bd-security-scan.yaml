@@ -128,8 +128,7 @@ jobs:
             --detect.risk.report.pdf=true \
             --detect.notices.report=true \
             --detect.cleanup.bdio.files=false \
-            --logging.level.com.synopsys.integration=DEBUG \
-            --blackduck.trust.cert=true
+            --logging.level.com.synopsys.integration=DEBUG
 
       - name: Upload Black Duck Reports
         uses: actions/upload-artifact@v4
