@@ -1047,3 +1047,37 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 
 	return foundID, nil // Return the found ID and no error
 }
+
+// sshRunScript connects via SSH to a worker and runs the provided script.
+func sshRunScript(config SSHConfig, script string) (string, error) {
+	sshConfig := &ssh.ClientConfig{
+		User: config.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(config.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	err = session.Run(script)
+	if err != nil {
+		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
