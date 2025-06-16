@@ -14,6 +14,7 @@ env:
   PROJECT_NAME: Test_NDM
   VERSION_NAME: test_v
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
 
 jobs:
   black-duck-sca-scan:
@@ -39,10 +40,25 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Replace GitHub Token Placeholder in .npmrc
+        run: |
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+
+      - name: Install dependencies and pkg
+        run: npm install && npm install pkg -g
+
+      - name: Run Build
+        run: npm run build
+
       - name: Validate environment
         run: |
           if [ -z "$BLACKDUCK_API_TOKEN" ]; then
             echo "❌ BLACKDUCK_API_TOKEN is not set. Please add it to GitHub Secrets."
+            exit 1
+          fi
+
+          if [ -z "$GITOPS_USER_GITHUB_TOKEN" ]; then
+            echo "❌ GITOPS_USER_GITHUB_TOKEN is not set. Please add it to GitHub Secrets."
             exit 1
           fi
 
@@ -52,26 +68,6 @@ jobs:
           fi
 
           echo "✅ Environment validation passed"
-
-      - name: Install NPM dependencies
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "📦 Installing NPM dependencies..."
-          cd $SERVICE_PATH
-          npm config set //npm.pkg.github.com/:_authToken=$NODE_AUTH_TOKEN
-          npm config set @netapp-cloud-datamigrate:registry https://npm.pkg.github.com/
-          echo "📋 NPM configuration:"
-          npm config list | grep -E "(registry|_authToken)" || true
-          if [ -f "package.json" ]; then
-            npm install --only=production
-            echo "✅ NPM dependencies installed successfully"
-            echo "📋 Installed packages:"
-            npm list --depth=0 --only=production || true
-          else
-            echo "⚠️ No package.json found in $SERVICE_PATH"
-          fi
 
       - name: Download Black Duck Detect
         run: |
@@ -173,14 +169,3 @@ jobs:
           echo "📄 Reports uploaded as GitHub artifacts"
           echo "📝 Note: Deep analysis data uploaded to Black Duck server."
           echo "📝 Full reports will be available in Black Duck web interface once server processing completes."
-
-          # Set job status based on vulnerability count
-          if [ "$VULNERABILITY_COUNT" != "unknown" ] && [ "$VULNERABILITY_COUNT" -gt 0 ]; then
-            echo "⚠️ Warning: $VULNERABILITY_COUNT vulnerabilities found"
-            # Uncomment the next line if you want the job to fail when vulnerabilities are found
-            # exit 1
-          elif [ "$VULNERABILITY_COUNT" = "0" ]; then
-            echo "✅ No vulnerabilities found"
-          else
-            echo "ℹ️ Vulnerability count could not be determined"
-          fi
