@@ -11,7 +11,8 @@ env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
   SERVICE_NAME: admin-service
   SERVICE_PATH: services/admin-service
-  PROJECT_VERSION: test_v
+  PROJECT_NAME: Test_NDM
+  VERSION_NAME: test_v
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
 
 jobs:
@@ -31,12 +32,13 @@ jobs:
 
       - name: Print debug variables
         run: |
-          echo "Running on: $RUNNER_OS"
-          echo "Service Name: $SERVICE_NAME"
-          echo "Service Path: $SERVICE_PATH"
-          echo "Project Version: $PROJECT_VERSION"
-          echo "Black Duck URL: $BLACKDUCK_URL"
-          echo "Workspace: ${{ github.workspace }}"
+          echo "PROJECT_NAME -->  $PROJECT_NAME"
+          echo "Running on -->  $RUNNER_OS"
+          echo "Service Name -->  $SERVICE_NAME"
+          echo "Service Path -->  $SERVICE_PATH"
+          echo "Project Version -->  $VERSION_NAME"
+          echo "Black Duck URL -->  $BLACKDUCK_URL"
+          echo "Workspace -->  ${{ github.workspace }}"
           echo "$BLACKDUCK_API_TOKEN"
 
       - name: Run Black Duck Detect
@@ -49,25 +51,23 @@ jobs:
             exit 1
           fi
 
-          curl -s https://detect.synopsys.com/detect10.sh -o detect.sh
-          chmod +x detect.sh
+          curl -s https://detect.blackduck.com/detect10.sh -o detect10.sh
+          chmod +x detect10.sh
+          echo "-------------------"
+          echo pwd
+          echo "-------------------"
 
-          ./detect.sh \
-            --detect.project.name="NetApp Data Migrator - $SERVICE_NAME" \
-            --detect.project.version.name="$PROJECT_VERSION" \
-            --blackduck.url="$BLACKDUCK_URL" \
+          ./detect10.sh \
+            --detect.project.name="$PROJECT_NAME" \
+            --blackduck.url=https://blackduck.eng.netapp.com \
             --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
+            --detect.project.version.name="$VERSION_NAME" \
             --detect.cleanup=false \
             --detect.source.path=services/admin-service \ 
-            --detect.blackduck.signature.scanner.paths=services/admin-service \ 
-            --detect.code.location.name="NetApp-Data_Migrator-$SERVICE_NAME-${{ github.run_id }}" \
+            --detect.code.location.name="Test_NDM_${{ github.run_id }}" \
+            --detect.accuracy.required=NONE
             --detect.tools=DETECTOR,SIGNATURE_SCAN \
             --detect.detector.search.depth=50 \
             --detect.detector.search.continue=true \
             --blackduck.trust.cert=true \
-            --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
-            --logging.level.com.synopsys.integration=DEBUG \
-            --detect.cleanup.bdio.files=false \
-            --detect.risk.report.pdf=true \
-            --detect.notices.report=true
             --blackduck.offline.mode=false
