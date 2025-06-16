@@ -47,17 +47,17 @@ variable "content_library_name" {
   type        = string
 }
 
-variable "ovf_template_name" {
-  description = "Name of the OVF template in the content library"
+variable "control_plane_ovf_template_name" {
+  description = "Name of the OVF template in the content library for control plane"
+  type        = string
+}
+
+variable "worker_ovf_template_name" {
+  description = "Name of the OVF template in the content library for worker"
   type        = string
 }
 
 # VM hardware variables
-variable "num_cpus" {
-  description = "Number of CPUs for the VM"
-  type        = number
-}
-
 variable "num_cores_per_socket" {
   description = "Number of cores per CPU socket"
   type        = number
@@ -114,17 +114,37 @@ variable "vm_firmware" {
   default     = "efi"
 }
 
+variable "control_plane" {
+  description = "Configuration for the control plane component"
+  type = object({
+    num_cpus   = number
+    memory_mb  = number
+  })
+}
+
+variable "worker" {
+  description = "Configuration for the worker component"
+  type = object({
+    num_cpus   = number
+    memory_mb  = number
+  })
+}
+
 # VM disk settings
-variable "disk" {
-  description = "Configuration for the disk of the virtual machine"
+variable "worker_disks" {
+  description = "Configuration for the disk of the worker virtual machine"
   type = object({
     label       = string
     size        = number
-    unit_number = number
+    unit_number = optional(number)
   })
-  default = {
-    label       = "disk0"
-    size        = 200
-    unit_number = 0
-  }
+}
+
+variable "control_plane_disks" {
+  description = "Configuration for the disk of the control plane virtual machine"
+  type = object({
+    label       = string
+    size        = number
+    unit_number = optional(number)
+  })
 }
