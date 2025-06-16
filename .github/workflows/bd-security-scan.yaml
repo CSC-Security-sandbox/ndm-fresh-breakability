@@ -22,6 +22,10 @@ jobs:
     runs-on: openlab
     timeout-minutes: 120
 
+    defaults:
+      run:
+        working-directory: services/admin-service
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,9 +44,9 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Replace GitHub Token Placeholder in "$SERVICE_PATH/.npmrc"
+      - name: Replace GitHub Token Placeholder in .npmrc
         run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' "$SERVICE_PATH/.npmrc"
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
 
       - name: Install dependencies and pkg
         run: npm install && npm install pkg -g
