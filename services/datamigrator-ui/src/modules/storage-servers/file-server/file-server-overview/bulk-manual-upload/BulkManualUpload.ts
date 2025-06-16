@@ -18,7 +18,7 @@ import { BulkManualUploadModalFooter } from "@modules/storage-servers/file-serve
 import { ConfigListTypeApiType, VolumeType } from "@/types/app.type";
 
 export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
-  // Initialize form handling
+  // Initialize form and state
   const form = useForm(INITIAL_VALUE_FORM, VALIDATION_SCHEMA);
   const [exportPathSourceData, setExportPathSourceData] =
     useState<UploadedFilePropsType>();
@@ -39,7 +39,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
     }
   }, [fileServerDetails?.fileServers]);
 
-  const handleResetAndClose = () => {
+  const resetStateAndCloseModal = () => {
     form.resetForm(INITIAL_VALUE_FORM);
     setExportPathSourceData(undefined);
     setError("");
@@ -47,13 +47,12 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
   };
 
   const onSubmit = async () => {
-    exportPathSourceData?.uploadId
-      ? submitUploadExportPathSourceFile()
-      : uploadFile();
+    exportPathSourceData?.uploadId ? submitFile() : uploadFile();
   };
 
   useEffect(() => {
     if (form?.formState?.exportPathSource?.fileName) openUploadModal();
+    setError("");
   }, [
     form?.formState?.exportPathSource?.fileName,
     form?.formErrors,
@@ -61,20 +60,16 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
     isLoading,
   ]);
 
-  const submitUploadExportPathSourceFile = async () => {
+  const submitFile = async () => {
     try {
-      setIsLoading(true);
+      startLoading();
       await submitExportPathSourceFile({
         uploadId: exportPathSourceData.uploadId,
       }).unwrap();
       notify.success("File uploaded successfully.");
-      handleResetAndClose();
+      resetStateAndCloseModal();
     } catch (error) {
-      const errorMessage = `Failed to upload file: ${
-        error?.data?.message || error?.message
-      }`;
-      console.error(errorMessage);
-      notify.error(errorMessage);
+      handleError(error, "Failed to upload file");
     } finally {
       setIsLoading(false);
     }
@@ -82,21 +77,30 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
 
   const uploadFile = async () => {
     try {
+      startLoading();
       const { exportPathSource } = form?.formState;
-      setIsLoading(true);
       const _exportPathSourceData = await uploadExportPathSourceFile({
         fileServerId,
         body: exportPathSource,
       }).unwrap();
       setExportPathSourceData(_exportPathSourceData);
     } catch (error) {
-      setError(error?.data?.message || error?.message);
-      console.error(
-        `Failed to upload file: ${error?.data?.message || error?.message}`
-      );
+      handleError(error, "Failed to upload file");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const startLoading = () => {
+    setIsLoading(true);
+    setError("");
+  };
+
+  const handleError = (error: any, defaultMessage: string) => {
+    const message = error?.data?.message || error?.message || defaultMessage;
+    setError(message);
+    console.error(message);
+    notify.error(message);
   };
 
   const openUploadModal = () => {
@@ -113,12 +117,10 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
         exportPathSourceData,
         isLoading,
         onSubmit,
-        handleResetAndClose
+        resetStateAndCloseModal
       ),
     });
   };
 
-  return {
-    openUploadModal,
-  };
+  return { openUploadModal };
 };

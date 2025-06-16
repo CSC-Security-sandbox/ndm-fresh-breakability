@@ -26,10 +26,11 @@ const UploadFileDetails = ({
         extraContent: <InfoIcon className="w-4" />,
       },
       {
-        label: "Path Difference",
+        label: "Disabled Paths",
         value: noLongerAvailablePaths,
         extraContent: <NoticeTriangleIcon className="w-4" color="warning" />,
-        tooltip: "Path difference will be considered disabled.",
+        tooltip:
+          "Any existing paths that were not part of uploaded path list will be considered disabled.",
       },
     ];
   }, [newPaths, alreadyExitingPaths, noLongerAvailablePaths]);
