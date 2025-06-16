@@ -24,18 +24,16 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		numberOfWorker := 2
 		ProjectId, workerIds, err = SetupTestEnv(numberOfWorker)
 		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+		Expect(len(workerIds)).Should(BeNumerically("=", 2), "Expected 2 workers to be attached")
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
 	})
 
 	It("TC-003: Create a fileserver with healthy workers and run scheduled discovery and migration", func() {
-		var sourceConfigID, sourceJobConfigID1, sourceJobConfigID2, sourcePathID1, sourcePathID2, sourceDiscoveryJobRunID1, sourceDiscoveryJobRunID2 string
-		var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs []string
-		var jobConfigID1, jobConfigID2, cutoverRunID1, cutoverRunID2 string
+		var sourceConfigID, sourcePathID1, sourcePathID2 string
+		var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 		var destinationConfigID, destinationPathID1, destinationPathID2 string
-		var destinationJobConfigID1, destinationJobConfigID2, destinationDiscoveryJobRunID1, destinationDiscoveryJobRunID2 string
 
 		By("Creating the source file server")
 		IntroduceDelay(20)
@@ -93,56 +91,39 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
-
-		sourceJobConfigID1 = sourceJobConfigIDs[0]
-		sourceJobConfigID2 = sourceJobConfigIDs[1]
 		IntroduceDelay(10)
+		By("Validating run not initiates on triggering Discovery if it is scheduled")
+		for _, sourceJobConfigID := range sourceJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers, false)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID for config %s", sourceJobConfigID)
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", sourceJobConfigID)
+			defer resp.Body.Close()
 
-		getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID1, headers, false)
-		Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
-		Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
-		Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER")
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-
-		getJobsResp, resp, err = GetJobRunDetails(sourceJobConfigID2, headers, false)
-		Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
-		Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
-		Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER")
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty for config %s", sourceJobConfigID)
+			Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", sourceJobConfigID)
+			Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", sourceJobConfigID)
+		}
 
 		IntroduceDelay(100)
 
 		By("Getting jobs by jobConfigId for source")
-		getJobsResp, resp, err = GetJobRunDetails(sourceJobConfigID1, headers)
-		sourceDiscoveryJobRunID1 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(sourceDiscoveryJobRunID1).NotTo(BeEmpty(), "source Discovery JobRun ID should not be empty")
+		for _, sourceJobConfigID := range sourceJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			defer resp.Body.Close()
 
-		getJobsResp, resp, err = GetJobRunDetails(sourceJobConfigID2, headers)
-		sourceDiscoveryJobRunID2 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(sourceDiscoveryJobRunID2).NotTo(BeEmpty(), "source Discovery JobRun ID should not be empty")
+			sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+			Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
 
-		// Wait for both discovery jobs to complete
-		err = WaitForJobState(sourceDiscoveryJobRunID1, COMPLETED_JOBRUN, 25)
-		Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-		err = WaitForJobState(sourceDiscoveryJobRunID2, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "Source discovery job 1 did not complete")
+			// Wait for discovery jobs to complete
+			err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-		result, err := ValidateReport(sourceDiscoveryJobRunID1, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while discovery report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
-		result, err = ValidateReport(sourceDiscoveryJobRunID2, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while discovery report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
+			result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
+			Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
+			LogDebug(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+		}
 
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
@@ -201,54 +182,37 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-		destinationJobConfigID1 = destinationJobConfigIDs[0]
-		destinationJobConfigID2 = destinationJobConfigIDs[1]
 		IntroduceDelay(10)
+		By("Validating run not initiates on triggering Discovery if it is scheduled")
+		for _, destinationJobConfigID := range destinationJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers, false)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID for config %s", destinationJobConfigID)
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", destinationJobConfigID)
+			defer resp.Body.Close()
 
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID1, headers, false)
-		Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
-		Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
-		Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER")
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID2, headers, false)
-		Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
-		Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
-		Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER")
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty for config %s", destinationJobConfigID)
+			Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", destinationJobConfigID)
+			Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", destinationJobConfigID)
+		}
 		IntroduceDelay(100)
 
 		By("Getting jobs by jobConfigId for destination")
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID1, headers)
-		destinationDiscoveryJobRunID1 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(destinationDiscoveryJobRunID1).NotTo(BeEmpty(), "destination Discovery JobRun ID should not be empty")
+		for _, destinationJobConfigID := range destinationJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			defer resp.Body.Close()
+			destinationDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+			Expect(destinationDiscoveryJobRunID).NotTo(BeEmpty(), "Destination Discovery JobRun ID should not be empty")
 
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID2, headers)
-		destinationDiscoveryJobRunID2 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(destinationDiscoveryJobRunID2).NotTo(BeEmpty(), "destination Discovery JobRun ID should not be empty")
+			// Wait for discovery jobs to complete
+			err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
 
-		// Wait for both discovery jobs to complete
-		err = WaitForJobState(destinationDiscoveryJobRunID1, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "Destination discovery job did not complete")
-		err = WaitForJobState(destinationDiscoveryJobRunID2, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "Destination discovery job 1 did not complete")
-
-		result, err = ValidateReport(destinationDiscoveryJobRunID1, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while discovery report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
-		result, err = ValidateReport(destinationDiscoveryJobRunID2, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while discovery report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
+			result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
+			Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", destinationDiscoveryJobRunID)
+			LogDebug(fmt.Sprintf("validate report result for %s: %s", destinationDiscoveryJobRunID, result))
+		}
 
 		By("Creating a migration job")
 		migrationFutureDateTime := time.Now().UTC().
@@ -275,7 +239,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		IntroduceDelay(10)
 
 		for _, migrationJobConfigID := range migrationJobConfigIDs {
-			getJobsResp, resp, err = GetJobRunDetails(migrationJobConfigID, headers, false)
+			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers, false)
 			Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
 			Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
 			Expect(getJobsResp.JobType).To(Equal("MIGRATE"), "Expected jobType to be MIGRATE")
@@ -287,7 +251,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 
 		// Wait for migration completion
 		for _, migrationJobConfigID := range migrationJobConfigIDs {
-			getJobsResp, resp, err = GetJobRunDetails(migrationJobConfigID, headers)
+			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 			migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 			Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 			defer resp.Body.Close()
@@ -315,53 +279,43 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
 		Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
-		jobConfigID1 = jobConfigIDs[0]
-		jobConfigID2 = jobConfigIDs[1]
-
 		By("Getting jobs by job config id")
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		defer resp.Body.Close()
-		cutoverRunID1 = getJobsResp.JobRuns[0].JobRunId
-		WaitForJobState(cutoverRunID1, BLOCKED_JOBRUN, 30)
-		// Fetch the latest status
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+		for _, jobConfigID := range jobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID for config %s", jobConfigID)
+			defer resp.Body.Close()
 
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		defer resp.Body.Close()
-		cutoverRunID2 = getJobsResp.JobRuns[0].JobRunId
-		WaitForJobState(cutoverRunID2, BLOCKED_JOBRUN, 30)
-		// Fetch the latest status
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		Expect(err).NotTo(HaveOccurred(), "cutoverRunID1 job did not reach BLOCKED state")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+			cutoverRunID := getJobsResp.JobRuns[0].JobRunId
+			Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
+
+			WaitForJobState(cutoverRunID, BLOCKED_JOBRUN, 30)
+			// Fetch the latest status
+			getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", jobConfigID)
+			defer resp.Body.Close()
+
+			Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found for config %s", jobConfigID)
+			Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", jobConfigID)
+			Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected status BLOCKED for config %s", jobConfigID)
+
+			cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
+		}
 
 		By("Approving bulk cutover job")
-		resp, err = ApproveRejectBulkCutoverJob(cutoverRunID1, "APPROVED", headers)
-		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+		for _, cutoverRunID := range cutoverRunIDs {
+			resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
+			Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverRunID)
+			defer resp.Body.Close()
+		}
 
-		resp, err = ApproveRejectBulkCutoverJob(cutoverRunID2, "APPROVED", headers)
-		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-
-		result, err = ValidateReport(cutoverRunID1, JobTypeCutover, "../utils/validator/COCDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while cutover report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
-		result, err = ValidateReport(cutoverRunID2, JobTypeCutover, "../utils/validator/COCDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "error while cutover report validation")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
+		By("Validating cutover reports")
+		for _, cutoverRunID := range cutoverRunIDs {
+			result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../utils/validator/COCDetails.json")
+			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+			LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+		}
 	})
 
 	AfterEach(func() {
