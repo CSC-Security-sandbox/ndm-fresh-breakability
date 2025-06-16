@@ -30,7 +30,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           registry-url: "https://npm.pkg.github.com"
           # No caching since package-lock.json doesn't exist
 
@@ -127,35 +127,6 @@ jobs:
           curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
           chmod +x detect10.sh
           echo "✅ Black Duck Detect downloaded successfully"
-
-      - name: Test API Token Authorization
-        env:
-          BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
-        run: |
-          echo "🔐 Testing API token authorization..."
-
-          # Test API connectivity and permissions
-          response=$(curl -s -w "%{http_code}" -o /tmp/auth_test.json \
-            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
-            -H "Accept: application/vnd.blackducksoftware.user-4+json" \
-            "$BLACKDUCK_URL/api/current-user")
-
-          if [ "$response" = "200" ]; then
-            echo "✅ API token is valid and authorized"
-            echo "Current user info:"
-            cat /tmp/auth_test.json | jq -r '.userName // "Unknown user"' 2>/dev/null || echo "User info not available"
-          else
-            echo "❌ API token authorization failed with HTTP $response"
-            echo "Response body:"
-            cat /tmp/auth_test.json 2>/dev/null || echo "No response body"
-            echo ""
-            echo "💡 Troubleshooting:"
-            echo "1. Verify BLACKDUCK_API_TOKEN secret is set correctly"
-            echo "2. Check if API token has expired"
-            echo "3. Ensure user has 'Project Creator' or 'Super User' role"
-            echo "4. Contact Black Duck administrator for permission verification"
-            exit 1
-          fi
 
       - name: Run Black Duck Detect
         shell: bash
