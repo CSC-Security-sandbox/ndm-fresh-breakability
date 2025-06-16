@@ -73,11 +73,6 @@ jobs:
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
 
-      # - name: Install jq for JSON parsing
-      #   run: |
-      #     apt-get update
-      #     apt-get install -y jq curl
-
       - name: Download Black Duck Detect
         run: |
           echo "📥 Downloading Black Duck Detect..."
@@ -126,9 +121,11 @@ jobs:
             --detect.risk.report.pdf.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
             --blackduck.timeout=7200 \
             --detect.timeout=14400 \
-            --detect.wait.for.results=true \
             --detect.blackduck.signature.scanner.memory=4096 \
-            --logging.level.com.synopsys.integration=INFO
+            --logging.level.com.synopsys.integration=INFO \
+            --detect.wait.for.results=false 
+            
+            
           SCAN_EXIT_CODE=$?
 
           echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
