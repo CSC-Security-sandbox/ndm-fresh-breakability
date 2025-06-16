@@ -71,8 +71,11 @@ jobs:
           if [ -s blackduck.crt ]; then
             echo "✅ Certificate extracted successfully"
             
-            # Add certificate to Java trust store
-            sudo keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
+            # Use full path to keytool
+            echo "Java Home: $JAVA_HOME"
+            
+            # Add certificate to Java trust store using full path
+            sudo $JAVA_HOME/bin/keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
             
             echo "✅ Certificate installed to Java trust store"
           else
@@ -90,6 +93,7 @@ jobs:
         shell: bash
         env:
           BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false"
         run: |
           echo "🚀 Starting Black Duck scan..."
 
