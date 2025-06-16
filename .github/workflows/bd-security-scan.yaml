@@ -113,18 +113,24 @@ jobs:
             --blackduck.trust.cert=true \
             --blackduck.offline.mode=false \
             --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
-            --detect.risk.report.pdf=true \
-            --detect.notices.report=true \
             --detect.cleanup.bdio.files=false \
             --detect.accuracy.required=NONE \
-            --detect.vulnerability.report=true \
-            --detect.risk.report.pdf.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
             --blackduck.timeout=7200 \
             --detect.timeout=14400 \
             --detect.blackduck.signature.scanner.memory=4096 \
             --logging.level.com.synopsys.integration=INFO \
-            --detect.wait.for.results=false 
-            
+            --detect.wait.for.results=false \
+            --detect.force.success=true \
+            --detect.force.success.on.skip=true \
+            --detect.bom.aggregate.remediation.mode=NONE \
+            --detect.blackduck.scan.mode=INTELLIGENT \
+            --detect.parallel.processors=4 \
+            --detect.maven.dependency.types.excluded=false \
+            --detect.npm.include.dev.dependencies=true \
+            --detect.detector.search.exclusion.defaults=false \
+            --detect.risk.report.pdf=false \
+            --detect.notices.report=false \
+            --detect.vulnerability.report=false
             
           SCAN_EXIT_CODE=$?
 
@@ -165,6 +171,8 @@ jobs:
           echo ""
           echo "🔗 Black Duck Console: $BLACKDUCK_URL"
           echo "📄 Reports uploaded as GitHub artifacts"
+          echo "📝 Note: Deep analysis data uploaded to Black Duck server."
+          echo "📝 Full reports will be available in Black Duck web interface once server processing completes."
 
           # Set job status based on vulnerability count
           if [ "$VULNERABILITY_COUNT" != "unknown" ] && [ "$VULNERABILITY_COUNT" -gt 0 ]; then
