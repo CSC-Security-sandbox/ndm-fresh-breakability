@@ -2,7 +2,7 @@ name: Black Duck SCA Scan
 
 on:
   push:
-    branches: [main, sm/bd-action-workflow]
+    branches: [main, sm/bd-action-workflow-v2]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           echo "Project Version: $PROJECT_VERSION"
           echo "Black Duck URL: $BLACKDUCK_URL"
           echo "Workspace: ${{ github.workspace }}"
-          echo "Token: $BLACKDUCK_API_TOKEN"
+          echo "$BLACKDUCK_API_TOKEN"
 
       - name: Run Black Duck Detect
         shell: bash
