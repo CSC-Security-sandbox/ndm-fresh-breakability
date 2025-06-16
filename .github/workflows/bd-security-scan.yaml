@@ -59,16 +59,17 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Replace GitHub Token Placeholder in .npmrc
+      - name: Replace GitHub Token Placeholder in .npmrc inside service path (if exists)
+        if: ${{ matrix.service.name != 'keycloak-customizations' }}
         run: |
-          if [ -f ".npmrc" ]; then
-            sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
-          fi
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc || echo "⚠️ .npmrc not found, skipping replacement"
 
       - name: Install dependencies and pkg
+        if: ${{ matrix.service.name != 'keycloak-customizations' }}
         run: npm install && npm install pkg -g
 
       - name: Run Build
+        if: ${{ matrix.service.name != 'keycloak-customizations' }}
         run: npm run build
 
       - name: Validate environment
