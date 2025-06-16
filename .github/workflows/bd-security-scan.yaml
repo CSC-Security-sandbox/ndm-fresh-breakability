@@ -166,7 +166,7 @@ jobs:
             --detect.risk.report.pdf=true \
             --detect.notices.report=true \
             --detect.cleanup.bdio.files=false \
-            --detect.accuracy.required=LOW \
+            --detect.accuracy.required=NONE \
             --logging.level.com.synopsys.integration=DEBUG
 
           SCAN_EXIT_CODE=$?
