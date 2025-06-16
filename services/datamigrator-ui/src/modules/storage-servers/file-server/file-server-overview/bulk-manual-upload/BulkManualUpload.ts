@@ -114,7 +114,6 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
       ),
       modalFooter: BulkManualUploadModalFooter(
         form,
-        exportPathSourceData,
         isLoading,
         onSubmit,
         resetStateAndCloseModal
