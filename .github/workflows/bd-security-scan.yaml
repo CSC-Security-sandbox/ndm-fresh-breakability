@@ -143,6 +143,7 @@ jobs:
             --detect.cleanup.bdio.files=false \
             --detect.accuracy.required=NONE \
             --detect.vulnerability.report=true \
+            --blackduck.timeout=2400 \
             --logging.level.com.synopsys.integration=DEBUG
           SCAN_EXIT_CODE=$?
           case $SCAN_EXIT_CODE in
