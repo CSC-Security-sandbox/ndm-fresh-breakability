@@ -785,5 +785,176 @@ describe('MigrationSyncService', () => {
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
                 expect(result.targetErrors).toHaveLength(0);
         });
+
+        it('should handle error when setting access and modified times', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: {} },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs.promises, 'utimes').mockRejectedValue({ message: 'utimes error', code: 'EUTIMES' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when setting ownership (chown)', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { gid: 1000, uid: 1000 } as any;
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: {} },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{}] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            jest.spyOn(fs.promises, 'chown').mockRejectedValue({ message: 'chown error', code: 'ECHOWN' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when setting birthtime', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { birthtime: new Date().toISOString() } as any;
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: {} },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            jest.spyOn(service['shellService'], 'runCommand').mockRejectedValue({ message: 'shell error', code: 'ESHELL' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when preserving access time', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { mtime: new Date().toISOString(), atime: new Date().toISOString() };
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: { preserveAccessTime: true } },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs.promises, 'utimes').mockResolvedValueOnce(undefined).mockRejectedValueOnce({ message: 'preserve error', code: 'EPRESERVE' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle win32 platform SID and ACL errors', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { sid: 'sid', atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: {} },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            jest.spyOn(service, 'getSID').mockRejectedValue({ message: 'sid error', code: 'ESID' });
+            const getUserACLsMock = jest.spyOn(utils, 'getUserACLs').mockReturnValue([{ user: 'user', permissions: 'perm' }]);
+            jest.spyOn(service['shellService'], 'runCommand').mockRejectedValue({ message: 'acl error', code: 'EACL' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length + result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+            getUserACLsMock.mockRestore();
+        });
+
+        it('should set win32 platform SID and ACL successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { sid: 'sid', atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+            appendToErrorList: jest.fn(),
+            jobConfig: { options: {} },
+            getScanTask: jest.fn(),
+            setScanTask: jest.fn(),
+            deleteScanTask: jest.fn(),
+            getSyncTask: jest.fn(),
+            setSyncTask: jest.fn(),
+            deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            jest.spyOn(service, 'getSID').mockResolvedValue('sid');
+            const getUserACLsMock = jest.spyOn(utils, 'getUserACLs').mockReturnValue([{ user: 'user', permissions: 'perm' }]);
+            jest.spyOn(service['shellService'], 'runCommand').mockResolvedValue('ok');
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length + result.targetErrors.length).toBe(1);
+            getUserACLsMock.mockRestore();
+        });
+
+        describe('copyFileWithChecksum', () => {
+            const mockSourceFile = '/mock/source.txt';
+            const mockDestFile = '/mock/dest.txt';
+            const fileContent = Buffer.from('Hello World');
+            const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+            beforeEach(() => {
+                jest.clearAllMocks();
+            });
+
+            it('should throw error if source file does not exist', async () => {
+                jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => false);
+                await expect(service.copyFileWithChecksum(mockSourceFile, mockDestFile))
+                    .rejects
+                    .toThrow(`Source file does not exist: ${mockSourceFile}`);
+            });
+        });
     });
 });

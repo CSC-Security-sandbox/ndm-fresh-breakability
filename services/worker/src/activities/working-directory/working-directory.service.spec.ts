@@ -6,6 +6,7 @@ import { AuthService } from 'src/auth/auth.service';
 
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
+const getProtocol = require('src/protocols/protocols').Protocols.getProtocol;
 
 jest.mock('axios');
 jest.mock('src/protocols/protocols');
@@ -226,5 +227,169 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(activity.updateConfigStatus(apiUrl, payload as any)).rejects.toThrow('API Error: fail-data');
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('API Error:'),);
     });
-  });
+
+    it('calls axios.post with correct headers and payload', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
+      const apiUrl = 'http://some.url';
+      const payload = { configId: 'cfg', status: ConfigStatus.ACTIVE };
+
+      await activity.updateConfigStatus(apiUrl, payload as any);
+
+      expect(axios.post).toHaveBeenCalledWith(
+      apiUrl,
+      payload,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${dummyToken}`,
+        }),
+      }),
+      );
+    });
+    });
+
+    describe('getNfsMountErrorMessage', () => {
+    it('returns PROTOCOL_NOT_SUPPORTED for illegal NFS version', () => {
+      const error = { message: 'illegal NFS version value: 4.2' };
+      expect((activity as any).getNfsMountErrorMessage(error)).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('returns PROTOCOL_NOT_SUPPORTED for RPC prog. not avail', () => {
+      const error = { message: 'RPC prog. not avail' };
+      expect((activity as any).getNfsMountErrorMessage(error)).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('returns PROTOCOL_NOT_SUPPORTED for Protocol not supported for', () => {
+      const error = { message: 'Protocol not supported for NFS' };
+      expect((activity as any).getNfsMountErrorMessage(error)).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('returns original message for other errors', () => {
+      const error = { message: 'Some other error' };
+      expect((activity as any).getNfsMountErrorMessage(error)).toBe('Some other error');
+    });
+    });
+
+    describe('handleMountAndUnmountPaths', () => {
+    it('mounts and unmounts for each fileServer', async () => {
+      const traceId = 'trace-7';
+      const protocolMock = {
+      mountPath: jest.fn().mockResolvedValue(undefined),
+      unmountPath: jest.fn().mockResolvedValue(undefined),
+      };
+      const fileServer = {
+      type: 'NFS',
+      host: 'host1',
+      username: 'user',
+      password: 'pass',
+      protocolVersion: '4.1',
+      };
+      const payload = {
+      listPathPayload: [fileServer],
+      fetchedPath: '/mnt/path',
+      };
+      
+      getProtocol.mockReturnValue(protocolMock);
+
+      await (activity as any).handleMountAndUnmountPaths(traceId, payload);
+
+      expect(protocolMock.mountPath).toHaveBeenCalledWith(traceId, expect.objectContaining({
+      hostname: fileServer.host,
+      path: payload.fetchedPath,
+      }));
+      expect(protocolMock.unmountPath).toHaveBeenCalledWith(traceId, expect.objectContaining({
+      hostname: fileServer.host,
+      path: payload.fetchedPath,
+      }));
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Mounting export path for host'));
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Unmounting export path for host'));
+    });
+
+    it('throws and logs error if protocol fails', async () => {
+      const traceId = 'trace-8';
+      const protocolMock = {
+      mountPath: jest.fn().mockRejectedValue(new Error('mount error')),
+      unmountPath: jest.fn(),
+      };
+      const fileServer = {
+      type: 'NFS',
+      host: 'host2',
+      username: 'user',
+      password: 'pass',
+      protocolVersion: '4.1',
+      };
+      const payload = {
+      listPathPayload: [fileServer],
+      fetchedPath: '/mnt/path',
+      };
+      getProtocol.mockReturnValue(protocolMock);
+
+      await expect((activity as any).handleMountAndUnmountPaths(traceId, payload)).rejects.toThrow('mount error');
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error while mounting the path - mount error'));
+    });
+    });
+
+    describe('isValidDirectory', () => {
+    const traceId = 'trace-9';
+    const fileServer = {
+      type: 'NFS',
+      host: 'host3',
+      username: 'user',
+      password: 'pass',
+      protocolVersion: '4.1',
+    };
+    const payload = {
+      listPathPayload: [fileServer],
+      exportPath: '/export',
+      workingDirectory: 'workdir',
+    };
+    let protocolMock: any;
+    let getProtocol: any;
+
+    beforeEach(() => {
+      protocolMock = {
+      mountPath: jest.fn().mockResolvedValue(undefined),
+      unmountPath: jest.fn().mockResolvedValue(undefined),
+      };
+      getProtocol.mockReturnValue(protocolMock);
+    });
+
+    it('returns true if directory exists and writable', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(activity, 'checkWritable').mockReturnValue(true);
+
+      const result = await (activity as any).isValidDirectory(payload, traceId);
+
+      expect(result).toBe(true);
+      expect(protocolMock.mountPath).toHaveBeenCalled();
+      expect(protocolMock.unmountPath).toHaveBeenCalled();
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory exists'));
+    });
+
+    it('returns false if directory does not exist', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      const result = await (activity as any).isValidDirectory(payload, traceId);
+
+      expect(result).toBe(false);
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory does not exist'));
+    });
+
+    it('throws if directory exists but not writable', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(activity, 'checkWritable').mockReturnValue(false);
+
+      await expect((activity as any).isValidDirectory(payload, traceId)).rejects.toThrow(
+      `Provided working directory ${payload.workingDirectory} has no writable permission`
+      );
+    });
+
+    it('throws and logs error if protocol fails', async () => {
+      protocolMock.mountPath.mockRejectedValue(new Error('mount error'));
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+      await expect((activity as any).isValidDirectory(payload, traceId)).rejects.toThrow('mount error');
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Working Directory validation error:'));
+    });
+    });
 });
