@@ -109,7 +109,8 @@ jobs:
 
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            targets=("datamigrator-ui")
+            targets=("${services[@]}")
+            targets+=("db-migrations")
           else
             # services
             for service in "${services[@]}"; do
