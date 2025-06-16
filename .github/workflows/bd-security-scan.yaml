@@ -19,7 +19,7 @@ jobs:
   black-duck-sca-scan:
     name: Black Duck SCA Scan
     runs-on: openlab
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
@@ -158,7 +158,7 @@ jobs:
             --detect.code.location.name="$CODE_LOCATION_NAME" \
             --detect.cleanup=false \
             --detect.tools=DETECTOR,SIGNATURE_SCAN \
-            --detect.detector.search.depth=50 \
+            --detect.detector.search.depth=25 \
             --detect.detector.search.continue=true \
             --blackduck.trust.cert=true \
             --blackduck.offline.mode=false \
@@ -167,7 +167,13 @@ jobs:
             --detect.notices.report=true \
             --detect.cleanup.bdio.files=false \
             --detect.accuracy.required=NONE \
-            --logging.level.com.synopsys.integration=DEBUG
+            --detect.vulnerability.report=true \
+            --detect.risk.report.pdf.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
+            --blackduck.timeout=7200 \
+            --detect.timeout=14400 \
+            --detect.wait.for.results=true \
+            --detect.blackduck.signature.scanner.memory=4096 \
+            --logging.level.com.synopsys.integration=INFO
 
           SCAN_EXIT_CODE=$?
 
