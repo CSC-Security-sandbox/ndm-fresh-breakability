@@ -277,7 +277,7 @@ export class DiscoveryScanActivity {
             }
 
         } catch (error: any) {
-            this.logger.error(`[${jobContext.jobRunId}] Error scanning directory ${sourcePath}: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
+            this.logger.error(`[${jobContext.jobRunId}] Error scanning directory ${sourcePath}`);
             
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, scanDirOutput.errorType, command.commandId, error, {
                 name: command.fPath,
