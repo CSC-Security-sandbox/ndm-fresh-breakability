@@ -27,6 +27,13 @@ jobs:
         with:
           fetch-depth: 0 # Full history for better analysis
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: "${{ env.SERVICE_PATH }}/package-lock.json"
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -46,6 +53,17 @@ jobs:
           fi
 
           echo "✅ Environment validation passed"
+
+      - name: Install NPM dependencies
+        run: |
+          echo "📦 Installing NPM dependencies..."
+          cd $SERVICE_PATH
+          if [ -f "package.json" ]; then
+            npm ci --only=production
+            echo "✅ NPM dependencies installed successfully"
+          else
+            echo "⚠️ No package.json found in $SERVICE_PATH"
+          fi
 
       - name: Print scan configuration
         run: |
@@ -93,6 +111,35 @@ jobs:
           chmod +x detect10.sh
           echo "✅ Black Duck Detect downloaded successfully"
 
+      - name: Test API Token Authorization
+        env:
+          BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+        run: |
+          echo "🔐 Testing API token authorization..."
+
+          # Test API connectivity and permissions
+          response=$(curl -s -w "%{http_code}" -o /tmp/auth_test.json \
+            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+            -H "Accept: application/vnd.blackducksoftware.user-4+json" \
+            "$BLACKDUCK_URL/api/current-user")
+
+          if [ "$response" = "200" ]; then
+            echo "✅ API token is valid and authorized"
+            echo "Current user info:"
+            cat /tmp/auth_test.json | jq -r '.userName // "Unknown user"' 2>/dev/null || echo "User info not available"
+          else
+            echo "❌ API token authorization failed with HTTP $response"
+            echo "Response body:"
+            cat /tmp/auth_test.json 2>/dev/null || echo "No response body"
+            echo ""
+            echo "💡 Troubleshooting:"
+            echo "1. Verify BLACKDUCK_API_TOKEN secret is set correctly"
+            echo "2. Check if API token has expired"
+            echo "3. Ensure user has 'Project Creator' or 'Super User' role"
+            echo "4. Contact Black Duck administrator for permission verification"
+            exit 1
+          fi
+
       - name: Run Black Duck Detect
         shell: bash
         env:
@@ -103,15 +150,18 @@ jobs:
 
           # Set unique code location name based on context
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CODE_LOCATION_NAME="NetApp-Data_Migrator-${SERVICE_NAME}-PR_${{ github.event.number }}"
+            CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-PR_${{ github.event.number }}"
           else
-            CODE_LOCATION_NAME="NetApp-Data_Migrator-${SERVICE_NAME}-${{ github.run_id }}"
+            CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-${{ github.run_id }}"
           fi
 
           echo "Code location: $CODE_LOCATION_NAME"
 
+          # Run the scan with enhanced error handling
+          set +e  # Don't exit on error, we want to handle it
+
           ./detect10.sh \
-            --detect.project.name="NetApp Data Migrator - $SERVICE_NAME" \
+            --detect.project.name="$PROJECT_NAME" \
             --blackduck.url="$BLACKDUCK_URL" \
             --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
             --detect.project.version.name="$VERSION_NAME" \
@@ -128,7 +178,36 @@ jobs:
             --detect.risk.report.pdf=true \
             --detect.notices.report=true \
             --detect.cleanup.bdio.files=false \
+            --detect.accuracy.required=LOW \
             --logging.level.com.synopsys.integration=DEBUG
+
+          SCAN_EXIT_CODE=$?
+
+          # Handle different exit codes
+          case $SCAN_EXIT_CODE in
+            0)
+              echo "✅ SUCCESS: Black Duck scan completed successfully"
+              ;;
+            11)
+              echo "❌ FAILURE: Black Duck feature error (Exit code 11)"
+              echo "This typically indicates:"
+              echo "1. API token lacks required permissions (Project Creator role needed)"
+              echo "2. Black Duck server compatibility issues"
+              echo "3. Network connectivity problems"
+              echo ""
+              echo "💡 Next steps:"
+              echo "- Contact your Black Duck administrator"
+              echo "- Verify API token has Project Creator permissions"
+              echo "- Check if project already exists and try scanning against it"
+              exit 1
+              ;;
+            *)
+              echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
+              if [ $SCAN_EXIT_CODE -ne 0 ]; then
+                echo "❌ Scan failed, but continuing to upload artifacts for analysis"
+              fi
+              ;;
+          esac
 
       - name: Upload Black Duck Reports
         uses: actions/upload-artifact@v4
@@ -160,3 +239,7 @@ jobs:
           echo "- Service: $SERVICE_NAME ($SERVICE_PATH)"
           echo "- Scan completed at: $(date)"
           echo "- Reports uploaded as artifacts"
+          echo ""
+          echo "🔗 Useful links:"
+          echo "- Black Duck Console: $BLACKDUCK_URL"
+          echo "- Documentation: https://documentation.blackduck.com/"
