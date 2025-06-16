@@ -2,7 +2,7 @@ name: Black Duck SCA Scan
 
 on:
   push:
-    branches: [main, sm/bd-action-workflow-v2]
+    branches: [main, sm/bd-action-workflow]
   pull_request:
     branches: [main]
   workflow_dispatch:
