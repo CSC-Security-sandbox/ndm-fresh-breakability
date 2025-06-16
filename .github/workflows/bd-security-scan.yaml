@@ -9,8 +9,6 @@ on:
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  SERVICE_NAME: admin-service
-  SERVICE_PATH: services/admin-service
   PROJECT_NAME: Test_NDM
   VERSION_NAME: test_v
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
@@ -21,10 +19,27 @@ jobs:
     name: Black Duck SCA Scan
     runs-on: openlab
     timeout-minutes: 120
+    strategy:
+      matrix:
+        service:
+          - name: admin-service
+            path: services/admin-service
+          - name: config-service
+            path: services/config-service
+          - name: db-writer
+            path: services/db-writer
+          - name: datamigrator-ui
+            path: services/datamigrator-ui
+          - name: jobs-service
+            path: services/jobs-service
+          - name: keycloak-customizations
+            path: services/keycloak-customizations
+          - name: reports-service
+            path: services/reports-service
 
     defaults:
       run:
-        working-directory: services/admin-service
+        working-directory: ${{ matrix.service.path }}
 
     steps:
       - name: Checkout code
@@ -66,8 +81,8 @@ jobs:
             exit 1
           fi
 
-          if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ Service path '$SERVICE_PATH' does not exist."
+          if [ ! -d "${{ matrix.service.path }}" ]; then
+            echo "❌ Service path '${{ matrix.service.path }}' does not exist."
             exit 1
           fi
 
@@ -86,7 +101,9 @@ jobs:
           BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
           JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
         run: |
-          echo "🚀 Starting Black Duck scan..."
+          SERVICE_NAME="${{ matrix.service.name }}"
+          SERVICE_PATH="${{ matrix.service.path }}"
+          echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-PR_${{ github.event.number }}"
           else
@@ -94,7 +111,6 @@ jobs:
           fi
           echo "Code location: $CODE_LOCATION_NAME"
 
-          # Store the code location name for later use
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
 
           set +e
@@ -131,7 +147,7 @@ jobs:
             --detect.risk.report.pdf=false \
             --detect.notices.report=false \
             --detect.vulnerability.report=false
-            
+
           SCAN_EXIT_CODE=$?
 
           echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
@@ -148,24 +164,30 @@ jobs:
               ;;
           esac
 
-      - name: Upload Black Duck Reports
+  upload-artifacts:
+    name: Upload All Black Duck Reports
+    runs-on: openlab
+    needs: black-duck-sca-scan
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Upload all Black Duck Reports
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: blackduck-reports-${{ github.run_id }}
-          path: |
-            ${{ github.workspace }}/blackduck-output/
-            vulnerability_summary.md
+          name: blackduck-reports-all-${{ github.run_id }}
+          path: blackduck-output/
           retention-days: 30
 
       - name: Final Summary
         if: always()
         run: |
-          echo "📊 Black Duck Scan Final Summary:"
+          echo "📊 Black Duck Scan Final Summary for ${{ matrix.service.name }}:"
           echo "=================================="
           echo "Project: $PROJECT_NAME"
           echo "Version: $VERSION_NAME"
-          echo "Service: $SERVICE_NAME ($SERVICE_PATH)"
+          echo "Service: ${{ matrix.service.name }} (${{ matrix.service.path }})"
           echo "Scan Exit Code: $SCAN_EXIT_CODE"
           echo "Scan Date: $(date)"
           echo ""
