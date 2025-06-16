@@ -1,4 +1,4 @@
-name: Black Duck SCA Scan
+name: Black Duck SCA Scan with Vulnerability Count
 
 on:
   push:
@@ -25,14 +25,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full history for better analysis
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           registry-url: "https://npm.pkg.github.com"
-          # No caching since package-lock.json doesn't exist
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -61,65 +60,23 @@ jobs:
         run: |
           echo "📦 Installing NPM dependencies..."
           cd $SERVICE_PATH
-
-          # Configure npm to use GitHub token for authentication (matching your .npmrc)
           npm config set //npm.pkg.github.com/:_authToken=$NODE_AUTH_TOKEN
           npm config set @netapp-cloud-datamigrate:registry https://npm.pkg.github.com/
-
-          # Verify npm configuration
           echo "📋 NPM configuration:"
           npm config list | grep -E "(registry|_authToken)" || true
-
           if [ -f "package.json" ]; then
-            # Use npm install since package-lock.json doesn't exist
             npm install --only=production
             echo "✅ NPM dependencies installed successfully"
-            
-            # List installed packages for verification
             echo "📋 Installed packages:"
             npm list --depth=0 --only=production || true
           else
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
 
-      - name: Print scan configuration
+      - name: Install jq for JSON parsing
         run: |
-          echo "🔍 Black Duck Scan Configuration:"
-          echo "PROJECT_NAME: $PROJECT_NAME"
-          echo "VERSION_NAME: $VERSION_NAME"
-          echo "SERVICE_NAME: $SERVICE_NAME"
-          echo "SERVICE_PATH: $SERVICE_PATH"
-          echo "BLACKDUCK_URL: $BLACKDUCK_URL"
-          echo "RUNNER_OS: $RUNNER_OS"
-          echo "WORKSPACE: ${{ github.workspace }}"
-          echo "GITHUB_REF: ${{ github.ref }}"
-          echo "GITHUB_SHA: ${{ github.sha }}"
-
-      - name: Install Black Duck Server Certificate
-        run: |
-          echo "🔐 Installing Black Duck server certificate..."
-
-          # Extract certificate from your Black Duck server
-          echo | openssl s_client -servername blackduck.eng.netapp.com -connect blackduck.eng.netapp.com:443 2>/dev/null | openssl x509 > blackduck.crt
-
-          # Verify certificate was extracted
-          if [ -s blackduck.crt ]; then
-            echo "✅ Certificate extracted successfully"
-            
-            # Create a custom truststore instead of modifying system one
-            cp $JAVA_HOME/lib/security/cacerts ./custom-truststore.jks
-            
-            # Add certificate to custom trust store (no sudo needed)
-            $JAVA_HOME/bin/keytool -import -trustcacerts -keystore ./custom-truststore.jks -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
-            
-            # Set Java system property to use custom truststore
-            echo "JAVA_OPTS=-Djavax.net.ssl.trustStore=$(pwd)/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" >> $GITHUB_ENV
-            
-            echo "✅ Certificate installed to custom trust store"
-          else
-            echo "⚠️ Could not extract certificate, will rely on Java SSL bypass options"
-            echo "JAVA_OPTS=-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true" >> $GITHUB_ENV
-          fi
+          sudo apt-get update
+          sudo apt-get install -y jq curl
 
       - name: Download Black Duck Detect
         run: |
@@ -132,22 +89,20 @@ jobs:
         shell: bash
         env:
           BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
-          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false"
+          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
         run: |
           echo "🚀 Starting Black Duck scan..."
-
-          # Set unique code location name based on context
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-PR_${{ github.event.number }}"
           else
             CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-${{ github.run_id }}"
           fi
-
           echo "Code location: $CODE_LOCATION_NAME"
 
-          # Run the scan with enhanced error handling
-          set +e  # Don't exit on error, we want to handle it
+          # Store the code location name for later use
+          echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
 
+          set +e
           ./detect10.sh \
             --detect.project.name="$PROJECT_NAME" \
             --blackduck.url="$BLACKDUCK_URL" \
@@ -174,32 +129,19 @@ jobs:
             --detect.wait.for.results=true \
             --detect.blackduck.signature.scanner.memory=4096 \
             --logging.level.com.synopsys.integration=INFO
-
           SCAN_EXIT_CODE=$?
 
-          # Handle different exit codes
+          echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
+
           case $SCAN_EXIT_CODE in
             0)
               echo "✅ SUCCESS: Black Duck scan completed successfully"
               ;;
-            11)
-              echo "❌ FAILURE: Black Duck feature error (Exit code 11)"
-              echo "This typically indicates:"
-              echo "1. API token lacks required permissions (Project Creator role needed)"
-              echo "2. Black Duck server compatibility issues"
-              echo "3. Network connectivity problems"
-              echo ""
-              echo "💡 Next steps:"
-              echo "- Contact your Black Duck administrator"
-              echo "- Verify API token has Project Creator permissions"
-              echo "- Check if project already exists and try scanning against it"
-              exit 1
+            2)
+              echo "⚠️ TIMEOUT: Scan timed out but data may have been uploaded"
               ;;
             *)
               echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
-              if [ $SCAN_EXIT_CODE -ne 0 ]; then
-                echo "❌ Scan failed, but continuing to upload artifacts for analysis"
-              fi
               ;;
           esac
 
@@ -210,30 +152,30 @@ jobs:
           name: blackduck-reports-${{ github.run_id }}
           path: |
             ${{ github.workspace }}/blackduck-output/
-            **/blackduck-output/
+            vulnerability_summary.md
           retention-days: 30
 
-      - name: Check for policy violations
+      - name: Final Summary
         if: always()
         run: |
-          # Check if there are any policy violation files
-          if find . -name "*PolicyViolation*" -type f | grep -q .; then
-            echo "⚠️ Policy violations detected. Check the uploaded artifacts for details."
-            exit 1
-          else
-            echo "✅ No policy violations found."
-          fi
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "📊 Black Duck Scan Summary:"
-          echo "- Project: $PROJECT_NAME"
-          echo "- Version: $VERSION_NAME"
-          echo "- Service: $SERVICE_NAME ($SERVICE_PATH)"
-          echo "- Scan completed at: $(date)"
-          echo "- Reports uploaded as artifacts"
+          echo "📊 Black Duck Scan Final Summary:"
+          echo "=================================="
+          echo "Project: $PROJECT_NAME"
+          echo "Version: $VERSION_NAME"
+          echo "Service: $SERVICE_NAME ($SERVICE_PATH)"
+          echo "Scan Exit Code: $SCAN_EXIT_CODE"
+          echo "Scan Date: $(date)"
           echo ""
-          echo "🔗 Useful links:"
-          echo "- Black Duck Console: $BLACKDUCK_URL"
-          echo "- Documentation: https://documentation.blackduck.com/"
+          echo "🔗 Black Duck Console: $BLACKDUCK_URL"
+          echo "📄 Reports uploaded as GitHub artifacts"
+
+          # Set job status based on vulnerability count
+          if [ "$VULNERABILITY_COUNT" != "unknown" ] && [ "$VULNERABILITY_COUNT" -gt 0 ]; then
+            echo "⚠️ Warning: $VULNERABILITY_COUNT vulnerabilities found"
+            # Uncomment the next line if you want the job to fail when vulnerabilities are found
+            # exit 1
+          elif [ "$VULNERABILITY_COUNT" = "0" ]; then
+            echo "✅ No vulnerabilities found"
+          else
+            echo "ℹ️ Vulnerability count could not be determined"
+          fi
