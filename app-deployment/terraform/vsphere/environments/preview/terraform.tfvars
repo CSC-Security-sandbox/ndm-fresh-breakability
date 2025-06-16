@@ -3,7 +3,7 @@ datacenter_name  = "Datacenter"
 cluster_name     = "NDMCluster"
 datastore_name   = "datastore"
 network_name     = "VM Network"
-folder_path      = "ova-build"
+folder_path      = "preview-environments"
 
 # Content library variables
 content_library_name = "datamigrator-ovf-builds"
@@ -25,7 +25,7 @@ network_interfaces = [
 # VM customization and tools settings
 sync_time_with_host  = true
 tools_upgrade_policy = "manual"
-vm_firmware = "efi"
+vm_firmware          = "efi"
 
 # Control plane configuration and Worker configuration
 control_plane = {
@@ -49,3 +49,7 @@ control_plane_disks = {
   size        = 200
   unit_number = 0
 }
+
+# Windows worker configuration
+windows_content_library_name     = "datamigrator-source-iso"
+windows_worker_ovf_template_name = "datamigrator-windows-server-base-ovf-2025-standard-dexp"
