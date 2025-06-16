@@ -4,7 +4,7 @@ import { memo } from "react";
 
 const PathsInfoCellRenderer = ({ row }: BlueXpTableRowType<any, string>) => {
   if (row?.isDisabled) {
-    return "Disabled";
+    return "-";
   }
   return <Box>{row?.isValid ? "Valid" : "Invalid"}</Box>;
 };
