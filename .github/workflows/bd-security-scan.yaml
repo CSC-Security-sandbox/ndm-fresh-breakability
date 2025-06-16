@@ -31,6 +31,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
+          registry-url: "https://npm.pkg.github.com"
           # No caching since package-lock.json doesn't exist
 
       - name: Set up Java
@@ -54,9 +55,21 @@ jobs:
           echo "✅ Environment validation passed"
 
       - name: Install NPM dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📦 Installing NPM dependencies..."
           cd $SERVICE_PATH
+
+          # Configure npm to use GitHub token for authentication (matching your .npmrc)
+          npm config set //npm.pkg.github.com/:_authToken=$NODE_AUTH_TOKEN
+          npm config set @netapp-cloud-datamigrate:registry https://npm.pkg.github.com/
+
+          # Verify npm configuration
+          echo "📋 NPM configuration:"
+          npm config list | grep -E "(registry|_authToken)" || true
+
           if [ -f "package.json" ]; then
             # Use npm install since package-lock.json doesn't exist
             npm install --only=production
