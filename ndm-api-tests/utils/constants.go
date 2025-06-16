@@ -71,6 +71,12 @@ const (
 	STOP_JOBRUN                             = "STOP"
 	READY_JOBRUN                            = "READY"
 	BLOCKED_JOBRUN                          = "BLOCKED"
+	CONFIG_TYPE_FILE                        = "FILE"
+	SERVER_TYPE                             = "OtherNAS"
+	USERNAME_ROOT                           = "Root"
+	PASSWORD_ROOT                           = ""
+	PROTOCOL                                = "NFS"
+	PROTOCOL_VERSION_3                      = "v3"
 )
 
 func init() {
