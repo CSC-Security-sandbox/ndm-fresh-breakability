@@ -150,12 +150,13 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         nfsAndSmbWorkersList.push(worker?.workerId);
       });
 
-      credentials?.volumes?.forEach((path) => {
-        nfsAndSmbVolumeList.push({
-          label: path.volumePath,
-          value: path.id,
-        });
-      });
+      if (credentials?.volumes) {
+        nfsAndSmbVolumeList.push(
+          ...credentials.volumes
+            .filter((volume) => volume?.isValid)
+            .map(({ volumePath, id }) => ({ label: volumePath, value: id }))
+        );
+      }
     };
 
     const handleEditConfiguration = async () => {
