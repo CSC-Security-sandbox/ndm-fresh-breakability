@@ -43,7 +43,10 @@ export abstract class Protocol {
           ?.replaceAll('${MOUNT_PATH}', payload?.path)
           ?.replaceAll('${DIR_PATH}', directoryPath)
           ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
-        this.logger.log(`command: ${command}`)
+        const sanitizedCommand = command
+          ?.replace(/${PASSWORD}=[^ ]+/g, '${PASSWORD}=***')
+          ?.replace(/${USERNAME}=[^ ]+/g, '${USERNAME}=***');
+        this.logger.log(`command: ${sanitizedCommand}`);
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
             this.logger.info(

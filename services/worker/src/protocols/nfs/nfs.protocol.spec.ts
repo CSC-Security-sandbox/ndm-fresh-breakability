@@ -8,7 +8,7 @@ import { CommandConfig } from 'src/config/command.config';
 import { Logger, Runtime, RuntimeOptions } from '@temporalio/worker';
 import { ProtocolTypes } from '../protocols';
 import { CommandPattern } from 'src/config/command.config';
-import * as os from 'os';
+import * as fs from 'fs';
 
 jest.mock('net');
 jest.mock('./nfs.utils');
@@ -29,6 +29,7 @@ describe('NFSProtocol', () => {
     mockLogger = {
       info: jest.fn(),
       error: jest.fn(),
+      warn: jest.fn(),
       log: jest.fn(),
     };
     nfsProtocol = new NFSProtocol();
@@ -147,18 +148,117 @@ describe('NFSProtocol', () => {
   });
 
   describe('unmountPath', () => {
-    it('should unmount path successfully', async () => {
+    it('should unmount path successfully and remove entry from /etc/fstab', async () => {
       const payload: ProtocolPayload = {
         hostname: 'localhost',
         protocolVersion: '',
         path: '/path1',
-        mountBasePath: '/mnt'
+        mountBasePath: '/mnt',
+        jobRunId: 'job123',
+        pathId: 'path456',
       };
       const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      (nfsProtocol as any).fstabPath = '/mock/etc/fstab';
+
+      const mockMountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+      const mockFstabEntry = `${payload.hostname}:${payload.path} ${mockMountDir} nfs defaults 0 0\n`;
+      // Mock dependencies
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
 
+      jest.spyOn(fs, 'existsSync').mockImplementation((path) => {
+        if (path === mockMountDir || path === (nfsProtocol as any).fstabPath) return true;
+        return false;
+      });
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(`${mockFstabEntry}otherEntry\n`);
+      const writeFileSyncMock = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+      const mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation();
+      const rmdirSyncMock = jest.spyOn(fs, 'rmdirSync').mockImplementation();
+
       const result = await nfsProtocol.unmountPath('traceId', payload);
-      expect(mockLogger.info).toHaveBeenCalled();
+
+      // Assertions
+      expect(nfsProtocol.executeCommand).toHaveBeenCalledWith(
+        'traceId',
+        ProtocolTypes.NFS,
+        payload,
+        expect.any(String),
+        'NFS Unmount',
+      );
+      expect(fs.existsSync).toHaveBeenCalledWith(mockMountDir);
+      expect(rmdirSyncMock).toHaveBeenCalledWith(mockMountDir, { recursive: true });
+      expect(fs.existsSync).toHaveBeenCalledWith((nfsProtocol as any).fstabPath);
+      expect(fs.readFileSync).toHaveBeenCalledWith((nfsProtocol as any).fstabPath, 'utf-8');
+      expect(writeFileSyncMock).toHaveBeenCalledWith(
+        (nfsProtocol as any).fstabPath,
+        'otherEntry\n', // Ensures the mockFstabEntry is removed
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Removed entry from /etc/fstab'),
+      );
+      expect(result).toBe(mockResponse);
+    });
+
+    it('should log a warning if /etc/fstab does not exist', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: '',
+        path: '/path1',
+        mountBasePath: '/mnt',
+        jobRunId: 'job123',
+        pathId: 'path456',
+      };
+      (nfsProtocol as any).fstabPath = '/mock/etc/fstab';
+
+
+      const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      const mockMountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+
+      // Mock dependencies
+      (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+      jest.spyOn(fs, 'existsSync').mockImplementation((path) => path === mockMountDir);
+      const rmdirSyncMock = jest.spyOn(fs, 'rmdirSync').mockImplementation();
+
+      const result = await nfsProtocol.unmountPath('traceId', payload);
+
+      // Assertions
+      expect(fs.existsSync).toHaveBeenCalledWith((nfsProtocol as any).fstabPath );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('/etc/fstab does not exist'),
+      );
+      expect(rmdirSyncMock).toHaveBeenCalledWith(mockMountDir, { recursive: true });
+      expect(result).toBe(mockResponse);
+    });
+
+    it('should handle errors while removing /etc/fstab entry', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: '',
+        path: '/path1',
+        mountBasePath: '/mnt',
+        jobRunId: 'job123',
+        pathId: 'path456',
+      };
+
+      const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      (nfsProtocol as any).fstabPath = '/mock/etc/fstab';
+      const mockMountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+      const mockFstabEntry = `${payload.hostname}:${payload.path} ${mockMountDir} nfs defaults 0 0\n`;
+
+      // Mock dependencies
+      (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+      jest.spyOn(fs, 'existsSync').mockImplementation((path) => path === (nfsProtocol as any).fstabPath || path === mockMountDir);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(`${mockFstabEntry}otherEntry\n`);
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw new Error('Mock write error');
+      });
+      const rmdirSyncMock = jest.spyOn(fs, 'rmdirSync').mockImplementation();
+
+      const result = await nfsProtocol.unmountPath('traceId', payload);
+      // Assertions
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error removing entry from /etc/fstab: Mock write error'),
+      );
+      expect(rmdirSyncMock).toHaveBeenCalledWith(mockMountDir, { recursive: true });
       expect(result).toBe(mockResponse);
     });
   })

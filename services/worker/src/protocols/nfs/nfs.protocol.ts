@@ -11,6 +11,8 @@ export class NFSProtocol extends Protocol {
     return CommandConfig.getNFSCommand(this.platform, key)
   }
 
+  protected fstabPath =  CommandConfig.getFstabPath(this.platform);
+
   // --------------------------- Validate Connection -------------------------- //
   async validateConnection(traceId:string, options: ProtocolPayload ): Promise<any> {
     const client = new net.Socket();
@@ -159,6 +161,29 @@ export class NFSProtocol extends Protocol {
       } else {
         this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
       }
+
+       // Platform-specific logic for removing mount entries
+       if (this.platform === 'linux') {
+        // Linux: Remove the corresponding entry from /etc/fstab
+        try {
+          const fstabEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+
+          if (fs.existsSync(this.fstabPath)) {
+            const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
+            const updatedFstabContent = fstabContent
+              .split('\n')
+              .filter((line) => line.trim() !== fstabEntry.trim())
+              .join('\n');
+
+            fs.writeFileSync(this.fstabPath, updatedFstabContent);
+            this.logger.info(`[${traceId}] Removed entry from /etc/fstab: ${fstabEntry.replace(payload.password, '****')}`);
+          } else {
+            this.logger.warn(`[${traceId}] /etc/fstab does not exist.`);
+          }
+        } catch (error) {
+          this.logger.error(`[${traceId}] Error removing entry from /etc/fstab: ${error.message}`);
+        }
+      }
       
       return response;
     }
@@ -205,7 +230,34 @@ export class NFSProtocol extends Protocol {
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
+    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`); 
+    
+    // Ensure the mount persists across reboots by updating /etc/fstab
+  try {
+    if (this.platform === 'linux') {
+      const fstabEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+
+      // Check if the entry already exists in /etc/fstab
+      const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
+      if (!fstabContent.includes(fstabEntry)) {
+        fs.appendFileSync(this.fstabPath, fstabEntry);
+        this.logger.info(`[${traceId}] Added entry to /etc/fstab `);
+      } else {
+        this.logger.info(`[${traceId}] Entry already exists in /etc/fstab`);
+      }
+    }
+  } catch (error) {
+    this.logger.error(`[${traceId}] Error updating /etc/fstab: ${error.message}`);
+    return {
+      traceId,
+      status: 'error',
+      protocolType: ProtocolTypes.NFS,
+      hostname: payload.hostname,
+      workerId: this.workerId,
+      message: `[${traceId}] Error updating /etc/fstab: ${error.message}`,
+    };
+  }
+   
     return mountResult;
   }
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
