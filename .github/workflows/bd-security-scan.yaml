@@ -9,8 +9,8 @@ on:
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  SERVICE_NAME: datamigrator-ui
-  SERVICE_PATH: services/datamigrator-ui
+  SERVICE_NAME: admin-service
+  SERVICE_PATH: services/admin-service
   PROJECT_NAME: Test_NDM
   VERSION_NAME: test_v
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
