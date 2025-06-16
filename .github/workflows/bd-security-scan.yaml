@@ -156,23 +156,116 @@ jobs:
             sleep 300
           fi
 
-          # Function to get project ID
+          # Debug Information
+          echo "🔧 Debug Information:"
+          echo "PROJECT_NAME: '$PROJECT_NAME'"
+          echo "VERSION_NAME: '$VERSION_NAME'"
+          echo "BLACKDUCK_URL: '$BLACKDUCK_URL'"
+
+          # Test API connectivity
+          echo "🔗 Testing API connectivity..."
+          API_TEST=$(curl -s -k -X GET \
+            -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$BLACKDUCK_URL/api/current-user" 2>/dev/null)
+
+          if echo "$API_TEST" | jq -e . >/dev/null 2>&1; then
+            echo "✅ API connection successful"
+            echo "User: $(echo "$API_TEST" | jq -r '.userName // "unknown"')"
+          else
+            echo "❌ API connection failed"
+            echo "Response: $API_TEST"
+          fi
+
+          # Improved function to get project ID
           get_project_id() {
-            curl -s -k -X GET \
+            echo "🔍 Searching for project: $PROJECT_NAME"
+            
+            # Method 1: Try exact name search
+            PROJECT_RESPONSE=$(curl -s -k -X GET \
               -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
-              "$BLACKDUCK_URL/api/projects?q=name:$PROJECT_NAME" | \
-              jq -r '.items[0]._meta.href' | sed 's/.*projects\///' | cut -d'/' -f1
+              "$BLACKDUCK_URL/api/projects?q=name:$PROJECT_NAME")
+            
+            PROJECT_ID=$(echo "$PROJECT_RESPONSE" | jq -r '.items[0]._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1)
+            
+            if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
+              echo "✅ Found project via exact search: $PROJECT_ID"
+              echo "$PROJECT_ID"
+              return
+            fi
+            
+            # Method 2: Try without query parameter (get all projects and filter)
+            echo "🔍 Trying alternative search method..."
+            ALL_PROJECTS=$(curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
+              "$BLACKDUCK_URL/api/projects?limit=1000")
+            
+            PROJECT_ID=$(echo "$ALL_PROJECTS" | jq -r --arg name "$PROJECT_NAME" '.items[] | select(.name == $name) | ._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1 | head -1)
+            
+            if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
+              echo "✅ Found project via full list search: $PROJECT_ID"
+              echo "$PROJECT_ID"
+              return
+            fi
+            
+            # Method 3: Try case-insensitive search
+            echo "🔍 Trying case-insensitive search..."
+            PROJECT_ID=$(echo "$ALL_PROJECTS" | jq -r --arg name "${PROJECT_NAME,,}" '.items[] | select(.name | ascii_downcase == $name) | ._meta.href' 2>/dev/null | sed 's/.*projects\///' | cut -d'/' -f1 | head -1)
+            
+            if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "" ]; then
+              echo "✅ Found project via case-insensitive search: $PROJECT_ID"
+              echo "$PROJECT_ID"
+              return
+            fi
+            
+            # Debug: Show available projects
+            echo "❌ Project not found. Available projects:"
+            echo "$ALL_PROJECTS" | jq -r '.items[]? | select(.name != null) | .name' 2>/dev/null | head -10 | sed 's/^/  - /'
+            
+            echo "null"
           }
 
-          # Function to get version ID
+          # Improved function to get version ID
           get_version_id() {
             local project_id=$1
-            curl -s -k -X GET \
+            echo "🔍 Searching for version: $VERSION_NAME in project: $project_id"
+            
+            # Method 1: Try with query parameter
+            VERSION_RESPONSE=$(curl -s -k -X GET \
               -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
               -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
-              "$BLACKDUCK_URL/api/projects/$project_id/versions?q=versionName:$VERSION_NAME" | \
-              jq -r '.items[0]._meta.href' | sed 's/.*versions\///' | cut -d'/' -f1
+              "$BLACKDUCK_URL/api/projects/$project_id/versions?q=versionName:$VERSION_NAME")
+            
+            VERSION_ID=$(echo "$VERSION_RESPONSE" | jq -r '.items[0]._meta.href' 2>/dev/null | sed 's/.*versions\///' | cut -d'/' -f1)
+            
+            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
+              echo "✅ Found version via query search: $VERSION_ID"
+              echo "$VERSION_ID"
+              return
+            fi
+            
+            # Method 2: Get all versions and filter
+            echo "🔍 Trying alternative version search..."
+            ALL_VERSIONS=$(curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
+              "$BLACKDUCK_URL/api/projects/$project_id/versions?limit=1000")
+            
+            VERSION_ID=$(echo "$ALL_VERSIONS" | jq -r --arg name "$VERSION_NAME" '.items[] | select(.versionName == $name) | ._meta.href' 2>/dev/null | sed 's/.*versions\///' | cut -d'/' -f1 | head -1)
+            
+            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "" ]; then
+              echo "✅ Found version via full list search: $VERSION_ID"
+              echo "$VERSION_ID"
+              return
+            fi
+            
+            # Debug: Show available versions
+            echo "❌ Version not found. Available versions:"
+            echo "$ALL_VERSIONS" | jq -r '.items[]? | select(.versionName != null) | .versionName' 2>/dev/null | head -10 | sed 's/^/  - /'
+            
+            echo "null"
           }
 
           # Function to get vulnerability count
