@@ -94,27 +94,50 @@ func GetExportPathID(
 	headers map[string]string,
 ) (string, GetServerResponse, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
-
-	resp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
-	if err != nil {
-		return "", GetServerResponse{}, err
-	}
-	defer resp.Body.Close()
-
-	volumeID, err := GetVolumeIDByName(volumeType, volumeName, AuthToken, configID)
-	if err != nil {
-		return "", GetServerResponse{}, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
-	}
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", GetServerResponse{}, err
-	}
+// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
+	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
 	var getSourceResp GetServerResponse
-	err = json.Unmarshal(bodyBytes, &getSourceResp)
+	var resp *http.Response
+	var err error
+
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+
+		err = json.Unmarshal(bodyBytes, &getSourceResp)
+		if err != nil {
+			return "", GetServerResponse{}, err
+		}
+
+		// Check if volumes exist
+		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
+			break // Volumes found, proceed
+		}
+
+		if attempt < MaxPollRetries {
+			IntroduceDelay(DefaultPollInterval) // Wait before retrying
+		}
+	}
+
+	// After retries, check again
+	if len(getSourceResp.FileServers) == 0 || len(getSourceResp.FileServers[0].Volumes) == 0 {
+		return "", getSourceResp, fmt.Errorf("no volumes found after %d attempts", MaxPollRetries)
+	}
+
+	// Now fetch the volume ID
+	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
 	if err != nil {
-		return "", GetServerResponse{}, err
+		return "", getSourceResp, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
 	}
 
 	sourcePathID := volumeID

@@ -1,0 +1,25 @@
+---
+- name: Template and package Helm umbrella chart with subcharts and values.yaml
+  debugger: never
+  gather_facts: no
+  hosts: local
+  vars:
+    ansible_python_interpreter: auto
+    ansible_python_interpreter_fallback: ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3.9', 'python3.8', '/usr/bin/python3', 'python3']
+    chart_names:
+      - admin-service
+      - config-service
+      - db-writer
+      - jobs-service
+      - reports-service
+      - datamigrator-ui
+      - db-migrations
+    main_chart_dir: "../roles/datamigrator/helm-chart/package"
+    charts_output_dir: "../../../artifacts"
+    services_dir: "../roles/datamigrator/helm-chart/package/charts"
+    chart_service_template: "../roles/datamigrator/helm-chart/chart.service.j2"
+    chart_umbrella_template: "../roles/datamigrator/helm-chart/chart.j2"
+    values_template: "../roles/datamigrator/helm-chart/values.j2"
+    values_output: "../roles/datamigrator/helm-chart/package/values.yaml"
+  roles:
+    - { role: ../roles/datamigrator/package-helm-chart, tags: 'package-helm-chart' }

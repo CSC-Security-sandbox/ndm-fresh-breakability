@@ -64,6 +64,10 @@ on:
         description: 'Tag for reports-service'
         required: false
         type: string
+      # db_migrations_tag:
+      #   description: 'Tag for db-migrations'
+      #   required: false
+      #   type: string
   schedule:
     - cron: '30 18 * * *'
 
@@ -112,6 +116,13 @@ jobs:
       component: ${{ matrix.component }}
       image_name: ${{ steps.image-info.outputs.image_name }}
     steps:
+      - name: Show current user
+        run: |
+          echo "Whoami: $(whoami)"
+          id
+          echo "User: $USER"
+          echo "UID: $UID"
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -175,8 +186,30 @@ jobs:
               echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
               ;;
           esac
+
+      - name: Determine build version and export as Packer variable
+        id: build_version
+        run: |
+          DATE_BASE=$(date +'%Y.%m.')
+          TIME_PART=$(date +'%d%H%M%S')
+          VERSION_BASE="${DATE_BASE}${TIME_PART}"
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-nightly"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-adhoc"
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            SUFFIX="${BASH_REMATCH[1]}"
+            BUILD_VERSION="${VERSION_BASE}-${SUFFIX}"
+          else
+            echo "Error: Unsupported event type or branch format for build versioning."
+            exit 1
+          fi
+          echo "BUILD_VERSION=$BUILD_VERSION"
+          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+          echo "PKR_VAR_build_version=$BUILD_VERSION" >> $GITHUB_ENV
+        shell: bash
       
-      - name: Fetch and Replace tags
+      - name: Fetch and Replace tags and bundle docker images
         if: ${{ matrix.component != 'worker' }}
         env:
           ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
@@ -186,9 +219,16 @@ jobs:
           JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
           KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
           REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
+          DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
+          build_version: ${{ steps.build_version.outputs.build_version }}
         run: |
           chmod +x ./app-deployment/scripts/get_tags.sh
-          ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh $build_version
+
+      - name: Run helm package ansible playbook
+        if: ${{ matrix.component != 'worker' }}
+        run: |
+          ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}"
 
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' || matrix.component == 'unified-plane' }}
@@ -244,10 +284,13 @@ jobs:
 
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
             echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
+            NEW_BINARY_NAME="datamigrator-worker-${{ steps.build_version.outputs.build_version }}"
+            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$NEW_BINARY_NAME"
+            echo "Renamed binary to $NEW_BINARY_NAME"
           else
             echo "Binary not found!" && exit 1
           fi
-          echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" >> $GITHUB_OUTPUT
+          echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/$NEW_BINARY_NAME" >> $GITHUB_OUTPUT
 
       - name: Add ovftool to PATH
         run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH

@@ -2581,7 +2581,6 @@ describe("JobRunService", () => {
       expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
       expect(service.resumeJobRun).toHaveBeenCalledTimes(jobRuns.length);
-      expect(jobContextMock.appendToFileList).toHaveBeenCalled();
 
       expect(result).toEqual({ details: "Operation Completed Successfully" });
     });

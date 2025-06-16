@@ -1,6 +1,18 @@
 name: Build and Push to ACR on PR Merge
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/datamigrator-ui/**'
+      - 'services/jobs-service/**'
+      - 'services/keycloak-customizations/**'
+      - 'services/reports-service/**'
+      - 'liquibase/**'
   push:
     branches:
       - main
@@ -17,30 +29,46 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  security-events: write
+  id-token: write
+  actions: read
+
+env:
+  TRIVY_VERSION: v0.63.0
 
 jobs:
   determine-matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-      matrix_count: ${{ steps.set-matrix.outputs.matrix_count }}
     steps:
-      - name: Checkout last 2 commits
-        uses: actions/checkout@v3
+      - name: Checkout Code with full history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Set matrix for changed services
         id: set-matrix
         shell: bash
         run: |
           services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
-
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          targets=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.sha }}"
+            for service in "${services[@]}"; do
+              if git diff --name-only "$base_sha" "$head_sha" | grep -q "^services/$service/"; then
+                targets+=("$service")
+              fi
+            done
+            if git diff --name-only "$base_sha" "$head_sha" | grep -q "^liquibase/"; then
+              targets+=("db-migrations")
+            fi
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             targets=("${services[@]}")
             targets+=("db-migrations")
-          else
+          elif [ "${{ github.event_name }}" = "push" ]; then
             # services
             for service in "${services[@]}"; do
               if git diff --name-only HEAD~1 HEAD | grep -q "^services/$service/"; then
@@ -58,53 +86,417 @@ jobs:
           echo "Matrix for changed services: $service_json"
           echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
 
-  build-and-push:
+  trivy-pr-scan:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: determine-matrix
     strategy:
       matrix:
         service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
       fail-fast: false
+    env:
+      IMAGE_NAME: prscan-${{ matrix.service }}
+      IMAGE_TAG: ${{ github.sha }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Authenticate to ACR
-        uses: azure/docker-login@v1
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
         with:
           login-server: ${{ secrets.ACR_NAME }}.azurecr.io
           username: ${{ secrets.AZURE_SP_USERNAME }}
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d
+        with:
+          version: ${{ env.TRIVY_VERSION }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build and Push Docker Image for ${{ matrix.service }}
+      - name: Set build context
+        id: set-context
         run: |
-          echo "Building Docker image for service: ${{ matrix.service }}"
-          IMAGE_NAME="${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}"
-          echo "Using image tags:"
-          echo "$IMAGE_NAME:${{ github.sha }}"
-          echo "$IMAGE_NAME:latest"
-
           if [ "${{ matrix.service }}" = "db-migrations" ]; then
-            CONTEXT="liquibase"
+            echo "CONTEXT=liquibase" >> $GITHUB_ENV
           else
-            CONTEXT="services/${{ matrix.service }}"
+            echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
           fi
 
-          docker buildx build --platform linux/amd64,linux/arm64 --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            -t "$IMAGE_NAME:${{ github.sha }}" \
-            -t "$IMAGE_NAME:latest" \
+      - name: Build Docker Image for ${{ matrix.service }} (for scan only)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+            -t "$IMAGE_NAME:$IMAGE_TAG" \
+            --load "$CONTEXT"
+        env:
+          GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          DOCKER_BUILDKIT: 1
+          CONTEXT: ${{ env.CONTEXT }}
+
+      - name: Scan image with Trivy (JSON, fail on CRITICAL/HIGH)
+        id: trivy-scan
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
+        continue-on-error: true
+        with:
+          image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
+          format: 'json'
+          output: 'trivy-results-${{ matrix.service }}.json'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: false
+
+      - name: Convert Trivy JSON to SARIF and Table format
+        run: |
+          FILE="trivy-results-${{ matrix.service }}.json"
+      
+          if [ -f "$FILE" ]; then
+            echo "Converting $FILE to SARIF"
+            trivy convert --format sarif --output trivy-results-${{ matrix.service }}.sarif "$FILE"
+      
+            echo "Converting $FILE to table"
+            trivy convert --format table --output trivy-table-${{ matrix.service }}.txt "$FILE"
+          else
+            echo "No Trivy results file found to convert"
+          fi
+
+      - name: Brand SARIF with service name
+        run: |
+          SERVICE="${{ matrix.service }}"
+          jq --arg svc "$SERVICE" \
+            '.runs[0].results |= map(
+                .message.text |= ("[" + $svc + "] " + .)
+              )' \
+            trivy-results-${SERVICE}.sarif > trivy-results-${SERVICE}-branded.sarif
+          mv trivy-results-${SERVICE}-branded.sarif trivy-results-${SERVICE}.sarif
+
+      - name: Output text summary file
+        run: |
+          cat trivy-table-${{ matrix.service }}.txt
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Generate Trivy Vulnerability Summary
+        id: summary
+        run: |
+          echo "### Trivy Scan Summary for \`${{ matrix.service }}\`" > summary.txt
+          echo "" >> summary.txt
+          echo "" >> summary.txt
+          if [ -s trivy-results-${{ matrix.service }}.json ]; then
+            HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results-${{ matrix.service }}.json)
+            CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results-${{ matrix.service }}.json)
+            echo "| Severity  | Count |" >> summary.txt
+            echo "|-----------|-------|" >> summary.txt
+            echo "| CRITICAL  | $CRITICAL |" >> summary.txt
+            echo "| HIGH      | $HIGH     |" >> summary.txt
+            echo "" >> summary.txt
+            if [ "$CRITICAL" -eq 0 ] && [ "$HIGH" -eq 0 ]; then
+              echo "No HIGH or CRITICAL vulnerabilities detected." >> summary.txt
+            else
+              echo "### List of HIGH and CRITICAL vulnerabilities" >> summary.txt
+              echo "" >> summary.txt
+              echo "| Severity | Vulnerability ID | Package | Version | Title |" >> summary.txt
+              echo "|----------|------------------|---------|---------|-------|" >> summary.txt
+              jq -r '.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL") | 
+                "| \(.Severity) | \(.VulnerabilityID) | \(.PkgName) | \(.InstalledVersion) | \(.Title // "N/A") |"' \
+                trivy-results-${{ matrix.service }}.json >> summary.txt
+              echo "" >> summary.txt
+              echo "Refer to full Trivy JSON report for details." >> summary.txt
+            fi
+          else
+            echo "No Trivy scan results found. Check previous scan step." >> summary.txt
+          fi
+
+      - name: Post or Update Trivy summary as PR comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+            const service = '${{ matrix.service }}';
+            const marker = `<!-- trivy-scan-summary:${service} -->`;
+            const summary = fs.readFileSync('summary.txt', 'utf8');
+
+            // Get IST time
+            const now = new Date();
+            const options = { timeZone: 'Asia/Kolkata', hour12: false };
+            const istString = now.toLocaleString('en-IN', options);
+            const runTime = `${istString} (IST)`;
+
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // Find a bot comment with the marker for this service
+            const botComment = comments.find(comment =>
+              comment.user.login === 'github-actions[bot]' && comment.body.startsWith(marker)
+            );
+
+            let newBody;
+            if (botComment) {
+              // Append new summary to existing comment
+              newBody = `${botComment.body}
+            ---
+            ## :hourglass: Trivy Scan Run at ${runTime}
+
+            ${summary}`;
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: newBody,
+              });
+            } else {
+              // Create a new comment for this service
+              newBody = `${marker}
+            ## :hourglass: Trivy Scan Run at ${runTime}
+
+            ${summary}`;
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: newBody,
+              });
+            }
+
+      - name: Fail job if vulnerabilities were found
+        if: steps.trivy-scan.outcome == 'failure'
+        run: |
+          echo "CRITICAL or HIGH vulnerabilities were found. Failing the job."
+          exit 1
+
+  build-and-push:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: determine-matrix
+    outputs:
+      metadata_path: ${{ steps.metadata_paths.outputs.metadata_path }}
+      latest_path: ${{ steps.metadata_paths.outputs.latest_path }}
+      ref_type: ${{ steps.metadata_paths.outputs.ref_type }}
+      ref_name: ${{ steps.metadata_paths.outputs.ref_name }}
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
+      fail-fast: false
+    env:
+      IMAGE_NAME: ${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}
+      IMAGE_TAG: ${{ github.sha }}-test
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
+
+      - name: Log in to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set build context
+        id: set-context
+        run: |
+          if [ "${{ matrix.service }}" = "db-migrations" ]; then
+            echo "CONTEXT=liquibase" >> $GITHUB_ENV
+            echo "DOCKERFILE_PATH=liquibase/Dockerfile" >> $GITHUB_ENV
+          else
+            echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
+            echo "DOCKERFILE_PATH=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_ENV
+          fi
+
+      - name: Authenticate to ACR
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
+        with:
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_SP_USERNAME }}
+          password: ${{ secrets.AZURE_SP_PASSWORD }}
+
+      - name: Create and use multi-arch builder
+        run: |
+          docker buildx create --name multiarch --driver docker-container --use
+          docker buildx inspect --bootstrap
+
+      - name: Set build timestamp
+        id: build_time
+        run: |
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image for ${{ matrix.service }} (multi-arch)
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+            -t "$IMAGE_NAME:$IMAGE_TAG" \
+            -t "$IMAGE_NAME:latest-test" \
             --push "$CONTEXT"
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
+          CONTEXT: ${{ env.CONTEXT }}
+
+      - name: Parse Base Image for ${{ matrix.service }}
+        id: fetch_info
+        run: |
+          BASE_IMAGE=$(grep -i "^FROM " "$DOCKERFILE_PATH" | head -1 | awk '{print $2}')
+          echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
+        env:
+          DOCKERFILE_PATH: ${{ env.DOCKERFILE_PATH }}
+
+      - name: Get Commit Info
+        id: commit_info
+        run: |
+          AUTHOR=$(git log -1 --pretty=format:'%an')
+          MESSAGE=$(git log -1 --pretty=format:'%s')
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+
+      - name: Determine metadata paths
+        id: metadata_paths
+        run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == "refs/heads/main" ]]; then
+            REF_TYPE="branches"
+            REF_NAME="main"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          elif [[ "$REF" == refs/heads/* ]]; then
+            REF_TYPE="branches"
+            REF_NAME="$(echo "${REF#refs/heads/}" | sed 's#/#-#g')"
+          else
+            echo "Unsupported ref: $REF"
+            exit 1
+          fi
+          echo "ref_type=$REF_TYPE" >> $GITHUB_OUTPUT
+          echo "ref_name=$REF_NAME" >> $GITHUB_OUTPUT
+          echo "metadata_path=services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json" >> $GITHUB_OUTPUT
+          echo "latest_path=services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker image manifest metadata.json
+        run: |
+          SERVICE="${{ matrix.service }}"
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          BRANCH="${GITHUB_REF_NAME}"
+          IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
+          BUILD_TIME="${{ steps.build_time.outputs.build_time }}"
+          WORKFLOW="${GITHUB_WORKFLOW}"
+          RUN_NUMBER="${GITHUB_RUN_NUMBER}"
+          JOB="build-and-push"
+          REPOSITORY="${GITHUB_REPOSITORY}"
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER}"
+          AUTHOR="${{ steps.commit_info.outputs.author }}"
+          COMMIT_MSG="${{ steps.commit_info.outputs.message }}"
+          OS_NAME="${{ runner.os }}"
+          RUNNER_NAME="${{ runner.name }}"
+          BASE_IMAGE="${{ steps.fetch_info.outputs.base_image }}"
+          cat <<EOF > metadata.json
+          {
+            "service": "$SERVICE",
+            "commit": "$FULL_SHA",
+            "short_commit": "$SHORT_SHA",
+            "image": "$IMAGE",
+            "image_tag": "$IMAGE_TAG",
+            "build_time": "$BUILD_TIME",
+            "branch": "$BRANCH",
+            "workflow": "$WORKFLOW",
+            "run_id": "$RUN_ID",
+            "run_number": "$RUN_NUMBER",
+            "job": "$JOB",
+            "repository": "$REPOSITORY",
+            "repository_owner": "$REPOSITORY_OWNER",
+            "commit_author": "$AUTHOR",
+            "commit_message": "$COMMIT_MSG",
+            "os": "$OS_NAME",
+            "runner_name": "$RUNNER_NAME",
+            "base_image": "$BASE_IMAGE"
+          }
+          EOF
+
+      - name: Generate latest.json pointer
+        run: |
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          METADATA_PATH="${{ steps.metadata_paths.outputs.metadata_path }}"
+          cat <<EOF > latest.json
+          {
+            "service": "${{ matrix.service }}",
+            "commit": "$FULL_SHA",
+            "short_commit": "$SHORT_SHA",
+            "image": "${IMAGE_NAME}:${IMAGE_TAG}",
+            "image_tag": "$IMAGE_TAG",
+            "updated_at": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+      - name: Upload build artifacts for upload step
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-artifacts-${{ matrix.service }}
+          path: |
+            metadata.json
+            latest.json
+
+  upload-artifactory:
+    runs-on: openlab
+    needs: [determine-matrix, build-and-push]
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
+      fail-fast: false
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: build-artifacts-${{ matrix.service }}
+
+      - name: Upload manifest metadata.json to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+          REF_TYPE: ${{ needs.build-and-push.outputs.ref_type }}
+          REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
+        run: |
+          METADATA_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json"
+          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${METADATA_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+      - name: Upload latest.json pointer to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+          REF_TYPE: ${{ needs.build-and-push.outputs.ref_type }}
+          REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
+        run: |
+          LATEST_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json"
+          curl --silent --show-error --fail --request PUT --upload-file latest.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${LATEST_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
