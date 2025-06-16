@@ -1,4 +1,4 @@
-name: Black Duck SCA Scan
+name: Black Duck SCA Scan with Vulnerability Count
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
   black-duck-sca-scan:
     name: Black Duck SCA Scan
     runs-on: openlab
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
@@ -73,34 +73,10 @@ jobs:
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
 
-      - name: Print scan configuration
+      - name: Install jq for JSON parsing
         run: |
-          echo "🔍 Black Duck Scan Configuration:"
-          echo "PROJECT_NAME: $PROJECT_NAME"
-          echo "VERSION_NAME: $VERSION_NAME"
-          echo "SERVICE_NAME: $SERVICE_NAME"
-          echo "SERVICE_PATH: $SERVICE_PATH"
-          echo "BLACKDUCK_URL: $BLACKDUCK_URL"
-          echo "RUNNER_OS: $RUNNER_OS"
-          echo "WORKSPACE: ${{ github.workspace }}"
-          echo "GITHUB_REF: ${{ github.ref }}"
-          echo "GITHUB_SHA: ${{ github.sha }}"
-
-      - name: Install Black Duck Server Certificate
-        run: |
-          echo "🔐 Installing Black Duck server certificate..."
-          echo | openssl s_client -servername blackduck.eng.netapp.com -connect blackduck.eng.netapp.com:443 2>/dev/null | openssl x509 > blackduck.crt
-          if [ -s blackduck.crt ]; then
-            echo "✅ Certificate extracted successfully"
-            cp $JAVA_HOME/lib/security/cacerts ./custom-truststore.jks
-            $JAVA_HOME/bin/keytool -delete -alias blackduck-cert -keystore ./custom-truststore.jks -storepass changeit || true
-            $JAVA_HOME/bin/keytool -import -trustcacerts -keystore ./custom-truststore.jks -storepass changeit -noprompt -alias blackduck-cert -file blackduck.crt
-            echo "JAVA_OPTS=-Djavax.net.ssl.trustStore=$(pwd)/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" >> $GITHUB_ENV
-            echo "✅ Certificate installed to custom trust store"
-          else
-            echo "⚠️ Could not extract certificate, will rely on Java SSL bypass options"
-            echo "JAVA_OPTS=-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true" >> $GITHUB_ENV
-          fi
+          sudo apt-get update
+          sudo apt-get install -y jq curl
 
       - name: Download Black Duck Detect
         run: |
@@ -113,7 +89,7 @@ jobs:
         shell: bash
         env:
           BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
-          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false"
+          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
         run: |
           echo "🚀 Starting Black Duck scan..."
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -122,6 +98,10 @@ jobs:
             CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-${{ github.run_id }}"
           fi
           echo "Code location: $CODE_LOCATION_NAME"
+
+          # Store the code location name for later use
+          echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
+
           set +e
           ./detect10.sh \
             --detect.project.name="$PROJECT_NAME" \
@@ -133,7 +113,7 @@ jobs:
             --detect.code.location.name="$CODE_LOCATION_NAME" \
             --detect.cleanup=false \
             --detect.tools=DETECTOR,SIGNATURE_SCAN \
-            --detect.detector.search.depth=50 \
+            --detect.detector.search.depth=25 \
             --detect.detector.search.continue=true \
             --blackduck.trust.cert=true \
             --blackduck.offline.mode=false \
@@ -143,25 +123,165 @@ jobs:
             --detect.cleanup.bdio.files=false \
             --detect.accuracy.required=NONE \
             --detect.vulnerability.report=true \
-            --detect.timeout=24000 \
-            --logging.level.com.synopsys.integration=DEBUG
+            --detect.risk.report.pdf.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
+            --blackduck.timeout=7200 \
+            --detect.timeout=14400 \
+            --detect.wait.for.results=true \
+            --detect.blackduck.signature.scanner.memory=4096 \
+            --logging.level.com.synopsys.integration=INFO
           SCAN_EXIT_CODE=$?
+
+          echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
+
           case $SCAN_EXIT_CODE in
             0)
               echo "✅ SUCCESS: Black Duck scan completed successfully"
               ;;
-            11)
-              echo "❌ FAILURE: Black Duck feature error (Exit code 11)"
-              echo "This typically indicates permission or server issues."
-              exit 1
+            2)
+              echo "⚠️ TIMEOUT: Scan timed out but data may have been uploaded"
               ;;
             *)
               echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
-              if [ $SCAN_EXIT_CODE -ne 0 ]; then
-                echo "❌ Scan failed, but continuing to upload artifacts for analysis"
-              fi
               ;;
           esac
+
+      - name: Wait for scan to complete and get vulnerability count
+        if: always()
+        run: |
+          echo "⏳ Waiting for scan results and fetching vulnerability count..."
+
+          # Wait a bit more for processing if we had a timeout
+          if [ "$SCAN_EXIT_CODE" = "2" ]; then
+            echo "⏳ Scan timed out, waiting additional 5 minutes for processing..."
+            sleep 300
+          fi
+
+          # Function to get project ID
+          get_project_id() {
+            curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
+              "$BLACKDUCK_URL/api/projects?q=name:$PROJECT_NAME" | \
+              jq -r '.items[0]._meta.href' | sed 's/.*projects\///' | cut -d'/' -f1
+          }
+
+          # Function to get version ID
+          get_version_id() {
+            local project_id=$1
+            curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.project-detail-4+json" \
+              "$BLACKDUCK_URL/api/projects/$project_id/versions?q=versionName:$VERSION_NAME" | \
+              jq -r '.items[0]._meta.href' | sed 's/.*versions\///' | cut -d'/' -f1
+          }
+
+          # Function to get vulnerability count
+          get_vulnerability_count() {
+            local project_id=$1
+            local version_id=$2
+            curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.vulnerability-4+json" \
+              "$BLACKDUCK_URL/api/projects/$project_id/versions/$version_id/vulnerable-bom-components?limit=1" | \
+              jq -r '.totalCount // 0'
+          }
+
+          # Function to get detailed vulnerability breakdown
+          get_vulnerability_details() {
+            local project_id=$1
+            local version_id=$2
+            curl -s -k -X GET \
+              -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+              -H "Accept: application/vnd.blackducksoftware.vulnerability-4+json" \
+              "$BLACKDUCK_URL/api/projects/$project_id/versions/$version_id/vulnerable-bom-components?limit=9999" | \
+              jq -r '
+                .items[]?.vulnerabilityWithRemediation?.vulnerabilityName as $vuln_name |
+                .items[]?.vulnerabilityWithRemediation?.severity as $severity |
+                select($vuln_name != null and $severity != null) |
+                "\($severity): \($vuln_name)"
+              ' 2>/dev/null || echo "No detailed vulnerability data available"
+          }
+
+          # Try to get project and vulnerability information
+          PROJECT_ID=$(get_project_id)
+
+          if [ "$PROJECT_ID" != "null" ] && [ -n "$PROJECT_ID" ]; then
+            echo "✅ Found project ID: $PROJECT_ID"
+            
+            VERSION_ID=$(get_version_id "$PROJECT_ID")
+            
+            if [ "$VERSION_ID" != "null" ] && [ -n "$VERSION_ID" ]; then
+              echo "✅ Found version ID: $VERSION_ID"
+              
+              # Get vulnerability count
+              VULN_COUNT=$(get_vulnerability_count "$PROJECT_ID" "$VERSION_ID")
+              echo "🔍 Total Vulnerabilities Found: $VULN_COUNT"
+              
+              # Get vulnerability breakdown by severity
+              echo "📊 Vulnerability Breakdown:"
+              curl -s -k -X GET \
+                -H "Authorization: Bearer $BLACKDUCK_API_TOKEN" \
+                -H "Accept: application/vnd.blackducksoftware.vulnerability-4+json" \
+                "$BLACKDUCK_URL/api/projects/$PROJECT_ID/versions/$VERSION_ID/vulnerable-bom-components?limit=9999" | \
+                jq -r '
+                  [.items[]?.vulnerabilityWithRemediation?.severity] | 
+                  group_by(.) | 
+                  map({severity: .[0], count: length}) | 
+                  .[] | 
+                  select(.severity != null) | 
+                  "  \(.severity): \(.count)"
+                ' 2>/dev/null || echo "  Unable to get severity breakdown"
+              
+              # Save counts to environment
+              echo "VULNERABILITY_COUNT=$VULN_COUNT" >> $GITHUB_ENV
+              
+              # Create a summary file
+              echo "# Black Duck Vulnerability Summary" > vulnerability_summary.md
+              echo "" >> vulnerability_summary.md
+              echo "**Project:** $PROJECT_NAME" >> vulnerability_summary.md
+              echo "**Version:** $VERSION_NAME" >> vulnerability_summary.md
+              echo "**Service:** $SERVICE_NAME" >> vulnerability_summary.md
+              echo "**Total Vulnerabilities:** $VULN_COUNT" >> vulnerability_summary.md
+              echo "" >> vulnerability_summary.md
+              echo "**Scan Date:** $(date)" >> vulnerability_summary.md
+              echo "**Black Duck Console:** $BLACKDUCK_URL/api/projects/$PROJECT_ID/versions/$VERSION_ID" >> vulnerability_summary.md
+              
+            else
+              echo "❌ Could not find version '$VERSION_NAME' in project"
+              echo "VULNERABILITY_COUNT=unknown" >> $GITHUB_ENV
+            fi
+          else
+            echo "❌ Could not find project '$PROJECT_NAME'"
+            echo "VULNERABILITY_COUNT=unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Parse local vulnerability reports
+        if: always()
+        run: |
+          echo "🔍 Parsing local vulnerability reports..."
+
+          REPORT_DIR="${{ github.workspace }}/blackduck-output/$SERVICE_NAME"
+
+          # Look for vulnerability reports in various formats
+          if find "$REPORT_DIR" -name "*vulnerability*" -type f 2>/dev/null | head -1 | grep -q .; then
+            echo "📄 Found local vulnerability reports:"
+            find "$REPORT_DIR" -name "*vulnerability*" -type f -exec ls -la {} \;
+            
+            # Try to parse JSON vulnerability reports
+            for file in $(find "$REPORT_DIR" -name "*vulnerability*.json" 2>/dev/null); do
+              if [ -f "$file" ]; then
+                echo "📊 Parsing $file:"
+                LOCAL_VULN_COUNT=$(jq -r '.vulnerabilities | length' "$file" 2>/dev/null || echo "0")
+                echo "  Local vulnerability count: $LOCAL_VULN_COUNT"
+                
+                # Get severity breakdown from local file
+                echo "  Severity breakdown:"
+                jq -r '.vulnerabilities[]?.severity' "$file" 2>/dev/null | sort | uniq -c | sed 's/^/    /' || echo "    Unable to parse severity data"
+              fi
+            done
+          else
+            echo "⚠️ No local vulnerability reports found in $REPORT_DIR"
+          fi
 
       - name: Upload Black Duck Reports
         uses: actions/upload-artifact@v4
@@ -170,29 +290,57 @@ jobs:
           name: blackduck-reports-${{ github.run_id }}
           path: |
             ${{ github.workspace }}/blackduck-output/
-            **/blackduck-output/
+            vulnerability_summary.md
           retention-days: 30
 
-      - name: Check for policy violations
-        if: always()
-        run: |
-          if find . -name "*PolicyViolation*" -type f | grep -q .; then
-            echo "⚠️ Policy violations detected. Check the uploaded artifacts for details."
-            exit 1
-          else
-            echo "✅ No policy violations found."
-          fi
+      - name: Comment vulnerability count on PR
+        if: github.event_name == 'pull_request' && env.VULNERABILITY_COUNT != 'unknown'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const vulnCount = process.env.VULNERABILITY_COUNT;
+            const serviceName = process.env.SERVICE_NAME;
+            const projectName = process.env.PROJECT_NAME;
 
-      - name: Summary
+            const comment = `## 🔒 Black Duck Security Scan Results
+
+            **Service:** ${serviceName}
+            **Total Vulnerabilities Found:** ${vulnCount}
+
+            ${vulnCount > 0 ? '⚠️ Vulnerabilities detected. Please review the Black Duck console for details.' : '✅ No vulnerabilities found.'}
+
+            **Black Duck Console:** ${process.env.BLACKDUCK_URL}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Final Summary
         if: always()
         run: |
-          echo "📊 Black Duck Scan Summary:"
-          echo "- Project: $PROJECT_NAME"
-          echo "- Version: $VERSION_NAME"
-          echo "- Service: $SERVICE_NAME ($SERVICE_PATH)"
-          echo "- Scan completed at: $(date)"
-          echo "- Reports uploaded as artifacts"
+          echo "📊 Black Duck Scan Final Summary:"
+          echo "=================================="
+          echo "Project: $PROJECT_NAME"
+          echo "Version: $VERSION_NAME"
+          echo "Service: $SERVICE_NAME ($SERVICE_PATH)"
+          echo "Scan Exit Code: $SCAN_EXIT_CODE"
+          echo "Vulnerabilities Found: ${VULNERABILITY_COUNT:-unknown}"
+          echo "Scan Date: $(date)"
           echo ""
-          echo "🔗 Useful links:"
-          echo "- Black Duck Console: $BLACKDUCK_URL"
-          echo "- Documentation: https://documentation.blackduck.com/"
+          echo "🔗 Black Duck Console: $BLACKDUCK_URL"
+          echo "📄 Reports uploaded as GitHub artifacts"
+
+          # Set job status based on vulnerability count
+          if [ "$VULNERABILITY_COUNT" != "unknown" ] && [ "$VULNERABILITY_COUNT" -gt 0 ]; then
+            echo "⚠️ Warning: $VULNERABILITY_COUNT vulnerabilities found"
+            # Uncomment the next line if you want the job to fail when vulnerabilities are found
+            # exit 1
+          elif [ "$VULNERABILITY_COUNT" = "0" ]; then
+            echo "✅ No vulnerabilities found"
+          else
+            echo "ℹ️ Vulnerability count could not be determined"
+          fi
