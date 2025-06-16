@@ -1,0 +1,73 @@
+name: Black Duck SCA Scan
+
+on:
+  push:
+    branches: [main, sm/bd-action-workflow]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BLACKDUCK_URL: https://blackduck.eng.netapp.com
+  SERVICE_NAME: admin-service
+  SERVICE_PATH: services/admin-service
+  PROJECT_VERSION: test_v
+  BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+
+jobs:
+  Black-Duck-SCA-Scan:
+    name: Black Duck SCA Scan
+    runs-on: openlab
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java (required for Black Duck Detect)
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Print debug variables
+        run: |
+          echo "Running on: $RUNNER_OS"
+          echo "Service Name: $SERVICE_NAME"
+          echo "Service Path: $SERVICE_PATH"
+          echo "Project Version: $PROJECT_VERSION"
+          echo "Black Duck URL: $BLACKDUCK_URL"
+          echo "Workspace: ${{ github.workspace }}"
+          echo "Token: $BLACKDUCK_API_TOKEN"
+
+      - name: Run Black Duck Detect
+        shell: bash
+        env:
+          BLACKDUCK_API_TOKEN: "$BLACKDUCK_API_TOKEN"
+        run: |
+          if [ -z "$BLACKDUCK_API_TOKEN" ]; then
+            echo "❌ BLACKDUCK_API_TOKEN is not set. Please provide it via GitHub Secrets or act --secret-file."
+            exit 1
+          fi
+
+          curl -s https://detect.synopsys.com/detect10.sh -o detect.sh
+          chmod +x detect.sh
+
+          ./detect.sh \
+            --detect.project.name="NetApp Data Migrator - $SERVICE_NAME" \
+            --detect.project.version.name="$PROJECT_VERSION" \
+            --blackduck.url="$BLACKDUCK_URL" \
+            --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
+            --detect.cleanup=false \
+            --detect.source.path=services/admin-service \ 
+            --detect.blackduck.signature.scanner.paths=services/admin-service \ 
+            --detect.code.location.name="NetApp-Data_Migrator-$SERVICE_NAME-${{ github.run_id }}" \
+            --detect.tools=DETECTOR,SIGNATURE_SCAN \
+            --detect.detector.search.depth=50 \
+            --detect.detector.search.continue=true \
+            --blackduck.trust.cert=true \
+            --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
+            --logging.level.com.synopsys.integration=DEBUG \
+            --detect.cleanup.bdio.files=false \
+            --detect.risk.report.pdf=true \
+            --detect.notices.report=true
+            --blackduck.offline.mode=false
