@@ -31,8 +31,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          cache: "npm"
-          cache-dependency-path: "${{ env.SERVICE_PATH }}/package-lock.json"
+          # No caching since package-lock.json doesn't exist
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -59,8 +58,13 @@ jobs:
           echo "📦 Installing NPM dependencies..."
           cd $SERVICE_PATH
           if [ -f "package.json" ]; then
-            npm ci --only=production
+            # Use npm install since package-lock.json doesn't exist
+            npm install --only=production
             echo "✅ NPM dependencies installed successfully"
+            
+            # List installed packages for verification
+            echo "📋 Installed packages:"
+            npm list --depth=0 --only=production || true
           else
             echo "⚠️ No package.json found in $SERVICE_PATH"
           fi
