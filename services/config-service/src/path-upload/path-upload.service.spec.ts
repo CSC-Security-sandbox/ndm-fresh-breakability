@@ -13,6 +13,8 @@ import { ImportVolumePathsDto } from './dto/path-upload.dto';
 import { ConfigService } from '@nestjs/config/dist/config.service';
 import { ExportPathSource, UploadPathAction } from 'src/constants/enums';
 import { get } from 'http';
+const fs = require('fs');
+const path = require('path');
 
 
 const mockQueryBuilder = {
@@ -582,5 +584,29 @@ describe('PathUploadService', () => {
       const result = await service.isRefreshPossible(fileServerId);
       expect(result).toBe(true);
     });
-  })
+  });
+
+  describe('createUploadDirectory', () => {
+    const uploadsPath = path.join(process.cwd(), './uploads');
+
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
+    it('should create the uploads directory if it does not exist', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      const mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { });
+      await service.createUploadDirectory();
+      expect(fs.existsSync).toHaveBeenCalledWith(uploadsPath);
+      expect(mkdirSyncMock).toHaveBeenCalledWith(uploadsPath, { recursive: true });
+    });
+
+    it('should not create the uploads directory if it already exists', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { });
+      await service.createUploadDirectory();
+      expect(fs.existsSync).toHaveBeenCalledWith(uploadsPath);
+      expect(mkdirSyncMock).not.toHaveBeenCalled();
+    });
+  });
 });
