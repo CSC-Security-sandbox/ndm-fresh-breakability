@@ -127,24 +127,19 @@ jobs:
             --detect.accuracy.required=NONE \
             --blackduck.timeout=7200 \
             --detect.timeout=14400 \
-            # --detect.blackduck.signature.scanner.memory=4096 \
-            # --logging.level.com.synopsys.integration=INFO \
-            # --detect.wait.for.results=false \
-            # --detect.force.success=true \
-            # --detect.force.success.on.skip=true \
-            # --detect.bom.aggregate.remediation.mode=NONE \
-            # --detect.blackduck.scan.mode=INTELLIGENT \
-            # --detect.parallel.processors=4 \
-            # --detect.maven.dependency.types.excluded=false \
-            # --detect.npm.include.dev.dependencies=true \
-            # --detect.detector.search.exclusion.defaults=false \
-            # --detect.risk.report.pdf=false \
-            # --detect.notices.report=false \
-            # --detect.vulnerability.report=false
+            --detect.wait.for.results=true \
+            --detect.risk.report.pdf=true \
+            --detect.notices.report=true \
+            --detect.vulnerability.report=true
 
           SCAN_EXIT_CODE=$?
 
           echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
+
+          if [ "$SCAN_EXIT_CODE" -ne 0 ]; then
+            echo "❌ Black Duck scan failed with exit code: $SCAN_EXIT_CODE"
+            exit $SCAN_EXIT_CODE
+          fi
 
           case $SCAN_EXIT_CODE in
             0)
@@ -177,15 +172,21 @@ jobs:
       - name: Final Summary
         if: always()
         run: |
-          echo "📊 Black Duck Scan Final Summary for ${{ matrix.service.name }}:"
-          echo "=================================="
-          echo "Project: $PROJECT_NAME"
-          echo "Version: $VERSION_NAME"
-          echo "Service: ${{ matrix.service.name }} (${{ matrix.service.path }})"
-          echo "Scan Exit Code: $SCAN_EXIT_CODE"
-          echo "Scan Date: $(date)"
           echo ""
-          echo "🔗 Black Duck Console: $BLACKDUCK_URL"
-          echo "📄 Reports uploaded as GitHub artifacts"
-          echo "📝 Note: Deep analysis data uploaded to Black Duck server."
-          echo "📝 Full reports will be available in Black Duck web interface once server processing completes."
+          echo "==================== 📊 Black Duck Scan Final Summary ===================="
+          echo ""
+          echo "  🏷️  Project : $PROJECT_NAME"
+          echo "  🗂️  Version : $VERSION_NAME"
+          echo "  📅 Date    : $(date)"
+          echo ""
+          echo "  📁 Reports Artifact Path:"
+          echo "     ${{ github.workspace }}/blackduck-output/"
+          echo ""
+          echo "  🔗 Black Duck Console:"
+          echo "     $BLACKDUCK_URL"
+          echo ""
+          echo "  📄 All Black Duck reports have been uploaded as GitHub artifacts."
+          echo "  📝 Deep analysis data has been uploaded to the Black Duck server."
+          echo "  🕒 Full reports will be available in the Black Duck web interface once server processing completes."
+          echo ""
+          echo "=========================================================================="
