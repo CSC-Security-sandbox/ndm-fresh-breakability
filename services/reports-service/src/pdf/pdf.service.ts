@@ -37,6 +37,10 @@ export class PdfService {
        
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
+          if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {
+            this.logger.error(`Attempted access to a file outside the reports directory: ${filePath}`);
+            throw new HttpException("Invalid file path", HttpStatus.FORBIDDEN);
+          }
           return fs.readFileSync(filePath); 
       } else {
         throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
