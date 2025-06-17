@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -155,10 +155,13 @@ export class PathUploadService {
     this.logger.log(`Processing export path upload with ID ${uploadId}`);
 
     // mark all the current paths as invalid
+    const disabledPaths: string[] = [], enabledPaths: string[] = [];
     for(const path of upload) {
-      const isDisabled = path.action === UploadPathAction.DELETE ? true : false;
-      await this.volumeRepo.update({ volumePath: path.volumePath, fileServerId: path.fileServerId }, { isValid: false, isDisabled })
+      if(path.action === UploadPathAction.DELETE) disabledPaths.push(path.volumePath);
+      else enabledPaths.push(path.volumePath);
     }
+    await this.volumeRepo.update({ fileServerId , volumePath: In(disabledPaths) }, { isDisabled: true , isValid: false });
+    await this.volumeRepo.update({ fileServerId , volumePath: In(enabledPaths) }, { isDisabled: false , isValid: false, });
 
     const traceId = uploadId;
     const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -211,47 +214,45 @@ export class PathUploadService {
     if (!result) {
       throw new BadRequestException('Failed to process validation result');
     }
+
     const createdBy = updateResult.createdBy || null;
-    for (const validPath of result.validPaths) {
-      const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: validPath.volumePath, fileServerId } });
-      if (existingVolume) {
-        existingVolume.reachableCount = validPath.reachableCount;
-        existingVolume.isValid = true;
-        existingVolume.createdBy = createdBy;
-        await this.volumeRepo.save(existingVolume);
-      }
-      else {
+    const allPaths = [
+      ...result.validPaths.map(p => ({ ...p, isValid: true, reachableCount: p.reachableCount, createdBy })),
+      ...result.invalidPaths.map(p => ({ ...p, isValid: false, reachableCount: 0, createdBy })),
+    ];
+
+    const existingPaths = await this.volumeRepo.find({
+      where: { fileServerId, volumePath: In(allPaths.map(p => p.volumePath)) },
+      select: ['id', 'volumePath', 'isValid', 'reachableCount'],
+    });
+
+    const existingPathsMap = new Map(existingPaths.map(v => [`${v.volumePath}-${fileServerId}`, v]));
+    const newPaths: VolumeEntity[] = [];
+
+    for(const path of allPaths) {
+      const pathKey = `${path.volumePath}-${fileServerId}`;
+      const existingPath = existingPathsMap.get(pathKey);
+      if (existingPath) {
+        // Update existing path
+        existingPath.isValid = path.isValid;
+        existingPath.reachableCount = path.reachableCount;
+        existingPath.createdBy = createdBy;
+        await this.volumeRepo.save(existingPath);
+      } else {
+        // Create new path
         const newVolume = this.volumeRepo.create({
-          id: validPath.id,
-          volumePath: validPath.volumePath,
+          id: path.id,
+          volumePath: path.volumePath,
           fileServerId,
-          reachableCount: validPath.reachableCount,
-          isValid: true,
+          isValid: path.isValid,
+          reachableCount: path.reachableCount,
           createdBy: createdBy,
         });
-        await this.volumeRepo.save(newVolume);
+        newPaths.push(newVolume);
       }
     }
-
-    for (const invalidPath of result.invalidPaths) {
-      const existingVolume = await this.volumeRepo.findOne({ where: { volumePath: invalidPath.volumePath, fileServerId } });
-      if (existingVolume) {
-        existingVolume.isValid = false;
-        existingVolume.createdBy = createdBy;
-        await this.volumeRepo.save(existingVolume);
-      }
-      else {
-        const newVolume = this.volumeRepo.create({
-          id: invalidPath.id,
-          volumePath: invalidPath.volumePath,
-          fileServerId,
-          isValid: false,
-          createdBy: createdBy,
-        });
-        await this.volumeRepo.save(newVolume);
-      }
-    }
-
+    if (newPaths.length > 0) await this.volumeRepo.save(newPaths);
+    
     // Inactivate all the job configurations that are using invalid paths as sourcePathId or targetPathId 
     const inValidPaths = await this.volumeRepo.find({
       where: [{ fileServerId, isValid: false }, { fileServerId, isDisabled: true }],
@@ -300,6 +301,8 @@ export class PathUploadService {
           acc[path].reachableCount += 1;
           validPaths.set(path, acc[path]);
         } else {
+          // if a path is invalid and already exists in validPaths, remove it from validPaths
+          if (validPaths.has(path)) validPaths.delete(path);
           invalidPaths.set(path, { ...acc[path], id: result.result.pathId, message: result.result.message || 'Unknown error' });
         }
       });

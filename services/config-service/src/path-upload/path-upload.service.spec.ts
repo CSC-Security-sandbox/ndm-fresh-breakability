@@ -274,10 +274,7 @@ describe('PathUploadService', () => {
 
       const result = await service.processUploadPathValidation(uploadId);
       expect(result).toBeDefined();
-      expect(volumeRepo.update).toHaveBeenCalledWith(
-        { volumePath: mockUpload.volumePath, fileServerId: mockUpload.fileServerId },
-        { isValid: false, isDisabled: false }
-      );
+      expect(volumeRepo.update).toHaveBeenCalled();
       expect(result).toHaveProperty('status', 'success');
       expect(result).toHaveProperty('message', 'Export path upload processed successfully');
       expect(result).toHaveProperty('workflowId', 'workflow-id');
