@@ -311,6 +311,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
+
 		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 		if err != nil {
 			return err
@@ -413,15 +414,13 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 }
 
 func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
-	url := "https://10.192.7.56/api/v1/job-run/ad-hoc"
-
+	url := fmt.Sprintf("%s%s", CONFIG_SERVICE_URL, ADHOC_JOBRUN_URL)
 	// Prepare request body
 	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId}
 	payloadBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", nil, err
 	}
-
 	// Prepare headers
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
@@ -432,6 +431,7 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 	}
 	defer resp.Body.Close()
 
+	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
 	// Read response
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -446,7 +446,7 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 	}
 
 	if jobRunResp.ID == "" {
-		return "", resp, fmt.Errorf("jobRunId not found in response")
+		return "", resp, fmt.Errorf("JobRunId not found in response")
 	}
 
 	return jobRunResp.ID, resp, nil
