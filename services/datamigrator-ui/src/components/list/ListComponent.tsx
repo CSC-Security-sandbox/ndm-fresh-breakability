@@ -6,26 +6,24 @@ import RenderEach from "@components/render-each/RenderEach";
 
 const ListComponent = ({ itemsList }: ListComponentPropsType) => {
   return (
-    <>
-      <RenderEach
-        renderList={itemsList}
-        renderItem={({ label, value, extraContent, tooltip }, index) => (
-          <Box key={index} className="flex items-center my-1 gap-2">
-            {(tooltip || extraContent) && (
-              <Box className="flex items-center">
-                {tooltip && <Tooltip>{tooltip}</Tooltip>}
-                {extraContent}
-              </Box>
-            )}
-
-            <Box className="flex items-center gap-1 text-sm">
-              {label && <span>{label}: </span>}
-              <span className="font-light">{value}</span>
+    <RenderEach
+      renderList={itemsList}
+      renderItem={({ label, value, extraContent, tooltip }, index) => (
+        <Box key={index} className="flex items-center my-1 gap-2">
+          {(tooltip || extraContent) && (
+            <Box className="flex items-center">
+              {tooltip && <Tooltip>{tooltip}</Tooltip>}
+              {extraContent}
             </Box>
+          )}
+
+          <Box className="flex items-center gap-1 text-sm">
+            {label && <span>{label}: </span>}
+            <span className="font-light">{value}</span>
           </Box>
-        )}
-      ></RenderEach>
-    </>
+        </Box>
+      )}
+    ></RenderEach>
   );
 };
 
