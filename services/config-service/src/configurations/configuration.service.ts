@@ -265,19 +265,14 @@ export class ConfigurationService {
       if (!config)
         throw new NotFoundException(`Config for id ${id} not found.`);
 
-      if(config?.fileServers){
-        let fileServers = []
-        for(const fileServer of config.fileServers) {
-          fileServers.push({
-            ...fileServer,
-            volumes: fileServer.volumes,
-            workers: fileServer.workers.map((worker) => ({
-              ...worker,
-              status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
-            }))
-          })
-        }
-        config.fileServers = fileServers;
+      if(config?.fileServers) {
+        config.fileServers = config.fileServers.map((fileServer) => ({
+          ...fileServer,
+          workers: fileServer.workers.map((worker) => ({
+            ...worker,
+            status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
+          }))
+        }))
       }
 
       if (
