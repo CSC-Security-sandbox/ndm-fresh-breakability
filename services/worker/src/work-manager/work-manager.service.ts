@@ -2,7 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { NativeConnection, Worker } from '@temporalio/worker';
+import { NativeConnection, Runtime, Worker } from '@temporalio/worker';
 import { firstValueFrom, retry, timeout, timer } from 'rxjs';
 import { Platform, WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getPlatform, getWorkerIdentity } from 'src/utils/worker-manager.mappers';
@@ -11,6 +11,12 @@ import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
 import { Connection } from '@temporalio/client';
+import {
+  OpenTelemetryActivityInboundInterceptor,
+  OpenTelemetryActivityOutboundInterceptor,
+   makeWorkflowExporter,
+} from '@temporalio/interceptors-opentelemetry/lib/worker';
+import { resource, traceExporter } from 'src/instrument';
 
 
 
@@ -70,7 +76,7 @@ export class WorkManagerService {
                 this.httpService.get(
                     `${this.workerConfigUrl}/api/v1/work-manager/config`,
                     {
-                        headers: { 
+                        headers: {
                             Authorization: `Bearer ${accessToken}`,
                             'x-client-platform': this.platform,
                         },
@@ -111,7 +117,9 @@ export class WorkManagerService {
         }
         for(let [id, config] of configsToStart) {
             this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
-            const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            let workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            workerOptions = this.addWorkerInterceptors(workerOptions);
+            console.log(`[Telemetry]Worker Options: ${JSON.stringify(workerOptions)}`);
             await this.startWorker(id, workerOptions)
             configsToStart.delete(id);
         }
@@ -179,6 +187,27 @@ export class WorkManagerService {
                 this.logger.error(`Error shutting down worker ${worker.options.identity}: ${err}`);
             }
             this.activeWorkers.delete(worker.options.identity);
+        }
+    }
+
+
+    addWorkerInterceptors(workerOptions: any) {
+        return {
+            ...workerOptions,
+              sinks: traceExporter && {
+                exporter: makeWorkflowExporter(traceExporter, resource),
+            },
+            interceptors:traceExporter && {
+                workflowModules: [require.resolve('../utils/worker-interceptors')],
+                activityInbound: [(ctx) => new OpenTelemetryActivityInboundInterceptor(ctx)],
+            },
+             activity: [
+                (ctx) => ({
+                inbound: new OpenTelemetryActivityInboundInterceptor(ctx),
+                outbound: new OpenTelemetryActivityOutboundInterceptor(ctx),
+                }),
+            ],
+
         }
     }
 }

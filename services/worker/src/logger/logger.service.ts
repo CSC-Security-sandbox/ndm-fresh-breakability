@@ -65,39 +65,9 @@ export class Logger implements LoggerService {
         Logger.logFormat,
       ),
       transports: [
-        new winston.transports.Console(),
-        // fluent,
-        // new winston.transports.DailyRotateFile({
-        //   filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
-        //   datePattern: 'YYYY-MM-DD',
-        //   maxFiles: '14d',
-        //   zippedArchive: true,
-        //   maxSize: '10m'
-        // }),
-        // ],
-        // exceptionHandlers: [
-        //   new winston.transports.DailyRotateFile({
-        //     filename: `${Logger.logDir}/${Logger.workerId}-%DATE%_exception.log`,
-        //     datePattern: 'YYYY-MM-DD',
-        //     maxFiles: '14d',
-        //     zippedArchive: true,
-        //     maxSize: '10m'
-        //   })
+        new winston.transports.Console(),       
       ],
     });
-
-    if (!Logger.isRuntimeInstalled) {
-      Runtime.install({
-        logger: this.defaultLogger,
-        telemetryOptions: {
-          logging: {
-            forward: {},
-            filter: makeTelemetryFilterString({ core: 'WARN' }),
-          },
-        },
-      });
-      Logger.isRuntimeInstalled = true; // Prevent future calls to Runtime.install()
-    }
   }
 
   log(message: string) {
