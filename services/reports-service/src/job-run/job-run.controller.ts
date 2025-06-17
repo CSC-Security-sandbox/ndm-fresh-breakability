@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, SerializeOptions,Logger } from '@nestjs/common';
+import { Controller, Get, Param, Query, SerializeOptions, Logger } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
