@@ -23,22 +23,25 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.dirsInfo =  {
-        jobRunId: 'job1',
-        streamKey: 'stream1',
-        numMessages: 0,
-        lastId: '0-0',
-        init: jest.fn(),
-        cleanup: jest.fn(),
-        close: jest.fn(),
-        append: jest.fn(),
-        read: jest.fn(),
-        groupRead: jest.fn(),
-        consumerGroupCount:2,
-        readAndPurge: jest.fn(),
-        getLength: jest.fn(),
+      jobRunId: 'job1',
+      streamKey: 'stream1',
+      numMessages: 0,
+      lastId: '0-0',
+      init: jest.fn(),
+      cleanup: jest.fn(),
+      close: jest.fn(),
+      append: jest.fn(),
+      read: jest.fn(),
+      groupRead: jest.fn(),
+      consumerGroupCount:2,
+      readAndPurge: jest.fn(),
+      getLength: jest.fn(),
+      ackAndCreateTask: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.errorsInfo =   {
@@ -55,6 +58,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.tasksInfo =  {
@@ -71,6 +75,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.migrateTask =  {
@@ -87,6 +92,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+       groupReadWithoutAck: jest.fn(),
     };
 
     this.taskStats =  {
@@ -103,6 +109,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+      groupReadWithoutAck: jest.fn(),
     };
 
     this.updatedTaskInfo =  {
@@ -119,6 +126,7 @@ class TestJobContext extends JobContext {
       consumerGroupCount:2,
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
+       groupReadWithoutAck: jest.fn(),
     };
   }
   async init() {}
@@ -802,6 +810,104 @@ describe('JobContext Class', () => {
       } as any;
       await jobContext.deleteAllSyncTasks();
       expect(jobContext.runningSyncTask.deleteAll).toHaveBeenCalled();
+    });
+
+    it('ackDirAndCreateTask should call dirsInfo.ackAndCreateTask', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockReturn = { success: true };
+      const groupType = GroupReaderType.DB_WRITER;
+      const ids = ['id1', 'id2'];
+      const tasks = [{ id: 'task1' }, { id: 'task2' }] as any;
+      jobContext.dirsInfo.ackAndCreateTask = jest.fn().mockResolvedValue(mockReturn);
+      const result = await jobContext.ackDirAndCreateTask(groupType, ids, tasks);
+      expect(jobContext.dirsInfo.ackAndCreateTask).toHaveBeenCalledWith(groupType, ids, tasks);
+      expect(result).toBe(mockReturn);
+    });
+
+    it('groupReadWithoutAckDirs should yield values from dirsInfo.groupReadWithoutAck', async () => {
+      const jobContext = new TestJobContext('job1');
+      const mockData = { data: { id: 'file1' }, id: 'id1' };
+      jobContext.dirsInfo.groupReadWithoutAck = jest.fn().mockReturnValue((async function* () { yield mockData; })());
+      const results = [];
+      for await (const item of jobContext.groupReadWithoutAckDirs('reader1', 10, GroupReaderType.DB_WRITER)) {
+      results.push(item);
+      }
+      expect(results).toEqual([mockData]);
+    });
+
+    it('appendToMigrationTask should call migrateTask.append', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'migrationTask' } as any;
+      jobContext.migrateTask.append = jest.fn().mockResolvedValue('migrationTaskId');
+      const result = await jobContext.appendToMigrationTask(task);
+      expect(jobContext.migrateTask.append).toHaveBeenCalledWith(task);
+      expect(result).toBe('migrationTaskId');
+    });
+
+    it('appendToUpdatedTaskList should call updatedTaskInfo.append', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'updatedTask' } as any;
+      jobContext.updatedTaskInfo.append = jest.fn().mockResolvedValue('updatedTaskId');
+      const result = await jobContext.appendToUpdatedTaskList(task);
+      expect(jobContext.updatedTaskInfo.append).toHaveBeenCalledWith(task);
+      expect(result).toBe('updatedTaskId');
+    });
+
+    it('readMigrationTask should yield values from migrateTask.readAndPurge', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'migrationTask' } as any;
+      jobContext.migrateTask.readAndPurge = jest.fn().mockReturnValue((async function* () { yield task; })());
+      const results = [];
+      for await (const t of jobContext.readMigrationTask('reader1', 10, GroupReaderType.DB_WRITER)) {
+      results.push(t);
+      }
+      expect(results).toEqual([task]);
+    });
+
+    it('groupReadMigrationTask should yield values from migrateTask.groupRead', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'migrationTask' } as any;
+      jobContext.migrateTask.groupRead = jest.fn().mockReturnValue((async function* () { yield task; })());
+      const results = [];
+      for await (const t of jobContext.groupReadMigrationTask('reader1', 10, GroupReaderType.DB_WRITER)) {
+      results.push(t);
+      }
+      expect(results).toEqual([task]);
+    });
+
+    it('readUpdatedTaskInfo should yield values from updatedTaskInfo.readAndPurge', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'updatedTask' } as any;
+      jobContext.updatedTaskInfo.readAndPurge = jest.fn().mockReturnValue((async function* () { yield task; })());
+      const results = [];
+      for await (const t of jobContext.readUpdatedTaskInfo('reader1', 10, GroupReaderType.DB_WRITER)) {
+      results.push(t);
+      }
+      expect(results).toEqual([task]);
+    });
+
+    it('groupReadUpdatedTaskInfo should yield values from updatedTaskInfo.groupRead', async () => {
+      const jobContext = new TestJobContext('job1');
+      const task = { id: 'updatedTask' } as any;
+      jobContext.updatedTaskInfo.groupRead = jest.fn().mockReturnValue((async function* () { yield task; })());
+      const results = [];
+      for await (const t of jobContext.groupReadUpdatedTaskInfo('reader1', 10, GroupReaderType.DB_WRITER)) {
+      results.push(t);
+      }
+      expect(results).toEqual([task]);
+    });
+
+    it('getJobState and setJobState should work correctly', () => {
+      const jobContext = new TestJobContext('job1');
+      const jobState = { state: 'RUNNING' } as any;
+      jobContext.setJobState(jobState);
+      expect(jobContext.getJobState()).toBe(jobState);
+    });
+
+    it('getJobConfig should return jobConfig', () => {
+      const jobConfig = { id: 'jobConfig1' } as any;
+      const jobContext = new TestJobContext('job1', jobConfig, 'running');
+      expect(jobContext.getJobConfig()).toBe(jobConfig);
     });
   });
 

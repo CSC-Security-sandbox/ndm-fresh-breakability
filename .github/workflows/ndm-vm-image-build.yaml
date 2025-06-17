@@ -32,8 +32,43 @@ on:
           - azure
           - vsphere
           - gcp
+      worker_tag:
+        description: 'Tag for worker (Worker GitHub release tag, e.g., f6d523)'
+        required: false
+        type: string
+      admin_service_tag:
+        description: 'Tag for admin-service'
+        required: false
+        type: string
+      config_service_tag:
+        description: 'Tag for config-service'
+        required: false
+        type: string
+      datamigrator_ui_tag:
+        description: 'Tag for datamigrator-ui'
+        required: false
+        type: string
+      db_writer_service_tag:
+        description: 'Tag for db-writer'
+        required: false
+        type: string
+      jobs_service_tag:
+        description: 'Tag for jobs-service'
+        required: false
+        type: string
+      keycloak_customizations_tag:
+        description: 'Tag for keycloak-customizations'
+        required: false
+        type: string
+      reports_service_tag:
+        description: 'Tag for reports-service'
+        required: false
+        type: string
   schedule:
     - cron: '30 18 * * *'
+
+permissions: 
+  contents: read
 
 jobs:
   determine-matrix:
@@ -143,35 +178,55 @@ jobs:
       
       - name: Fetch and Replace tags
         if: ${{ matrix.component != 'worker' }}
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh
 
       - name: Download Worker Binary
-        if: ${{ matrix.component == 'worker' }} || ${{ matrix.component == 'unified-plane' }}
+        if: ${{ matrix.component == 'worker' || matrix.component == 'unified-plane' }}
         id: worker-binary
         run: |
-          REPO="NetApp-Cloud-DataMigrate/worker"
+          REPO="NetApp-Cloud-DataMigrate/ndm"
           API_URL="https://api.github.com/repos/$REPO/releases"
 
-          LATEST_RELEASE=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+          # Fetch all release tags
+          RELEASE_TAGS=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
+            "$API_URL" | jq -r '.[].tag_name')
 
-          if [[ "$LATEST_RELEASE" == "null" || -z "$LATEST_RELEASE" ]]; then
-            echo "Error: Unable to fetch latest release tag."
-            exit 1
+          # Use custom tag if provided, else use latest
+          CUSTOM_TAG="${{ github.event.inputs.worker_tag }}"
+          if [[ -n "$CUSTOM_TAG" ]]; then
+            if echo "$RELEASE_TAGS" | grep -Fxq "$CUSTOM_TAG"; then
+              SELECTED_TAG="$CUSTOM_TAG"
+              echo "Using custom worker tag: $SELECTED_TAG"
+            else
+              echo "Error: Provided worker_tag '$CUSTOM_TAG' does not exist in releases."
+              exit 1
+            fi
+          else
+            SELECTED_TAG=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
+            echo "No custom worker tag provided. Using latest: $SELECTED_TAG"
           fi
 
-          echo "Latest release tag: $LATEST_RELEASE"
-          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+          echo "SELECTED_TAG=$SELECTED_TAG" >> $GITHUB_ENV
 
           # Get release by tag
-          WORKER_BINARY_URL="https://api.github.com/repos/NetApp-Cloud-DataMigrate/worker/releases/tags/$LATEST_RELEASE"
+          WORKER_BINARY_URL="$API_URL/tags/$SELECTED_TAG"
 
           ASSET_URL=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$LATEST_RELEASE'-worker.zip") | .url')
+            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$SELECTED_TAG'-worker.zip") | .url')
 
           echo "Asset URL: $ASSET_URL"
 
@@ -180,19 +235,22 @@ jobs:
             -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
             -H "Accept: application/octet-stream" \
             "$ASSET_URL"
-          
+
           echo "Worker binary downloaded successfully."
-      
+
           # Create directory in the workspace
           mkdir -p $GITHUB_WORKSPACE/worker_bin
           unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
-      
+
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
             echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
           else
             echo "Binary not found!" && exit 1
           fi
           echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" >> $GITHUB_OUTPUT
+
+      - name: Add ovftool to PATH
+        run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
 
       - name: Packer Init
         run: |
@@ -313,6 +371,35 @@ jobs:
             echo "GCP Image ID: $IMAGE_ID"
             ;;
           esac
+
+      - name: Upload OVA file to Artifactory
+        if: ${{ matrix.provider == 'vsphere' && (matrix.component == 'unified-plane' || matrix.component == 'control-plane' || matrix.component == 'worker') }}
+        run: |
+          echo "Uploading OVA file to Artifactory..."
+
+          OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
+          BUILD_TYPE="${{ github.event_name }}"
+          DATE=$(date -u +'%Y-%m-%d')
+          TIME=$(date -u +'%H%M%S')
+          COMMIT_HASH="${GITHUB_SHA::6}"
+
+          if [ "$BUILD_TYPE" = "schedule" ]; then
+            ARTIFACTORY_PATH="builds/nightly/${DATE}/${{ matrix.component }}/${{ matrix.component }}-nightly-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          else
+            ARTIFACTORY_PATH="builds/adhoc/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          fi
+
+          if [ -f "$OVA_FILE" ]; then
+            echo "Found OVA file: $OVA_FILE"
+            curl --silent --show-error --fail --request PUT --upload-file \
+              "$OVA_FILE" \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "OVA file uploaded successfully to ${ARTIFACTORY_PATH}."
+          else
+            echo "Error: OVA file not found at $OVA_FILE"
+            exit 1
+          fi
 
   deploy-and-test:
     if: ${{ needs.packer.outputs.provider == 'vsphere' && needs.packer.outputs.component == 'unified-plane' }}

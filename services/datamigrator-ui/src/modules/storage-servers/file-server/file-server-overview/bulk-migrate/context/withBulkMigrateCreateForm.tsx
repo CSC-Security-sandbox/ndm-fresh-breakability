@@ -28,6 +28,7 @@ import {
   SKIP_FILE_OPTIONS,
   WEEK_OPTIONS,
   WEEKDAY_OPTIONS,
+  OFFLINE_STATUS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import {
   BulkMigrateContextType,
@@ -60,6 +61,7 @@ import {
   setModalClose,
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
+import useFetchWorkers from "@hooks/useFetchWorkers";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -303,6 +305,36 @@ export function withBulkMigrateCreateForm(
       </>
     );
 
+    // Use the hook to get workers
+    const { workers } = useFetchWorkers();
+
+    // Define the type for a worker object
+    type WorkerType = {
+      status: string;
+      workerName?: string;
+      workerId?: string;
+    };
+    // Helper to check if any worker is offline
+    // Proceed with remaining workers even if some are offline; just warn
+    const validateWorkerStatus = () => {
+      const availableWorkers = workers || [];
+      const offlineWorkers = availableWorkers.filter(
+        (w: WorkerType) => w.status && w.status.toLowerCase() === OFFLINE_STATUS
+      );
+      if (availableWorkers.length > 0 && offlineWorkers.length === availableWorkers.length) {
+        throw new Error(
+          `All workers are offline. Please ensure at least one worker is online before proceeding.`
+        );
+      }
+      if (offlineWorkers.length > 0) {
+        notify.warning(
+          `Some workers are offline: ${offlineWorkers
+            .map((w: WorkerType) => w.workerName || w.workerId)
+            .join(", ")}. Proceeding with available workers.`
+        );
+      }
+    };
+
     const handlePrecheck = (onSuccessfulSubmit?: () => void) => {
       let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
@@ -310,6 +342,13 @@ export function withBulkMigrateCreateForm(
       setIsPrecheckSuccessful(false);
       setPreCheckStatus(PRECHECK_STATUS);
       setIsSubmitting(true);
+      // Check worker status before proceeding
+      try {
+        validateWorkerStatus();
+      } catch (err: any) {
+        showErrorOnFailure(err);
+        return;
+      }
       const body = {
         migrateConfigs: createPathMapping(
           mappingStepForm?.values?.migrationDetailsTableConfigurationValue,

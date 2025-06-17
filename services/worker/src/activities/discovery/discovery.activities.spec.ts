@@ -155,5 +155,41 @@ describe('DiscoveryActivity', () => {
       expect(logger.error).toHaveBeenCalledWith(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: Error: post fail`);
       expect(res).toEqual({ message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId });
     });
+
+    it('should handle error when buildTask or ackDirAndCreateTask throws', async () => {
+      // Mock jobContext with groupReadWithoutAckDirs yielding two dirs
+      const fakeJobContext = {
+      groupReadWithoutAckDirs: jest.fn().mockImplementation(async function* () {
+        yield { data: { path: '/foo' }, id: 'id1' };
+        yield { data: { path: '/bar' }, id: 'id2' };
+      }),
+      ackDirAndCreateTask: jest.fn().mockRejectedValue(new Error('ack fail')),
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeJobContext);
+
+      // Mock buildTask to return a dummy task
+      jest.mock('../utils/utils', () => ({
+      buildTask: jest.fn().mockReturnValue({}),
+      generateDummyFileEntry: {},
+      }));
+
+      const result = await service.publishTask(traceId);
+      expect(logger.error).toHaveBeenCalled();
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('Failed to publish task for Job run id');
+    });
+
+    it('should handle empty directories gracefully', async () => {
+      // Mock jobContext with groupReadWithoutAckDirs yielding nothing
+      const fakeJobContext = {
+      groupReadWithoutAckDirs: jest.fn().mockImplementation(async function* () { }),
+      ackDirAndCreateTask: jest.fn(),
+      };
+      (redisService.getJobContext as jest.Mock).mockResolvedValueOnce(fakeJobContext);
+
+      const result = await service.publishTask(traceId);
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] Total commands to publish: 0`);
+      expect(result).toEqual({ status: 'success', message: 'Task published successfully' });
+    });
   });
 });
