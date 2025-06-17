@@ -29,7 +29,7 @@ export class MigrationScanService {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;   
-        this.operationTimeout = this.configService.get('worker.operationTimeout');
+        this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<string[]> {

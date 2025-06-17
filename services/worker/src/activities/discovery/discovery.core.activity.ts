@@ -26,7 +26,7 @@ export class DiscoveryScanActivity {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount');
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 250; 
-        this.operationTimeout = this.configService.get('worker.operationTimeout');
+        this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<fs.Dirent[]> {
@@ -123,9 +123,9 @@ export class DiscoveryScanActivity {
         };
 
         const basePrefixPath = basePrefix(jobContext.jobRunId, jobContext.jobConfig.sourceFileServer.pathId);
-        const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ?
+        const excludePatterns = jobContext?.jobConfig?.options?.excludeFilePattern ?
             jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
-        const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ?
+        const skipFile = jobContext?.jobConfig?.options?.skipsFilesModifiedInLast ?
             jobContext.jobConfig.options.skipsFilesModifiedInLast : '';
 
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
