@@ -1261,14 +1261,25 @@ export class JobConfigService {
 
     const payload: JobListingDTO[] = [];
     allJobsDetails.forEach((job) => {
+        let nextScheduleDate: Date | null = null;
+
+      if (job.jobconfigstatus === JobStatus.Active) {
+        try {
+          nextScheduleDate = nextDate(job.jobtype, job.firstrunat, job.futureschedule);
+        } catch (err) {
+            this.logger.error(
+            `Failed to calculate nextScheduleDate for jobConfigId ${job.jobconfigid}:`,
+            (err as Error).message
+          );
+          nextScheduleDate = null;
+        }
+      }
+
       payload.push({
         jobConfigId: job.jobconfigid,
         jobType: job.jobtype,
         jobStatus: job.jobconfigstatus,
-        nextScheduleDate:
-          job.jobconfigstatus === JobStatus.Active
-            ? nextDate(job.jobtype, job.firstrunat, job.futureschedule)
-            : null,
+        nextScheduleDate,
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
