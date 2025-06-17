@@ -40,5 +40,5 @@ export class UpdateValidationResultDto {
       type: [Object],
     })
     @IsArray()
-    validationResult: [];
+    validationResult: Record<string, any>[];
 }

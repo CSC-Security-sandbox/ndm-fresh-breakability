@@ -29,7 +29,7 @@ import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
-import { FindAllConfigPageDto, FileServerInfo } from './dto/findallconfig.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
   CreateRequestDto,
   Options,
@@ -1170,7 +1170,7 @@ export class ConfigurationService {
         .createQueryBuilder('jobConfig')
         .update()
         .set({ status:  JobStatus.InActive })
-        .where('jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)', { volumeIds: volumeIdList })
+        .where('jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)', { volumeIds: volumeIdList })
         .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
         .execute();
       }
