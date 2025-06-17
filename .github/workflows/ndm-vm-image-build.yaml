@@ -1,167 +1,413 @@
-name: Run API Tests on vSphere
+name: NDM Packer VM Image Build Workflow
 
 env:
+  PACKER_GITHUB_API_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
-  TERRAFORM_VERSION: 1.12.1
+  HELM_VERSION: 3.17.3
+  PACKER_VERSION: 1.12.0
+  TERRAFORM_VERSION: 1.11.4
   GO_VERSION: 1.24.2
   NODE_VERSION: 22.15.0
+
 on:
   workflow_dispatch:
     inputs:
-      control_plane_template:
-        description: 'OVF VM template name for control-plane'
-        required: true
+      component:
+        description: 'Component to build (control-plane, worker, or all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - control-plane
+          - worker
+      provider:
+        description: 'Cloud provider'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - azure
+          - vsphere
+          - gcp
+      worker_tag:
+        description: 'Tag for worker (Worker GitHub release tag, e.g., f6d523)'
+        required: false
         type: string
-      worker_template:
-        description: 'OVF VM template name for worker'
-        required: true
+      admin_service_tag:
+        description: 'Tag for admin-service'
+        required: false
         type: string
+      config_service_tag:
+        description: 'Tag for config-service'
+        required: false
+        type: string
+      datamigrator_ui_tag:
+        description: 'Tag for datamigrator-ui'
+        required: false
+        type: string
+      db_writer_service_tag:
+        description: 'Tag for db-writer'
+        required: false
+        type: string
+      jobs_service_tag:
+        description: 'Tag for jobs-service'
+        required: false
+        type: string
+      keycloak_customizations_tag:
+        description: 'Tag for keycloak-customizations'
+        required: false
+        type: string
+      reports_service_tag:
+        description: 'Tag for reports-service'
+        required: false
+        type: string
+  schedule:
+    - cron: '30 18 * * *'
+
+permissions: 
+  contents: read
+
 jobs:
-  deploy-and-test:
-    name: Create VM for control-plane and worker on vSphere and run API tests
+  determine-matrix:
     runs-on: openlab
     outputs:
-      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
-      worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.worker_vm_ip_addresses }}
-    env:
-      NDM_VM_PORT: 22
-      NDM_WORKERS_PORT: 22
-      SOURCE_HOST_IP: 10.192.7.42
-      DESTINATION_HOST_IP: 10.192.7.42
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Configure Provider Credentials
+      - id: set-matrix
         run: |
+          # Set components based on input
+          if [[ "${{ github.event.inputs.component }}" == "all" || "${{ github.event.inputs.component }}" == "" ]]; then
+            if [[ "${{ github.event.inputs.provider }}" == "vsphere" ]]; then
+              COMPONENTS='["control-plane", "worker"]'
+            else
+              COMPONENTS='["control-plane", "worker"]'
+            fi
+          else
+            COMPONENTS='["${{ github.event.inputs.component }}"]'
+          fi
+
+          # Set providers based on input
+          if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
+            PROVIDERS='["azure", "vsphere", "gcp"]'
+          else
+            PROVIDERS='["${{ github.event.inputs.provider }}"]'
+          fi
+
+          # Create the matrix JSON
+          echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
+
+    
+  packer:
+    needs: determine-matrix
+    name: Build ${{ matrix.component }} on ${{ matrix.provider }}
+    runs-on: openlab
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
+    outputs:
+      provider: ${{ matrix.provider }}
+      component: ${{ matrix.component }}
+      image_name: ${{ steps.image-info.outputs.image_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@1aa358be5cf73883762b302a3a03abd66e75b232
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Determine packer path
+        id: packer-path
+        run: |
+          # Dynamically generate the path for each component-provider combination
+          PROVIDER_PATH="${{ matrix.provider }}"
+
+          PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
+          echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
+          echo "Using packer configuration path: $PACKER_PATH"
+
+      - name: Export ACR pull secret
+        if: ${{ matrix.component != 'worker' }}
+        run: |
+          echo "Exporting ACR pull secret..."
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Configure cloud provider credentials
+        id: credentials
+        run: |
+          # Create credentials directory
           mkdir -p $GITHUB_WORKSPACE/credentials
 
-          echo "Setting VM credentials..."
-          VM_USERNAME=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)
-
-          # Write to GITHUB_ENV
-          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-
-          echo "TF_VAR_vsphere_server=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
-          echo "TF_VAR_vsphere_user=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
-          echo "TF_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
-          echo "TF_VAR_worker_ovf_template_name=${{ github.event.inputs.worker_template }}" >> $GITHUB_ENV
-          echo "TF_VAR_control_plane_ovf_template_name=${{ github.event.inputs.control_plane_template }}" >> $GITHUB_ENV
-
-      - name: Initialize Terraform
+          echo "Setting up credentials for provider: ${{ matrix.provider }}"
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          case "${{ matrix.provider }}" in
+            azure)
+              echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+              echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+              echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+              ;;
+            aws)
+              echo "PKR_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+              echo "PKR_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+              ;;
+            vsphere)
+              echo "Decoding and exporting vSphere credentials..."
+              echo "PKR_VAR_vsphere_endpoint=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_vsphere_username=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_username=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_password=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_password_encrypted=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD_ENCRYPTED }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_build_key=$(echo "${{ secrets.VSPHERE_BUILD_KEY }}" | base64 --decode)" >> $GITHUB_ENV
+              ;;
+            gcp)
+              echo "${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}" | base64 --decode > $GITHUB_WORKSPACE/gcp-key.json
+              echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
+              ;;
+          esac
+      
+      - name: Fetch and Replace tags
+        if: ${{ matrix.component != 'worker' }}
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          terraform init
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh
 
-      - name: Validate Terraform Configuration
+      - name: Download Worker Binary
+        if: ${{ matrix.component == 'worker' }}
+        id: worker-binary
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          terraform validate
+          REPO="NetApp-Cloud-DataMigrate/ndm"
+          API_URL="https://api.github.com/repos/$REPO/releases"
 
-      - name: Create Terraform Plan
+          # Fetch all release tags
+          RELEASE_TAGS=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$API_URL" | jq -r '.[].tag_name')
+
+          # Use custom tag if provided, else use latest
+          CUSTOM_TAG="${{ github.event.inputs.worker_tag }}"
+          if [[ -n "$CUSTOM_TAG" ]]; then
+            if echo "$RELEASE_TAGS" | grep -Fxq "$CUSTOM_TAG"; then
+              SELECTED_TAG="$CUSTOM_TAG"
+              echo "Using custom worker tag: $SELECTED_TAG"
+            else
+              echo "Error: Provided worker_tag '$CUSTOM_TAG' does not exist in releases."
+              exit 1
+            fi
+          else
+            SELECTED_TAG=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "$API_URL" | jq -r 'sort_by(.published_at) | reverse | .[0].tag_name')
+            echo "No custom worker tag provided. Using latest: $SELECTED_TAG"
+          fi
+
+          echo "SELECTED_TAG=$SELECTED_TAG" >> $GITHUB_ENV
+
+          # Get release by tag
+          WORKER_BINARY_URL="$API_URL/tags/$SELECTED_TAG"
+
+          ASSET_URL=$(curl -s -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$WORKER_BINARY_URL" | jq -r '.assets[] | select(.name == "'$SELECTED_TAG'-worker.zip") | .url')
+
+          echo "Asset URL: $ASSET_URL"
+
+          echo "Downloading asset using GitHub API..."
+          curl -L -o "worker.zip" \
+            -H "Authorization: token ${{ env.GITOPS_USER_GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" \
+            "$ASSET_URL"
+
+          echo "Worker binary downloaded successfully."
+
+          # Create directory in the workspace
+          mkdir -p $GITHUB_WORKSPACE/worker_bin
+          unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
+
+          if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
+            echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
+          else
+            echo "Binary not found!" && exit 1
+          fi
+          echo "worker_binary_path=$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" >> $GITHUB_OUTPUT
+
+      - name: Add ovftool to PATH
+        run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
+
+      - name: Packer Init
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          terraform plan -out=tfplan
+          cd ${{ steps.packer-path.outputs.path }}
+          packer init .
 
-      - name: Apply Terraform Plan
+      - name: Packer Validate
+        id: validate
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          terraform apply -auto-approve tfplan
+          cd ${{ steps.packer-path.outputs.path }}
 
-      - name: Extract Deployment Information
-        id: deployment-info
+          if [ "${{ matrix.component }}" == "worker" ]; then
+            echo "Validating worker configuration with binary path..."
+            packer validate \
+              -var "worker_binary_path=${{ steps.worker-binary.outputs.worker_binary_path }}" \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl
+          else
+            echo "Validating control-plane configuration..."
+            packer validate \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl
+          fi
+
+          if [ $? -ne 0 ]; then
+            echo "Packer validation failed"
+            exit 1
+          fi
+
+          echo "Packer validation completed successfully"
+
+      - name: Packer Build
+        id: build
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          CONTROL_PLANE_IP=$(terraform output -raw control_plane_vm_ip_address)
-          WORKER_IPS=$(terraform output -json worker_vm_ip_addresses | jq -c .)
-          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
-          echo "worker_vm_ip_addresses=$WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "VM IP: $CONTROL_PLANE_IP"
-          echo "Worker IPs: $WORKER_IPS"
+          cd ${{ steps.packer-path.outputs.path }}
 
-      - name: Set NDM_WORKERS_HOST env
-        id: set-workers-host
+          # Set build-specific variables
+          BUILD_ID=$(date -u +'%Y%m%dT%H%M%SZ')-${{ github.sha }}
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+
+          # Run packer build with appropriate parameters based on component
+          if [ "${{ matrix.component }}" == "worker" ]; then
+            echo "Building worker image with binary path..."
+            packer build \
+              -var "worker_binary_path=${{ steps.worker-binary.outputs.worker_binary_path }}" \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+          else
+            echo "Building control-plane image..."
+            packer build \
+              -var-file="variables.pkrvars.hcl" \
+              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+          fi
+
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "Packer build failed"
+            exit 1
+          fi
+
+          echo "Packer build completed successfully"
+
+      - name: Extract Image Info
+        id: image-info
         run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          WORKER_IPS=$(terraform output -json worker_vm_ip_addresses | jq -r '.[]' | paste -sd, -)
-          echo "NDM_WORKERS_HOST=$WORKER_IPS" >> $GITHUB_ENV
+          # Extract image information based on provider
+          case "${{ matrix.provider }}" in
+          azure)
+            echo "Capturing image details for Azure..."
+      
+            IMAGE_RESOURCE_GROUP=$(grep 'ManagedImageResourceGroupName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_NAME=$(grep 'ManagedImageName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_ID=$(grep 'ManagedImageId' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_LOCATION=$(grep 'ManagedImageLocation' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+      
+            echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+            echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            echo "resource_group=$IMAGE_RESOURCE_GROUP" >> $GITHUB_OUTPUT
+            echo "location=$IMAGE_LOCATION" >> $GITHUB_OUTPUT
+      
+            # Output summary
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "Image ID: $IMAGE_ID"
+            echo "Image Name: $IMAGE_NAME"
+            echo "Resource Group: $IMAGE_RESOURCE_GROUP"
+            echo "Location: $IMAGE_LOCATION"
+            ;;
+          aws)
+            echo "Capturing image details for AWS..."
+      
+            # Process the packer log to extract AMI ID using your pattern
+            tail -2 $GITHUB_WORKSPACE/packer.log | head -2 | awk 'match($0, /ami-.*/) { print substr($0, RSTART, RLENGTH) }' > $GITHUB_WORKSPACE/ami.txt
+            
+            # Read the AMI ID from the file
+            IMAGE_ID=$(cat $GITHUB_WORKSPACE/ami.txt)
+            
+            echo "aws_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+      
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "AMI ID: $IMAGE_ID"
+            ;;
+          vsphere)
+            echo "Capturing image details for vSphere..."
+            IMAGE_NAME=$(grep -A 3 'Builds finished' $GITHUB_WORKSPACE/packer.log | grep 'vsphere-iso.linux-ubuntu:' | tail -1 | awk '{print $NF}')
+      
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "OVF Template Name: $IMAGE_NAME"
+            echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            ;;
+          gcp)
+            echo "Capturing image details for GCP..."
 
-      - name: Set VM IP Address for API Tests
+            # Extract GCP Image ID from the Packer log
+            IMAGE_ID=$(grep 'A disk image was created' $GITHUB_WORKSPACE/packer.log | tail -1 | awk -F': ' '{print $NF}')
+
+            echo "gcp_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+
+            echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
+            echo "GCP Image ID: $IMAGE_ID"
+            ;;
+          esac
+
+      - name: Upload OVA file to Artifactory
+        if: ${{ matrix.provider == 'vsphere' }}
         run: |
-          echo "JOB_SERVICE_URL=https://${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" >> $GITHUB_ENV
-          echo "CONFIG_SERVICE_URL=https://${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" >> $GITHUB_ENV
-          echo "ADMIN_SERVICE_URL=https://${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" >> $GITHUB_ENV
-          echo "KEYCLOAK_IP=${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" >> $GITHUB_ENV
-          echo "NDM_VM_HOST=${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" >> $GITHUB_ENV
+          echo "Uploading OVA file to Artifactory..."
 
-      # - name: Install sshpass
-      #   run: |
-      #     echo "Installing sshpass..."
-      #     sudo apt-get update -qq
-      #     sudo apt-get install -y sshpass
-      #     echo "sshpass installed successfully."
+          OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
+          BUILD_TYPE="${{ github.event_name }}"
+          DATE=$(date -u +'%Y-%m-%d')
+          TIME=$(date -u +'%H%M%S')
+          COMMIT_HASH="${GITHUB_SHA::6}"
 
-      - name: Wait for Service Boot Setup to Complete
-        run: |
-          # echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
-          
-          # # Ensure script is executable
-          # chmod +x ./app-deployment/scripts/service_check.sh
-          
-          # # Run the service_check.sh script to wait for the microk8s-boot service to complete
-          # ./app-deployment/scripts/service_check.sh \
-          # "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
-          # "$VM_USERNAME" \
-          # "$VM_PASSWORD"
-          
-          # if [ $? -ne 0 ]; then
-          #   echo "Service setup failed or timed out"
-          #   exit 1
-          # fi
-          
-          # echo "Service setup completed successfully"
-          echo "Pausing for 10 minutes to allow service boot setup to complete..."
-          sleep 600
+          if [ "$BUILD_TYPE" = "schedule" ]; then
+            ARTIFACTORY_PATH="builds/nightly/${DATE}/${{ matrix.component }}/${{ matrix.component }}-nightly-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          else
+            ARTIFACTORY_PATH="builds/adhoc/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          fi
 
+          if [ -f "$OVA_FILE" ]; then
+            echo "Found OVA file: $OVA_FILE"
+            curl --silent --show-error --fail --request PUT --upload-file \
+              "$OVA_FILE" \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "OVA file uploaded successfully to ${ARTIFACTORY_PATH}."
+          else
+            echo "Error: OVA file not found at $OVA_FILE"
+            exit 1
+          fi
 
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Run API Tests
-        run: |
-          cd ndm-api-tests
-          go mod tidy
-          go test -v -count=1 ./...
-        continue-on-error: true
-
-      - name: Destroy Terraform Resources
-        if: always()
-        run: |
-          cd app-deployment/terraform/vsphere/environments/api
-          terraform destroy -auto-approve
-
-      - name: Clean Up Temporary Files
-        if: always()
-        run: |
-          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+  # deploy-and-test:
+  #   if: ${{ needs.packer.outputs.provider == 'vsphere' && github.event_name == 'schedule' }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
+  #   needs: [ packer, determine-matrix ]
+  #   uses: ./.github/workflows/run-api-tests.yaml
+  #   with:
+  #     control_plane_template: "control-plane-template-name"
+  #     worker_template: "worker-template-name"
+  #   secrets: inherit
