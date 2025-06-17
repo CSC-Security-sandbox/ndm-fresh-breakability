@@ -20,8 +20,8 @@ func sanitize(msg string) string {
 }
     
 func LogDebug(msg string) {
-    sanitisedMessage := sanitize(msg)
-    log.Print("[DEBUG] " + sanitisedMessage)
+    // sanitisedMessage := sanitize(msg)
+    log.Print("[DEBUG] " + msg)
 }
 
 func LogError(msg string, err ...error) {
