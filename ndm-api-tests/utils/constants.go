@@ -71,6 +71,7 @@ const (
 	STOP_JOBRUN                             = "STOP"
 	READY_JOBRUN                            = "READY"
 	BLOCKED_JOBRUN                          = "BLOCKED"
+	DeltaFolder                             = "delta"
 	CONFIG_TYPE_FILE                        = "FILE"
 	SERVER_TYPE                             = "OtherNAS"
 	USERNAME_ROOT                           = "Root"
