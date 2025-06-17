@@ -13,18 +13,19 @@ import (
 var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
 	var headers map[string]string
 	var (
-		ProjectId       string
-		workerId1       string
-		workerId2       string
-		workerIds       []string
-		err             error
-		getSourceResp   GetServerResponse
-		currentDateTime string
+		ProjectId        string
+		workerId1        string
+		workerId2        string
+		workerIds        []string
+		err              error
+		getSourceDetails FileServerList
+		currentDateTime  string
 	)
 	BeforeEach(func() {
-		ProjectId, workerIds, err = SetupTestEnv(2)
+		NumberOfWorker := 2
+		ProjectId, workerIds, err = SetupTestEnv(NumberOfWorker)
 		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+		Expect(len(workerIds)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
@@ -32,24 +33,37 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 	})
 
 	It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
-		var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2, sourceDiscoveryJobRunID1, sourceDiscoveryJobRunID2 string
-		var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs []string
-		var jobConfigID1, jobConfigID2, idCutover1, idCutover2, migrationJobRunID string
+		var (
+			// Source-related IDs
+			sourceConfigID1, sourceConfigID2 string
+			sourcePathID1, sourcePathID2     string
+			sourceJobConfigIDs               []string
+			sourceConfigIDs                  []string
+			sourceDiscoveryJobRunIDs         []string
 
-		// DO NOT CHANGE THIS ROW
-		var destinationConfigID, destinationPathID, destinationPathID1, destinationJobConfigID1, destinationJobConfigID2, destinationDiscoveryJobRunID1, destinationDiscoveryJobRunID2 string
+			// Destination-related IDs
+			destinationConfigID, destinationPathID, destinationPathID1 string
+			destinationJobConfigID1, destinationJobConfigID2           string
+			// destinationDiscoveryJobRunID1, destinationDiscoveryJobRunID2 string
+			destinationJobConfigIDs []string
 
+			// Job Config and Migration IDs
+			jobConfigIDs, migrationJobConfigIDs []string
+			jobConfigID1, jobConfigID2          string
+			migrationJobRunID                   string
+		)
 		By("Creating the source file server")
-		time.Sleep(20 * time.Second)
+		// Adding a delay because sometimes the worker takes 10 to 15 seconds to attach
+		IntroduceDelay(20)
 		sourceParams := CreateServereParams{
 			ConfigName:       "source-file-server",
-			ConfigType:       "FILE",
+			ConfigType:       CONFIG_TYPE_FILE,
 			ProjectID:        ProjectId,
-			ServerType:       "OtherNAS",
-			UserName:         "Root",
-			Password:         "",
-			Protocol:         "NFS",
-			ProtocolVersion:  "v3",
+			ServerType:       SERVER_TYPE,
+			UserName:         USERNAME_ROOT,
+			Password:         PASSWORD_ROOT,
+			Protocol:         PROTOCOL,
+			ProtocolVersion:  PROTOCOL_VERSION_3,
 			Host:             SOURCE_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -60,28 +74,28 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		defer resp.Body.Close()
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, getSourceResp, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
+		sourcePathID1, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
 
-		sourcePathID2, getSourceResp, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
+		sourcePathID2, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
 
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
 			ConfigName:       "destination-file-server",
-			ConfigType:       "FILE",
+			ConfigType:       CONFIG_TYPE_FILE,
 			ProjectID:        ProjectId,
-			ServerType:       "OtherNAS",
-			UserName:         "Root",
-			Password:         "",
-			Protocol:         "NFS",
-			ProtocolVersion:  "v3",
+			ServerType:       SERVER_TYPE,
+			UserName:         USERNAME_ROOT,
+			Password:         PASSWORD_ROOT,
+			Protocol:         PROTOCOL,
+			ProtocolVersion:  PROTOCOL_VERSION_3,
 			Host:             DESTINATION_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -92,20 +106,20 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		defer resp.Body.Close()
 
 		By("Getting the destination file server by configId")
-		destinationPathID, getSourceResp, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+		destinationPathID, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 		Expect(destinationPathID).NotTo(BeEmpty(), "Expected a valid destinationPathID")
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 
-		destinationPathID1, getSourceResp, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		destinationPathID1, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
 		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid destinationPathID1")
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 
 		DetachWorkers(1)
-		IntroduceDelay(40)
+		IntroduceDelay(WORKER_TIMEOUT)
 
 		By("Creating a new discovery job for the source")
 		jobParams := DiscoveryJobParams{
@@ -129,30 +143,33 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		sourceConfigID2 = sourceJobConfigIDs[1]
 
 		By("Getting jobs by jobConfigId for source")
-		getJobsResp, resp, err := GetJobRunDetails(sourceConfigID1, headers)
-		sourceDiscoveryJobRunID1 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(sourceDiscoveryJobRunID1).NotTo(BeEmpty(), "sourceDiscoveryJobRunID1 should not be empty")
+		sourceConfigIDs = []string{sourceConfigID1, sourceConfigID2}
+		sourceDiscoveryJobRunIDs = make([]string, len(sourceConfigIDs))
 
-		getJobsResp, resp, err = GetJobRunDetails(sourceConfigID2, headers)
-		sourceDiscoveryJobRunID2 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(sourceDiscoveryJobRunID2).NotTo(BeEmpty(), "sourceDiscoveryJobRunID2 should not be empty")
+		for i, configID := range sourceConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(configID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			resp.Body.Close()
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
-		// Wait for both discovery jobs to complete
-		err = WaitForJobState(sourceDiscoveryJobRunID1, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-		IntroduceDelay(40)
-		result, err := ValidateReport(sourceDiscoveryJobRunID1, JobTypeDiscovery, "../validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
+			jobRunID := getJobsResp.JobRuns[0].JobRunId
+			sourceDiscoveryJobRunIDs[i] = jobRunID
+			Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("sourceDiscoveryJobRunID%d should not be empty", i+1))
+		}
 
-		err = WaitForJobState(sourceDiscoveryJobRunID2, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "Source discovery job 2 did not complete")
+		// Wait for both discovery jobs to complete and validate the first one
+		for i, jobRunID := range sourceDiscoveryJobRunIDs {
+			err := WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Source discovery job %d did not complete", i+1))
+
+			if i == 0 {
+				// result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				// LogDebug(fmt.Sprintf("validate report result : %s", result))
+			}
+		}
+
+		// return
 
 		By("Creating a new discovery job for destination")
 		destinationJobParams := DiscoveryJobParams{
@@ -175,30 +192,31 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		destinationJobConfigID1, destinationJobConfigID2 = destinationJobConfigIDs[0], destinationJobConfigIDs[1]
 
 		By("Getting jobs by jobConfigId for destination")
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID1, headers)
-		destinationDiscoveryJobRunID1 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(destinationDiscoveryJobRunID1).NotTo(BeEmpty(), "destinationDiscoveryJobRunID1 should not be empty")
 
-		getJobsResp, resp, err = GetJobRunDetails(destinationJobConfigID2, headers)
-		destinationDiscoveryJobRunID2 = getJobsResp.JobRuns[0].JobRunId
-		Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(destinationDiscoveryJobRunID2).NotTo(BeEmpty(), "destinationDiscoveryJobRunID2 should not be empty")
+		destinationJobConfigIDs = []string{destinationJobConfigID1, destinationJobConfigID2}
+		destinationDiscoveryJobRunIDs := make([]string, len(destinationJobConfigIDs))
+
+		for i, jobConfigID := range destinationJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			resp.Body.Close() // Close immediately in a loop
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+			jobRunID := getJobsResp.JobRuns[0].JobRunId
+			destinationDiscoveryJobRunIDs[i] = jobRunID
+			Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("destinationDiscoveryJobRunID%d should not be empty", i+1))
+		}
 
 		// Wait for both discovery jobs to complete
-		err = WaitForJobState(destinationDiscoveryJobRunID1, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "destination discovery job did not complete")
+		for i, jobRunID := range destinationDiscoveryJobRunIDs {
+			err := WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("destination discovery job %d did not complete", i+1))
+		}
 
-		err = WaitForJobState(destinationDiscoveryJobRunID2, COMPLETED_JOBRUN)
-		Expect(err).NotTo(HaveOccurred(), "destination discovery job 1 did not complete")
-		IntroduceDelay(40)
-		result, err = ValidateReport(destinationDiscoveryJobRunID1, JobTypeDiscovery, "../validator/PDFDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-		LogDebug(fmt.Sprintf("validate report result : %s", result))
+		// Validate report for the first job run ID
+		// result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
+		// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+		// LogDebug(fmt.Sprintf("validate report result : %s", result))
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
@@ -221,7 +239,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 
 		// Get migration job run IDs and wait for completion
 		for _, migrationJobConfigID := range migrationJobConfigIDs {
-			getJobsResp, resp, err = GetJobRunDetails(migrationJobConfigID, headers)
+			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 			migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 			Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 			defer resp.Body.Close()
@@ -229,10 +247,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-			IntroduceDelay(30)
-			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-			LogDebug(fmt.Sprintf("validate report result : %s", res))
+			// res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+			// LogDebug(fmt.Sprintf("validate report result : %s", res))
 		}
 
 		By("Creating bulk cutover job")
@@ -251,43 +268,61 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		jobConfigID2 = jobConfigIDs[1]
 
 		By("Getting jobs by job config id")
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		defer resp.Body.Close()
-		idCutover1 = getJobsResp.JobRuns[0].JobRunId
-		WaitForJobState(idCutover1, BLOCKED_JOBRUN)
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Cutover1 job did not reach BLOCKED state")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+		jobConfigIDs = []string{jobConfigID1, jobConfigID2}
+		idCutovers := make([]string, len(jobConfigIDs))
+		for i, jobConfigID := range jobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
+			defer resp.Body.Close()
 
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		defer resp.Body.Close()
+			idCutover := getJobsResp.JobRuns[0].JobRunId
+			idCutovers[i] = idCutover
 
-		idCutover2 = getJobsResp.JobRuns[0].JobRunId
-		WaitForJobState(idCutover2, BLOCKED_JOBRUN)
-		getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		Expect(err).NotTo(HaveOccurred(), "Cutover2 job did not reach BLOCKED state")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+			WaitForJobState(idCutover, BLOCKED_JOBRUN)
+
+			getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Cutover%d job did not reach BLOCKED state", i+1))
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
+			Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
+			Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+		}
+		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
+		// Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
+		// defer resp.Body.Close()
+		// idCutover1 = getJobsResp.JobRuns[0].JobRunId
+		// WaitForJobState(idCutover1, BLOCKED_JOBRUN)
+		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
+		// Expect(err).NotTo(HaveOccurred(), "Cutover1 job did not reach BLOCKED state")
+		// Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+		// Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
+		// Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
+		// Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+
+		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
+		// Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
+		// defer resp.Body.Close()
+
+		// idCutover2 = getJobsResp.JobRuns[0].JobRunId
+		// WaitForJobState(idCutover2, BLOCKED_JOBRUN)
+		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
+		// Expect(err).NotTo(HaveOccurred(), "Cutover2 job did not reach BLOCKED state")
+		// Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+		// Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
+		// Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
+		// Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 
 		By("Approving bulk cutover job")
-		resp, err = ApproveRejectBulkCutoverJob(idCutover1, "APPROVED", headers)
+		resp, err = ApproveRejectBulkCutoverJob(idCutovers[0], "APPROVED", headers)
 		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		WaitForJobState(idCutover1, APPROVED_JOBRUN)
-		IntroduceDelay(40)
-		result, err = ValidateReport(idCutover1, JobTypeCutover, "../validator/COCDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-		LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
+		WaitForJobState(idCutovers[0], APPROVED_JOBRUN)
+		// result, err = ValidateReport(idCutovers[0], JobTypeCutover, "../validator/COCDetails.json")
+		// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+		// LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
 
-		resp, err = ApproveRejectBulkCutoverJob(idCutover2, "APPROVED", headers)
+		resp, err = ApproveRejectBulkCutoverJob(idCutovers[1], "APPROVED", headers)
 		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")

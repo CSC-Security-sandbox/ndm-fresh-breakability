@@ -158,26 +158,43 @@ func fetchReport(
 	// 3) get token from env and prepare headers
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
-	// 4) send POST
-	resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-	if err != nil {
-		return nil, fmt.Errorf("POST %s: %w", url, err)
-	}
-	defer resp.Body.Close()
+	const maxRetries = MaxPollRetries
+	const retryDelay = DefaultPollInterval // adjust as needed
 
-	// 5) read response
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// 4) send POST
+		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
+		fmt.Println("report api response : ", resp)
+		if err != nil {
+			return nil, fmt.Errorf("POST %s: %w", url, err)
+		}
+		defer resp.Body.Close()
+
+		// 5) read response
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		// 6) expect 200 OK or 201 CREATED
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			return respBytes, nil
+		}
+
+		// Retry on 500 Internal Server Error
+		if resp.StatusCode == http.StatusInternalServerError {
+			if attempt < maxRetries {
+				IntroduceDelay(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
+		}
+
+		// For other status codes, return error immediately
+		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	// 6) expect 201 CREATED
-	if resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("unexpected HTTP %d: %s",
-			resp.StatusCode, string(respBytes))
-	}
-
-	return respBytes, nil
+	return nil, fmt.Errorf("failed to fetch report after %d retries", maxRetries)
 }
 
 // --- PDF & CSV Validator Helpers ------------------------------------------
