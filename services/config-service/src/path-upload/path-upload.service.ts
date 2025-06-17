@@ -14,6 +14,8 @@ import { ImportVolumePathsDto } from './dto/path-upload.dto';
 import { ExportPathSource, UploadPathAction, WorkFlows } from 'src/constants/enums';
 import { JobConfigEntity, JobStatus } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
+import * as fs from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class PathUploadService {
@@ -358,5 +360,11 @@ export class PathUploadService {
     
     this.logger.log(`Refresh is possible for file server ${fileServerId}`); 
     return true;
+  }
+
+  async createUploadDirectory(): Promise<void> {
+    if (!fs.existsSync(join(process.cwd(), './uploads'))) {
+      fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
+    }
   }
 }

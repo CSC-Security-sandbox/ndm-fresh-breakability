@@ -8,6 +8,7 @@ import { join } from 'path';
 import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
+import { ExportPathSource } from '../list-path/list-path.type';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -95,8 +96,7 @@ export class ValidateWorkingDirectoryActivity {
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
     try {
       for (const fileServer of payload.listPathPayload) {
-        const isManualUpload = fileServer.exportPathSource === 'MANUAL_UPLOAD';
-        if(isManualUpload) {
+        if(fileServer.exportPathSource === ExportPathSource.MANUAL_UPLOAD) {
           this.logger.log(`Skipping mounting and unmounting for MANUAL_UPLOAD type for host ${fileServer.host}`);
           continue;
         }

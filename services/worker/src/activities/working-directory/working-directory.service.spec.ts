@@ -7,6 +7,7 @@ import { AuthService } from 'src/auth/auth.service';
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
 import { Protocols } from 'src/protocols/protocols';
+import { ExportPathSource } from '../list-path/list-path.type';
 
 jest.mock('axios');
 jest.mock('src/protocols/protocols');
@@ -232,7 +233,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       const traceId = 'trace-manual';
       const payload = {
       listPathPayload: [
-        { exportPathSource: 'MANUAL_UPLOAD', host: 'host1' },
+        { exportPathSource: ExportPathSource.MANUAL_UPLOAD, host: 'host1' },
         { exportPathSource: 'OTHER', host: 'host2', type: 'NFS', username: 'u', password: 'p', protocolVersion: 'v' }
       ],
       fetchedPath: '/fetched'

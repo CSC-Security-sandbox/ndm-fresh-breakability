@@ -17,7 +17,8 @@ describe('PathUploadController', () => {
     processUploadUpdate: jest.fn(),
     createVolumeForFileServer: jest.fn(),
     processValidationResult: jest.fn(),
-    isRefreshPossible: jest.fn()
+    isRefreshPossible: jest.fn(),
+    createUploadDirectory: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -178,6 +179,7 @@ describe('PathUploadController', () => {
       jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
         throw new Error('File not found');
       });
+      jest.spyOn(service, 'createUploadDirectory').mockResolvedValue();
 
       await expect(controller.downloadCsvFile(mockResponse)).rejects.toThrow('File not found');
     });

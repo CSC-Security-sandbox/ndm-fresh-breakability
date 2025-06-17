@@ -69,9 +69,7 @@ export class PathUploadController {
         const fileName = 'volume_paths_template.csv';
         
         // create the uploads directory if it doesn't exist
-        if (!fs.existsSync(join(process.cwd(), './uploads'))) {
-            fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
-        }
+        await this.pathUploadService.createUploadDirectory();
 
         const filePath = join(process.cwd(), './uploads', fileName);
         fs.writeFileSync(filePath, csvContent);
