@@ -489,7 +489,7 @@ describe('PathUploadService', () => {
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
+        getExists: jest.fn().mockResolvedValue([
           { scheduler: 'SCHEDULING', fileServerId: fileServerId } as any
         ]),
       } as any);
@@ -515,7 +515,7 @@ describe('PathUploadService', () => {
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
+        getExists: jest.fn().mockResolvedValue([
           { fileServerId: fileServerId, futureScheduleAt: '*/5 * * * *' } as any
         ]),
       } as any);
@@ -541,7 +541,7 @@ describe('PathUploadService', () => {
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
+        getExists: jest.fn().mockResolvedValue([
           { fileServerId: fileServerId, futureScheduleAt:  null } as any
         ]),
       } as any);
@@ -565,14 +565,20 @@ describe('PathUploadService', () => {
       mockFileServer.id = fileServerId;
       mockFileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOne').mockResolvedValue(mockFileServer as any);
+
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
-          { fileServerId: fileServerId, futureScheduleAt: null } as any
-        ]),
+        getExists: jest.fn().mockResolvedValue(null),
       } as any);
-      jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0); // Simulating no job is running
+
+      jest.spyOn(jobRunRepo, 'createQueryBuilder').mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+      } as any);
+
       const result = await service.isRefreshPossible(fileServerId);
       expect(result).toBe(true);
     });

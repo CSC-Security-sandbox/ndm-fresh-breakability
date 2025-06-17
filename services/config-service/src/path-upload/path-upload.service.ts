@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { In, Not, Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -327,31 +327,31 @@ export class PathUploadService {
 
     const volumeIds = fileServer.volumes.map(volume => volume.id);
     // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
-    const jobConfigs = await this.jobConfigRepo
-      .createQueryBuilder('jobConfig')
-      .where('jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds)', { volumeIds })
-      .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
-      .getMany();
-    
-    // check if any job config has schedule as SCHEDULING if yes then return false
-    if (jobConfigs.some(jc => jc.scheduler === 'SCHEDULING')) {
-      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with SCHEDULING status`);
-      return false;
-    }
-    
-    // check if futureScheduleAt is not null for any job config, if yes then return false
-    if (jobConfigs.some(jc => !!jc.futureScheduleAt)) {
-      this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are jobs with futureScheduleAt set`);
-      return false;
-    }
+    const blockingJobConfigExists = await this.jobConfigRepo
+        .createQueryBuilder('jobConfig')
+        .where('(jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds))', { volumeIds })
+        .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+        .andWhere(
+          new Brackets(qb => {
+            qb.where('jobConfig.scheduler = :scheduling', { scheduling: 'SCHEDULING' })
+              .orWhere('jobConfig.futureScheduleAt IS NOT NULL');
+          }),
+        )
+        .getExists();
+
+      if (blockingJobConfigExists) {
+        this.logger.warn(`Refresh is not possible for file server ${fileServerId} due to active job configs with scheduler=SCHEDULING or futureScheduleAt set.`);
+        return false;
+      }
 
     // fetch all the jobs that are in running state for above job configurations
-    const runningJobs = await this.jobRunRepo.count({
-      where: {
-        jobConfigId: In(jobConfigs.map(jc => jc.id)),
-        status: JobRunStatus.Running,
-      }
-    })
+    const runningJobs = await this.jobRunRepo
+      .createQueryBuilder('jobRun')
+      .innerJoin('jobRun.jobConfig', 'jobConfig')
+      .where('jobRun.status = :status', { status: JobRunStatus.Running })
+      .andWhere('(jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds))', { volumeIds })
+      .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+      .getCount();
 
     if (runningJobs > 0) {
       this.logger.warn(`Refresh is not possible for file server ${fileServerId} as there are running jobs`);
