@@ -28,19 +28,20 @@ export class PdfService {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
       const sanitizedFileName = `${jobRunId.replace(/[^a-zA-Z0-9_-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, sanitizedFileName);
-
+      
+      if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {
+        this.logger.error(`Invalid file path: ${filePath}`);
+        throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
+      }
+      
       if (reportType === ReportType.JOBS_RREPORT)
         {
-          let response =  await this.generateJobsReportPdf(jobRunId);
+          let response = await this.generateJobsReportPdf(jobRunId);
           return response;
         }
-       
+      
       if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
-          if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {
-            this.logger.error(`Attempted access to a file outside the reports directory: ${filePath}`);
-            throw new HttpException("Invalid file path", HttpStatus.FORBIDDEN);
-          }
           return fs.readFileSync(filePath); 
       } else {
         throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
