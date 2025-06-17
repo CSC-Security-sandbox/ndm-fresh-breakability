@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 var ProjectID string
 
 // createProject creates a project using the API and stores the project ID globally.

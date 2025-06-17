@@ -7,11 +7,11 @@ func LogDebug(msg string) {
 }
 
 func LogError(msg string, err ...error) {
-    if len(err) > 0 && err[0] != nil {
-        log.Print("[ERROR] " + msg + " | Error: " + err[0].Error())
-    } else {
-        log.Print("[ERROR] " + msg)
-    }
+	if len(err) > 0 && err[0] != nil {
+		log.Print("[ERROR] " + msg + " | Error: " + err[0].Error())
+	} else {
+		log.Print("[ERROR] " + msg)
+	}
 }
 
 func LogFatalf(format string, args ...interface{}) {

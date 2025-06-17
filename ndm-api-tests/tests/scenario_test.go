@@ -2,13 +2,13 @@ package tests
 
 import (
 	"fmt"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"ndm-api-tests/internal/scenario"
 	. "ndm-api-tests/utils"
 	"path/filepath"
 	"strconv"
 	"strings"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 // sharedVars holds the common variables used in scenario tests.
