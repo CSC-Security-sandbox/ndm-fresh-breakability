@@ -102,11 +102,7 @@ jobs:
           SERVICE_NAME="${{ matrix.service.name }}"
           SERVICE_PATH="${{ matrix.service.path }}"
           echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-PR_${{ github.event.number }}"
-          else
-            CODE_LOCATION_NAME="${PROJECT_NAME}-${SERVICE_NAME}-${{ github.run_id }}"
-          fi
+          CODE_LOCATION_NAME="${PROJECT_NAME}_${SERVICE_NAME}"
           echo "Code location: $CODE_LOCATION_NAME"
 
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
