@@ -1,4 +1,4 @@
-name: Run API Tests on vSphere
+name: Run E2E API Automation Tests for NDM
 
 env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -26,6 +26,10 @@ on:
   #       description: 'OVF VM template name for worker'
   #       required: true
   #       type: string
+
+permissions: 
+  contents: read
+
 jobs:
   deploy-and-test:
     name: Create VM for control-plane and worker on vSphere and run API tests
@@ -36,14 +40,14 @@ jobs:
     env:
       NDM_VM_PORT: 22
       NDM_WORKERS_PORT: 22
-      SOURCE_HOST_IP: 10.192.7.42
-      DESTINATION_HOST_IP: 10.192.7.42
+      SOURCE_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_SOURCE_IP }}
+      DESTINATION_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_DESTINATION_IP }}
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
     steps:
       
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node.js
         uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
@@ -70,6 +74,7 @@ jobs:
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          
 
           echo "TF_VAR_vsphere_server=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
           echo "TF_VAR_vsphere_user=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
@@ -105,7 +110,7 @@ jobs:
           WORKER_IPS=$(terraform output -json worker_vm_ip_addresses | jq -c .)
           echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
           echo "worker_vm_ip_addresses=$WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "VM IP: $CONTROL_PLANE_IP"
+          echo "Control Plane IP: $CONTROL_PLANE_IP"
           echo "Worker IPs: $WORKER_IPS"
 
       - name: Set NDM_WORKERS_HOST env

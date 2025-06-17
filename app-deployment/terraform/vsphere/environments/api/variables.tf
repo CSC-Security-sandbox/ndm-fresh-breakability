@@ -63,10 +63,6 @@ variable "num_cores_per_socket" {
   type        = number
 }
 
-variable "memory_mb" {
-  description = "Amount of memory in MB"
-  type        = number
-}
 
 variable "cpu_hot_add_enabled" {
   description = "Enable CPU hot add"
