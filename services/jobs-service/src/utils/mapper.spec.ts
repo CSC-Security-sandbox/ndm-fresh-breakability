@@ -31,16 +31,20 @@ describe('nextDate', () => {
       expect(result).toBeNull();
   });
 
-  it('should return the next date parsed from the cron string if jobType is not DISCOVER', () => {
+  it('should return the next date parsed from the cron string if jobType is MIGRATE', () => {
       const mockNextDate = new Date(Date.now() + 1000 * 60 * 60); // 1 hour in the future
       const mockCronExpression = {
           next: jest.fn().mockReturnValue({ toDate: () => mockNextDate }),
       };
       (parser.parseExpression as jest.Mock).mockReturnValue(mockCronExpression);
+        const cron = '*/5 * * * *';
 
-      const result = nextDate('OTHER_JOB_TYPE', null, '*/5 * * * *');
-      expect(parser.parseExpression).toHaveBeenCalledWith('*/5 * * * *');
-      expect(result).toBe(mockNextDate);
+      const result = nextDate(JobType.MIGRATE, null, cron);
+        expect(parser.parseExpression).toHaveBeenCalledWith(
+        cron,
+        expect.objectContaining({ currentDate: expect.any(Date) })
+  );
+  expect(result).toBe(mockNextDate);
   });
 
   it('should return null if jobType is not DISCOVER and cron string is null', () => {
@@ -52,8 +56,8 @@ describe('nextDate', () => {
       (parser.parseExpression as jest.Mock).mockImplementation(() => {
           throw new Error('Invalid cron expression');
       });
-
-      expect(() => nextDate('OTHER_JOB_TYPE', null, 'invalid-cron')).toThrow('Invalid cron expression');
+    const result = nextDate('OTHER_JOB_TYPE', null, 'invalid-cron');
+    expect(result).toBeNull();
   });
 
   // add test cases for CUT_OVER job type

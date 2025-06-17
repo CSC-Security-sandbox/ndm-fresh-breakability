@@ -40,20 +40,6 @@ type KeycloakCredentials struct {
 	ClientSecret  string
 }
 
-type Volume struct {
-	ID         string `json:"id"`
-	VolumePath string `json:"volumePath"`
-	// other fields omitted for brevity
-}
-type FileServer struct {
-	ID      string   `json:"id"`
-	Volumes []Volume `json:"volumes"`
-	// other fields omitted for brevity
-}
-type Response struct {
-	FileServers []FileServer `json:"fileServers"`
-}
-
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
 func GetBearerToken(userN, pass string) (string, string, error) {
 	tokenUrl := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, TOKEN_URL)
@@ -1000,50 +986,36 @@ func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
 	return nil
 }
 
-func GetVolumeID(response Response, volumePath string) (string, error) {
-	for _, fileServer := range response.FileServers {
-		for _, volume := range fileServer.Volumes {
-			if volume.VolumePath == volumePath {
-				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
-				return volume.ID, nil // Return the found ID and no error
-			}
-		}
+// sshRunScript connects via SSH to a worker and runs the provided script.
+func sshRunScript(config SSHConfig, script string) (string, error) {
+	sshConfig := &ssh.ClientConfig{
+		User: config.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(config.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	// If no volume is found, return an error
-	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
-}
 
-func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
-	// Build the full URL
-	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
-	var reqBody []byte
-
-	// Get extra headers
-	headers := GetHeaders(authToken, ContentTypeForm)
-	// Send the API request
-	resp, err := SendAPIRequest(http.MethodGet, fullURL, reqBody, headers)
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
 	if err != nil {
-		return "", fmt.Errorf("error sending API request: %w", err)
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
-	defer resp.Body.Close() // Ensure the response body is closed
-	// Read the response body
-	bodyBytes, err := io.ReadAll(resp.Body)
+	defer client.Close()
+
+	session, err := client.NewSession()
 	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	err = session.Run(script)
+	if err != nil {
+		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
 	}
 
-	// Unmarshal the response
-	var response Response
-	err = json.Unmarshal(bodyBytes, &response)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling response: %w", err)
-	}
-
-	// Find the volume ID
-	foundID, err := GetVolumeID(response, volumeName)
-	if err != nil {
-		return "", fmt.Errorf("error finding volume ID: %w", err)
-	}
-
-	return foundID, nil // Return the found ID and no error
+	return stdout.String(), nil
 }

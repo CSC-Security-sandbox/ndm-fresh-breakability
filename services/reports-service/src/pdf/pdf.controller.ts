@@ -3,7 +3,7 @@ import { PdfService } from './pdf.service';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReportType } from 'src/constants/enums';
-
+import { sanitisedeErrorResponse } from 'src/utils/sanitised-error-response';
 
 @ApiTags('Generate PDF')
 @Controller('pdf')
@@ -40,7 +40,8 @@ export class PdfController {
         res.setHeader('Content-Length', pdf.length);  
         res.send(pdf);
       } catch (error) {
-        res.status(500).send(error);
+        const sanitizedError = sanitisedeErrorResponse(error);
+        res.status(sanitizedError.status).send(sanitizedError);
       } 
     } 
   
