@@ -2,7 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { NativeConnection, Worker } from '@temporalio/worker';
+import { NativeConnection, Runtime, Worker } from '@temporalio/worker';
 import { firstValueFrom, retry, timeout, timer } from 'rxjs';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
@@ -11,6 +11,12 @@ import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
 import { Connection } from '@temporalio/client';
+import {
+  OpenTelemetryActivityInboundInterceptor,
+  OpenTelemetryActivityOutboundInterceptor,
+   makeWorkflowExporter,
+} from '@temporalio/interceptors-opentelemetry/lib/worker';
+import { resource, traceExporter } from 'src/instrument';
 
 
 
@@ -53,12 +59,7 @@ export class WorkManagerService {
     
     @Cron(CronExpression.EVERY_10_SECONDS)
     async handleCron() {
-        if (this.loadingConfigs) {
-            this.logger.debug('Already loading configurations, skipping this cycle.');
-            return;
-        }
         try {
-            this.loadingConfigs = true;
             const accessToken = await this.authService.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
@@ -74,9 +75,6 @@ export class WorkManagerService {
             await this.monitorTaskQueues();
         } catch (error) {
             this.logger.error(`Error fetching configurations: ${error.message}`);
-        }
-        finally {
-            this.loadingConfigs = false;
         }      
     }
     
@@ -99,7 +97,9 @@ export class WorkManagerService {
         }
         for(let [id, config] of configsToStart) {
             this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
-            const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            let workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            workerOptions = this.addWorkerInterceptors(workerOptions);
+            console.log(`[Telemetry]Worker Options: ${JSON.stringify(workerOptions)}`);
             await this.startWorker(id, workerOptions)
             configsToStart.delete(id);
         }
@@ -117,7 +117,7 @@ export class WorkManagerService {
             }
             this.logger.info(`Worker ${id} started successfully`);
             this.activeWorkers.set(id, worker);
-            this.taskQueuesToMonitor.push({queueName: workerOptions.taskQueue, workerId: id})       
+            this.taskQueuesToMonitor.push({queueName: workerOptions.taskQueue, workerId: id})     
         } catch (err) {
             this.logger.error(`Error starting worker ${id}: ${err}`);
         }
@@ -167,6 +167,27 @@ export class WorkManagerService {
                 this.logger.error(`Error shutting down worker ${worker.options.identity}: ${err}`);
             }
             this.activeWorkers.delete(worker.options.identity);
+        }
+    }
+
+
+    addWorkerInterceptors(workerOptions: any) {
+        return {
+            ...workerOptions,
+              sinks: traceExporter && {
+                exporter: makeWorkflowExporter(traceExporter, resource),
+            },
+            interceptors:traceExporter && {
+                workflowModules: [require.resolve('../utils/worker-interceptors')],  
+                activityInbound: [(ctx) => new OpenTelemetryActivityInboundInterceptor(ctx)], 
+            },    
+             activity: [
+                (ctx) => ({
+                inbound: new OpenTelemetryActivityInboundInterceptor(ctx),
+                outbound: new OpenTelemetryActivityOutboundInterceptor(ctx),
+                }),
+            ],
+
         }
     }
 }
