@@ -25,7 +25,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		numberOfWorker := 2
 		ProjectId, workerIds, err = SetupTestEnv(numberOfWorker)
 		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(workerIds)).Should(BeNumerically("=", 2), "Expected 2 workers to be attached")
+		Expect(len(workerIds)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
