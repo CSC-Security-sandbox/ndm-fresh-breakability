@@ -343,6 +343,7 @@
    <changeSet id="20250602_02_alter_volume_table_add_column_isvalid.sql" author="dineshseervi">
       <sqlFile path="liquibase/20250602_02_alter_volume_table_add_column_isvalid.sql" splitStatements="false"/>
       <rollback>
+         <sqlFile path="liquibase/20250617_03_alter_volume_table_drop_column_isvalid.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
 
@@ -350,12 +351,14 @@
    <changeSet id="20250602_03_create_table_path_uploads.sql" author="dineshseervi">
       <sqlFile path="liquibase/20250602_03_create_table_path_uploads.sql" splitStatements="false"/>
       <rollback>
+         <sqlFile path="liquibase/20250617_02_drop_table_path_uploads.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
   
    <changeSet id="20250603_01_alter_table_fileserver_add_column_exportpathsource.sql" author="dineshseervi">
       <sqlFile path="liquibase/20250603_01_alter_table_fileserver_add_column_exportpathsource.sql" splitStatements="false"/>
       <rollback>
+         <sqlFile path="liquibase/20250617_01_alter_table_fileserver_add_column_exportpathsource_rollback.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
 
