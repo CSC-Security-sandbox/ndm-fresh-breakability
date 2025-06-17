@@ -1,11 +1,6 @@
-locals {
-  cp_vm_name     = "api-control-plane"
-  worker_vm_name = [for i in range(3) : "api-worker-${i+1}"]
-}
-
 module "control-plane" {
   source                 = "../../modules/linux"
-  vm_name                = local.cp_vm_name
+  vm_name                = "${var.control_plane_ovf_template_name}-api"
   datacenter_name        = var.datacenter_name
   cluster_name           = var.cluster_name
   datastore_name         = var.datastore_name
@@ -26,14 +21,10 @@ module "control-plane" {
   disk                   = var.control_plane_disks
 }
 
-resource "null_resource" "workers" {
-  count = 3
-}
-
 module "worker" {
   count                  = 3
   source                 = "../../modules/linux"
-  vm_name                = local.worker_vm_name[count.index]
+  vm_name                = "${var.worker_ovf_template_name}-api-${count.index + 1}"
   datacenter_name        = var.datacenter_name
   cluster_name           = var.cluster_name
   datastore_name         = var.datastore_name
