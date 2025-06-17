@@ -6,6 +6,7 @@ import {
   Inject,
   InternalServerErrorException,
   Post,
+  Req
 } from "@nestjs/common";
 import { HealthcheckService } from "./healthcheck.service";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
@@ -26,8 +27,10 @@ export class HealthcheckController {
   @AuthWorker()
   async healthCheck(
     @Body() healthStats: HealthcheckStats,
+    @Req() req: any
   ): Promise<HealthCheckResponse> {
     try {
+      this.logger.log(`Received health check stats from worker: ${req['worker_id']}`);
       await this.healthcheckService.createOrUpdateHealthCheckStats(healthStats);
       return this.createResponse(HttpStatus.OK);
     } catch (error) {
