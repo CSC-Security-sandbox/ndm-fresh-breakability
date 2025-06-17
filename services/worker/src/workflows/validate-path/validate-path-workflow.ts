@@ -7,7 +7,7 @@ async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
 }
 
-const { postValidationResult } = proxyActivities<ValidatePathActivity>({ startToCloseTimeout: '300s' });
+const { postValidationResult } = proxyActivities<ValidatePathActivity>({ startToCloseTimeout: '5m' });
 
 
 export const ValidatePathsWorkflow = async ({traceId, payload, options}) => {
