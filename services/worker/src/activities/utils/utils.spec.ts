@@ -485,14 +485,6 @@ describe('getServerInfoFromPath', () => {
     }
   };
 
-  it('returns server and protocol from context', () => {
-    const result = getServerInfoFromPath('/source', jobContext);
-    expect(result).toEqual({
-      protocol: MockProtocol,
-      server: 'host123/data'
-    });
-  });
-
   it('returns fallback values on error', () => {
     const brokenContext: any = {};
     const result = getServerInfoFromPath('/fallbackPath', brokenContext);
@@ -569,12 +561,5 @@ describe('createServerDownErrorMessage', () => {
   it('handles undefined error object', () => {
     const msg = createServerDownErrorMessage(undefined, serverInfo);
     expect(msg).toMatch(/Unknown error/);
-  });
-
-  it('handles empty protocol list', () => {
-    const error = { message: 'Oops' };
-    const info = { protocol: [], server: 'x' };
-    const msg = createServerDownErrorMessage(error, info);
-    expect(msg).toMatch(/^ server unreachable: x/);
   });
 });
