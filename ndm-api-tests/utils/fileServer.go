@@ -3,13 +3,23 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 )
 
-type CreateServerResponse struct {
-	ID string `json:"id"`
+type Volume struct {
+	ID         string `json:"id"`
+	VolumePath string `json:"volumePath"`
+}
+
+type FileServer struct {
+	Volumes []Volume `json:"volumes"`
+}
+
+type FileServerList struct {
+	FileServers []FileServer `json:"fileServers"`
 }
 
 type CreateServereParams struct {
@@ -31,7 +41,7 @@ var sshConfig SSHConfig
 func init() {
 	port, err := strconv.Atoi(NDM_VM_PORT)
 	if err != nil {
-		LogError("Invalid port number in NDM_VM_PORT: %v", err)
+		LogFatalf("Invalid port number in NDM_VM_PORT: %v", err)
 	}
 
 	sshConfig = SSHConfig{
@@ -84,22 +94,17 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", resp, err
 	}
 
-	var createSourceResp CreateServerResponse
-	err = json.Unmarshal(bodyBytes, &createSourceResp)
+	// Internal struct for unmarshalling response
+	type fileServerID struct {
+		ID string `json:"id"`
+	}
+	var createFileServerResp fileServerID
+	err = json.Unmarshal(bodyBytes, &createFileServerResp)
 	if err != nil {
 		return "", resp, err
 	}
 
-	sourceConfigID := createSourceResp.ID
-	return sourceConfigID, resp, nil
-}
-
-type GetServerResponse struct {
-	FileServers []struct {
-		Volumes []struct {
-			ID string `json:"id"`
-		} `json:"volumes"`
-	} `json:"fileServers"`
+	return createFileServerResp.ID, resp, nil
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,
@@ -109,12 +114,12 @@ func GetExportPathID(
 	volumeName string,
 	configID string,
 	headers map[string]string,
-) (string, GetServerResponse, error) {
+) (string, FileServerList, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 	// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
-	var getSourceResp GetServerResponse
+	var getSourceResp FileServerList
 	var resp *http.Response
 	var err error
 
@@ -122,18 +127,18 @@ func GetExportPathID(
 		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
-			return "", GetServerResponse{}, err
+			return "", FileServerList{}, err
 		}
 		defer resp.Body.Close()
 
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", GetServerResponse{}, err
+			return "", FileServerList{}, err
 		}
 
 		err = json.Unmarshal(bodyBytes, &getSourceResp)
 		if err != nil {
-			return "", GetServerResponse{}, err
+			return "", FileServerList{}, err
 		}
 
 		// Check if volumes exist
@@ -163,7 +168,7 @@ func GetExportPathID(
 }
 
 // ClearVolume removes all data from the NFS export mounted on the VM.
-func ClearVolume(Export string) error {
+func ClearVolume(export string) error {
 	destMount := "/mnt/remove_data"
 
 	script := fmt.Sprintf(`
@@ -173,7 +178,7 @@ func ClearVolume(Export string) error {
 	sudo rm -rf "%s"/*
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, Export, destMount, destMount, destMount, destMount)
+	`, destMount, export, destMount, destMount, destMount, destMount)
 
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
@@ -249,4 +254,52 @@ func RemoveDeltaFromVolume(export string) error {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
 	return nil
+}
+
+func GetVolumeID(response FileServerList, volumePath string) (string, error) {
+	for _, fileServer := range response.FileServers {
+		for _, volume := range fileServer.Volumes {
+			if volume.VolumePath == volumePath {
+				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
+				return volume.ID, nil // Return the found ID and no error
+			}
+		}
+	}
+	// If no volume is found, return an error
+	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
+}
+
+func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
+	// Build the full URL
+	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
+	var reqBody []byte
+
+	// Get extra headers
+	headers := GetHeaders(authToken, ContentTypeForm)
+	// Send the API request
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, reqBody, headers)
+	if err != nil {
+		return "", fmt.Errorf("error sending API request: %w", err)
+	}
+	defer resp.Body.Close() // Ensure the response body is closed
+	// Read the response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Unmarshal the response
+	var response FileServerList
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling response: %w", err)
+	}
+
+	// Find the volume ID
+	foundID, err := GetVolumeID(response, volumeName)
+	if err != nil {
+		return "", fmt.Errorf("error finding volume ID: %w", err)
+	}
+
+	return foundID, nil // Return the found ID and no error
 }
