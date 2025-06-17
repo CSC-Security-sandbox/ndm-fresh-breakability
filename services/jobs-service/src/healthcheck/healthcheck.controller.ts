@@ -6,11 +6,11 @@ import {
   Inject,
   InternalServerErrorException,
   Post,
-  Req
+  Req,
+  Logger
 } from "@nestjs/common";
 import { HealthcheckService } from "./healthcheck.service";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
-import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 import { ApiTags } from "@nestjs/swagger";
@@ -20,7 +20,7 @@ import { ApiTags } from "@nestjs/swagger";
 export class HealthcheckController {
   constructor(
     private healthcheckService: HealthcheckService,
-    private logger: LoggerService,
+    private logger: Logger,
   ) {}
 
   @Post("/")
