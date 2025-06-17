@@ -4,7 +4,6 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,14 +11,13 @@ import (
 
 var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
-		ProjectId       string
-		workerId1       string
-		workerId2       string
-		workerIds       []string
-		err             error
-		headers         map[string]string
-		getSourceResp   GetServerResponse
-		currentDateTime string
+		ProjectId      string
+		workerId1      string
+		workerId2      string
+		workerIds      []string
+		err            error
+		headers        map[string]string
+		fileServerInfo FileServerInfo
 	)
 	BeforeEach(func() {
 		numberOfWorker := 2
@@ -29,7 +27,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		currentDateTime = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	})
 
 	It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
@@ -41,13 +38,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		IntroduceDelay(20)
 		sourceParams := CreateServereParams{
 			ConfigName:       "source-file-server",
-			ConfigType:       CONFIG_TYPE_FILE,
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       SERVER_TYPE,
-			UserName:         USERNAME_ROOT,
-			Password:         PASSWORD_ROOT,
-			Protocol:         PROTOCOL,
-			ProtocolVersion:  PROTOCOL_VERSION_3,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         "Root",
+			Password:         "",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             SOURCE_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -59,16 +56,16 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, getSourceResp, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+		sourcePathID1, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
 
-		sourcePathID2, getSourceResp, err = GetExportPathID("source", NFS_SOURCE_VOLUME_2, sourceConfigID, headers)
+		sourcePathID2, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
 
 		By("Creating a new discovery job for the source")
@@ -77,7 +74,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -112,13 +109,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
 			ConfigName:       "destination-file-server",
-			ConfigType:       CONFIG_TYPE_FILE,
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       SERVER_TYPE,
-			UserName:         USERNAME_ROOT,
-			Password:         PASSWORD_ROOT,
-			Protocol:         PROTOCOL,
-			ProtocolVersion:  PROTOCOL_VERSION_3,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         "Root",
+			Password:         "",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             DESTINATION_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -130,17 +127,17 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 		By("Getting the destination file server by configId")
-		destinationPathID1, getSourceResp, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		destinationPathID1, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID")
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 
-		destinationPathID2, getSourceResp, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_2, destinationConfigID, headers)
+		destinationPathID2, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
 		Expect(destinationPathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID")
 		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceResp.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceResp.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
+		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 
 		By("Creating a new discovery job for destination")
 		destinationJobParams := DiscoveryJobParams{
@@ -148,7 +145,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -182,7 +179,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
-			FirstRunAt:         currentDateTime,
+			FirstRunAt:         GetCurrentUTCTimestamp(),
 			FutureRunSchedule:  "",
 			SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 			DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
