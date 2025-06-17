@@ -127,20 +127,20 @@ jobs:
             --detect.accuracy.required=NONE \
             --blackduck.timeout=7200 \
             --detect.timeout=14400 \
-            --detect.blackduck.signature.scanner.memory=4096 \
-            --logging.level.com.synopsys.integration=INFO \
-            --detect.wait.for.results=false \
-            --detect.force.success=true \
-            --detect.force.success.on.skip=true \
-            --detect.bom.aggregate.remediation.mode=NONE \
-            --detect.blackduck.scan.mode=INTELLIGENT \
-            --detect.parallel.processors=4 \
-            --detect.maven.dependency.types.excluded=false \
-            --detect.npm.include.dev.dependencies=true \
-            --detect.detector.search.exclusion.defaults=false \
-            --detect.risk.report.pdf=false \
-            --detect.notices.report=false \
-            --detect.vulnerability.report=false
+            # --detect.blackduck.signature.scanner.memory=4096 \
+            # --logging.level.com.synopsys.integration=INFO \
+            # --detect.wait.for.results=false \
+            # --detect.force.success=true \
+            # --detect.force.success.on.skip=true \
+            # --detect.bom.aggregate.remediation.mode=NONE \
+            # --detect.blackduck.scan.mode=INTELLIGENT \
+            # --detect.parallel.processors=4 \
+            # --detect.maven.dependency.types.excluded=false \
+            # --detect.npm.include.dev.dependencies=true \
+            # --detect.detector.search.exclusion.defaults=false \
+            # --detect.risk.report.pdf=false \
+            # --detect.notices.report=false \
+            # --detect.vulnerability.report=false
 
           SCAN_EXIT_CODE=$?
 
