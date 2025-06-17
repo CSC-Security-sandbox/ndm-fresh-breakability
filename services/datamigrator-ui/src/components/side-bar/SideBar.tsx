@@ -80,6 +80,9 @@ const SideBar = () => {
                 icon={item.icon}
                 onClick={() => handleNavigation(item, item.id)}
                 active={activeMenuId === item.id}
+                /* Disabling this menu item which is related to speed-test as it is not included in Alpha release.
+                Remove the below line when we want to enable speedtest functionality. */
+                disabled={item.disabled}
               >
                 {item.label}
               </MenuItem>
