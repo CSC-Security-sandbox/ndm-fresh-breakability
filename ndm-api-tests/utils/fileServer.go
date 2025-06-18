@@ -18,19 +18,19 @@ type FileServer struct {
 	Volumes []Volume `json:"volumes"`
 }
 
-type FileServerList struct {
+type FileServerInfo struct {
 	FileServers []FileServer `json:"fileServers"`
 }
 
 type CreateServereParams struct {
 	ConfigName       string
-	ConfigType       string
+	ConfigType       ConfigType
 	ProjectID        string
-	ServerType       string
+	ServerType       ServerType
 	UserName         string
 	Password         string
-	Protocol         string
-	ProtocolVersion  string
+	Protocol         Protocol
+	ProtocolVersion  ProtocolVersion
 	Host             string
 	Workers          []string
 	WorkingDirectory string
@@ -114,12 +114,12 @@ func GetExportPathID(
 	volumeName string,
 	configID string,
 	headers map[string]string,
-) (string, FileServerList, error) {
+) (string, FileServerInfo, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 	// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
-	var getSourceResp FileServerList
+	var getSourceResp FileServerInfo
 	var resp *http.Response
 	var err error
 
@@ -127,18 +127,18 @@ func GetExportPathID(
 		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
-			return "", FileServerList{}, err
+			return "", FileServerInfo{}, err
 		}
 		defer resp.Body.Close()
 
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", FileServerList{}, err
+			return "", FileServerInfo{}, err
 		}
 
 		err = json.Unmarshal(bodyBytes, &getSourceResp)
 		if err != nil {
-			return "", FileServerList{}, err
+			return "", FileServerInfo{}, err
 		}
 
 		// Check if volumes exist
@@ -256,7 +256,7 @@ func RemoveDeltaFromVolume(export string) error {
 	return nil
 }
 
-func GetVolumeID(response FileServerList, volumePath string) (string, error) {
+func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
 			if volume.VolumePath == volumePath {
@@ -289,7 +289,7 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 	}
 
 	// Unmarshal the response
-	var response FileServerList
+	var response FileServerInfo
 	err = json.Unmarshal(bodyBytes, &response)
 	if err != nil {
 		return "", fmt.Errorf("error unmarshalling response: %w", err)

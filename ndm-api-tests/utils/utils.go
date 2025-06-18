@@ -1019,3 +1019,13 @@ func sshRunScript(config SSHConfig, script string) (string, error) {
 
 	return stdout.String(), nil
 }
+
+func GetCurrentUTCTimestamp() string {
+	return time.Now().UTC().Format(TIME_FORMAT)
+}
+
+func GetFutureUTCTimestamp(timeInterval int) string {
+	return time.Now().UTC().
+		Add(time.Duration(timeInterval) * time.Second).
+		Format(TIME_FORMAT)
+}
