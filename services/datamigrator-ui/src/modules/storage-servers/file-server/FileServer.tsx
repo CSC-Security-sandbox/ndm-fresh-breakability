@@ -14,7 +14,7 @@ import { FILE_SERVER_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-serv
 import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const FileServer = () => {
-  const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
+  const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 500000; // 5 seconds
   const navigate = useNavigate();
   const projectId = useSelector(
     (state: RootStateType) => state.appSlice.project
@@ -30,16 +30,18 @@ const FileServer = () => {
   } = useGetAllFileServersOfProjectQuery({
     projectId,
   }, { pollingInterval: isFrequentInterval ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS : Number(
-    window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
-  ) });
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+    ) });
 
+  const items =configByProject?.data?.items;
   useEffect(() => {
-    if(configByProject?.serverConfig?.find(row => row.status === FILE_SERVER_STATUS.IN_PROGRESS)) {
+
+    if(items?.serverConfig?.find(row => row.status === FILE_SERVER_STATUS.IN_PROGRESS)) {
       setIsFrequentInterval(true);
     } else {
       setIsFrequentInterval(false);
     }
-  }, [configByProject])
+  }, [items])
 
   const canManageConfig: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageConfig
@@ -67,10 +69,9 @@ const FileServer = () => {
       </Button>
     </PermissionAuth>
   );
-
   const tableStateProps = {
     columns: FILE_SERVER_LIST_COLUMN_DEFS,
-    rows: configByProject?.serverConfig,
+    rows: items?.serverConfig,
     isSorting: true,
     pageSize: 10,
     defaultSortState: { sortOrder: "desc", column: 8 },

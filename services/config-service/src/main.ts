@@ -4,10 +4,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { ResponseInterceptor } from './util/response-handler/response-Interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
 
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');

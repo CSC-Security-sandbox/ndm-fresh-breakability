@@ -2,21 +2,21 @@
 export const  handleConnectionError = (error: any, host: string, port: number) => {
     switch (error.code) {
         case 'ENOTFOUND':
-            return `Error: Host ${host} not found.`;
+            return `Host ${host} not found.`;
         case 'EHOSTUNREACH':
-            return `Error: Host ${host} unreachable.`;
+            return `Host ${host} unreachable.`;
         case 'ECONNREFUSED':
-            return `Error: Connection refused by server at ${host}:${port}.`;
+            return `Connection refused by server at ${host}:${port}.`;
         case 'ETIMEDOUT':
-            return `Error: Connection to ${host}:${port} timed out.`;
+            return `Connection to ${host}:${port} timed out.`;
         case 'EACCES':
-            return `Error: Permission denied to access ${host}:${port}.`;
+            return `Permission denied to access ${host}:${port}.`;
         case 'EMFILE':
-            return `Error: Too many open files. Adjust the file descriptor limit.`;
+            return `Too many open files. Adjust the file descriptor limit.`;
         case 'ECONNRESET':
-            return `Error: Connection reset by server at ${host}:${port}.`;
+            return `Connection reset by server at ${host}:${port}.`;
         default:
-            return `Error: Unexpected error while connecting to ${host}:${port} - ${error.message}`;
+            return `Unexpected error while connecting to ${host}:${port} - ${error.message}`;
     }
 }
 
