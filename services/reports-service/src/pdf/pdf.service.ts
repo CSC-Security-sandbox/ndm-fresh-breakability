@@ -40,7 +40,7 @@ export class PdfService {
           return response;
         }
       
-      if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) {
+      if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) { 
           this.logger.log(`Report found. Returning existing report: ${filePath}`);
           return fs.readFileSync(filePath); 
       } else {
