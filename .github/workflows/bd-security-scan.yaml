@@ -22,22 +22,34 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: app-deployment
+          - name: App Deployment
             path: app-deployment
-          - name: admin-service
+
+          # --- LIBs ---
+          - name: Auth Lib
+            path: libs/auth-lib
+          - name: Jobs Lib
+            path: libs/jobs-lib
+          - name: Logger Lib
+            path: libs/logger-lib
+
+          # --- SERVICES ---
+          - name: Admin Service
             path: services/admin-service
-          - name: config-service
+          - name: Config Service
             path: services/config-service
-          - name: db-writer
-            path: services/db-writer
-          - name: datamigrator-ui
+          - name: Datamigrator UI
             path: services/datamigrator-ui
-          - name: jobs-service
+          - name: DB Writer
+            path: services/db-writer
+          - name: Jobs Service
             path: services/jobs-service
-          - name: keycloak-customizations
+          - name: Keycloak Customizations
             path: services/keycloak-customizations
-          - name: reports-service
+          - name: Reports Service
             path: services/reports-service
+          - name: Worker
+            path: services/worker
 
     steps:
       - name: Checkout code
