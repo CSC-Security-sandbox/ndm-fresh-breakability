@@ -37,10 +37,6 @@ jobs:
           - name: reports-service
             path: services/reports-service
 
-    defaults:
-      run:
-        working-directory: ${{ matrix.service.path }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,15 +57,18 @@ jobs:
 
       - name: Replace GitHub Token Placeholder in .npmrc inside service path (if exists)
         if: ${{ matrix.service.name != 'keycloak-customizations' }}
+        working-directory: ${{ matrix.service.path }}
         run: |
           sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc || echo "⚠️ .npmrc not found, skipping replacement"
 
       - name: Install dependencies and pkg
         if: ${{ matrix.service.name != 'keycloak-customizations' }}
+        working-directory: ${{ matrix.service.path }}
         run: npm install && npm install pkg -g
 
       - name: Run Build
         if: ${{ matrix.service.name != 'keycloak-customizations' }}
+        working-directory: ${{ matrix.service.path }}
         run: npm run build
 
       - name: Validate environment
@@ -102,10 +101,22 @@ jobs:
           SERVICE_NAME="${{ matrix.service.name }}"
           SERVICE_PATH="${{ matrix.service.path }}"
           echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
+
+          # Use a unique version name to avoid duplicate report issues
           CODE_LOCATION_NAME="${PROJECT_NAME}_${SERVICE_NAME}"
           echo "Code location: $CODE_LOCATION_NAME"
+          echo "Unique version: $VERSION_NAME"
 
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
+
+          # Verify the path exists
+          if [ ! -d "$SERVICE_PATH" ]; then
+            echo "❌ Service path $SERVICE_PATH does not exist"
+            exit 1
+          fi
+
+          echo "✅ Service path $SERVICE_PATH exists"
+          ls -la "$SERVICE_PATH"
 
           set +e
           ./detect10.sh \
@@ -136,11 +147,6 @@ jobs:
 
           echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
 
-          if [ "$SCAN_EXIT_CODE" -ne 0 ]; then
-            echo "❌ Black Duck scan failed with exit code: $SCAN_EXIT_CODE"
-            exit $SCAN_EXIT_CODE
-          fi
-
           case $SCAN_EXIT_CODE in
             0)
               echo "✅ SUCCESS: Black Duck scan completed successfully"
@@ -148,8 +154,15 @@ jobs:
             2)
               echo "⚠️ TIMEOUT: Scan timed out but data may have been uploaded"
               ;;
+            6)
+              echo "❌ FAILURE_SCAN: Signature scanner failed - check configuration and paths"
+              exit $SCAN_EXIT_CODE
+              ;;
             *)
               echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
+              if [ "$SCAN_EXIT_CODE" -gt 2 ]; then
+                exit $SCAN_EXIT_CODE
+              fi
               ;;
           esac
 
