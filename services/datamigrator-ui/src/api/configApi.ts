@@ -83,7 +83,7 @@ export const configApi = createApi({
 
     downloadExportPathSourceTemplate: builder.query<Blob, void>({
       query: () => ({
-        url: "path-upload/download/template",
+        url: "paths-upload/download/template",
         responseHandler: async (response) => response.blob(),
       }),
     }),
@@ -93,7 +93,7 @@ export const configApi = createApi({
       UploadExportPathSourceFileProps
     >({
       query: ({ fileServerId, body }) => ({
-        url: `path-upload/${fileServerId}`,
+        url: `paths-upload/${fileServerId}`,
         method: "POST",
         body,
       }),
