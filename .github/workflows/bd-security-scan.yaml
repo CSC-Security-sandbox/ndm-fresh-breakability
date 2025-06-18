@@ -1,4 +1,4 @@
-name: Black Duck SCA Scan with Vulnerability Count
+name: BDS
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
   PROJECT_NAME: Test_NDM
-  VERSION_NAME: test_v
+  VERSION_NAME: test_v2
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
 
