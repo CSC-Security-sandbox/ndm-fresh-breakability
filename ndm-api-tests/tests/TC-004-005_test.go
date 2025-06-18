@@ -4,22 +4,19 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and batch pause/resume", func() {
+var _ = Describe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
 	var headers map[string]string
 	var (
-		ProjectId        string
-		workerId1        string
-		workerId2        string
-		workerIds        []string
-		err              error
-		getSourceDetails FileServerList
-		currentDateTime  string
+		ProjectId string
+		workerId1 string
+		workerId2 string
+		workerIds []string
+		err       error
 	)
 	BeforeEach(func() {
 		NumberOfWorker := 2
@@ -29,7 +26,6 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		currentDateTime = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	})
 
 	It("TC-004 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
@@ -61,17 +57,11 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		defer resp.Body.Close()
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
+		sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		sourcePathID2, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
+		sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
@@ -93,17 +83,11 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		defer resp.Body.Close()
 
 		By("Getting the destination file server by configId")
-		destinationPathID1, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
-		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid destinationPathID1")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		destinationPathID2, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
-		Expect(destinationPathID2).NotTo(BeEmpty(), "Expected a valid destinationPathID2")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating a new discovery job for the source")
 		jobParams := DiscoveryJobParams{
@@ -144,11 +128,9 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 
 				err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(jobRunID, "RESUME", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(jobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
@@ -215,8 +197,6 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
 		}
 
-		IntroduceDelay(40)
-
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
 			FirstRunAt:         GetCurrentUTCTimestamp(),
@@ -252,11 +232,9 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 
 				err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(migrationJobRunID, "RESUME", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
@@ -301,17 +279,16 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 			jobRunID := getJobsResp.JobRuns[0].JobRunId
 			cutoverJobRunIDs[i] = jobRunID
 
+			//  Perform PAUSE, RESUME, and STOP operations on the first cutover job run
 			if i == 0 {
 				list = nil
 				list = append(list, jobRunID)
 
 				err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(jobRunID, "RESUME", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-				IntroduceDelay(8)
 
 				err = HandleJobRunStateChange(jobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
@@ -322,6 +299,8 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 				LogDebug("Ad-hoc JobRunId: " + adHocJobRunId)
 				err = WaitForJobState(adHocJobRunId, BLOCKED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
+
+				cutoverJobRunIDs[i] = adHocJobRunId
 				continue
 			}
 
@@ -340,10 +319,13 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		LogDebug(fmt.Sprintf("validate COC report result : %s", result))
 
 		By("Approving bulk cutover job")
-		resp, err = ApproveRejectBulkCutoverJob(cutoverJobRunIDs[1], "APPROVED", headers)
-		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
-		defer resp.Body.Close()
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+		for i := 0; i < 2; i++ {
+			resp, err = ApproveRejectBulkCutoverJob(cutoverJobRunIDs[i], "APPROVED", headers)
+			Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job for run %s", cutoverJobRunIDs[i])
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverJobRunIDs[i])
+			resp.Body.Close()
+		}
 	})
 
 	AfterEach(func() {

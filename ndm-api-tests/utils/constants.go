@@ -62,6 +62,7 @@ const (
 	JOB_RUN_ENDPOINT                                = "/api/v1/job-run"
 	JOBS_ENDPOINT                                   = "/api/v1/jobs"
 	FILE_SERVER_REFRESH_URL                         = "/api/v1/servers/refresh"
+	ADHOC_JOBRUN_URL                                = "/api/v1/job-run/ad-hoc"
 	JobTypeDiscovery                JobType         = "DISCOVER"
 	JobTypeCutover                  JobType         = "CUTOVER"
 	JobTypeMigration                JobType         = "MIGRATE"
@@ -69,6 +70,7 @@ const (
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
 	MaxPollRetries                                  = 30
+	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
 	COMPLETED_JOBRUN                                = "COMPLETED"
@@ -76,6 +78,7 @@ const (
 	STOP_JOBRUN                                     = "STOP"
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
+	APPROVED_JOBRUN                                 = "APPROVED"
 	DeltaFolder                                     = "delta"
 	ConfigTypeFile                  ConfigType      = "FILE"
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
