@@ -8,6 +8,7 @@ import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStat
 import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
+import * as utils from '../utils/utils';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -492,6 +493,22 @@ describe('MigrationScanService', () => {
       expect(result.error).toBe(1);
       expect(result.errors.size).toBe(1);
     });
+
+    it('Should handle if the worker is already failed', async () => {
+      const jobRunId = 'job-1';
+      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
+      const jobContext = new TestJobContext('job1', jobConfig, 'running');
+
+      jest.spyOn(mockRedisService, 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(mockCommonService, 'fetchOneTask').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'getScanTask').mockReturnValue(null);
+      jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
+      jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
+
+      const result = await service.scanPathActivity({ jobRunId , failedWorkers: ['test-worker-id'] });
+      expect(result.noTaskFound).toBe(true);
+    });
   });
 
   describe('buildCommand', () => {
@@ -510,4 +527,41 @@ describe('MigrationScanService', () => {
       expect(command).toBeUndefined();
     });
   });
+  describe('publishMigrationTask', () => {
+    const mockedJobContext = {
+      jobRunId: '1234',
+      jobConfig: {},
+      appendToUpdatedTaskList: jest.fn(),
+      appendToTaskList: jest.fn(),
+      appendToFileList: jest.fn(),
+      appendToDirList: jest.fn(),
+      appendToErrorList: jest.fn(),
+      appendToMigrationTask: jest.fn(),
+      appendToTaskStats: jest.fn(),
+      appendToTaskStatsList: jest.fn(),
+      jobState: {
+        workers: [],
+        tasks_completed: 1,
+        tasks_total: 2,
+        workers_agreed: [],
+        status: 'RUNNING',
+        failedWorkers: []
+      },
+      jobRunStatus: 'RUNNING',
+      updatedTaskInfo: {
+        lastId: 'task-id'
+      },
+      migrateTask: {
+        lastId: 'task-id',
+      }
+    }
+    it('Should publish migration task successfully', async () => {
+      jest.spyOn(utils, 'buildTask').mockReturnValue({
+        type: 'SCAN',
+        jobRunId: 'job-123',
+        jobContext: mockedJobContext,
+      } as any);
+      const result = await service.publishMigrationTask({ jobContext: mockedJobContext, commands: [] } as any);
+    });
+  })
 });
