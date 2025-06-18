@@ -120,6 +120,8 @@ export function withBulkMigrateCreateForm(
       onSubmit: () => {},
     });
 
+    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<string[]>([]);
+
     useEffect(() => {
       mappingStepForm.validateForm();
     }, [mappingStepForm.values]);
@@ -166,17 +168,23 @@ export function withBulkMigrateCreateForm(
             });
           });
 
+          const notReachableVolumes = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
-            config?.fileServers?.flatMap((fileServer) =>
-              fileServer?.volumes?.map((volume) =>
+
+            config?.fileServers?.flatMap((fileServer) => 
+              fileServer?.volumes?.map((volume) => {
                 _destinationPaths.push({
                   protocol: fileServer.protocol,
                   pathId: volume?.id,
                   pathName: volume?.volumePath,
                 })
-              )
+                if (volume?.reachableCount === 0) {
+                  notReachableVolumes.push(volume.id);
+                }
+              })
             );
+            setListOfNotReachableExportPaths(notReachableVolumes);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
 
@@ -583,6 +591,7 @@ export function withBulkMigrateCreateForm(
       mappingStepTableState,
       setFileName,
       fileName,
+      listOfNotReachableExportPaths,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
