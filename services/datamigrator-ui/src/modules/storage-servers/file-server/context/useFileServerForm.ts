@@ -184,9 +184,6 @@ export const useFileServerForm = () => {
 
       return new Promise((resolve) => {
         interval.current = setInterval(async () => {
-          console.log('>SDADASDASDASDASDASDASDASDASDSADASDSADAS',await checkConnectionRespApi({
-            id: resp?.data?.items?.workflowId,
-          }));
           const data = await checkConnectionRespApi({
             id: resp?.data?.items?.workflowId,
           }).unwrap();
@@ -229,7 +226,7 @@ export const useFileServerForm = () => {
             const error = new Error(message);
             showErrorOnFailure(error);
           }
-        }, 50000);
+        }, 5000);
       });
     } catch (error: any) {
       showErrorOnFailure(error);

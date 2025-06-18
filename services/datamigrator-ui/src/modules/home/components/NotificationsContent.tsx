@@ -31,7 +31,7 @@ const NotificationsContent = ({
         const response = await getNoticeBoardDetailsApi({
           projectId: selectedProjectId,
         }).unwrap();
-        setNoticeBoardDetails(response);
+        setNoticeBoardDetails(response?.data?.items);
       })();
     }
   }, [selectedProjectId]);
