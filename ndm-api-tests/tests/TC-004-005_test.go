@@ -44,13 +44,13 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		IntroduceDelay(20)
 		sourceParams := CreateServereParams{
 			ConfigName:       "source-file-server",
-			ConfigType:       "FILE",
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       "OtherNAS",
+			ServerType:       ServerTypeOtherNAS,
 			UserName:         "Root",
 			Password:         "",
-			Protocol:         "NFS",
-			ProtocolVersion:  "v3",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             SOURCE_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -76,13 +76,13 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
 			ConfigName:       "destination-file-server",
-			ConfigType:       "FILE",
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       "OtherNAS",
+			ServerType:       ServerTypeOtherNAS,
 			UserName:         "Root",
 			Password:         "",
-			Protocol:         "NFS",
-			ProtocolVersion:  "v3",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             DESTINATION_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -111,7 +111,7 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -173,7 +173,7 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -219,7 +219,7 @@ var _ = Describe("TC-004, TC-005: Run discovery with exclude path pattern and ba
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
-			FirstRunAt:         currentDateTime,
+			FirstRunAt:         GetCurrentUTCTimestamp(),
 			FutureRunSchedule:  "",
 			SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 			DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
