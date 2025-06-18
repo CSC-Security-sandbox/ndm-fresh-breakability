@@ -6,7 +6,7 @@ const ExportPathSourceCellRenderer = (
   props: BlueXpTableRowType<ConfigListTypeApiType, ConfigListTypeApiType>
 ) => {
   return (
-    <> {FILE_SERVER_LIST_ENUM[props.row.fileServers[0].exportPathSource]}</>
+    <> {FILE_SERVER_LIST_ENUM[props?.row?.fileServers[0]?.exportPathSource]}</>
   );
 };
 
