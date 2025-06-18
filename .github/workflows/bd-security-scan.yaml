@@ -57,21 +57,36 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Replace GitHub Token Placeholder in .npmrc inside service path (if exists)
-        if: ${{ matrix.service.name != 'keycloak-customizations' }}
+      - name: Replace GitHub Token Placeholder in .npmrc (if exists)
         working-directory: ${{ matrix.service.path }}
         run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc || echo "⚠️ .npmrc not found, skipping replacement"
+          if [ -f .npmrc ]; then
+            echo "✅ .npmrc found. Replacing GitHub token..."
+            sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+          else
+            echo "⚠️ .npmrc not found. Skipping replacement."
+          fi
 
-      - name: Install dependencies and pkg
-        if: ${{ matrix.service.name != 'keycloak-customizations' }}
+      - name: Install dependencies and pkg (if package.json exists)
         working-directory: ${{ matrix.service.path }}
-        run: npm install && npm install pkg -g
+        run: |
+          if [ -f package.json ]; then
+            echo "📦 Installing dependencies..."
+            npm install
+            npm install pkg -g
+          else
+            echo "⚠️ package.json not found. Skipping npm install."
+          fi
 
-      - name: Run Build
-        if: ${{ matrix.service.name != 'keycloak-customizations' }}
+      - name: Run Build (if package.json exists)
         working-directory: ${{ matrix.service.path }}
-        run: npm run build
+        run: |
+          if [ -f package.json ]; then
+            echo "🏗️ Running build..."
+            npm run build
+          else
+            echo "⚠️ package.json not found. Skipping build."
+          fi
 
       - name: Validate environment
         run: |
