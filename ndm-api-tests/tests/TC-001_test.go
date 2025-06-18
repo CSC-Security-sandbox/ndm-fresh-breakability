@@ -11,13 +11,12 @@ import (
 
 var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
-		ProjectId      string
-		workerId1      string
-		workerId2      string
-		workerIds      []string
-		err            error
-		headers        map[string]string
-		fileServerInfo FileServerInfo
+		ProjectId string
+		workerId1 string
+		workerId2 string
+		workerIds []string
+		err       error
+		headers   map[string]string
 	)
 	BeforeEach(func() {
 		numberOfWorker := 2
@@ -56,17 +55,11 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
+		sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		sourcePathID2, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
+		sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating a new discovery job for the source")
 		jobParams := DiscoveryJobParams{
@@ -127,17 +120,11 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 		By("Getting the destination file server by configId")
-		destinationPathID1, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
-		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		destinationPathID2, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
-		Expect(destinationPathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating a new discovery job for destination")
 		destinationJobParams := DiscoveryJobParams{
