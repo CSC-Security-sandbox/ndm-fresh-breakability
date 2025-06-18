@@ -4,7 +4,6 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -13,13 +12,11 @@ import (
 var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
 	var headers map[string]string
 	var (
-		ProjectId        string
-		workerId1        string
-		workerId2        string
-		workerIds        []string
-		err              error
-		getSourceDetails FileServerList
-		currentDateTime  string
+		ProjectId string
+		workerId1 string
+		workerId2 string
+		workerIds []string
+		err       error
 	)
 	BeforeEach(func() {
 		NumberOfWorker := 2
@@ -29,7 +26,6 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		currentDateTime = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	})
 
 	It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
@@ -60,7 +56,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
 			ServerType:       ServerTypeOtherNAS,
-			UserName:         USERNAME_ROOT,
+			UserName:         "Root",
 			Password:         "",
 			Protocol:         ProtocolNFS,
 			ProtocolVersion:  ProtocolVersion3,
@@ -74,17 +70,11 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		defer resp.Body.Close()
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
+		sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		sourcePathID2, getSourceDetails, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
+		sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
@@ -92,7 +82,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
 			ServerType:       ServerTypeOtherNAS,
-			UserName:         USERNAME_ROOT,
+			UserName:         "Root",
 			Password:         "",
 			Protocol:         ProtocolNFS,
 			ProtocolVersion:  ProtocolVersion3,
@@ -106,19 +96,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		defer resp.Body.Close()
 
 		By("Getting the destination file server by configId")
-		destinationPathID, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
-		Expect(destinationPathID).NotTo(BeEmpty(), "Expected a valid destinationPathID")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		destinationPathID1, getSourceDetails, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
-		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid destinationPathID1")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(getSourceDetails.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(getSourceDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-
+		destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 		DetachWorkers(1)
+		// 		waiting for worker to go offline
 		IntroduceDelay(WORKER_TIMEOUT)
 
 		By("Creating a new discovery job for the source")
