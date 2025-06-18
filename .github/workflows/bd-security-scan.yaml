@@ -24,8 +24,8 @@ jobs:
         service:
           - name: app-deployment
             path: app-deployment
-          # - name: admin-service
-          #   path: services/admin-service
+          - name: admin-service
+            path: services/admin-service
           # - name: config-service
           #   path: services/config-service
           # - name: db-writer
