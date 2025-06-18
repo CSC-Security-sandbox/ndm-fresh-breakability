@@ -139,8 +139,6 @@ jobs:
             --blackduck.timeout=7200 \
             --detect.timeout=14400 \
             --detect.wait.for.results=true \
-            --detect.risk.report.pdf=true \
-            --detect.notices.report=true \
             --detect.vulnerability.report=true
 
           SCAN_EXIT_CODE=$?
