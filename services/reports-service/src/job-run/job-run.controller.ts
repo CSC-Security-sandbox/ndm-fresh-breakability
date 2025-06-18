@@ -50,7 +50,10 @@ export class JobRunController {
   @ApiResponse({ status: 404, description: "COC report not found." })
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
-    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId);
-    return response;
+    if (!/^[a-zA-Z0-9_-]+$/.test(jobRunId)) {
+      throw new Error("Invalid JobRunId format.");
+    }
+    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId); 
+    return response; 
   }
 }
