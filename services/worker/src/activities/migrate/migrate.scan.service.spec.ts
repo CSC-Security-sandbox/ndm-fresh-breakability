@@ -12,9 +12,9 @@ import * as utils from '../utils/utils';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
-      current: jest.fn().mockResolvedValue(()=>({
-          heartbeat: jest.fn(),
-      }))
+    current: jest.fn().mockResolvedValue(() => ({
+      heartbeat: jest.fn(),
+    }))
   },
 }))
 
@@ -40,7 +40,7 @@ jest.mock('winston', () => {
     }),
     transports: {
       ...actualWinston.transports,
-      DailyRotateFile: jest.fn(), 
+      DailyRotateFile: jest.fn(),
     },
   };
 });
@@ -59,7 +59,7 @@ const stream = {
   append: jest.fn(),
   read: jest.fn(),
   groupRead: jest.fn(),
-  consumerGroupCount:2,
+  consumerGroupCount: 2,
   readAndPurge: jest.fn(),
   getLength: jest.fn(),
   groupReadWithoutAck: jest.fn(),
@@ -71,19 +71,19 @@ describe('MigrationScanService', () => {
   let redisClient: RedisClientType;
 
   beforeEach(() => {
-      redisClient = {
-          exists: jest.fn(),
-          del: jest.fn(),
-          set: jest.fn(),
-          stats: jest.fn(),
-          hIncrBy: jest.fn(),
-          disconnect: jest.fn(),
-      } as unknown as RedisClientType;
+    redisClient = {
+      exists: jest.fn(),
+      del: jest.fn(),
+      set: jest.fn(),
+      stats: jest.fn(),
+      hIncrBy: jest.fn(),
+      disconnect: jest.fn(),
+    } as unknown as RedisClientType;
 
   });
 
   afterEach(() => {
-      jest.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   let service: MigrationScanService;
@@ -110,9 +110,9 @@ describe('MigrationScanService', () => {
         deleteValue: jest.fn()
       }
     }
-    async init() {}
-    async close() {}
-    async cleanup() {}
+    async init() { }
+    async close() { }
+    async cleanup() { }
   }
 
   beforeEach(async () => {
@@ -306,14 +306,26 @@ describe('MigrationScanService', () => {
   });
 
   describe('scanContent', () => {
+    let jobContext: any;
+    let command: any;
+    beforeEach(() => {
+      jobContext = {
+        appendToErrorList: jest.fn(),
+        appendToDirList: jest.fn().mockResolvedValue('dir-id'),
+        dirsInfo: { lastId: '', numMessages: 0 },
+        errorsInfo: { lastId: '' },
+        jobConfig: { options: {}, jobType: 'type1' }
+      };
+      command = { commandId: 'cmd-1', fPath: 'file.txt', retryCount: 0 };
+    });
     it('should handle errors when reading source directory', async () => {
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext = new TestJobContext('job1', jobConfig, 'running');
 
-      const command: Command = { 
-        commandId: 'cmd-1', 
-        fPath: 'file.txt', 
+      const command: Command = {
+        commandId: 'cmd-1',
+        fPath: 'file.txt',
         retryCount: 0,
         ops: [],
         status: CommandStatus.IN_PROCESS,
@@ -338,13 +350,13 @@ describe('MigrationScanService', () => {
     });
 
     it('should handle errors when reading target directory', async () => {
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext = new TestJobContext('job1', jobConfig, 'running');
 
-      const command: Command = { 
-        commandId: 'cmd-1', 
-        fPath: 'file.txt', 
+      const command: Command = {
+        commandId: 'cmd-1',
+        fPath: 'file.txt',
         retryCount: 0,
         ops: [],
         status: CommandStatus.IN_PROCESS,
@@ -371,13 +383,13 @@ describe('MigrationScanService', () => {
     });
 
     it('should process files and directories correctly', async () => {
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext = new TestJobContext('job1', jobConfig, 'running');
 
-      const command: Command = { 
-        commandId: 'cmd-1', 
-        fPath: 'file.txt', 
+      const command: Command = {
+        commandId: 'cmd-1',
+        fPath: 'file.txt',
         retryCount: 0,
         ops: [],
         status: CommandStatus.COMPLETED,
@@ -403,19 +415,143 @@ describe('MigrationScanService', () => {
 
       jest.spyOn(fs.Stats.prototype, 'isDirectory').mockReturnValue(true);
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue(returnValue);
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);      
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(service, 'buildCommand').mockReturnValue(command);
 
       const result = await service.scanContent(input);
       expect(result.directory).toBe(0);
       expect(result.command.length).toBe(0);
     });
+
+
+    it('should handle error in fs.promises.lstat', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(false);
+      jest.spyOn(fs.promises, 'lstat').mockRejectedValueOnce(new Error('lstat error'));
+      const input = {
+        excludePatterns: [],
+        jobContext,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      const result = await service.scanContent(input);
+      expect(jobContext.appendToErrorList).toHaveBeenCalled();
+      expect(result.error).toBe('');
+    });
+
+    it('should skip item if shouldExcludeOrSkip returns true', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(fs.promises, 'lstat').mockResolvedValue({ isDirectory: () => false, isSymbolicLink: () => false } as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(true);
+      const input = {
+        excludePatterns: [],
+        jobContext,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      const result = await service.scanContent(input);
+      expect(result.files).toBe(0);
+      expect(result.directory).toBe(0);
+      expect(result.command.length).toBe(0);
+    });
+
+    it('should handle else branch for targetContent.has(item) and fs.existsSync false', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValueOnce(true).mockReturnValueOnce(false);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(fs.promises, 'lstat').mockResolvedValue({ isDirectory: () => false, isSymbolicLink: () => false } as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(false);
+      jest.spyOn(utils, 'getFileInfo').mockResolvedValue({ path: 'file.txt' });
+      const input = {
+        excludePatterns: [],
+        jobContext,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      // targetContent has item
+      jest.spyOn(service, 'getDirectoryContents').mockResolvedValueOnce(['file.txt']).mockResolvedValueOnce(['file.txt']);
+      const result = await service.scanContent(input);
+      expect(result.files).toBe(0);
+      expect(result.command.length).toBe(0);
+    });
+
+    it('should handle else branch for targetContent.has(item) and fs.existsSync true', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(fs.promises, 'lstat').mockResolvedValue({ isDirectory: () => false, isSymbolicLink: () => false } as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(false);
+      jest.spyOn(utils, 'getFileInfo').mockResolvedValue({ path: 'file.txt' });
+      jest.spyOn(service, 'buildCommand').mockReturnValue({} as any);
+      jest.spyOn(fs, 'statSync').mockReturnValue({} as any);
+      const input = {
+        excludePatterns: [],
+        jobContext,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      // targetContent has item
+      jest.spyOn(service, 'getDirectoryContents').mockResolvedValueOnce(['file.txt']).mockResolvedValueOnce(['file.txt']);
+      const result = await service.scanContent(input);
+      expect(result.command.length).toBe(1);
+    });
   });
 
   describe('scanPath', () => {
+    let jobContext: any;
+    let task: any;
+    beforeEach(() => {
+      jobContext = {
+        jobConfig: { options: {}, jobType: 'type1' },
+        appendToUpdatedTaskList: jest.fn().mockResolvedValue('id'),
+        appendToErrorList: jest.fn().mockResolvedValue('id'),
+        appendToTaskList: jest.fn().mockResolvedValue('id'),
+        updatedTaskInfo: { lastId: '' },
+        tasksInfo: { lastId: '' },
+        setScanTask: jest.fn(),
+        getScanTask: jest.fn(),
+        deleteScanTask: jest.fn(),
+        migrateTask: { lastId: '' }
+      };
+      task = {
+        id: 'task-1',
+        jobRunId: 'job-1',
+        taskType: TaskType.MIGRATE,
+        status: TaskStatus.PENDING,
+        commands: [{ status: CommandStatus.IN_PROCESS, retryCount: 2, fPath: 'file.txt' }],
+        workerId: 'worker-1',
+        sPath: 'source-path',
+        sPathId: 'source-path-id',
+        tPathId: 'target-path-id'
+      };
+    });
     it('should return no task found if no task exists', async () => {
       const jobRunId = 'job-1';
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext = new TestJobContext('job1', jobConfig, 'running');
 
@@ -424,29 +560,29 @@ describe('MigrationScanService', () => {
       jest.spyOn(jobContext, 'getScanTask').mockReturnValue(null);
       jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
       jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
-      
-      const result = await service.scanPath({ jobRunId , failedWorkers: [] });
+
+      const result = await service.scanPath({ jobRunId, failedWorkers: [] });
       expect(result.noTaskFound).toBe(true);
     });
 
     it('should process tasks correctly', async () => {
       const jobRunId = 'job-1';
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext: any = new TestJobContext('job1', jobConfig, 'running');
-      const command: Command = { 
-        commandId: 'cmd-1', 
-        fPath: 'file.txt', 
+      const command: Command = {
+        commandId: 'cmd-1',
+        fPath: 'file.txt',
         retryCount: 0,
         ops: [],
         status: CommandStatus.IN_PROCESS,
         serialize: jest.fn()
       };
 
-      const task: Task = { 
-        id: 'task-1', 
-        jobRunId: 'job-1', 
-        taskType: TaskType.MIGRATE, 
+      const task: Task = {
+        id: 'task-1',
+        jobRunId: 'job-1',
+        taskType: TaskType.MIGRATE,
         status: TaskStatus.ERRORED,
         commands: [command],
         workerId: 'worker-1',
@@ -465,7 +601,7 @@ describe('MigrationScanService', () => {
       jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
       jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
 
-      const result = await service.scanPath({ jobRunId,  failedWorkers: [] });
+      const result = await service.scanPath({ jobRunId, failedWorkers: [] });
       expect(result.success).toBe(1);
       expect(result.files).toBe(1);
       expect(result.folders).toBe(0);
@@ -473,15 +609,17 @@ describe('MigrationScanService', () => {
 
     it('should handle errors during task processing', async () => {
       const jobRunId = 'job-1';
-      const jobContext = { jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn(), updatedTaskInfo: { lastId: '0-0' }, appendToErrorList: jest.fn() ,  getJobState: jest.fn().mockReturnValue({
-        workers: [],
-        tasks_completed: 1,
-        tasks_total: 2,
-        workers_agreed: [],
-        status: 'RUNNING',
-        failedWorkers: []
-    }), getScanTask: jest.fn(), setScanTask: jest.fn(), deleteScanTask: jest.fn() } as unknown as JobContext;
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const jobContext = {
+        jobConfig: { options: {} }, appendToUpdatedTaskList: jest.fn(), updatedTaskInfo: { lastId: '0-0' }, appendToErrorList: jest.fn(), getJobState: jest.fn().mockReturnValue({
+          workers: [],
+          tasks_completed: 1,
+          tasks_total: 2,
+          workers_agreed: [],
+          status: 'RUNNING',
+          failedWorkers: []
+        }), getScanTask: jest.fn(), setScanTask: jest.fn(), deleteScanTask: jest.fn()
+      } as unknown as JobContext;
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const task = { commands: [{ status: CommandStatus.IN_PROCESS, fPath: 'file.txt' }] };
       mockRedisService.getJobContext = jest.fn().mockResolvedValue(jobContext);
@@ -496,7 +634,7 @@ describe('MigrationScanService', () => {
 
     it('Should handle if the worker is already failed', async () => {
       const jobRunId = 'job-1';
-      const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'user', 'password', 'domain');
+      const sourceFileServer = new FileServerDetails('host', [new NFS('root')], 'user', 'password', 'domain');
       const jobConfig = new JobConfig('job1', 'type1', sourceFileServer, '/source');
       const jobContext = new TestJobContext('job1', jobConfig, 'running');
 
@@ -506,8 +644,115 @@ describe('MigrationScanService', () => {
       jest.spyOn(jobContext, 'setScanTask').mockResolvedValue(null);
       jest.spyOn(jobContext, 'deleteScanTask').mockResolvedValue(null);
 
-      const result = await service.scanPathActivity({ jobRunId , failedWorkers: ['test-worker-id'] });
+      const result = await service.scanPathActivity({ jobRunId, failedWorkers: ['test-worker-id'] });
       expect(result.noTaskFound).toBe(true);
+    });
+
+
+    it('should set task.status=ERRORED if scanPath.error > 0 && scanPath.retryCount >= maxRetryCount', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'err', errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      (service as any).maxRetryCount = 2;
+      const result = await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(result.error).toBe(1);
+      expect(task.status).toBe(TaskStatus.ERRORED);
+    });
+
+    it('should set task.status=COMPLETED_WITH_ERROR if scanPath.retryCount > 0', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: null, errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      task.commands[0].retryCount = 1;
+      const result = await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(task.status).toBe(TaskStatus.COMPLETED_WITH_ERROR);
+    });
+
+    it('should set task.status=COMPLETED if no errors', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: null, errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      task.commands[0].retryCount = 0;
+      const result = await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(task.status).toBe(TaskStatus.COMPLETED);
+    });
+
+    it('should handle scanPath.error > 0 and isFatalError returns true', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'fatal', errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jest.spyOn(utils, 'isFatalError').mockReturnValue(true);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      (service as any).maxRetryCount = 2;
+      const result = await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(result.isFatal).toBe(true);
+      expect(task.status).toBe(TaskStatus.ERRORED);
+    });
+
+    it('should handle scanPath.error > 0 and isFatalError returns false, errorType=TRANSIENT_ERROR', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'err', errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      (service as any).maxRetryCount = 2;
+      task.commands[0].retryCount = 1;
+      const result = await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(task.status).toBe(TaskStatus.ERRORED);
+    });
+
+    it('should handle scanPath.retryCount < maxRetryCount and !scanPath.isFatal', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'err', errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      (service as any).maxRetryCount = 5;
+      task.commands[0].retryCount = 1;
+      const loggerSpy = jest.spyOn(service['logger'], 'debug');
+      await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Appending to Retry'));
+    });
+
+    it('should handle scanPath.isFatal', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: 'fatal', errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jest.spyOn(utils, 'isFatalError').mockReturnValue(true);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      (service as any).maxRetryCount = 2;
+      const loggerSpy = jest.spyOn(service['logger'], 'debug');
+      await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Fatal Error Detected'));
+    });
+
+    it('should handle else branch (no errors)', async () => {
+      jest.spyOn(service, 'scanContent').mockResolvedValue({ files: 0, directory: 0, command: [], isGeneratedTask: false, error: null, errorType: ErrorType.RECOVERABLE_ERROR });
+      jest.spyOn(service['redisService'], 'getJobContext').mockResolvedValue(jobContext);
+      jest.spyOn(service['commonService'], 'fetchOneTask').mockResolvedValue(task);
+      jobContext.getScanTask = jest.fn().mockReturnValue(null);
+      jobContext.setScanTask = jest.fn();
+      jobContext.deleteScanTask = jest.fn();
+      const loggerSpy = jest.spyOn(service['logger'], 'debug');
+      await service.scanPathActivity({ jobRunId: 'job-1', failedWorkers: [] });
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Completed Task'));
     });
   });
 
@@ -515,7 +760,7 @@ describe('MigrationScanService', () => {
     it('should build a command if content is updated', () => {
       const sFile = { size: 100, mtime: new Date(), isDirectory: () => false };
       const fPath = 'file.txt';
-      const command:any = service.buildCommand(sFile as any, fPath);
+      const command: any = service.buildCommand(sFile as any, fPath);
       expect(command).toBeDefined();
       expect(command.ops[0].cmd).toBe('cc');
     });
@@ -562,6 +807,82 @@ describe('MigrationScanService', () => {
         jobContext: mockedJobContext,
       } as any);
       const result = await service.publishMigrationTask({ jobContext: mockedJobContext, commands: [] } as any);
+    });
+
+    it('should call buildTask and appendToMigrationTask in publishMigrationTask', async () => {
+      const mockJobContext = {
+        jobRunId: 'run-1',
+        migrateTask: { lastId: '' },
+        appendToMigrationTask: jest.fn().mockResolvedValue('new-last-id'),
+      };
+      const mockCommands = [{}, {}];
+      jest.spyOn(utils, 'buildTask').mockReturnValue({ id: 'task-1', status: 'READY', commands: mockCommands } as any);
+      await service.publishMigrationTask({ jobContext: mockJobContext as any, commands: mockCommands as any });
+      expect(utils.buildTask).toHaveBeenCalled();
+      expect(mockJobContext.appendToMigrationTask).toHaveBeenCalled();
+      expect(mockJobContext.migrateTask.lastId).toBe('new-last-id');
+      expect(mockLogger.debug).toHaveBeenCalled();
+    });
+
+    it('should handle scanContent errors in for loop gracefully', async () => {
+      const jobContext = {
+        appendToErrorList: jest.fn(),
+        appendToDirList: jest.fn(),
+        dirsInfo: { lastId: '', numMessages: 0 },
+        errorsInfo: { lastId: '' },
+        jobConfig: { options: {}, jobType: 'type1' }
+      };
+      const command = { commandId: 'cmd-1', fPath: 'file.txt', retryCount: 0 };
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs.promises, 'lstat').mockRejectedValueOnce(new Error('lstat error'));
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(false);
+      const input: ScanContentInput = {
+        excludePatterns: [],
+        jobContext: jobContext as any,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command: command as any,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      const result = await service.scanContent(input);
+      expect(jobContext.appendToErrorList).toHaveBeenCalled();
+      expect(result.error).toBe('');
+    });
+
+    it('should skip items if shouldExcludeOrSkip returns true', async () => {
+      const jobContext = {
+        appendToErrorList: jest.fn(),
+        appendToDirList: jest.fn(),
+        dirsInfo: { lastId: '', numMessages: 0 },
+        errorsInfo: { lastId: '' },
+        jobConfig: { options: {}, jobType: 'type1' }
+      };
+      const command = { commandId: 'cmd-1', fPath: 'file.txt', retryCount: 0 };
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs.promises, 'lstat').mockResolvedValue({ isDirectory: () => false, isSymbolicLink: () => false } as any);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['file.txt'] as any);
+      jest.spyOn(utils, 'removePrefix').mockReturnValue('file.txt');
+      jest.spyOn(utils, 'shouldExcludeOrSkip').mockReturnValue(true);
+      const input: ScanContentInput = {
+        excludePatterns: [],
+        jobContext: jobContext as any,
+        sourcePath: 'source-path',
+        sourcePrefix: 'source-prefix',
+        targetPath: 'target-path',
+        command: command as any,
+        skipFile: '',
+        jobRunId: 'job-1',
+        errorType: ErrorType.RECOVERABLE_ERROR
+      };
+      const result = await service.scanContent(input);
+      expect(result.files).toBe(0);
+      expect(result.directory).toBe(0);
+      expect(result.command.length).toBe(0);
     });
   })
 });
