@@ -26,18 +26,18 @@ jobs:
             path: app-deployment
           - name: admin-service
             path: services/admin-service
-          # - name: config-service
-          #   path: services/config-service
-          # - name: db-writer
-          #   path: services/db-writer
-          # - name: datamigrator-ui
-          #   path: services/datamigrator-ui
-          # - name: jobs-service
-          #   path: services/jobs-service
-          # - name: keycloak-customizations
-          #   path: services/keycloak-customizations
-          # - name: reports-service
-          #   path: services/reports-service
+          - name: config-service
+            path: services/config-service
+          - name: db-writer
+            path: services/db-writer
+          - name: datamigrator-ui
+            path: services/datamigrator-ui
+          - name: jobs-service
+            path: services/jobs-service
+          - name: keycloak-customizations
+            path: services/keycloak-customizations
+          - name: reports-service
+            path: services/reports-service
 
     steps:
       - name: Checkout code
@@ -119,14 +119,12 @@ jobs:
           SERVICE_PATH="${{ matrix.service.path }}"
           echo "🚀🚀🚀🚀 Starting Black Duck scan for $SERVICE_NAME...🚀🚀🚀🚀"
 
-          # Use unique code location to avoid conflicts but keep same version
-          CODE_LOCATION_NAME="${PROJECT_NAME}_${SERVICE_NAME}_${VERSION_NAME}"
+          CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
           echo "Code location: $CODE_LOCATION_NAME"
           echo "Version: $VERSION_NAME"
 
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
 
-          # Verify the path exists
           if [ ! -d "$SERVICE_PATH" ]; then
             echo "❌ ❌ ❌ ❌ Service path $SERVICE_PATH does not exist ❌ ❌ ❌ ❌ "
             exit 1
@@ -166,19 +164,7 @@ jobs:
 
           case $SCAN_EXIT_CODE in
             0)
-              echo "✅ SUCCESS: Black Duck scan completed successfully"
-              ;;
-            2)
-              echo "⚠️ TIMEOUT: Scan timed out but data may have been uploaded"
-              ;;
-            6)
-              echo "❌ FAILURE_SCAN: Signature scanner failed - check configuration and paths"
-              exit $SCAN_EXIT_CODE
-              ;;
-            11)
-              echo "⚠️ BLACKDUCK_FEATURE_ERROR: Report generation failed due to server-side processing conflicts"
-              echo "This is usually due to duplicate reports being processed. The scan data was uploaded successfully."
-              # Don't exit with error for report generation issues if scan succeeded
+              echo "✅ ✅ ✅ ✅ ✅ SUCCESS: Black Duck scan completed successfully for service $SERVICE_NAME ✅ ✅ ✅ ✅ ✅  "
               ;;
             *)
               echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
