@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"golang.org/x/crypto/ssh"
 )
 
 // Global raw configuration data.
@@ -222,40 +220,6 @@ func DetachWorkers(count ...int) (string, error) {
 	return outputBuilder.String(), nil
 }
 
-// SSHRunScript connects via SSH to a worker and runs the provided script.
-func SSHRunScript(config SSHConfig, script string) (string, error) {
-	sshConfig := &ssh.ClientConfig{
-		User: config.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(config.Password),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	client, err := ssh.Dial("tcp", address, sshConfig)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
-	}
-	defer client.Close()
-
-	session, err := client.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("failed to create SSH session: %w", err)
-	}
-	defer session.Close()
-
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-	err = session.Run(script)
-	if err != nil {
-		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
-	}
-
-	return stdout.String(), nil
-}
-
 // CreateWorkerScript creates a shell script to register a worker using API response data.
 func CreateWorkerScript(resp *http.Response) (string, string, error) {
 	respBody, err := io.ReadAll(resp.Body)
@@ -323,7 +287,7 @@ func GetDetachWorkerScript() string {
 // DetachWorker runs the detach script on a given worker via SSH.
 func DetachWorker(config SSHConfig) (string, error) {
 	script := GetDetachWorkerScript()
-	return SSHRunScript(config, script)
+	return sshRunScript(config, script)
 }
 
 // attachWorkerForConfig registers a single worker via API call and SSH.
@@ -347,7 +311,7 @@ func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId str
 		return workerId, err
 	}
 	LogDebug(fmt.Sprintf("For worker %s, running script: %s", worker.Host, script))
-	output, err := SSHRunScript(worker, script)
+	output, err := sshRunScript(worker, script)
 	if err != nil {
 		return workerId, err
 	}

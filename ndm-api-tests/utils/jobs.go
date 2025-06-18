@@ -9,10 +9,27 @@ import (
 )
 
 type GetJobResponse struct {
-	JobRuns []struct {
+	JobConfigId  string `json:"jobConfigId"`
+	JobType      string `json:"jobType"`
+	SourceServer struct {
+		ServerName string `json:"serverName"`
+		Path       string `json:"path"`
+		Protocol   string `json:"protocol"`
+	} `json:"sourceServer"`
+	DestinationServer struct{} `json:"destinationServer"`
+	Status            string   `json:"status"`
+	CreatedAt         string   `json:"createdAt"`
+	JobRuns           []struct {
 		JobRunId string `json:"jobRunId"`
 		Status   string `json:"status"`
 	} `json:"jobRuns"`
+	AggregateData struct {
+		TimeElapsed             int    `json:"timeElapsed"`
+		ScannedFilesCount       string `json:"scannedFilesCount"`
+		ScannedDirectoriesCount string `json:"scannedDirectoriesCount"`
+		TotalScannedSize        string `json:"totalScannedSize"`
+	} `json:"aggregateData"`
+	Errors []interface{} `json:"errors"`
 }
 
 type JobResponse []struct {
@@ -238,7 +255,7 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
-func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
+func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAttempt ...bool) (GetJobResponse, *http.Response, error) {
 	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
 	var resp *http.Response
 
@@ -258,6 +275,10 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResp
 		err = json.Unmarshal(bodyBytes, &getJobsResp)
 		if err != nil {
 			return GetJobResponse{}, resp, fmt.Errorf("error unmrashling response: %w", err)
+		}
+
+		if len(needRetryAttempt) > 0 {
+			return getJobsResp, resp, nil
 		}
 
 		if len(getJobsResp.JobRuns) > 0 {
