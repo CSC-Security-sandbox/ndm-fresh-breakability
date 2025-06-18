@@ -9,6 +9,7 @@ export interface ScanActivityOutput {
     jobRunId: string;
     fileCount: number;
     dirCount: number;
+    subDirs: string[];
 }
 
 export interface ScanDirectoryInput {
@@ -26,4 +27,5 @@ export interface ScanDirectoryOutput {
     fileCount: number;
     dirCount: number;
     command: Command[];
+    subDirs: string[];
 }

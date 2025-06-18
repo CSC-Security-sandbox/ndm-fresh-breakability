@@ -115,7 +115,7 @@ export const MigrationWorkflow = async ({
   await waitUntilRedisMemoryOk(traceId);
 
   // scan workflow
-  scanWorkflow = await wf.startChild('ScanWorkflow', {
+  scanWorkflow = await wf.startChild('ChildScanWorkflow', {
     args: [ { jobRunId: traceId, workers:workFlowStatus.setupCompletedWorkers, failedWorkers: [] } ],
     workflowId: `ScanWorkflow-${traceId}`,
     taskQueue: `${traceId}-TaskQueue`,
