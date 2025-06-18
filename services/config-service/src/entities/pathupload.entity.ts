@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { UploadPathAction } from '../constants/enums';
+import { FileServerEntity } from './fileserver.entity';
 
 @Entity({ name: 'path_uploads' })
 export class PathUploadsEntity extends Base {
@@ -28,4 +29,9 @@ export class PathUploadsEntity extends Base {
     @ApiProperty({ description: 'File server ID associated with this path upload' })
     @Column({ type: 'uuid', name: 'file_server_id' })
     fileServerId: string;
+
+
+    @ManyToOne(() => FileServerEntity, (fileServer) => fileServer.uploads)
+    @JoinColumn({ name: 'fileServerId' })
+    fileServer: FileServerEntity;
 }

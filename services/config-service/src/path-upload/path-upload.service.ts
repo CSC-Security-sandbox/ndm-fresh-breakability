@@ -43,7 +43,8 @@ export class PathUploadService {
   }
 
   async processFileUpload(importVolumePathsDto: ImportVolumePathsDto, fileServerId: string, userDetails?: UserDetails): Promise<any> {
-    const fileServer = await this.fileServerRepo.findOneBy({ id: fileServerId });
+    try {
+      const fileServer = await this.fileServerRepo.findOneBy({ id: fileServerId });
     if (!fileServer) throw new NotFoundException('File server does not exists');
     
     if (!!fileServer && fileServer.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
@@ -66,19 +67,18 @@ export class PathUploadService {
       noLongerAvailablePaths: 0,
     }
     const uploadId = uuid();
+    const existingPaths = await this.volumeRepo.find({ where: { fileServerId } });
+
     for (const row of parsedData) {
       const [volumePath] = row;
-      if (!volumePath || volumePath.trim() === '') continue;
       const trimmedPath = volumePath.trim();
-      const existingPath = await this.volumeRepo.findOne({
-        where: { volumePath: trimmedPath, fileServerId },
-      });
-      if (existingPath) {
+      if (!trimmedPath) continue;
+      if (existingPaths.filter(path => path.volumePath === trimmedPath && path.fileServerId === fileServerId).length > 0) {
         this.logger.warn(`Path ${trimmedPath} already exists for file server ${fileServerId}`);
         uploadStats.alreadyExitingPaths++;
         // createUpload
         await this.createUpload({
-          id: existingPath.id,
+          id: existingPaths[0].id,
           uploadId,
           volumePath: trimmedPath,
           fileServerId: fileServerId,
@@ -103,11 +103,7 @@ export class PathUploadService {
     }
 
     // all the paths with fileServerId from the volume entity which are not in the uploadData, increment noLongerAvailablePaths count by number of such paths
-    const existingPaths = await this.volumeRepo.find({
-      where: { fileServerId },
-      select: ['volumePath'],
-    });
-
+    
     existingPaths.filter(async path => {
       const isPathNoLongerAvailable = !parsedData.some(row => row[0].trim() === path.volumePath);
       if (isPathNoLongerAvailable) {
@@ -136,6 +132,10 @@ export class PathUploadService {
       alreadyExitingPaths: uploadStats.alreadyExitingPaths,
       noLongerAvailablePaths: uploadStats.noLongerAvailablePaths,
     };
+    } catch (error) {
+      this.logger.error('Error processing file upload', error);
+      throw new BadRequestException('Error processing file upload: ' + error.message);
+    }
   }
 
   async createUpload(uploadData: Partial<PathUploadsEntity>): Promise<Partial<PathUploadsEntity>> {
@@ -145,23 +145,27 @@ export class PathUploadService {
   }
 
   async processUploadPathValidation(uploadId: string): Promise<{ status: string, message: string, workflowId?: string }> {
-    const upload = await this.uploadRepo.find({ where: { uploadId } });
-    if (!upload.length) {
+    try {
+      const fileServer = await this.fileServerRepo
+      .createQueryBuilder('fileServer')
+      .leftJoinAndSelect('fileServer.uploads', 'upload')
+      .where('upload.uploadId = :uploadId', { uploadId })
+      .getOne();
+
+    if (!fileServer) {
       this.logger.error(`Upload with ID ${uploadId} not found`);
       throw new Error(`Upload with ID ${uploadId} not found`);
     }
-    const fileServerId = upload[0].fileServerId;
-    const fileServer = await this.fileServerRepo.findOne({ where: { id: fileServerId }, relations: ['workers'] });
     this.logger.log(`Processing export path upload with ID ${uploadId}`);
 
     // mark all the current paths as invalid
     const disabledPaths: string[] = [], enabledPaths: string[] = [];
-    for(const path of upload) {
+    for(const path of fileServer.uploads) {
       if(path.action === UploadPathAction.DELETE) disabledPaths.push(path.volumePath);
       else enabledPaths.push(path.volumePath);
     }
-    await this.volumeRepo.update({ fileServerId , volumePath: In(disabledPaths) }, { isDisabled: true , isValid: false });
-    await this.volumeRepo.update({ fileServerId , volumePath: In(enabledPaths) }, { isDisabled: false , isValid: false, });
+    await this.volumeRepo.update({ fileServerId: fileServer.id , volumePath: In(disabledPaths) }, { isDisabled: true , isValid: false });
+    await this.volumeRepo.update({ fileServerId: fileServer.id , volumePath: In(enabledPaths) }, { isDisabled: false , isValid: false, });
 
     const traceId = uploadId;
     const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -171,7 +175,7 @@ export class PathUploadService {
         traceId: traceId,
         payload: {
           traceId,
-          paths: upload.filter(up => up.action !== UploadPathAction.DELETE).map(path => {
+          paths: fileServer.uploads.filter(up => up.action !== UploadPathAction.DELETE).map(path => {
             return { pathId: path.id, path: path.volumePath }
           }),
           fileServer: {
@@ -195,6 +199,10 @@ export class PathUploadService {
       status: 'success',
       message: 'Export path upload processed successfully',
       workflowId: workflow.workflowId,
+    }
+    } catch (error) {
+      this.logger.error('Error processing export path upload', error);
+      throw new BadRequestException('Error processing export path upload: ' + error.message);
     }
   }
 
