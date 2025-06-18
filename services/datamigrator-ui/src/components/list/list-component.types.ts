@@ -4,7 +4,7 @@ export type ListComponentPropsType = {
   itemsList: {
     label?: string;
     value: string | number;
-    extraContent?: ReactNode;
+    children?: ReactNode;
     tooltip?: string;
   }[];
 };
