@@ -41,7 +41,8 @@ export class MigrateScanService {
     }
 
     async scanDirectory({excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, jobRunId, skipFile, }: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
-        const output: ScanDirectoryOutput = {jobRunId, fileCount: 0, dirCount: 0, command: []};
+        
+        const output: ScanDirectoryOutput = {jobRunId, fileCount: 0, dirCount: 0, command: [], subDirs: []};
         let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
       
         try {
@@ -79,7 +80,7 @@ export class MigrateScanService {
 
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {
                     output.dirCount++;
-                    const id = await jobContext.appendToDirList(fileInfo);
+                    output.subDirs.push(relativeSourcePath);
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) output.command.push(command);
@@ -111,6 +112,7 @@ export class MigrateScanService {
         const output: ScanActivityOutput = {
             dirCount: 0,
             fileCount: 0,
+            subDirs: [],
             jobRunId: jobRunId
         }
         const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
@@ -138,6 +140,7 @@ export class MigrateScanService {
                     const result = await this.scanDirectory(scanDirectoryInput);
                     output.fileCount += result.fileCount;
                     output.dirCount += result.dirCount;
+                    output.subDirs.push(...result.subDirs);
                     commands.push(...result.command);
 
 
