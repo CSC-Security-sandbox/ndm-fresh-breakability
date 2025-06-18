@@ -5,6 +5,7 @@ import {
 } from "@store/reducer/commonComponentSlice";
 import { ModalConfigPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 
+//Custom hook to manage modal dialogs in the application
 export const useModalManager = () => {
   const dispatch = useDispatch();
 
