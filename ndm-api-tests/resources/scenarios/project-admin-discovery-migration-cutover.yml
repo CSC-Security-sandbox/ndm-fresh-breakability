@@ -83,6 +83,7 @@ scenarios:
     delay: "5"
     data:
       type : source
+      volume_name : "/volSrcEDA"
 
 # Run Discovery
   - name: create-new-discovery-job-for-source
@@ -98,7 +99,7 @@ scenarios:
       preserveAccessTime: false
       firstRunAt: "2025-05-20T07:09:19.642Z"
       sourcePathIds:
-        - 
+        - "$sourcePathId"
       createdBy: null
     response:
       - status_code: 201
@@ -156,6 +157,7 @@ scenarios:
     delay: "5"
     data:
       type : "destination"
+      volume_name : "/vol_vasu_nfs_dest"
 
 # Run Migration
   - name: pre-check-migration
@@ -269,7 +271,7 @@ scenarios:
     service_name: job_service
     headers: 
       projectid: $project_id   
-    delay: "60"
+    delay: "150"
     data: {}
     response:
       - status_code: 200

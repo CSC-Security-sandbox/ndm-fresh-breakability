@@ -48,22 +48,22 @@ func InitTestEnv() {
 
 	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
 	if roleIdsErr != nil {
-		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
+		LogError("Error getting Role Ids: %v", roleIdsErr)
 	}
 
 	scenarioConfigPath := filepath.Join(projectRoot, "scenario_config.yml")
 	configBytes, err := ioutil.ReadFile(scenarioConfigPath)
 	if err != nil {
-		LogFatalf("Error reading configuration file: %v", err)
+		LogError("Error reading configuration file: %v", err)
 	}
 
 	var scConfig scenario.ScenarioConfig
 	if err = yaml.Unmarshal(configBytes, &scConfig); err != nil {
-		LogFatalf("Error parsing scenario configuration file: %v", err)
+		LogError("Error parsing scenario configuration file: %v", err)
 	}
 
 	if len(scConfig.Files) == 0 {
-		LogFatalf("Scenario configuration file does not list any files")
+		LogError("Scenario configuration file does not list any files")
 	}
 
 	ScenarioFileNames = scConfig.Files

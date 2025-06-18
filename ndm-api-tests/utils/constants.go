@@ -49,10 +49,10 @@ const (
 	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                                     = "logout-user"
-	NFS_SOURCE_VOLUME                               = "/vol_src_Automation"
-	NFS_DESTINATION_VOLUME                          = "/vol_Dst_Automation"
-	NFS_SOURCE_VOLUME_1                             = "/vol_src_Automation2"
-	NFS_DESTINATION_VOLUME_1                        = "/vol_Dst_Automation2"
+	NFS_SOURCE_VOLUME                               = "/volSrcEDA"
+	NFS_DESTINATION_VOLUME                          = "/vol_vasu_nfs_dest"
+	NFS_SOURCE_VOLUME_1                             = "/volSrcGenomics"
+	NFS_DESTINATION_VOLUME_1                        = "/volEDAs"
 	CREATE_FILESERVER_ENDPOINT                      = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                       = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                       = "/api/v1/jobs/bulk-migrate"
@@ -111,6 +111,7 @@ func init() {
 	NDM_WORKERS_HOST = os.Getenv("NDM_WORKERS_HOST")
 	NDM_WORKERS_PORT = os.Getenv("NDM_WORKERS_PORT")
 	NDM_WORKERS_PASSWORD = os.Getenv("NDM_WORKERS_PASSWORD")
-	SOURCE_HOST_IP = os.Getenv("SOURCE_HOST_IP")
-	DESTINATION_HOST_IP = os.Getenv("DESTINATION_HOST_IP")
+	SOURCE_HOST_IP = "10.192.7.42"
+	DESTINATION_HOST_IP = "10.192.7.42"
+
 }

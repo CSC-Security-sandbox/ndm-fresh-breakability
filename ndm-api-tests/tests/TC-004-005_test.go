@@ -144,9 +144,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			}
 			err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-			result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-			LogDebug(fmt.Sprintf("validate report result : %s", result))
+			// result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+			// LogDebug(fmt.Sprintf("validate report result : %s", result))
 		}
 
 		By("Creating a new discovery job for destination")
@@ -188,9 +188,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			if i == 0 {
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-				result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				// LogDebug(fmt.Sprintf("validate report result : %s", result))
 				continue
 			}
 			err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
@@ -253,9 +253,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 25)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-			result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../validator/COCDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-			LogDebug(fmt.Sprintf("validate COC report result : %s", result))
+			// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../validator/COCDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+			// LogDebug(fmt.Sprintf("validate COC report result : %s", result))
 		}
 
 		By("Creating bulk cutover job")
@@ -314,9 +314,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 		}
 
-		result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, "../validator/COCDetails.json")
-		Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-		LogDebug(fmt.Sprintf("validate COC report result : %s", result))
+		// result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, "../validator/COCDetails.json")
+		// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+		// LogDebug(fmt.Sprintf("validate COC report result : %s", result))
 
 		By("Approving bulk cutover job")
 

@@ -431,7 +431,7 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 	}
 	defer resp.Body.Close()
 
-	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
+	LogDebug("adhoc run response executed ")
 	// Read response
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {

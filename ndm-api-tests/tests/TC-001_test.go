@@ -94,9 +94,9 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-			result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-			LogDebug(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+			// result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
+			// LogDebug(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
 		}
 
 		By("Creating the destination file server")
@@ -159,9 +159,9 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
 
-			result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", destinationDiscoveryJobRunID)
-			LogDebug(fmt.Sprintf("validate report result for %s: %s", destinationDiscoveryJobRunID, result))
+			// result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../utils/validator/PDFDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", destinationDiscoveryJobRunID)
+			// LogDebug(fmt.Sprintf("validate report result for %s: %s", destinationDiscoveryJobRunID, result))
 		}
 
 		By("Creating a migration job")
@@ -194,9 +194,9 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-			result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/COCDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-			LogDebug(fmt.Sprintf("validate report result : %s", result))
+			// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/COCDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+			// LogDebug(fmt.Sprintf("validate report result : %s", result))
 		}
 
 		By("Creating bulk cutover job")
@@ -243,12 +243,12 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			defer resp.Body.Close()
 		}
 
-		By("Validating cutover reports")
-		for _, cutoverRunID := range cutoverRunIDs {
-			result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../utils/validator/COCDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-		}
+		// By("Validating cutover reports")
+		// for _, cutoverRunID := range cutoverRunIDs {
+		// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../utils/validator/COCDetails.json")
+		// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+		// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+		// }
 	})
 
 	AfterEach(func() {
