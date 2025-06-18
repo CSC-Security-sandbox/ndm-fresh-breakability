@@ -22,8 +22,10 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: admin-service
-            path: services/admin-service
+          - name: app-deployment
+            path: app-deployment
+          # - name: admin-service
+          #   path: services/admin-service
           # - name: config-service
           #   path: services/config-service
           # - name: db-writer
@@ -74,12 +76,12 @@ jobs:
       - name: Validate environment
         run: |
           if [ -z "$BLACKDUCK_API_TOKEN" ]; then
-            echo "❌ BLACKDUCK_API_TOKEN is not set. Please add it to GitHub Secrets."
+            echo "❌ ❌ ❌ ❌  BLACKDUCK_API_TOKEN is not set. Please add it to GitHub Secrets.❌ ❌ ❌ ❌ "
             exit 1
           fi
 
           if [ -z "$GITOPS_USER_GITHUB_TOKEN" ]; then
-            echo "❌ GITOPS_USER_GITHUB_TOKEN is not set. Please add it to GitHub Secrets."
+            echo "❌ ❌ ❌ ❌❌ GITOPS_USER_GITHUB_TOKEN is not set. Please add it to GitHub Secrets.❌ ❌ ❌ ❌ "
             exit 1
           fi
 
@@ -100,7 +102,7 @@ jobs:
         run: |
           SERVICE_NAME="${{ matrix.service.name }}"
           SERVICE_PATH="${{ matrix.service.path }}"
-          echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
+          echo "🚀🚀🚀🚀 Starting Black Duck scan for $SERVICE_NAME...🚀🚀🚀🚀"
 
           # Use unique code location to avoid conflicts but keep same version
           CODE_LOCATION_NAME="${PROJECT_NAME}_${SERVICE_NAME}_${VERSION_NAME}"
@@ -111,7 +113,7 @@ jobs:
 
           # Verify the path exists
           if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ Service path $SERVICE_PATH does not exist"
+            echo "❌ ❌ ❌ ❌ Service path $SERVICE_PATH does not exist ❌ ❌ ❌ ❌ "
             exit 1
           fi
 
