@@ -57,13 +57,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		IntroduceDelay(20)
 		sourceParams := CreateServereParams{
 			ConfigName:       "source-file-server",
-			ConfigType:       CONFIG_TYPE_FILE,
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       SERVER_TYPE,
+			ServerType:       ServerTypeOtherNAS,
 			UserName:         USERNAME_ROOT,
-			Password:         PASSWORD_ROOT,
-			Protocol:         PROTOCOL,
-			ProtocolVersion:  PROTOCOL_VERSION_3,
+			Password:         "",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             SOURCE_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -89,13 +89,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
 			ConfigName:       "destination-file-server",
-			ConfigType:       CONFIG_TYPE_FILE,
+			ConfigType:       ConfigTypeFile,
 			ProjectID:        ProjectId,
-			ServerType:       SERVER_TYPE,
+			ServerType:       ServerTypeOtherNAS,
 			UserName:         USERNAME_ROOT,
-			Password:         PASSWORD_ROOT,
-			Protocol:         PROTOCOL,
-			ProtocolVersion:  PROTOCOL_VERSION_3,
+			Password:         "",
+			Protocol:         ProtocolNFS,
+			ProtocolVersion:  ProtocolVersion3,
 			Host:             DESTINATION_HOST_IP,
 			Workers:          []string{workerId1, workerId2},
 			WorkingDirectory: "",
@@ -127,7 +127,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -163,13 +163,11 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Source discovery job %d did not complete", i+1))
 
 			if i == 0 {
-				// result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
-				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				// LogDebug(fmt.Sprintf("validate report result : %s", result))
+				result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
+				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
 		}
-
-		// return
 
 		By("Creating a new discovery job for destination")
 		destinationJobParams := DiscoveryJobParams{
@@ -177,7 +175,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			ExcludeOlderThan:         nil,
 			ExcludeFilePatterns:      "",
 			PreserveAccessTime:       false,
-			FirstRunAt:               currentDateTime,
+			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
 			WorkflowExecutionTimeout: "60s",
 			WorkflowTaskTimeout:      "30s",
@@ -214,13 +212,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		}
 
 		// Validate report for the first job run ID
-		// result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
-		// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-		// LogDebug(fmt.Sprintf("validate report result : %s", result))
+		result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
+		Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+		LogDebug(fmt.Sprintf("validate report result : %s", result))
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
-			FirstRunAt:         currentDateTime,
+			FirstRunAt:         GetCurrentUTCTimestamp(),
 			FutureRunSchedule:  "",
 			SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 			DestinationPathIDs: []string{destinationPathID, destinationPathID1},
@@ -247,9 +245,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-			// res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")
-			// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-			// LogDebug(fmt.Sprintf("validate report result : %s", res))
+			res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")
+			Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+			LogDebug(fmt.Sprintf("validate report result : %s", res))
 		}
 
 		By("Creating bulk cutover job")
@@ -287,30 +285,6 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
 			Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 		}
-		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		// Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		// defer resp.Body.Close()
-		// idCutover1 = getJobsResp.JobRuns[0].JobRunId
-		// WaitForJobState(idCutover1, BLOCKED_JOBRUN)
-		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID1, headers)
-		// Expect(err).NotTo(HaveOccurred(), "Cutover1 job did not reach BLOCKED state")
-		// Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		// Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		// Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		// Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
-
-		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		// Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-		// defer resp.Body.Close()
-
-		// idCutover2 = getJobsResp.JobRuns[0].JobRunId
-		// WaitForJobState(idCutover2, BLOCKED_JOBRUN)
-		// getJobsResp, resp, err = GetJobRunDetails(jobConfigID2, headers)
-		// Expect(err).NotTo(HaveOccurred(), "Cutover2 job did not reach BLOCKED state")
-		// Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		// Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-		// Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-		// Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 
 		By("Approving bulk cutover job")
 		resp, err = ApproveRejectBulkCutoverJob(idCutovers[0], "APPROVED", headers)
@@ -318,9 +292,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 		WaitForJobState(idCutovers[0], APPROVED_JOBRUN)
-		// result, err = ValidateReport(idCutovers[0], JobTypeCutover, "../validator/COCDetails.json")
-		// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-		// LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
+		result, err = ValidateReport(idCutovers[0], JobTypeCutover, "../validator/COCDetails.json")
+		Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+		LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
 
 		resp, err = ApproveRejectBulkCutoverJob(idCutovers[1], "APPROVED", headers)
 		Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
