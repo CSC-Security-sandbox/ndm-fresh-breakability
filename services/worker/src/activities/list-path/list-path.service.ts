@@ -2,6 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigService } from '@nestjs/config';
+import {
+  CreatApiResponse,
+  RESPONSESTATUS,
+} from '../../workflows/utils/response-handler/create-api-response';
 
 @Injectable()
 export class ListPathActivity {
@@ -13,7 +17,11 @@ export class ListPathActivity {
     this.workerId = this.configService.get('worker.workerId');
   }
 
-  async listPath(traceId: string, protocolType: string, payload: any): Promise<any> {
+  async listPath(
+    traceId: string,
+    protocolType: string,
+    payload: any,
+  ): Promise<any> {
     this.logger.log(
       `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
     );
@@ -29,11 +37,24 @@ export class ListPathActivity {
     };
 
     try {
-      const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol: Protocol = Protocols.getProtocol(
+        ProtocolTypes[protocolType],
+      );
       response.paths = await protocol.listPaths(traceId, payload);
-      return response;
+      const result = CreatApiResponse.apiResponse(
+        RESPONSESTATUS.SUCCESS,
+        response,
+      );
+     // console.log('result in the Pathsss', result);
+      return result;
     } catch (error) {
-      return {
+      console.log('error on the list pathhhs', error);
+      const result = CreatApiResponse.apiResponse(
+        RESPONSESTATUS.ERROR,
+        response,
+      );
+      console.log('result in the Pathsss', result);
+      return; /*{
         traceId: traceId,
         status: 'error',
         protocolType: protocolType,
@@ -41,7 +62,7 @@ export class ListPathActivity {
         workerId: this.workerId,
         paths: [],
         message: `Failed to List Path for ${payload.hostname} of type ${protocolType}: ${error}`,
-      };
+      };*/
     }
   }
 }

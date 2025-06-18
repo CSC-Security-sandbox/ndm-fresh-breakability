@@ -180,12 +180,17 @@ export const useFileServerForm = () => {
 
     try {
       const resp = await validateConnectionMutationApi(payload).unwrap();
+      console.log('before return Promisrrrrr', resp)
 
       return new Promise((resolve) => {
         interval.current = setInterval(async () => {
+          console.log('>SDADASDASDASDASDASDASDASDASDSADASDSADAS',await checkConnectionRespApi({
+            id: resp?.data?.items?.workflowId,
+          }));
           const data = await checkConnectionRespApi({
-            id: resp?.workflowId,
+            id: resp?.data?.items?.workflowId,
           }).unwrap();
+          console.log('inside the Ptomise USer File Server', data )
           if (data?.status === ValidateConnectionStatus.COMPLETED) {
             const errorMessageList = await handleConnectionValidationComplete(
               data
@@ -224,7 +229,7 @@ export const useFileServerForm = () => {
             const error = new Error(message);
             showErrorOnFailure(error);
           }
-        }, 2000);
+        }, 50000);
       });
     } catch (error: any) {
       showErrorOnFailure(error);
@@ -244,22 +249,26 @@ export const useFileServerForm = () => {
     const smbFailedWorkers: string[] = [];
     const newErrorMessageList: ErroredWorkersDetailsType[] = [];
 
-    status.completed.forEach((row) => {
+    status.completed.forEach((row:any) => {
+
       if (row?.status === WorkerConnectionStatus.SUCCESS) {
-        if (row?.protocolType === ProtocolType.NFS)
-          nfsValidatedWorkers.push(row?.workerId);
-        else if (row?.protocolType === ProtocolType.SMB)
-          smbValidatedWorkers.push(row?.workerId);
-      } else if (row.status === WorkerConnectionStatus.ERROR) {
+        const rowData= row?.data;
+        if (rowData?.protocolType === ProtocolType.NFS)
+          nfsValidatedWorkers.push(rowData?.workerId);
+        else if (rowData?.protocolType === ProtocolType.SMB)
+          smbValidatedWorkers.push(rowData?.workerId);
+      } else if (row?.status === WorkerConnectionStatus.ERROR) {
+        const errorDetails= row?.error;
+        console.log('row>>>>>>>>>>>>>>>', errorDetails)
         newErrorMessageList.push({
-          errorMessage: row?.message || "Unknown-Error",
-          workerId: row?.workerId,
-          workerName: workerIdWithName?.[row?.workerId] || "workerName ",
+          errorMessage: errorDetails?.displayMessage || "Unknown-Error",
+          workerId: errorDetails?.details.workerId,
+          workerName: workerIdWithName?.[errorDetails?.details?.workerId] || "workerName ",
         });
-        if (row?.protocolType === ProtocolType.NFS)
-          nfsFailedWorkers.push(row?.workerId);
-        else if (row?.protocolType === ProtocolType.SMB)
-          smbFailedWorkers.push(row?.workerId);
+        if (errorDetails?.details?.protocolType === ProtocolType.NFS)
+          nfsFailedWorkers.push(errorDetails?.details?.workerId);
+        else if (errorDetails?.details?.protocolType === ProtocolType.SMB)
+          smbFailedWorkers.push(errorDetails?.details?.workerId);
       }
     });
     setErrorMessageList(newErrorMessageList);

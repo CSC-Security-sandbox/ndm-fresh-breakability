@@ -16,13 +16,16 @@ export async function ValidateWorkerConnectionWorkflow(
   log( args.traceId, `Starting ValidateWorkerConnectionWorkflow with args: ${JSON.stringify(args)}`);
   const results = await Promise.all(
     fileServer.protocols.map(async (protocol) => {
-      return await validateActivity(args.traceId, protocol.type, {
-        hostname: fileServer.hostname,
-        ...protocol,
-      },
-      args.feature
+      const res = await validateActivity(args.traceId, protocol.type, {
+          hostname: fileServer.hostname,
+          ...protocol,
+        },
+        args.feature
       );
+      console.log('result of await ',res)
+      return res;
     }),
   );
+  //console.log('resukt ibs the workflorrrrr', JSON.stringify(results) )
   return results;
 }

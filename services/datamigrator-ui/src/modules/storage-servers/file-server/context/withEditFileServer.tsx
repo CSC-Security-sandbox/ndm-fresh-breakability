@@ -20,6 +20,7 @@ import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function withEditFileServer(WrappedComponent: ComponentType<any>) {
+  console.log("withEditFileServer HOC called",WrappedComponent);
   return function WithEditFileServerComponent(props: any) {
     const nfsAndSmbWorkersList: string[] = [];
     const nfsAndSmbVolumeList: MountPathsOptionsListType[] = [];
@@ -33,8 +34,11 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
     const fileServerForm = useFileServerForm();
     const [updateConfigurationApi] = useUpdateFileServerMutation();
 
+
+    console.log('updateConfigurationApi:', updateConfigurationApi);
     // API
     const [getFileServerDetailsByIdApi] = useLazyGetFileServerByIdQuery();
+    console.log('getFileServerDetailsByIdApi:', getFileServerDetailsByIdApi);
 
     // GET THE FILE SERVER DETAILS TO EDIT
     useEffect(() => {
@@ -49,7 +53,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
               notify.error("Error Fetching Details.");
               console.error(error);
             });
-          setEditingFileServerDetails(resp);
+          setEditingFileServerDetails(resp['data']?.items);
         })();
       }
     }, [fileServerForm?.fileServerId]);
@@ -164,7 +168,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         fileServerForm.hostCredentialsForm,
         fileServerForm.jobConfigForm
       );
-
+console.log('payload handleEditConfiguration:', payload);
       try {
         updateConfigurationApi({
           id: editingFileServerDetails?.id,
@@ -172,6 +176,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         })
           .unwrap()
           .then((resp) => {
+            console.log('Response from update configuration API:', resp);
             if (resp.error) {
               throw new Error("Error creating file server");
             }

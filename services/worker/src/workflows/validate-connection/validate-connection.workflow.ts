@@ -1,6 +1,7 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
 import { WorkFlows } from "src/work-manager/work-manager.types";
 import { ValidateWorkerConnectionWorkflow } from "./validate-worker-connection.workflow";
+import { ApiResponse, CreatApiResponse, RESPONSESTATUS } from '../utils/response-handler/create-api-response';
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
@@ -13,7 +14,8 @@ async function log(traceId: string, message: string) {
  * @returns Returns the result of all child workflows
  */
 export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) => {
-  log( traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,);
+//  log( traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,);
+  console.log('PayLOAD<<<<<<<<',payload, traceId, options);
   const responseArray = await Promise.all(
     payload.workerIds.map((workerId) =>
       executeChild(ValidateWorkerConnectionWorkflow, {
@@ -32,10 +34,16 @@ export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) =
       }),
     ),
   );
-  
+/*  console.log('REsponseeeeArray', responseArray);
+  const apiResponse: ApiResponse = CreatApiResponse.apiResponse(
+    RESPONSESTATUS.ERROR,
+    responseArray,
+  );
+  console.log('responseeeeee', apiResponse);*/
   const result = responseArray.flat();
   log(
     traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
   );
+  console.log('PostFlat Arry', result);
   return result;
 }

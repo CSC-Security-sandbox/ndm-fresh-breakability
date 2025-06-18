@@ -10,44 +10,60 @@ const { listPath: listPathActivity } = proxyActivities<ListPathActivity>({
   startToCloseTimeout: '30s',
 });
 
-const { validateWorkingDirectory: workingDirectoryActivity } = proxyActivities<ValidateWorkingDirectoryActivity>({
-  startToCloseTimeout: '30s',
-});
+const { validateWorkingDirectory: workingDirectoryActivity } =
+  proxyActivities<ValidateWorkingDirectoryActivity>({
+    startToCloseTimeout: '30s',
+  });
 
 export async function ValidateWorkingDirectoryWorkerWorkflow(
   args: any,
 ): Promise<any> {
-  log(args.traceId, `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
+  log(
+    args.traceId,
+    `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`,
+  );
   const results = await Promise.all(
     args.payload.listPathPayload.map(async (data: any) => {
-      return await listPathActivity(args.traceId, data.type, {
+      const result = await listPathActivity(args.traceId, data.type, {
         hostname: data.host,
         username: data.username,
-        password: data.password
+        password: data.password,
       });
+      return result;
     }),
+  );
+  console.log(
+    'Results in the ValidateWorkingDirectoryWorkerWorkflow,',
+    results,
   );
 
   let paths = [];
 
-  for (let data of results) {
-    paths = [...data.paths];
+  for (const data of results) {
+    const patData = data['data'];
+    paths = [...patData.paths];
   }
-  
-  const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
 
-  if(exportPathWorkingDirectoryProvided) {
+  const exportPathWorkingDirectoryProvided =
+    args?.payload?.exportPath?.length > 0;
+
+  if (exportPathWorkingDirectoryProvided) {
     const exportPath = paths.includes(args.payload.exportPath);
     args.payload['exportPathPresent'] = exportPath;
   }
 
-  args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
+  args.payload['exportPathWorkingDirectoryProvided'] =
+    exportPathWorkingDirectoryProvided;
 
-  if(!exportPathWorkingDirectoryProvided) {
+  if (!exportPathWorkingDirectoryProvided) {
     args.payload['fetchedPath'] = paths[0];
   }
-  args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
+  args.payload['exportPathWorkingDirectoryProvided'] =
+    exportPathWorkingDirectoryProvided;
 
-  log(args.traceId, `Starting ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
+  log(
+    args.traceId,
+    `Starting ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`,
+  );
   return await workingDirectoryActivity(args.traceId, args.payload);
 }
