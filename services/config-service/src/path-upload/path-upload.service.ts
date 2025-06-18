@@ -102,8 +102,11 @@ export class PathUploadService {
       uploadStats.newPaths++;
     }
 
-    // all the paths with fileServerId from the volume entity which are not in the uploadData, increment noLongerAvailablePaths count by number of such paths
-    
+    /*
+      all the paths with fileServerId from the 
+      volume entity which are not in the uploadData,
+      increment noLongerAvailablePaths count by number of such paths
+    */
     existingPaths.filter(async path => {
       const isPathNoLongerAvailable = !parsedData.some(row => row[0].trim() === path.volumePath);
       if (isPathNoLongerAvailable) {
@@ -118,7 +121,6 @@ export class PathUploadService {
           action: UploadPathAction.DELETE,
           createdBy: userDetails?.user?.id || null,
         });
-        // await this.volumeRepo.update({ id: path.id }, { isDisabled: true })
         return true;
       }
       return false;

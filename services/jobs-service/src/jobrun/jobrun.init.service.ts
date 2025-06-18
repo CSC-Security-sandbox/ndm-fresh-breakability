@@ -109,7 +109,7 @@ export class JobRunInitService {
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
 
     // check if source and target paths are flagged as valid
-    const isPathValid = (details.connection.sourceCredential.isValidPath) || (details.connection.targetCredential && details.connection.targetCredential.isValidPath)
+    const isPathValid = (details.connection?.sourceCredential?.isValidPath) || (details.connection?.targetCredential?.isValidPath)
     if(!isPathValid) {
       this.logger.warn(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);
       throw new NotFoundException(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);

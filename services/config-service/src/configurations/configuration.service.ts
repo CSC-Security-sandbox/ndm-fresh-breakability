@@ -1195,7 +1195,10 @@ export class ConfigurationService {
       return true; // No volumes means no jobs, so refresh is possible
     }
 
-    // fetch all the job configurations that has any of the volumeIds in their sourcePathId or targetPathId and status is ACTIVE
+    /*
+      fetch all the job configurations that has any of the volumeIds in
+      their sourcePathId or targetPathId and status is ACTIVE
+    */
     const jobConfigs = await this.jobConfigRepo
       .createQueryBuilder('jobConfig')
       .where('jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)', { volumeIds })

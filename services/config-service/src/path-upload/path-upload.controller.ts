@@ -10,8 +10,8 @@ import { UserDetails } from '../configurations/configuration.types';
 import { PathUploadService } from './path-upload.service';
 
 
-@ApiTags('Path Uploads')
-@Controller('path-upload')
+@ApiTags('Paths Upload')
+@Controller('paths-upload')
 export class PathUploadController {
     
     constructor(private pathUploadService: PathUploadService) {}
