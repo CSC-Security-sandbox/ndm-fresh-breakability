@@ -1,5 +1,6 @@
 import { SMBProtocol } from './smb.protocol';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
+import * as fs from 'fs';
 import {
   handleConnectionError,
   parseLinMacShares,
@@ -338,172 +339,268 @@ describe('SMBProtocol', () => {
   });
 
 
-describe('SMBProtocol', () => {
-  let smbProtocol: SMBProtocol;
-  let loggerMock: any;
+  describe('SMBProtocol', () => {
+    let smbProtocol: SMBProtocol;
+    let loggerMock: any;
 
-  const mockTraceId = 'test-trace-id';
-  const mockPayload: ProtocolPayload = {
-    hostname: 'test-host',
-    username: 'test-user',
-    protocolVersion: '3.0',
-    path: '/test/path'
-  };
-
-  beforeEach(() => {
-    loggerMock = {
-      log: jest.fn(),
-      error: jest.fn(),
-      info: jest.fn(),
-      debug: jest.fn(),
-      warn: jest.fn(),
-      verbose: jest.fn()
+    const mockTraceId = 'test-trace-id';
+    const mockPayload: ProtocolPayload = {
+      hostname: 'test-host',
+      username: 'test-user',
+      protocolVersion: '3.0',
+      path: '/test/path'
     };
-    smbProtocol = new SMBProtocol();
-    
-    (smbProtocol as any).logger = loggerMock;
-    (smbProtocol as any).platform = 'win32';
-    (smbProtocol as any).workerId = 'test-worker-id';
 
-    jest.spyOn(smbProtocol as any, 'executeCommand').mockImplementation();
-    jest.spyOn(smbProtocol as any, 'getCommandPattern').mockReturnValue('mock-command-pattern');
-    
-    jest.spyOn(console, 'log').mockImplementation();
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('getTotalSizeWindows', () => {
-    it('should successfully return total size', async () => {
-      const mockResponse = { message: '1048576' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-
-      expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
-        mockTraceId,
-        ProtocolTypes.SMB,
-        mockPayload,
-        'mock-command-pattern',
-        'SMB Mounted Folder size'
-      );
-
-      expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.MOUNTED_FOLDER_SIZE);
-
-      expect(loggerMock.debug).toHaveBeenCalledWith('inside getTotalUsedMemory method for windows');
-      expect(loggerMock.log).toHaveBeenCalledWith(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(mockResponse)}`);
-      expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
-
-      expect(result).toBe(1048576);
-    });
-
-    it('should handle string with whitespace', async () => {
-      const mockResponse = { message: '  2097152  ' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-
-      expect(result).toBe(2097152);
-    });
-
-    it('should return 0 for non-numeric response', async () => {
-      const mockResponse = { message: 'not a number' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-      expect(result).toBe(0);
-    });
-
-    it('should return 0 for empty response', async () => {
-      const mockResponse = { message: '' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
-      expect(result).toBe(0);
-    });
-  });
-
-  describe('getAvailableDiskSpace', () => {
-    it('should successfully return available disk space', async () => {
-      const mockResponse = { message: '1073741824' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
-
-      expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
-        mockTraceId,
-        ProtocolTypes.NFS,
-        mockPayload,
-        'mock-command-pattern',
-        'SMB Available Disk Space'
-      );
-
-      expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
-
-      expect(loggerMock.debug).toHaveBeenCalledWith('inside getAvailableDiskSpace method for windows');
-      expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`);
-      expect(loggerMock.log).toHaveBeenCalledWith(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(mockResponse)}`);
-      expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
-      expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at ${mockPayload.path}: 1073741824 bytes`);
-
-      expect(result).toEqual({ size: 1073741824 });
-    });
-
-    it('should handle string with whitespace', async () => {
-      const mockResponse = { message: '  2147483648  ' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
-
-      expect(result).toEqual({ size: 2147483648 });
-    });
-
-    it('should handle undefined path in payload', async () => {
-      const payloadWithoutPath: ProtocolPayload = {
-        hostname: 'test-host',
-        username: 'test-user',
-        protocolVersion: '3.0'
+    beforeEach(() => {
+      loggerMock = {
+        log: jest.fn(),
+        error: jest.fn(),
+        info: jest.fn(),
+        debug: jest.fn(),
+        warn: jest.fn(),
+        verbose: jest.fn()
       };
+      smbProtocol = new SMBProtocol();
 
-      const mockResponse = { message: '3221225472' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+      (smbProtocol as any).logger = loggerMock;
+      (smbProtocol as any).platform = 'win32';
+      (smbProtocol as any).workerId = 'test-worker-id';
 
-      const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, payloadWithoutPath);
+      jest.spyOn(smbProtocol as any, 'executeCommand').mockImplementation();
+      jest.spyOn(smbProtocol as any, 'getCommandPattern').mockReturnValue('mock-command-pattern');
 
-      expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: undefined`);
-      expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at undefined: 3221225472 bytes`);
-
-      expect(result).toEqual({ size: 3221225472 });
+      jest.spyOn(console, 'log').mockImplementation();
     });
 
-    it('should handle non-numeric response', async () => {
-      const mockResponse = { message: 'not a number' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
-
-      const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
-      expect(result.size).toBeNaN();
+    afterEach(() => {
+      jest.clearAllMocks();
     });
 
-    it('should verify NFS protocol type is used', async () => {
-      const mockResponse = { message: '4294967296' };
-      (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+    describe('getTotalSizeWindows', () => {
+      it('should successfully return total size', async () => {
+        const mockResponse = { message: '1048576' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-      await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
 
-      expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
-        mockTraceId,
-        ProtocolTypes.NFS,
-        mockPayload,
-        'mock-command-pattern',
-        'SMB Available Disk Space'
-      );
+        expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
+          mockTraceId,
+          ProtocolTypes.SMB,
+          mockPayload,
+          'mock-command-pattern',
+          'SMB Mounted Folder size'
+        );
+
+        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.MOUNTED_FOLDER_SIZE);
+
+        expect(loggerMock.debug).toHaveBeenCalledWith('inside getTotalUsedMemory method for windows');
+        expect(loggerMock.log).toHaveBeenCalledWith(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(mockResponse)}`);
+        expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
+
+        expect(result).toBe(1048576);
+      });
+
+      it('should handle string with whitespace', async () => {
+        const mockResponse = { message: '  2097152  ' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+
+        expect(result).toBe(2097152);
+      });
+
+      it('should return 0 for non-numeric response', async () => {
+        const mockResponse = { message: 'not a number' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        expect(result).toBe(0);
+      });
+
+      it('should return 0 for empty response', async () => {
+        const mockResponse = { message: '' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        expect(result).toBe(0);
+      });
+    });
+
+    describe('getAvailableDiskSpace', () => {
+      it('should successfully return available disk space', async () => {
+        const mockResponse = { message: '1073741824' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+
+        expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
+          mockTraceId,
+          ProtocolTypes.NFS,
+          mockPayload,
+          'mock-command-pattern',
+          'SMB Available Disk Space'
+        );
+
+        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
+
+        expect(loggerMock.debug).toHaveBeenCalledWith('inside getAvailableDiskSpace method for windows');
+        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`);
+        expect(loggerMock.log).toHaveBeenCalledWith(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(mockResponse)}`);
+        expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
+        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at ${mockPayload.path}: 1073741824 bytes`);
+
+        expect(result).toEqual({ size: 1073741824 });
+      });
+
+      it('should handle string with whitespace', async () => {
+        const mockResponse = { message: '  2147483648  ' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+
+        expect(result).toEqual({ size: 2147483648 });
+      });
+
+      it('should handle undefined path in payload', async () => {
+        const payloadWithoutPath: ProtocolPayload = {
+          hostname: 'test-host',
+          username: 'test-user',
+          protocolVersion: '3.0'
+        };
+
+        const mockResponse = { message: '3221225472' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, payloadWithoutPath);
+
+        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: undefined`);
+        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at undefined: 3221225472 bytes`);
+
+        expect(result).toEqual({ size: 3221225472 });
+      });
+
+      it('should handle non-numeric response', async () => {
+        const mockResponse = { message: 'not a number' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+        expect(result.size).toBeNaN();
+      });
+
+      it('should verify NFS protocol type is used', async () => {
+        const mockResponse = { message: '4294967296' };
+        (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
+
+        await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+
+        expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
+          mockTraceId,
+          ProtocolTypes.NFS,
+          mockPayload,
+          'mock-command-pattern',
+          'SMB Available Disk Space'
+        );
+      });
+
+      describe('SMBProtocol - mountPath & unmountPath', () => {
+        let smbProtocol: SMBProtocol;
+        let loggerMock: any;
+        let fsMock: any;
+
+        const mockTraceId = 'mount-trace-id';
+        const mockPayload = {
+          hostname: 'host',
+          username: 'user',
+          password: 'pass',
+          protocolVersion: 'SMB2',
+          mountBasePath: '/mnt',
+          jobRunId: 'job123'
+        };
+
+        beforeEach(() => {
+          loggerMock = {
+            log: jest.fn(),
+            error: jest.fn(),
+            info: jest.fn(),
+            debug: jest.fn(),
+            warn: jest.fn(),
+            verbose: jest.fn()
+          };
+          smbProtocol = new SMBProtocol();
+          (smbProtocol as any).logger = loggerMock;
+          (smbProtocol as any).platform = 'win32';
+          (smbProtocol as any).workerId = 'test-worker-id';
+
+          jest.spyOn(smbProtocol as any, 'executeCommand').mockResolvedValue({ message: 'mounted successfully.' });
+          jest.spyOn(smbProtocol as any, 'getCommandPattern').mockImplementation((key: string) => key);
+
+          // Mock fs
+          fsMock = {
+            existsSync: jest.fn(),
+            mkdirSync: jest.fn()
+          };
+          jest.spyOn(fs, 'existsSync').mockImplementation(fsMock.existsSync);
+          jest.spyOn(fs, 'mkdirSync').mockImplementation(fsMock.mkdirSync);
+        });
+
+        afterEach(() => {
+          jest.clearAllMocks();
+        });
+
+        describe('mountPath', () => {
+          it('should create directory and mount path successfully', async () => {
+            fsMock.existsSync.mockReturnValue(false);
+            fsMock.mkdirSync.mockImplementation(() => undefined);
+
+            // Simulate executeCommand for mount and create path link
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'mounted successfully.' }) // mount
+              .mockResolvedValueOnce({ message: 'link created successfully.' }); // create path link
+
+            const payload = { ...mockPayload };
+            const result = await smbProtocol.mountPath(mockTraceId, payload);
+
+            expect(fs.existsSync).toHaveBeenCalledWith('/mnt/job123');
+            expect(fs.mkdirSync).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
+            expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] Directory created: /mnt/job123`);
+            expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
+              mockTraceId,
+              ProtocolTypes.SMB,
+              payload,
+              CommandPattern.MOUNT_PATH,
+              'SMB Mount'
+            );
+            expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
+              mockTraceId,
+              ProtocolTypes.SMB,
+              payload,
+              CommandPattern.CREATE_PATH_LINK,
+              'SMB Show Shares'
+            );
+            expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] link created successfully.`);
+            expect(result).toEqual({ message: 'link created successfully.' });
+          });
+
+          it('should handle error during directory creation', async () => {
+            fsMock.existsSync.mockReturnValue(false);
+            const error = new Error('mkdir failed');
+            fsMock.mkdirSync.mockImplementation(() => { throw error; });
+
+            const payload = { ...mockPayload };
+            const result = await smbProtocol.mountPath(mockTraceId, payload);
+
+            expect(loggerMock.error).toHaveBeenCalledWith(`[${mockTraceId}] Error creating directory------?: ${error.message}`);
+            expect(result).toEqual({
+              traceId: mockTraceId,
+              status: 'error',
+              protocolType: ProtocolTypes.NFS,
+              hostname: payload.hostname,
+              workerId: (smbProtocol as any).workerId,
+              message: `[${mockTraceId}] Error creating directory: ${error.message}`,
+            });
+          });
+        });
+      });
     });
   });
 });
-
-
-});
-
-
