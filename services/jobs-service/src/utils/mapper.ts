@@ -1,15 +1,28 @@
+
 import * as parser from 'cron-parser';
-import { JobType } from "src/constants/enums";
-``
-export const nextDate = (jobType: string, runDate: Date, cron: string) => {
-    switch(jobType) {
-        case JobType.DISCOVER:
-            return runDate && runDate > new Date() ? runDate : null;
-        case JobType.CUT_OVER:
-                return runDate && runDate > new Date() ? runDate : null;
-        default:
-            if(runDate && runDate > new Date())
-                return runDate;
-            return cron ? parser.parseExpression(cron).next().toDate(): null
+import { JobType } from 'src/constants/enums';
+import { Logger } from "@nestjs/common";
+const logger = new Logger('nextDate'); 
+
+export const nextDate = (
+  jobType: string,
+  runDate: Date | null,
+  cron: string | null
+): Date | null => {    
+  try {
+    const now = new Date();
+
+    if (runDate instanceof Date && runDate > now) {
+      return runDate;
     }
-}
+
+    if (jobType === JobType.MIGRATE && cron) {
+      const interval = parser.parseExpression(cron, { currentDate: now });
+      return interval.next().toDate();
+    }
+    return null;
+  } catch (error) {
+    logger.error('Error parsing cron expression:', (error as Error).message);
+    return null;
+  }
+};
