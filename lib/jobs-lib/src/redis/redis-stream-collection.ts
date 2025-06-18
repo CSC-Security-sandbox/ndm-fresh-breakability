@@ -198,6 +198,22 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
+  async ackAndPurge(ids: string[], groupType: GroupReaderType): Promise<boolean> {
+    const multi = this.redisClient.multi();
+    for (const id of ids) {
+      multi.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, id);
+      multi.xDel(this.streamKey, id);
+    }
+    try {
+      const result = await multi.exec();
+      // Return true if result is an array and all commands succeeded (not null)
+      return Array.isArray(result) && result.every(res => res !== null);
+    } catch (error) {
+      console.error('Redis multi.exec error:', error);
+      return false;
+    }
+  }
+
   async getLength(): Promise<number> {
     try{
       return this.redisClient.xLen(this.streamKey);

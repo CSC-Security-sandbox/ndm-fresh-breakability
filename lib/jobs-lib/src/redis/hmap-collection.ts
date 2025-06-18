@@ -21,3 +21,4 @@ export interface WorkerRunningTaskMapCollection<T extends Serializable> {
 
 export interface RunningScanTaskCollection extends WorkerRunningTaskMapCollection<any> {}
 export interface RunningSyncTaskCollection extends WorkerRunningTaskMapCollection<any> {}
+export interface TaskMap extends WorkerRunningTaskMapCollection<any> {}
