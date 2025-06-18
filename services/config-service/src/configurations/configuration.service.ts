@@ -174,8 +174,7 @@ export class ConfigurationService {
       }
       return { serverConfig, total };
     } catch (error) {
-      this.logger.error(`Error fetching configurations: ${error.message}`);
-      throw new InternalServerErrorException('Failed to fetch configurations');
+      throw new Error(error);
     }
   }
 

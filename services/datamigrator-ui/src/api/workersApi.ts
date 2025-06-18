@@ -17,7 +17,7 @@ export const workersApi = createApi({
 
       // THIS IS RESP MODIFICATION DUE TO BLUEXP SELECT WORKS ON ID. ON VALIDATE CONNECTION
       transformResponse: (response: any) => {
-        return response?.data?.map((worker: GetAllWorkersApiType) => {
+        return response?.data?.items.map((worker: GetAllWorkersApiType) => {
           return {
             ...worker,
             id: worker?.workerId,

@@ -88,7 +88,7 @@ export class WorkersService {
       data = await this.WorkerEntity.find(findOptions);
       total = await this.WorkerEntity.count({ where: updateFilter });
     }
-    const workerWithStatusUpdated = this.updateWorkerStatus(data);
-    return { data: workerWithStatusUpdated, total };
+    const workerWithStatusUpdated = this.updateWorkerStatus(data);console.log("Array.isArray(data)", workerWithStatusUpdated,Array.isArray(workerWithStatusUpdated));
+    return { items:workerWithStatusUpdated, total };
   }
 }
