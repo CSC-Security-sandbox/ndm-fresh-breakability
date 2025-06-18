@@ -28,7 +28,7 @@ export class RedisJobContextProvider implements JobContextProvider {
       jobRunId,
       this.redisClient,
       jobConfig,
-      jobStatus,
+      jobStatus,  
       jobState
     );
     await jobContext.init();
