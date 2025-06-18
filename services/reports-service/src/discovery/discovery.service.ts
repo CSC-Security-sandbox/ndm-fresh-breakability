@@ -65,7 +65,7 @@ export class DiscoveryService {
       const pdfBuffer = await this.generatePdfFromData(reportData);
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
-      fs.writeFileSync(pdfFilePath, pdfBuffer);
+      fs.writeFileSync(pdfFilePath, pdfBuffer); //two
 
       return {
         message: "Report generated successfully",
@@ -216,7 +216,7 @@ export class DiscoveryService {
 
   const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
 
-  fs.writeFileSync(filePath, csvContent);
+  fs.writeFileSync(filePath, csvContent); //one
   console.log(`Data has been written to ${filePath}`);
 }
 
