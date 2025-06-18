@@ -1,7 +1,6 @@
 import {
   Injectable,
   InternalServerErrorException,
-  Logger,
   BadRequestException,
 } from '@nestjs/common';
 import axios from 'axios';
@@ -13,15 +12,21 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { WorkerRegisterConfig } from 'src/config/workerregister.config';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { RequestContext } from '../common/request-context';
 
 @Injectable()
 export class WorkerRegistrationService {
-  private readonly logger = new Logger(WorkerRegistrationService.name);
+  private readonly logger;
 
   readonly keycloak: KeycloakAdminConfig;
   readonly workerRegisterConfig: WorkerRegisterConfig;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private loggerFactory: LoggerFactory,
+  ) {
+    this.logger = this.loggerFactory.create(WorkerRegistrationService.name);
     this.keycloak =
       this.configService.get<KeycloakAdminConfig>('keycloakAdmin');
     this.workerRegisterConfig =
@@ -42,7 +47,8 @@ export class WorkerRegistrationService {
       );
       return response.data.access_token;
     } catch (error) {
-      this.logger.error('Failed to fetch admin access token', error);
+      const traceId = RequestContext.getTraceId();
+      this.logger.error('Failed to fetch admin access token', traceId, error.message);
       throw new InternalServerErrorException('Could not authenticate admin');
     }
   }
@@ -77,7 +83,8 @@ export class WorkerRegistrationService {
         `Failed to register worker with status code ${response.status}`,
       );
     } catch (error) {
-      this.logger.error('Error during worker registration', error);
+      const traceId = RequestContext.getTraceId();
+      this.logger.error('Error during worker registration', traceId, error.message);
       if (axios.isAxiosError(error) && error.response)
         throw new InternalServerErrorException(error.response.data);
       throw new InternalServerErrorException(

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module,MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AccountModule } from './account/account.module';
@@ -22,6 +22,8 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
 import { SettingModule } from './setting/setting.module';
 import { GlobalSettings } from './entities/global-setting.entity';
 import { EmailModule } from './email/email.module';
+import { RequestContextMiddleware } from './common/middlewares/request-context.middleware';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
@@ -47,8 +49,13 @@ import { EmailModule } from './email/email.module';
     WorkerRegistrationModule,
     SettingModule,
     EmailModule,
+    LoggerModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
