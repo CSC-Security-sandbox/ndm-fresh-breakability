@@ -222,7 +222,7 @@ export class JobRunService {
         throw new Error(`Invalid file path: ${filePath}`);
       }
 
-      if (fs.existsSync(filePath)) return filePath; //three
+      if (fs.existsSync(filePath)) return filePath;
       await this.csvService.generateCsv(filePath, jobRunId);
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -230,10 +230,10 @@ export class JobRunService {
         await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
       }
 
-      if (!fs.existsSync(filePath)) //two
+      if (!fs.existsSync(filePath))
         throw new Error(`File not found: ${filePath}`);
 
-      const fileBuffer = fs.readFileSync(filePath);  //one
+      const fileBuffer = fs.readFileSync(filePath);
       const reportData = {
         filePath,
         size: fileBuffer.length,
