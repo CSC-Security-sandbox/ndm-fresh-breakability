@@ -26,6 +26,5 @@ export interface ScanDirectoryOutput {
     jobRunId: string;
     fileCount: number;
     dirCount: number;
-    command: Command[];
     subDirs: string[];
 }

@@ -34,17 +34,17 @@ export class MigrateScanService {
         return  await fs.promises.readdir(directoryPath);
     
     }
-    async publishMigrationTask({ jobContext, commands}: PublishMigrationTaskInput)  {
-        const task = buildTask(TaskType.MIGRATE, jobContext.jobRunId, jobContext, commands);
-        jobContext.migrateTask.lastId  = await jobContext.appendToMigrationTask(task);
-        this.logger.debug(`[${jobContext.jobRunId}] Task published: ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
+    async publishCommands({ jobContext, commands}: PublishMigrationTaskInput)  {
+        await jobContext.publishCommandsBatch(commands);
+        this.logger.debug(`[${jobContext.jobRunId}] Publishing  ${commands.length} commands`);  
     }
 
-    async scanDirectory({excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, jobRunId, skipFile, }: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
-        
-        const output: ScanDirectoryOutput = {jobRunId, fileCount: 0, dirCount: 0, command: [], subDirs: []};
+
+
+    async scanDirectory({excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, jobRunId, skipFile, }: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+        const output: ScanDirectoryOutput = {jobRunId, fileCount: 0, dirCount: 0, subDirs: []};
         let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
-      
+        let commands: Command[] = [];
         try {
             sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
         }catch(error) {
@@ -83,27 +83,32 @@ export class MigrateScanService {
                     output.subDirs.push(relativeSourcePath);
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
-                        if (command) output.command.push(command);
+                        if (command) commands.push(command);
                     }
                 } else if (!targetContent.has(item)) {
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
-                    if (command) output.command.push(command);
+                    if (command) commands.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
                     if (fs.existsSync(targetFilePath)) {
                         const targetStat = fs.statSync(targetFilePath);
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
-                        if (command) output.command.push(command);
+                        if (command) commands.push(command);
                     }
                 }
-                if(output.command.length >= this.maxMigrationCommand) {
-                    const chunk = output.command.splice(0, this.maxMigrationCommand);
-                    await this.publishMigrationTask({ jobContext, commands: chunk });
+                if(commands.length >= this.maxMigrationCommand) {
+                    const chunk = commands.splice(0, this.maxMigrationCommand);
+                    await this.publishCommands({ jobContext, commands: chunk });
                 }
+                
             }catch(error) {
                 this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
             }
+        }
+        if (commands.length > 0) {
+            await this.publishCommands({ jobContext, commands: commands });
+            commands = [];
         }
         return output
     }
@@ -123,7 +128,6 @@ export class MigrateScanService {
         const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
         const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '';
         
-        const commands :Command[] = []
         for (let i = 0; i < dirsToScan.length; i += this.maxConcurrency) {
             const batch = dirsToScan.slice(i, i + this.maxConcurrency);
             await Promise.allSettled(
@@ -141,47 +145,35 @@ export class MigrateScanService {
                     output.fileCount += result.fileCount;
                     output.dirCount += result.dirCount;
                     output.subDirs.push(...result.subDirs);
-                    commands.push(...result.command);
-
-
-                    if (commands.length >= this.maxMigrationCommand) {
-                        const chunk = commands.splice(0, this.maxMigrationCommand);
-                        await this.publishMigrationTask({ jobContext, commands: chunk });
-                    }
                 })
             )
         }
-
-        if (commands.length > 0) {
-            await this.publishMigrationTask({ jobContext, commands });
-        }
-
         return output
     }
 
-        buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
-            const metadata: MetaData =  { 
-                size: sFile.size,
-                mtime: sFile.mtime,
-                mode: sFile.mode,
-                uid: sFile.uid,
-                gid: sFile.gid,
-                atime: sFile.atime,
-                ctime: sFile.ctime,
-                birthtime: sFile.birthtime,
-                sid: undefined
-            } 
-            if (isContentUpdate(sFile, dFile) ) 
-                return new Command(
-                    fPath,
-                    {
-                        0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY },
-                        1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
-                    },
-                    uuid4(),
-                    0
-                );
-    
-            return undefined;
-        }
+    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
+        const metadata: MetaData =  { 
+            size: sFile.size,
+            mtime: sFile.mtime,
+            mode: sFile.mode,
+            uid: sFile.uid,
+            gid: sFile.gid,
+            atime: sFile.atime,
+            ctime: sFile.ctime,
+            birthtime: sFile.birthtime,
+            sid: undefined
+        } 
+        if (isContentUpdate(sFile, dFile) ) 
+            return new Command(
+                fPath,
+                {
+                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY },
+                    1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
+                },
+                uuid4(),
+                0
+            );
+
+        return undefined;
+    }
 }

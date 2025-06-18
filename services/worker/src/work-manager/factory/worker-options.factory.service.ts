@@ -18,6 +18,9 @@ import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activi
 import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 import { ConfigService } from "@nestjs/config";
 import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
+import { MigrateSyncService } from '../../activities/migrate/core/migrate-sync.service';
+import { get } from "http";
+import { MigrateCommonService } from '../../activities/migrate/migrate-common.service';
 
 @Injectable()
 export class WorkerOptionsService {
@@ -37,6 +40,8 @@ export class WorkerOptionsService {
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly  redismeorycheck: RedisMemoryCheckActivity,
     private readonly migrateScanService: MigrateScanService,
+    private readonly migrateSyncService:  MigrateSyncService,
+    private readonly migrateCommonService: MigrateCommonService,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
@@ -117,6 +122,8 @@ export class WorkerOptionsService {
           hasRunningSyncTask: this.commonActivityService.hasRunningSyncTask.bind(this.commonActivityService),
           // for new migration workflow 
           scanDirectories: this.migrateScanService.scanDirectories.bind(this.migrateScanService),
+          syncTaskActivity: this.migrateSyncService.syncTaskActivity.bind(this.migrateSyncService),
+          getGroupOfTasksActivity: this.migrateCommonService.getGroupOfTasksActivity.bind(this.migrateScanService),
         }, this.jobTaskActivityConcurrency);
       default:
         return undefined;
