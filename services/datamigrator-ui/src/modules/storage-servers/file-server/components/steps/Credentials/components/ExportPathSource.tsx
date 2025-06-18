@@ -30,7 +30,6 @@ const ExportPathSource = () => {
             options={RADIO_OPTIONS}
             form={nfsCredentialsForm}
             name="exportPathSource"
-            style="flex gap-16"
           />
         </Box>
         {isManualUpload && (
