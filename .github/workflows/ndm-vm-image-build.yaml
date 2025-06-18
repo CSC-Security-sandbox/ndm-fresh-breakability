@@ -391,11 +391,15 @@ jobs:
 
           if [ -f "$OVA_FILE" ]; then
             echo "Found OVA file: $OVA_FILE"
-            curl --silent --show-error --fail --request PUT --upload-file \
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading OVA file to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file \
               "$OVA_FILE" \
-              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+              "$TARGET_URL" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "OVA file uploaded successfully to ${ARTIFACTORY_PATH}."
+              echo "OVA file uploaded successfully to $TARGET_URL."
+            done
           else
             echo "Error: OVA file not found at $OVA_FILE"
             exit 1
