@@ -27,11 +27,11 @@ jobs:
 
           # --- LIBs ---
           - name: Auth Lib
-            path: libs/auth-lib
+            path: lib/auth-lib
           - name: Jobs Lib
-            path: libs/jobs-lib
+            path: lib/jobs-lib
           - name: Logger Lib
-            path: libs/logger-lib
+            path: lib/logger-lib
 
           # --- SERVICES ---
           - name: Admin Service
