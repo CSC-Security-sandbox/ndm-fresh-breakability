@@ -101,7 +101,7 @@ export const configApi = createApi({
 
     submitExportPathSourceFile: builder.mutation<void, { uploadId: string }>({
       query: ({ uploadId }) => ({
-        url: `path-upload/confirm/${uploadId}`,
+        url: `paths-upload/confirm/${uploadId}`,
         method: "POST",
       }),
       invalidatesTags: ["GET_FILE_SERVER_BY_ID"],
