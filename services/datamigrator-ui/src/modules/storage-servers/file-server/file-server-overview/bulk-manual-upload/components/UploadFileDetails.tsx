@@ -18,17 +18,17 @@ const UploadFileDetails = ({
       {
         label: "New Paths",
         value: newPaths,
-        extraContent: <InfoIcon className="w-4" />,
+        children: <InfoIcon className="w-4" />,
       },
       {
         label: "Already Existing Paths",
         value: alreadyExitingPaths,
-        extraContent: <InfoIcon className="w-4" />,
+        children: <InfoIcon className="w-4" />,
       },
       {
         label: "Disabled Paths",
         value: noLongerAvailablePaths,
-        extraContent: <NoticeTriangleIcon className="w-4" color="warning" />,
+        children: <NoticeTriangleIcon className="w-4" color="warning" />,
         tooltip:
           "Any existing paths that were not part of uploaded path list will be considered disabled.",
       },

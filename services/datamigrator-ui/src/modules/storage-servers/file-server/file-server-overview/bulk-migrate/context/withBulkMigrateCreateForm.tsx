@@ -142,7 +142,7 @@ export function withBulkMigrateCreateForm(
             fileServer.volumes.forEach((volume, index) => {
               _migrationTableDetails.push({
                 id: index,
-                isValid: volume.isValid,
+                isValid: volume?.isValid,
                 sourceFileServerDetails: fileServerDetails,
                 protocol: fileServer.protocol,
                 sourcePath: {
