@@ -21,10 +21,6 @@ interface SyncWorkflowInput {
 const {
     updateStatus: updateStatusActivity,
     updateLastEntry: updateLastEntryActivity,
-    getJobState: getJobStateActivity,
-    setJobState: setJobStateActivity,
-    getJobStateAndUpdateTaskList: getJobStateAndUpdateTaskList,
-    hasRunningSyncTask: hasRunningSyncTaskActivity
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m',});
   
 
@@ -86,7 +82,7 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
             flag = false;
             continue;
         }
-        Promise.all(
+        await Promise.all(
             taskIds.map(async (taskId) => {
                 try {
                     const output = await SyncTaskActivity({ jobRunId, taskId });
@@ -107,5 +103,6 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
     }else{
         syncWorkflowOutput.status = JobRunStatus.Completed;
     }
+    await updateLastEntryActivity(jobRunId)
     return syncWorkflowOutput; 
 }
