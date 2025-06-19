@@ -30,8 +30,7 @@ export class PathUploadsEntity extends Base {
     @Column({ type: 'uuid', name: 'file_server_id' })
     fileServerId: string;
 
-
     @ManyToOne(() => FileServerEntity, (fileServer) => fileServer.uploads)
-    @JoinColumn({ name: 'fileServerId' })
+    @JoinColumn({ name: 'file_server_id' })
     fileServer: FileServerEntity;
 }

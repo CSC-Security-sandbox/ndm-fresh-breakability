@@ -78,7 +78,6 @@ export class PathUploadService {
         uploadStats.alreadyExitingPaths++;
         // createUpload
         await this.createUpload({
-          id: existingPaths[0].id,
           uploadId,
           volumePath: trimmedPath,
           fileServerId: fileServerId,
@@ -90,7 +89,6 @@ export class PathUploadService {
       }
       // If the path does not exist, create a new PathUploadsEntity
       await this.createUpload({
-        id: uuid(),
         uploadId,
         volumePath: trimmedPath,
         fileServerId: fileServerId,
@@ -150,8 +148,9 @@ export class PathUploadService {
     try {
       const fileServer = await this.fileServerRepo
       .createQueryBuilder('fileServer')
-      .leftJoinAndSelect('fileServer.uploads', 'upload')
-      .where('upload.uploadId = :uploadId', { uploadId })
+      .leftJoinAndSelect('fileServer.uploads', 'uploads')
+      .leftJoinAndSelect('fileServer.workers', 'workers')
+      .where('uploads.uploadId = :uploadId', { uploadId })
       .getOne();
 
     if (!fileServer) {
@@ -166,7 +165,7 @@ export class PathUploadService {
       if(path.action === UploadPathAction.DELETE) disabledPaths.push(path.volumePath);
       else enabledPaths.push(path.volumePath);
     }
-    await this.volumeRepo.update({ fileServerId: fileServer.id , volumePath: In(disabledPaths) }, { isDisabled: true , isValid: false });
+    await this.volumeRepo.update({ fileServerId: fileServer.id , volumePath: In(disabledPaths) }, { isDisabled: true });
     await this.volumeRepo.update({ fileServerId: fileServer.id , volumePath: In(enabledPaths) }, { isDisabled: false , isValid: false, });
 
     const traceId = uploadId;

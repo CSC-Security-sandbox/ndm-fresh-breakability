@@ -79,7 +79,7 @@ export class ValidatePathActivity {
     }
 
     async postValidationResult(uploadId: string, result: any): Promise<void> {
-        const url = `${this.workerConfigUrl}/api/v1/path-upload/${uploadId}`;    
+        const url = `${this.workerConfigUrl}/api/v1/paths-upload/${uploadId}`;    
         this.logger.log(`[${this.workerId}] Posting validation result to ${url}`);
         try {
             await axios.patch(url, { validationResult: result })

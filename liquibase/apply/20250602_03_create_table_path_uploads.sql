@@ -13,7 +13,3 @@ CREATE TABLE
         updated_at timestamp DEFAULT now () NOT NULL,
         updated_by uuid NULL
     );
-
--- create a trigger to call the function before update
-CREATE TRIGGER update_path_uploads_updated_at BEFORE
-UPDATE ON path_uploads FOR EACH ROW EXECUTE FUNCTION update_updated_at_column ();

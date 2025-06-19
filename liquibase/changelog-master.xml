@@ -332,14 +332,7 @@
       <rollback>
       </rollback>
    </changeSet>
-
-   <changeSet id="20250602_01_create_funtion_to_update_updated_at.sql" author="dineshseervi">
-      <sqlFile path="liquibase/20250602_01_create_funtion_to_update_updated_at.sql" splitStatements="false"/>
-      <rollback>
-      </rollback>
-   </changeSet>
-
-
+   
    <changeSet id="20250602_02_alter_volume_table_add_column_isvalid.sql" author="dineshseervi">
       <sqlFile path="liquibase/20250602_02_alter_volume_table_add_column_isvalid.sql" splitStatements="false"/>
       <rollback>

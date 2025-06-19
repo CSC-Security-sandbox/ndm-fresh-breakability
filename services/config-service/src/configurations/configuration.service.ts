@@ -1236,12 +1236,11 @@ export class ConfigurationService {
 
   async isUploadInProgress(fileServerIds: string[]): Promise<boolean> {
     try {
-      const latestUpload = await this.pathUploadsRepo
-        .createQueryBuilder('upload')
-        .where('upload.fileServerId IN (:...fileServerIds)', { fileServerIds })
-        .orderBy('upload.createdAt', 'DESC')
-        .getOne();
-
+      const latestUpload = await this.pathUploadsRepo.findOne({
+        where: { fileServerId: In(fileServerIds) },
+        order: { createdAt: 'DESC' },
+        select: ['uploadId'],
+      })
       const uploadId = latestUpload?.uploadId;
       if (!uploadId) {
         this.logger.warn(`No uploads found for file server IDs: ${fileServerIds.join(', ')}`);
