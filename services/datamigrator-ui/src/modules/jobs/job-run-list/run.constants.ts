@@ -13,6 +13,7 @@ import React from "react";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 import {
   COLUMN_WIDTH_120,
+  COLUMN_WIDTH_150,
   COLUMN_WIDTH_180,
 } from "@modules/jobs/job-run-list/grid.constants";
 
@@ -76,7 +77,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Source Name",
     accessor: "sourceServer.serverName",
     id: "sourceServerName",
-    width: 150,
+    width: COLUMN_WIDTH_150,
   },
   {
     header: "Source Path",
@@ -104,7 +105,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
-    width: 150,
+    width: COLUMN_WIDTH_150,
   },
   {
     header: "Destination Path",
