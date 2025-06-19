@@ -1,8 +1,8 @@
 import { RedisClientType } from "redis";
 import { JobManagerContext } from "./job-manager-context";
 import { JobConfig } from "../job-config";
-import { RedisCommandCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection } from "src/redis/redis-collections";
-import { RedisHMapCollection } from "src/redis/redis-hmap-collection";
+import { RedisCommandCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection } from "../../redis/redis-collections";
+import { RedisHMapCollection } from "../../redis/redis-hmap-collection";
 
 
 

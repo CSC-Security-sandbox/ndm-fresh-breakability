@@ -44,7 +44,7 @@ export class JobManagerContext {
         return await this.fileStream.append(file);
     }
 
-    async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator {
+    async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: FileInfo; id: string; }> {
         yield* this.fileStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
 
@@ -57,7 +57,7 @@ export class JobManagerContext {
         return await this.errorStream.append(error);
     }
 
-    async *groupReadErrorStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator {
+    async *groupReadErrorStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: DMError; id: string; }> {
         yield* this.errorStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
     
@@ -70,7 +70,7 @@ export class JobManagerContext {
         return await this.commandStream.append(command);
     }
 
-    async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator {
+    async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Command; id: string; }> {
         yield* this.commandStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
 
@@ -82,7 +82,7 @@ export class JobManagerContext {
     async publishToTaskStream(task: Task): Promise<string> {
         return await this.taskStream.append(task);
     }
-    async *groupReadTaskStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator {
+    async *groupReadTaskStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Task; id: string; }> {
         yield* this.taskStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
     async groupAckTaskStream(ids:string[], groupType: GroupReaderType): Promise<void> {

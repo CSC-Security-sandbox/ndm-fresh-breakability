@@ -33,15 +33,16 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async init(): Promise<void> {
-    if (await this.redisClient.exists(this.streamKey)) {
-     return
-    }
+    console.log(`Initializing stream collection for ${this.streamKey}`);
     for( const groupType of Object.values(GroupReaderType)) {
       await this.redisClient.xGroupCreate(this.streamKey, `${this.jobRunId}-${groupType}`, '0', {
         MKSTREAM: true,
       }).catch(err => {
         if (err.message.includes('BUSYGROUP')) {
           console.warn(`Consumer group ${this.jobRunId} already exists`);
+        }
+        else {
+          console.error(`Error creating consumer group ${this.jobRunId}-${groupType}:`, err);
         }
       })
     }
