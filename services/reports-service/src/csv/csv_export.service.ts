@@ -6,15 +6,13 @@ import { filePathValidation } from 'src/utils/filepath-validation';
 
 @Injectable()
 export class CsvService {
-    private readonly logger = new Logger("CSV file");
-
+    private readonly logger = new Logger(CsvService.name);
     constructor(private readonly dataSource: DataSource) { }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
-        // const sanitizedFilePath = filePath.replace(/[^a-zA-Z0-9_\-./]/g, '');
         const sanitisedFilePath = filePathValidation(filePath);
-        this.logger.log("sanitised file", filePath);
         if (sanitisedFilePath !== filePath) {
+            this.logger.error(`File path contains invalid characters: ${filePath}`);
             throw new Error('File path contains invalid characters.');
         }
         const queryRunner = this.dataSource.createQueryRunner();
