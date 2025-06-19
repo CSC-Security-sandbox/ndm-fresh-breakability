@@ -1,19 +1,17 @@
+import { CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_STATUS, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_STATUS, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { ShellService } from 'src/activities/common/shell.service';
+import { ACL, getFileInfoInput, Operation, Origin } from 'src/activities/utils/utils.types';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
-import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../utils/utils';
-import { ACL, getFileInfoInput, Operation, Origin } from '../utils/utils.types';
-import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput  } from './migrate.type';
-import {  SyncTaskOutput, SyncTaskInput } from './migrate-sync.types';
-
-import { Context } from '@temporalio/activity';
-import { ShellService } from 'src/activities/common/shell.service';
+import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs } from '../../utils/utils';
+import { OPS_CMD, } from '../migrate.type';
+import { StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { CommonActivityService } from 'src/activities/common/common.service';
 
 
@@ -26,9 +24,9 @@ export class MigrateSyncService {
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
+    private readonly commonService: CommonActivityService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
-    private readonly commonService: CommonActivityService,
     private readonly shellService: ShellService,
     private readonly workerThreadService: WorkerThreadService,
   ) {
@@ -101,14 +99,14 @@ export class MigrateSyncService {
     }
   }
   
-  async stampMetaData(targetPath: string, sourcePath: string,  metadata: MetaData, jobContext: JobContext, command: Command, errorType: ErrorType):Promise<StampMetaDataOutput> {
+  async stampMetaData({sourcePath, metadata, command, errorType, jobContext, targetPath}: StampMetaDataInput):Promise<StampMetaDataOutput> {
     const stampMetaDataOutput : StampMetaDataOutput = {sourceErrors: [], targetErrors:[], errorType: errorType}
     if(metadata?.mode) {
       try {
         await fs.promises.chmod(targetPath, metadata.mode);
       } catch(error) {
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META,stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
         stampMetaDataOutput.targetErrors.push(error.code)
         this.logger.error(`Error setting file mode: ${error.message}`);
       }
@@ -132,7 +130,7 @@ export class MigrateSyncService {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.targetErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
     }
     
@@ -141,8 +139,8 @@ export class MigrateSyncService {
         let gid = metadata.gid?.toString();
         let uid = metadata.uid?.toString();
         if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-          gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
-          uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
+          gid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.gid?.toString(), 'GID')
+          uid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.uid?.toString(), 'UID')
         }
         if(gid && uid)
           await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
@@ -150,7 +148,7 @@ export class MigrateSyncService {
         this.logger.error(`Error setting ownership: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.targetErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
     }
      
@@ -162,13 +160,13 @@ export class MigrateSyncService {
         this.logger.error(`Error setting ownership: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.sourceErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
       try{
         const usersAcls:ACL[] = getUserACLs(metadata.sid, sourcePath)
         await Promise.all(
           usersAcls.map(async (userAcl) => {
-            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext, userAcl.user, 'SID');
+            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
             if (user) {
               const commandExec = command.ops[0].cmd !== OPS_CMD.COPY_DIR
                 ? CommandPattern.SET_SID_FOR_OBJECT
@@ -188,7 +186,7 @@ export class MigrateSyncService {
         this.logger.error(`Error setting ownership: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.targetErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
     }
     
@@ -203,7 +201,7 @@ export class MigrateSyncService {
         this.logger.error(`Error setting file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.targetErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
      }
 
@@ -218,7 +216,7 @@ export class MigrateSyncService {
         this.logger.error(`Error preserving file timestamps: ${error.message}`);
         const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_TIME, stampMetaDataOutput.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
         stampMetaDataOutput.sourceErrors.push(error.code)
-        await jobContext.appendToErrorList(dmErr);
+        await jobContext.publishToErrorStream(dmErr);
       }
     }
     return stampMetaDataOutput
@@ -237,7 +235,7 @@ export class MigrateSyncService {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message } ;
           this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}`);
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-          await jobContext.appendToErrorList(dmErr);
+          await jobContext.publishToErrorStream(dmErr);
           syncOperation.errors.target.add(error.code)
           this.logger.error(`Error in SyncOperation File: ${error.message} | ${error?.code}`);
           return syncOperation
@@ -251,14 +249,14 @@ export class MigrateSyncService {
           syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
           this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}`);
           const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-          await jobContext.appendToErrorList(dmErr);
+          await jobContext.publishToErrorStream(dmErr);
           this.logger.error(`Error in SyncOperation Dir: ${error.message}`);
           return syncOperation
         }
       }
     }
     if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED) {
-      const result = await this.stampMetaData(targetPath, sourcePath, ops[1].metadata, jobContext, command, errorType)
+      const result = await this.stampMetaData({targetPath, sourcePath, metadata: ops[1].metadata, jobContext, command, errorType})
       result.sourceErrors.forEach(error => syncOperation.errors.source.add(error))
       result.targetErrors.forEach(error => syncOperation.errors.target.add(error))
       syncOperation.ops[1].status = result.targetErrors.length || result.sourceErrors.length > 0 ? OPS_STATUS.ERROR : OPS_STATUS.COMPLETED
@@ -268,13 +266,13 @@ export class MigrateSyncService {
 
   async syncTaskActivity({ jobRunId , taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncOutput: SyncTaskOutput = { errors: {source: [], target: []}, success: 0, error: 0, retryCount : 0, isFatal: false };
-    const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
+    const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
     let task = undefined;
     try{
-        task  = await jobContext.getTask(taskId);
+        task = await jobContext.getTask(taskId);
         if (!task) {
-        this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
-        return syncOutput;
+          this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
+          return syncOutput;
         }
 
         this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
@@ -287,7 +285,7 @@ export class MigrateSyncService {
 
         this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
         
-        await jobContext.appendToUpdatedTaskList(task);
+        await jobContext.publishToTaskStream(task);
         
         const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
@@ -319,24 +317,24 @@ export class MigrateSyncService {
                         getID: jobContext.jobConfig.options.isIdentityMappingAvailable
                     });
 
-                    jobContext.filesInfo.lastId = await jobContext.appendToFileList(fileInfo);                  
+                    await jobContext.publishToFileStream(fileInfo);                  
                     command.status = CommandStatus.COMPLETED;
                     //TODO:  can we do this in batch?
-                    await jobContext.updateTask(taskId, task);
+                    await jobContext.setTask(taskId, task);
                 }
         }
         // task handling 
         if (task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
             task.status = TaskStatus.COMPLETED;
             this.logger.debug(`[${jobRunId}] Task ${task.id} completed successfully.`);
-            await jobContext.appendToUpdatedTaskList(task);
-            await jobContext.removeTask(taskId);        
+            await jobContext.publishToTaskStream(task);
+            await jobContext.deleteTask(taskId);        
         } else {
             task.status = TaskStatus.ERRORED;
             this.logger.error(`[${jobRunId}] Task ${task.id} failed with errors: ${JSON.stringify(task.errors)}`);
             if(task.retryCount >= this.maxRetryCount){
-                await jobContext.appendToUpdatedTaskList(task);  
-                await jobContext.removeTask(taskId);
+                await jobContext.publishToTaskStream(task);  
+                await jobContext.deleteTask(taskId);
             }else{
                 // TODO: This gets retried by temporal autoamtically but name the error better like retryableError.
                 throw new Error("Failed to complete task");

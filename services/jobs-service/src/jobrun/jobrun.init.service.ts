@@ -1,16 +1,15 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
   Command,
   FileServerDetails,
   JobConfig,
-  SpeedTestJobConfig,
   JobContextFactory,
   NFS,
-  RedisUtils,
   SMB,
-  Task,
+  SpeedTestJobConfig,
+  Task
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import {
   IdentityTypes,
@@ -24,37 +23,33 @@ import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import { WorkflowHandleWithFirstExecutionRunId } from "@temporalio/client";
 import axios from "axios";
 import {
-  ConsumerType,
   JobRunStatus,
   JobStatus,
   JobType,
   Protocol,
-  WorkFlows,
+  WorkFlows
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import {
-  SpeedTestConfigEntity,
-  SpeedTestConfigWorkerEntity,
+  SpeedTestConfigEntity
 } from "src/entities/speed-test-job-config.entity";
 
+import { FileServerEntity } from "src/entities/fileserver.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { RedisService } from "src/redis/redis.service";
+import { filterUnhealthyWorkers } from "src/utils/worker-filter";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
+import { Readable } from "stream";
 import { In, LessThan, Repository } from "typeorm";
 import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
-import { RedisService } from "src/redis/redis.service";
-import { FileServerEntity } from "src/entities/fileserver.entity";
-import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
-import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
-import { Readable } from "stream";
-import { HealthStatus } from "../workers/worker.types";
-import { WorkerEntity } from "src/entities/worker.entity";
-import { filterUnhealthyWorkers } from "src/utils/worker-filter";
 
 @Injectable()
 export class JobRunInitService {
@@ -551,28 +546,15 @@ export class JobRunInitService {
         isIdentityMappingAvailable: isIdentityMapping,
       },
     );
-    const jobState: JobState = new JobState(
-      [],
-      0,
-      1,
-      [],
-      JobContextStatus.Pending,
-      [],
-    );
 
     const task = await this.createInitialTask(jobRunId, jobRunConfig);
-    const redisProvider = JobContextFactory.getProvider("redis", redisClient);
+    const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
     const jobContext = await redisProvider.buildContext(
       jobRunId,
       jobConfig,
       JobRunStatus.Ready,
-      jobState,
     );
-    await jobContext.appendToTaskList(task);
-    this.logger.debug(
-      "JobContext created and appended initial task ---> ",
-      task,
-    );
+
     await this.redisService.setJobContext(jobRunId, jobContext);
     this.logger.debug("JobContext Saved to Redis");
   }

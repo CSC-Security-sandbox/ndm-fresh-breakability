@@ -1,16 +1,12 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Command, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Logger } from "@temporalio/worker";
-import { CommonActivityService } from "src/activities/common/common.service";
-import { RedisService } from "src/redis/redis.service";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput } from "./migrate-scan.type";
-import { Command, ErrorType, FileInfo, JobContext, MetaData, OPS_CMD, OPS_STATUS, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
-import { Operation, Origin } from "src/activities/utils/utils.types";
-import { PublishMigrationTaskInput } from "../migrate.type";
+import { basePrefix, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { RedisService } from "src/redis/redis.service";
+import { PublishCommandInput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput } from "./migrate-scan.type";
 
 @Injectable()
 export class MigrateScanService {
@@ -18,7 +14,8 @@ export class MigrateScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     constructor(
-        @Inject(ConfigService) private readonly configService: ConfigService,
+        @Inject(ConfigService) 
+        private readonly configService: ConfigService,
         private readonly logger: Logger,
         private readonly redisService: RedisService,
     ) {
@@ -34,9 +31,10 @@ export class MigrateScanService {
         return  await fs.promises.readdir(directoryPath);
     
     }
-    async publishCommands({ jobContext, commands}: PublishMigrationTaskInput)  {
-        await jobContext.publishCommandsBatch(commands);
-        this.logger.debug(`[${jobContext.jobRunId}] Publishing  ${commands.length} commands`);  
+    async publishCommands({ jobContext, commands}: PublishCommandInput)  {
+        for(const command of commands)
+            await jobContext.publishToCommandStream(command);
+
     }
 
 
@@ -58,7 +56,6 @@ export class MigrateScanService {
            this.logger.error(`Error reading target directory ${targetPath}: ${error}`);
 
         }
-        
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
@@ -81,6 +78,7 @@ export class MigrateScanService {
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {
                     output.dirCount++;
                     output.subDirs.push(relativeSourcePath);
+                    this.logger.debug(`Scan Path ${relativeSourcePath} | parent ${sourcePath}`)
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
@@ -120,8 +118,9 @@ export class MigrateScanService {
             subDirs: [],
             jobRunId: jobRunId
         }
-        const jobContext: JobContext = await this.redisService.getJobContext(jobRunId);
-        const jobConfig = jobContext.getJobConfig();
+        const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
+        const jobConfig = jobContext.getJobConfig()
+        this.logger.debug(`Job Config is : ${jobConfig}`)
 
         const baseSourcePrefixPath = basePrefix(jobRunId, jobConfig.sourceFileServer.pathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, jobConfig.destinationFileServer.pathId);
