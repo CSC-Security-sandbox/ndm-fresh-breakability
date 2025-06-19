@@ -33,14 +33,14 @@ const ListComponent = ({ itemsList }: ListComponentPropsType) => (
 
 export default memo(ListComponent);
 
-//Sample usage of ListComponent
-// const itemsList = [
-//   {
-//     label: "Item 1",
-//     value: "Value 1",
-//     extraContent: <InfoIcon className="w-4" />,
-//     tooltip: "This is a tooltip for Item 1",
-//   }]
-//   {/* <ListComponent itemsList={itemsList} />; */
-// }
-// Note: The `InfoIcon` components is imported from the appropriate libraries for sample code snippets.
+/* Sample usage of ListComponent
+const itemsList = [
+  {
+    label: "Item 1",
+    value: "Value 1",
+    extraContent: <InfoIcon className="w-4" />,
+    tooltip: "This is a tooltip for Item 1",
+  }]
+  {<ListComponent itemsList={itemsList} />; }
+
+Note: The `InfoIcon` components is imported from the appropriate libraries for sample code snippets. */
