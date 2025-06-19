@@ -105,12 +105,12 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
+          services=( "datamigrator-ui" )
 
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             targets=("${services[@]}")
-            targets+=("db-migrations")
+            # targets+=("db-migrations")
           else
             # services
             for service in "${services[@]}"; do
