@@ -49,9 +49,9 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   };
 
   // TODO: move this to a seperate activity. 
-  const jobState = await getJobStateActivity( jobRunId );
-  const updatedJobState = {...jobState, status: JobRunStatus.Running};
-  await setJobStateActivity(jobRunId, updatedJobState) 
+  // const jobState = await getJobStateActivity( jobRunId );
+  // const updatedJobState = {...jobState, status: JobRunStatus.Running};
+  // await setJobStateActivity(jobRunId, updatedJobState) 
 
 
   let errors: string[] = [];

@@ -138,7 +138,7 @@ export class SetupActivityService {
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
@@ -182,7 +182,6 @@ export class SetupActivityService {
         protocolType,
         workerId: this.workerId,
         message: `Worker ${this.workerId} successfully set up.`,
-        state: context.jobState
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
