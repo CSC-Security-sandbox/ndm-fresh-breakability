@@ -3,10 +3,11 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { WinstonModule } from "nest-winston";
 import 'winston-daily-rotate-file';
 import loggerConfig from "../config/logger.config";
-import { RequestLoggerMiddleware } from "../middleware/request-logger.middleware";
+import { RequestContextMiddleware } from "../middleware/request-context.middleware";
 import { format, transports } from "winston";
 import { LoggerService } from "./logger.service";
 import { LoggerFactory } from "./logger.factory";
+import {RequestContext} from "../middleware/request-context";
 
 
 @Module({})
@@ -44,13 +45,13 @@ export class LoggerModule {
                                     format.printf((info) => `${info.timestamp} ${info.level}: ${info.message} ${JSON.stringify(info)}`),
                                 ),
                             }),
-                
+
                         ]
                     })
                 })
             ],
-            exports: [LoggerModule, RequestLoggerMiddleware, LoggerFactory, LoggerService],
-            providers:[RequestLoggerMiddleware, LoggerFactory, LoggerService]
+            exports: [LoggerModule, RequestContext, RequestContextMiddleware, LoggerFactory, LoggerService],
+            providers:[RequestContextMiddleware, LoggerFactory, LoggerService]
         }
     }
 }
