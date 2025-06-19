@@ -13,6 +13,8 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
+import { filePathValidation } from 'src/utils/filepath-validation';
+
 @Injectable()
 export class DiscoveryService {
   private logger: Logger = new Logger(DiscoveryService.name);
@@ -65,7 +67,12 @@ export class DiscoveryService {
       const pdfBuffer = await this.generatePdfFromData(reportData);
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
-      fs.writeFileSync(pdfFilePath, pdfBuffer); //two
+      const sanitisedFilePath = filePathValidation(pdfFilePath);
+      this.logger.log("pdf file path validation");
+      if (sanitisedFilePath !== pdfFilePath) {
+        throw new Error('File path contains invalid characters.');
+      }
+      fs.writeFileSync(pdfFilePath, pdfBuffer); 
 
       return {
         message: "Report generated successfully",
@@ -186,6 +193,11 @@ export class DiscoveryService {
   }
 
  formatAndWriteToFile(reportData: any[], filePath: string) {
+  const sanitisedFilePath = filePathValidation(filePath);
+  this.logger.log("file path validation in discovery");
+  if (sanitisedFilePath !== filePath) {
+    throw new Error('File path contains invalid characters.');
+  }
   const predefinedHeaders = Object.values(ReportHeaders);
   const dynamicHeaders = new Set<string>();
       if (reportData && reportData.length > 0) {
@@ -216,7 +228,7 @@ export class DiscoveryService {
 
   const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
 
-  fs.writeFileSync(filePath, csvContent); //one
+  fs.writeFileSync(filePath, csvContent); 
   console.log(`Data has been written to ${filePath}`);
 }
 
