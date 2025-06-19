@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Command, GroupReaderType, JobContext, OPS_CMD, OPS_STATUS, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Command, GroupReaderType, JobContext, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
 import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
@@ -29,28 +29,30 @@ export class MigrationTaskService{
   }
 
   async publishScanTask({ jobRunId }: PublishScanTaskInput): Promise<PublishScanTaskOutput> {
+    this.logger.log(`[${jobRunId}] Starting publishTask`);
     try {
       const jobContext:JobContext = await this.redisService.getJobContext(jobRunId);
       this.logger.log(`[${jobRunId}] JobContext retrieved. Processing files.`);
-      let commands:Command[] = [], ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
-      for await (const dir of jobContext.readDirs(this.workerId, this.pushTaskDirSize, GroupReaderType.WORKER)) {
-        const command = new Command(dir.path, ops, uuid4(), 0);
+      let commands: Command[] = [], streamIds: string[] = [],tasks: Task[] = [];
+      const ops = { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } };
+      for await (const { data, id } of jobContext.groupReadWithoutAckDirs(jobRunId, this.pushTaskDirSize*5, GroupReaderType.WORKER)) {
+        const command = new Command(data.path, ops, uuid4(), 0);
         commands.push(command);
+        streamIds.push(id);
         if (commands && commands.length >= this.pushTaskDirSize) {
           const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
-          const id = await jobContext.appendToTaskList(task);
-          jobContext.tasksInfo.lastId = id;
-          await this.redisService.setJobContext(jobRunId, jobContext);
+          tasks.push(task);
           commands = [];
         }
       }
-      
       if (commands.length > 0) {
         const task = buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
-        const id = await jobContext.appendToTaskList(task);
-        jobContext.tasksInfo.lastId = id;
-        await this.redisService.setJobContext(jobRunId, jobContext);
+        tasks.push(task);
       }
+
+      if(tasks.length > 0)
+        await jobContext.ackDirAndCreateTask(GroupReaderType.WORKER, streamIds, tasks);
+      
       return { jobRunId, status: 'success', message: 'Task published successfully' };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Error in publishing task: ${error.message}`);

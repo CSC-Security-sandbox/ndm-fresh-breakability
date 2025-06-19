@@ -23,11 +23,14 @@ export interface StreamCollection<T extends Serializable> {
   groupRead(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;
   readAndPurge(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;
   getLength(): Promise<number>;
+  groupReadWithoutAck(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }>;
 }
 
 export interface FileCollection extends StreamCollection<FileInfo> {}
 export interface ErrorCollection extends StreamCollection<DMError> {}
-export interface DirectoryCollection extends StreamCollection<FileInfo> {}
+export interface DirectoryCollection extends StreamCollection<FileInfo> {
+   ackAndCreateTask(groupType: GroupReaderType, ids: string[], tasks: Task[]);
+}
 export interface SpeedTestReadWriteCollection extends StreamCollection<SpeedTestReadWriteInfo> {}
 export interface TaskStatsCollection extends StreamCollection<TaskStats> {}
 export interface TaskCollection extends StreamCollection<Task> {}

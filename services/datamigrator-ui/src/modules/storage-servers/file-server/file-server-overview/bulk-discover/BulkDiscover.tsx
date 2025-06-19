@@ -1,8 +1,11 @@
 import useFileServerDetails from "@/hooks/useFileServerDetails";
-import { BlueXpFormType, JOBS_TYPE } from "@/types/app.type";
+import { BlueXpFormType, JOBS_TYPE, AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
-import { useBulkDiscoveryMutation } from "@api/jobsApi";
+import { 
+  useBulkDiscoveryMutation,
+  useLazyGetAllFileServersWithVolumeQuery
+ } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -25,19 +28,21 @@ import utc from "dayjs/plugin/utc";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BULK_DISCOVERY_DEFAULT_COLUMN_STATE } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
-
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 dayjs.extend(utc);
 
 const BulkDiscover = () => {
   const navigate = useNavigate();
   const [createBulkDiscoveryApi, { isLoading: isSubmitting }] =
     useBulkDiscoveryMutation();
+  const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
+  const { selectedProjectId: projectId } = useSelectedProjectId();
   const { fileServerDetails, allExportPaths } = useFileServerDetails();
   const [selectedExportPathsIds, setSelectedExportPathsIds] = useState<
     string[]
   >([]);
   const [key, setKey] = useState(nanoid());
-
+  const [notReachableExportPaths, setNotReachableExportPaths] = useState<string[]>([]);
   const options = useMemo(() => {
     return getOptionsFromArray(
       fileServerDetails?.fileServers?.map((data) => data.protocol) || [
@@ -66,6 +71,30 @@ const BulkDiscover = () => {
     setSelectedExportPathsIds([]);
     setKey(nanoid());
   }, [bulkDiscoveryForm.formState.protocol.value]);
+
+  useEffect(() => {
+    const fetchFileServers = async () => {
+      try {
+        const resp = await getAllFileServersApi({ projectId }).unwrap();
+        const allFileServers: AllFileServerWithVolumesApiType[] = resp?.configs;
+        let notReachableExportPaths = [];
+        allFileServers.forEach((config) => {
+          config?.fileServers?.flatMap((fileServer) =>
+            fileServer?.volumes?.map((volume) => {
+              console.log(volume);
+              if (volume?.reachableCount === 0) {
+                notReachableExportPaths.push(volume.id);
+              }
+            })
+          )
+        });
+        setNotReachableExportPaths(notReachableExportPaths);
+      } catch (error) {
+        console.error("Error fetching file servers:", error);
+      }
+    };
+    fetchFileServers();
+  }, [projectId, getAllFileServersApi]);
 
   const handleCreateBulkDiscovery = async () => {
     try {
@@ -132,6 +161,7 @@ const BulkDiscover = () => {
           isRowSelectingEnabled={true}
           setSelectedExportPathsIds={setSelectedExportPathsIds}
           key={key}
+          notReachableExportPaths={notReachableExportPaths}
         />
       </Box>
       <AppFooter
