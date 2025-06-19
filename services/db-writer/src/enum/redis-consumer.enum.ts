@@ -17,9 +17,6 @@ export enum WorkFlows {
 
 export enum ConsumerType {
     files = "files",
-    directories = "directories",
     tasks = "tasks",
-    updatedTask = "updatedTask",
-    errors = 'errors',
-    migrationTask = "migrationTask"
+    errors = 'errors'
 }
