@@ -11,13 +11,12 @@ import (
 
 var _ = Describe("TC-006: Run migration to the same destination", func() {
 	var (
-		ProjectId      string
-		workerId1      string
-		workerId2      string
-		workerIds      []string
-		err            error
-		headers        map[string]string
-		fileServerInfo FileServerInfo
+		ProjectId string
+		workerId1 string
+		workerId2 string
+		workerIds []string
+		err       error
+		headers   map[string]string
 	)
 	BeforeEach(func() {
 		numberOfWorker := 2
@@ -30,11 +29,20 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 	})
 
 	It("TC-006: Run migration to the same destination", func() {
-		var sourceConfigID, sourcePathID1, sourcePathID2 string
-		var jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
-		var destinationConfigID, destinationPathID1, destinationPathID2 string
+		var (
+			// Source-related IDs
+			sourceConfigID               string
+			sourcePathID1, sourcePathID2 string
+
+			// Destination-related IDs
+			destinationConfigID, destinationPathID1, destinationPathID2 string
+
+			// Job Config and Migration IDs
+			jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
+		)
 
 		By("Creating the source file server")
+		// Added delay as multiple worker attaching takes time
 		IntroduceDelay(20)
 		sourceParams := CreateServereParams{
 			ConfigName:       "source-file-server",
@@ -52,21 +60,15 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 		Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+		defer resp.Body.Close()
 
 		By("Getting the source file server by config ID")
-		sourcePathID1, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID1")
+		sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		sourcePathID2, fileServerInfo, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
-		Expect(sourcePathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID2")
+		sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating the destination file server")
 		destinationParams := CreateServereParams{
@@ -85,21 +87,16 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 		Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+		defer resp.Body.Close()
 
 		By("Getting the destination file server by configId")
-		destinationPathID1, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
-		Expect(destinationPathID1).NotTo(BeEmpty(), "Expected a valid sourcePathID")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
+		destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-		destinationPathID2, fileServerInfo, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 		Expect(destinationPathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID")
-		Expect(err).NotTo(HaveOccurred(), "Error sending get source file server API request")
-		Expect(len(fileServerInfo.FileServers)).To(BeNumerically(">", 0), "No fileServers found in source response")
-		Expect(len(fileServerInfo.FileServers[0].Volumes)).To(BeNumerically(">", 0), "No volumes found for source file server")
 
 		By("Creating a migration job")
 		migrationParams := MigrationJobParams{
@@ -128,7 +125,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
+			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 			result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/COCDetails.json")
@@ -158,7 +155,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			cutoverRunID := getJobsResp.JobRuns[0].JobRunId
 			Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
 
-			WaitForJobState(cutoverRunID, BLOCKED_JOBRUN, 30)
+			WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
 			// Fetch the latest status
 			getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
