@@ -1,18 +1,7 @@
-# vSphere connection variables
-variable "vsphere_server" {
-  description = "vSphere server hostname or IP address"
+# Environment variables
+variable "vm_name" {
+  description = "Name of the virtual machine to be deployed"
   type        = string
-}
-
-variable "vsphere_user" {
-  description = "vSphere username"
-  type        = string
-}
-
-variable "vsphere_password" {
-  description = "vSphere password"
-  type        = string
-  sensitive   = true
 }
 
 # vSphere infrastructure variables
@@ -122,9 +111,4 @@ variable "disk" {
     size        = number
     unit_number = number
   })
-  default = {
-    label       = "disk0"
-    size        = 200
-    unit_number = 0
-  }
 }

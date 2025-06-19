@@ -69,6 +69,7 @@ export class WorkManagerService {
             if (response.status !== 200) {
                 throw new Error(`Failed to fetch configurations. Status: ${response.status}`);
             }
+            this.logger.debug(`Fetched configurations: ${JSON.stringify(response.data)}`);
             await this.handleConfigurations(response.data);
             await this.monitorTaskQueues();
         } catch (error) {
