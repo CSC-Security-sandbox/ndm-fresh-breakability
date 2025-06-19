@@ -131,7 +131,7 @@ export class DiscoveryController {
     @Body('report-type') reportType: ReportType
   ): Promise<string> {
     this.logger.log("reached here in controller");
-
+    this.logger.debug(`Generating report for jobRunId: ${jobRunId}, reportType: ${reportType}`);
     if (!jobRunId) {
       throw new BadRequestException('jobRunId is required');
     }

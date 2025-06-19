@@ -20,6 +20,7 @@ export class WorkManagerController {
     @AuthWorker()
     @Get('config')
     async getConfiguration(@ClientIp() ip: string, @Req() req: any): Promise<WorkerConfiguration[]> {
+        this.logger.debug(`Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']}`);
         return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'])
     }
 

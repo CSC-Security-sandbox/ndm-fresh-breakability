@@ -33,14 +33,10 @@ data "vsphere_content_library_item" "ovf_template" {
   type       = "ovf"
 }
 
-# Define folder if specified
-data "vsphere_folder" "folder" {
-  path = var.folder_path
-}
 
 # VM deployment from content library OVF template
 resource "vsphere_virtual_machine" "vm" {
-  name             = "${var.ovf_template_name}-api"
+  name             = var.vm_name
   folder           = var.folder_path
   resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
   datastore_id     = data.vsphere_datastore.datastore.id
@@ -75,13 +71,12 @@ resource "vsphere_virtual_machine" "vm" {
 
   # Disk settings
   disk {
-    label       = var.disk.label
-    size        = var.disk.size
-    unit_number = var.disk.unit_number
+    label            = var.disk.label
+    size             = var.disk.size
+    unit_number      = var.disk.unit_number
   }
 
   # VMware tools sync settings
   sync_time_with_host  = var.sync_time_with_host
   tools_upgrade_policy = var.tools_upgrade_policy
-
 }
