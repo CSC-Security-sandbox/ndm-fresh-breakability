@@ -67,10 +67,10 @@ const {
 */
 
 export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
-    wf.log.debugf(`Starting SyncWorkflow ${jobRunId}`)
+    console.log(`Starting SyncWorkflow ${jobRunId}`)
 
     wf.setHandler(isScanCompletedSignal, () => {
-        wf.log.debugf(jobRunId, `isScanCompletedSignal called with value: ${isScanCompleted}`);
+        console.log(jobRunId, `isScanCompletedSignal called with value: ${isScanCompleted}`);
         isScanCompleted = true;
     });
     let failedTasks = [];
@@ -90,10 +90,10 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
             taskIds.map(async (taskId) => {
                 try {
                     const output = await SyncTaskActivity({ jobRunId, taskId });
-                    wf.log.debugf(jobRunId, `SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
+                    console.debug(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
                 } catch (error) {
-                    wf.log.errorf(jobRunId, `SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
+                    console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
                     return { taskId, error: error.message };
                 }
             })
@@ -103,7 +103,7 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
     }
     if(failedTasks.length > 0) {
         syncWorkflowOutput.status = JobRunStatus.Failed;
-        wf.log.errorf(jobRunId, `Failed tasks in this iteration: ${JSON.stringify(failedTasks)}`);
+        console.error(`Failed tasks in this iteration: ${JSON.stringify(failedTasks)}`);
     }else{
         syncWorkflowOutput.status = JobRunStatus.Completed;
     }

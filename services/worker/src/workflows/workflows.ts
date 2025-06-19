@@ -17,7 +17,7 @@ export {PreCheckWorkerValidationWorkflow} from './pre-check/core/pre-check.worke
 export { ValidateWorkingDirectoryWorkflow} from './working-directory/working-directory.workflow';
 export { ValidateWorkingDirectoryWorkerWorkflow } from './working-directory/working-directory-worker.workflow';
 
-export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
+// export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
 export {CutOverWorkFlow, WaitingForApproval} from '../workflows/migration/parent/cutover-job-workflow'
 
 export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
@@ -29,3 +29,8 @@ export {SpeedTestJobWorkflow} from '../workflows/speed-test/speed-test-job-workf
 export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
 
 export {RedisMemoryCheckWorkflow} from '../workflows/redis/redis.memorycheck.workflow'
+
+export {ChildScanWorkflow } from '../workflows/migration/core/child-scan.workflow'
+export {ChildSyncWorkflow} from '../workflows/migration/core/child-sync.workflow'
+
+export {MigrationWorkflow} from '../workflows/migration/parent/migration-parent-workflow'

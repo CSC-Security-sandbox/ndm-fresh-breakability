@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -139,7 +139,7 @@ export function getFileType(stats: fs.Stats): FileType {
     }
 }
 
-export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
+export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext | JobManagerContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
   basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
   jobContext.jobConfig.sourceFileServer.pathId,

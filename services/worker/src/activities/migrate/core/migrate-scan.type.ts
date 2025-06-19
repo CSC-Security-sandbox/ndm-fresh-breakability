@@ -1,4 +1,4 @@
-import { Command, JobContext } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, JobContext, JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
 
 
 export interface ScanActivityInput {
@@ -18,7 +18,7 @@ export interface ScanDirectoryInput {
     targetPath: string;
     sourcePrefix: string;
     excludePatterns: string[];
-    jobContext: JobContext;
+    jobContext: JobManagerContext;
     skipFile: string;
 }
 
@@ -27,4 +27,9 @@ export interface ScanDirectoryOutput {
     fileCount: number;
     dirCount: number;
     subDirs: string[];
+}
+
+export interface PublishCommandInput{
+    jobContext: JobManagerContext;
+    commands: Command[]
 }

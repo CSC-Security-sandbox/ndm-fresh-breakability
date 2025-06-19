@@ -1,10 +1,8 @@
-import { JobRunStatus } from "src/activities/discovery/enums";
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
-import { ChildScanWorkflowInput } from "./chid-scan.workflow.type";
-import { dir } from "console";
-import { scan } from 'rxjs';
+import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
+import { ChildScanWorkflowInput } from "./chid-scan.workflow.type";
 
 
 const {
@@ -63,11 +61,12 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
       batches.push(dirsToScan.slice(i, i + batchSize));
     }
 
+    let nexDirsToScan: string[] = [];
     //TODO: make workflow failed when activity fails. 
     const results = await Promise.all(
       batches.map(async (dirs) =>{
         try{
-            return await scanDirectories({jobRunId, dirsToScan: dirs});
+            return scanDirectories({jobRunId, dirsToScan: dirs});
         }catch(error){
             wf.log.error(`Error scanning directories: ${error}`);
             errors.push(error.message || 'Activity failed error');
@@ -78,8 +77,11 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     for(const result of results){
       scanWorkflowOutput.fileCount += result.fileCount; // Add file count from the result.
       scanWorkflowOutput.dirCount += result.dirCount; // Add directory count from the result.
-      dirsToScan.push(...result.subDirs)
+      console.log(`results : ${JSON.stringify(result.subDirs)}`)
+      nexDirsToScan.push(...result.subDirs)
     }        
+    dirsToScan = nexDirsToScan;
+    nexDirsToScan = []
   }
   scanWorkflowOutput.status = JobRunStatus.Completed;
   scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;

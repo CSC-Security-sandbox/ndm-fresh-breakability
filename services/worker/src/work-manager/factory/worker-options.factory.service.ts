@@ -18,9 +18,9 @@ import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activi
 import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 import { ConfigService } from "@nestjs/config";
 import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
-import { MigrateSyncService } from '../../activities/migrate/core/migrate-sync.service';
-import { get } from "http";
-import { MigrateCommonService } from '../../activities/migrate/migrate-common.service';
+import { MigrateSyncService } from "src/activities/migrate/core/migrate-sync.service";
+import { MigrateCommonService } from "src/activities/migrate/migrate-common.service";
+
 
 @Injectable()
 export class WorkerOptionsService {
@@ -38,7 +38,7 @@ export class WorkerOptionsService {
     private readonly precheckActivity:PrecheckActivity,
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
-    private readonly  redismeorycheck: RedisMemoryCheckActivity,
+    private readonly redismeorycheck: RedisMemoryCheckActivity,
     private readonly migrateScanService: MigrateScanService,
     private readonly migrateSyncService:  MigrateSyncService,
     private readonly migrateCommonService: MigrateCommonService,
