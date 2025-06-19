@@ -114,7 +114,7 @@ func GetExportPathID(
 	volumeName string,
 	configID string,
 	headers map[string]string,
-) (string, FileServerInfo, error) {
+) (string, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 	// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
@@ -127,18 +127,18 @@ func GetExportPathID(
 		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
-			return "", FileServerInfo{}, err
+			return "", err
 		}
 		defer resp.Body.Close()
 
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", FileServerInfo{}, err
+			return "", err
 		}
 
 		err = json.Unmarshal(bodyBytes, &getSourceResp)
 		if err != nil {
-			return "", FileServerInfo{}, err
+			return "", err
 		}
 
 		// Check if volumes exist
@@ -152,19 +152,25 @@ func GetExportPathID(
 	}
 
 	// After retries, check again
-	if len(getSourceResp.FileServers) == 0 || len(getSourceResp.FileServers[0].Volumes) == 0 {
-		return "", getSourceResp, fmt.Errorf("no volumes found after %d attempts", MaxPollRetries)
+	if len(getSourceResp.FileServers) == 0 {
+		return "", fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
+	}
+	if len(getSourceResp.FileServers[0].Volumes) == 0 {
+		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
 
 	// Now fetch the volume ID
 	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
 	if err != nil {
-		return "", getSourceResp, fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
+		return "", fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
+	}
+	if volumeID == "" {
+		return "", fmt.Errorf("expected a valid sourcePathID, got empty string")
 	}
 
 	sourcePathID := volumeID
 
-	return sourcePathID, getSourceResp, nil
+	return sourcePathID, nil
 }
 
 // ClearVolume removes all data from the NFS export mounted on the VM.
