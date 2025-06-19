@@ -10,3 +10,13 @@ export const MANUAL_UPLOAD_INFO =
 
 export const EXPORT_PATH_SOURCE_NOTE =
   "Use manual upload if showmount is not supported, such as with GCNV Flex service, or if you prefer to upload the export paths manually.";
+
+export const EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT =
+  "Export Paths File upload is in progress...";
+
+export const NO_DATA_TEXT = "No Data";
+
+export const VALIDATION_STATUS = {
+  VALID: "Valid",
+  INVALID: "Invalid",
+};

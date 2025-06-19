@@ -21,16 +21,16 @@ const RadioButtonGroup = ({
 
 export default RadioButtonGroup;
 
-//Sample usage of RadioButtonGroup
-// const RADIO_BUTTON_OPTIONS = [
-//     { label: "Option 1", value: "1" },
-//     { label: "Option 2", value: "2" },
-//     { label: "Option 3", value: "3" },
-//   ];
+/* Sample usage of RadioButtonGroup
+const RADIO_BUTTON_OPTIONS = [
+    { label: "Option 1", value: "1" },
+    { label: "Option 2", value: "2" },
+    { label: "Option 3", value: "3" },
+  ];
 {
-  /* <RadioButtonGroup
+  <RadioButtonGroup
   options={RADIO_BUTTON_OPTIONS}
   form={form_name}
   name="radioGroupName"
-/>; */
-}
+/>; 
+} */
