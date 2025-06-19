@@ -216,7 +216,7 @@ export class JobRunService {
         throw new NotFoundException(
           `Job Run with id ${jobRunId} is not a migration job`
         );
-      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(/[^a-zA-Z0-9-_\.]/g, "_");
+      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(/[^a-zA-Z0-9-_.]/g, "");
       const filePath = path.join(this.getReportsDirectory, sanitizedFileName);
       if (!filePath.startsWith(this.getReportsDirectory)) {
         throw new Error(`Invalid file path: ${filePath}`);
