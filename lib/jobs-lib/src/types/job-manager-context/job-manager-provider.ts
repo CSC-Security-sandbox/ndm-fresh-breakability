@@ -32,7 +32,7 @@ export class RedisJobManagerProvider {
 
     async getContext(jobRunId: string): Promise<JobManagerContext> {
         const jobManager = new RedisJobManagerContext(this.redisClient, jobRunId);
-        jobManager.initializeInstance()
+        await jobManager.initializeInstance()
         return jobManager
     }
 }
