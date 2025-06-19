@@ -227,7 +227,7 @@ export class SetupActivityService {
 
   async cleanup(jobRunId: string): Promise<SetupOutput> {
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
 
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);

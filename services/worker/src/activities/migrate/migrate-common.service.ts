@@ -9,7 +9,7 @@ import { buildTask } from "../utils/utils";
 @Injectable()
 export class MigrateCommonService {
 
-  readonly batchOfCommands: number = 100;
+  readonly batchOfCommands: number = 10;
 
   constructor(
       private readonly logger: Logger,
@@ -24,7 +24,7 @@ export class MigrateCommonService {
         for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
-          if (commands.length >= this.batchOfCommands) {
+          if (commands.length >= 100) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             taskIds.push(task.id);
             await jobContext.setTask(task.id, task);            

@@ -46,26 +46,10 @@ export class CommonActivityService{
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
-      const jobContext = await this.redisService.getJobContext(traceId);
-      const id = await jobContext.appendToFileList(generateDummyFileEntry);
-      jobContext.filesInfo.lastId = id;
-      
-      const directoryId  = await jobContext.appendToDirList(generateDummyFileEntry);
-      jobContext.dirsInfo.lastId = directoryId;
-
-      const lastTask = await jobContext.appendToTaskList(generateDummyTaskEntry);
-      jobContext.tasksInfo.lastId = lastTask;
-
-      const migratedTask = await jobContext.appendToMigrationTask(generateDummyTaskEntry);
-      jobContext.migrateTask.lastId = migratedTask;
-
-      const updateTask = await jobContext.appendToUpdatedTaskList(generateDummyTaskEntry);
-      jobContext.updatedTaskInfo.lastId = updateTask;
-
-      const errorTask = await jobContext.appendToErrorList(generateDummyErrorEntry);
-      jobContext.errorsInfo.lastId = errorTask;
-      
-      this.redisService.setJobContext(traceId, jobContext);
+      const jobContext = await this.redisService.getJobManagerContext(traceId);
+      await jobContext.publishToFileStream(generateDummyFileEntry);  
+      await jobContext.publishToTaskStream(generateDummyTaskEntry);
+      await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {
