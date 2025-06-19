@@ -17,6 +17,7 @@ export class MigrateCommonService {
     ) {}
 
     async getGroupOfTasksActivity(jobRunId,  groupSize =1000): Promise<string[]> {
+    let taskIds: string[] = [];
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Command[] = [], streamIds = [];
@@ -25,13 +26,15 @@ export class MigrateCommonService {
           streamIds.push(id);
           if (commands.length >= this.batchOfCommands) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-            await jobContext.taskMap.set(task.id, task);
+            taskIds.push(task.id);
+            await jobContext.setTask(task.id, task);            
             commands = [];
           }
         }
-        if (commands.length >= 0) {
+        if (commands.length > 0) {
           const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-           await jobContext.taskMap.set(task.id, task);
+          taskIds.push(task.id);
+           await jobContext.setTask(task.id, task);   
           commands = [];
         }
         if(streamIds.length > 0) 
@@ -39,6 +42,6 @@ export class MigrateCommonService {
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
       }
-      return [];
+      return taskIds;
     }
 }
