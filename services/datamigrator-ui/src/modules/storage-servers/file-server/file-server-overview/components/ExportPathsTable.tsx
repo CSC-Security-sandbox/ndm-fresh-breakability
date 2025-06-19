@@ -16,6 +16,10 @@ import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
 import { hasManualUploadPath } from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
+import {
+  EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT,
+  NO_DATA_TEXT,
+} from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -128,16 +132,16 @@ const ExportPathsTable = ({
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
     return allExportPaths.length > 0 ? getBulkManualUpload() : "";
-  }, [isManualUploadPath, showRefetch, fileServerDetails]);
+  }, [isManualUploadPath, showRefetch, allExportPaths]);
 
   const getDataLabel = useCallback(() => {
-    if (jobType === "bulk-discovery") return "No Data";
+    if (jobType === "bulk-discovery") return NO_DATA_TEXT;
 
     if (fileServerDetails?.isUploadInProgress)
-      return "Export Paths File upload is in progress...";
+      return EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT;
 
-    return isManualUploadPath ? getBulkManualUpload() : "No Data";
-  }, [jobType, fileServerDetails, isManualUploadPath]);
+    return isManualUploadPath ? getBulkManualUpload() : NO_DATA_TEXT;
+  }, [fileServerDetails, isManualUploadPath]);
 
   return (
     <TableWrapper
