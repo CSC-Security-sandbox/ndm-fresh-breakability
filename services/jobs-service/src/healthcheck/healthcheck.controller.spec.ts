@@ -1,7 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { HealthcheckController } from "./healthcheck.controller";
 import { HealthcheckService } from "./healthcheck.service";
-import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
@@ -11,6 +10,7 @@ import { HealthcheckStats } from "./dto/healthcheck.dto";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { HttpStatus, InternalServerErrorException } from "@nestjs/common";
 import { JwtService } from "@netapp-cloud-datamigrate/auth-lib";
+import { Logger } from '@nestjs/common';
 
 describe("HealthcheckController", () => {
   let controller: HealthcheckController;
@@ -47,12 +47,7 @@ describe("HealthcheckController", () => {
           provide: JwtService,
           useValue: mockJwtService,
         },
-        {
-          provide: LoggerService,
-          useValue: {
-            error: jest.fn(),
-          },
-        },
+       Logger,
       ],
     }).compile();
 
@@ -82,8 +77,10 @@ describe("HealthcheckController", () => {
       .mockResolvedValueOnce();
 
     // Act
+    const mockReq = { worker_id: 'mock-worker-id' };
+
     const response: HealthCheckResponse =
-      await controller.healthCheck(healthStats);
+      await controller.healthCheck(healthStats,mockReq);
 
     // Assert
     expect(service.createOrUpdateHealthCheckStats).toHaveBeenCalledWith(
@@ -111,9 +108,10 @@ describe("HealthcheckController", () => {
     jest
       .spyOn(service, "createOrUpdateHealthCheckStats")
       .mockRejectedValueOnce(error);
+    const mockReq = { worker_id: '"worker-123' };
 
     // Act
-    await expect(controller.healthCheck(healthStats)).rejects.toThrow(
+    await expect(controller.healthCheck(healthStats,mockReq)).rejects.toThrow(
       InternalServerErrorException,
     );
     // Assert

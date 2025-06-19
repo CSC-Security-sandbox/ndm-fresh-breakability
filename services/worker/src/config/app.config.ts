@@ -25,6 +25,7 @@ export default registerAs(
     migrationTaskStreamLimit: parseInt(process.env.MIGRATION_TASK_LIMIT || '100'),
     migrationChunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
     maxCommandConcurrency: parseInt(process.env.MAX_COMMAND_CONCURRENCY || '100'),
+    operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',

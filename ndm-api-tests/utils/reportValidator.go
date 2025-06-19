@@ -158,26 +158,43 @@ func fetchReport(
 	// 3) get token from env and prepare headers
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
-	// 4) send POST
-	resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-	if err != nil {
-		return nil, fmt.Errorf("POST %s: %w", url, err)
-	}
-	defer resp.Body.Close()
+	const maxRetries = MaxPollRetries
+	const retryDelay = DefaultPollInterval // adjust as needed
 
-	// 5) read response
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// 4) send POST
+		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
+		fmt.Println("report api response : ", resp)
+		if err != nil {
+			return nil, fmt.Errorf("POST %s: %w", url, err)
+		}
+		defer resp.Body.Close()
+
+		// 5) read response
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		// 6) expect 200 OK or 201 CREATED
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			return respBytes, nil
+		}
+
+		// Retry on 500 Internal Server Error
+		if resp.StatusCode == http.StatusInternalServerError {
+			if attempt < maxRetries {
+				IntroduceDelay(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
+		}
+
+		// For other status codes, return error immediately
+		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	// 6) expect 201 CREATED
-	if resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("unexpected HTTP %d: %s",
-			resp.StatusCode, string(respBytes))
-	}
-
-	return respBytes, nil
+	return nil, fmt.Errorf("failed to fetch report after %d retries", maxRetries)
 }
 
 // --- PDF & CSV Validator Helpers ------------------------------------------
@@ -266,34 +283,34 @@ func validateCSVAgainstJSON(csvPath, jsonPath string) error {
 
 // validatePDFAgainstJSON extracts text from the PDF and validates it against the JSON spec.
 func validatePDFAgainstJSON(pdfPath, jsonPath string) error {
-    // 1) Extract PDF text
-    txt, err := extractTextFromPDF(pdfPath)
-    if err != nil {
-        return fmt.Errorf("extract PDF text: %w", err)
-    }
+	// 1) Extract PDF text
+	txt, err := extractTextFromPDF(pdfPath)
+	if err != nil {
+		return fmt.Errorf("extract PDF text: %w", err)
+	}
 
-    // 2) Read and parse JSON as a list of maps with string values
-    raw, err := os.ReadFile(jsonPath)
-    if err != nil {
-        return fmt.Errorf("read JSON: %w", err)
-    }
-    var rows []map[string]string
-    if err := json.Unmarshal(raw, &rows); err != nil {
-        return fmt.Errorf("parse JSON: %w", err)
-    }
+	// 2) Read and parse JSON as a list of maps with string values
+	raw, err := os.ReadFile(jsonPath)
+	if err != nil {
+		return fmt.Errorf("read JSON: %w", err)
+	}
+	var rows []map[string]string
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return fmt.Errorf("parse JSON: %w", err)
+	}
 
-    // 3) For each row, check all key-value pairs in PDF text
-    for _, row := range rows {
-        for key, val := range row {
-            // Build regex: key, optional spaces, optional colon or equals, optional spaces, value
-            pattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*` + regexp.QuoteMeta(val)
-            re := regexp.MustCompile(pattern)
-            if !re.MatchString(txt) {
-                return fmt.Errorf("validation failed: missing key-value pair %q in format for key %q", val, key)
-            }
-        }
-    }
-    return nil
+	// 3) For each row, check all key-value pairs in PDF text
+	for _, row := range rows {
+		for key, val := range row {
+			// Build regex: key, optional spaces, optional colon or equals, optional spaces, value
+			pattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*` + regexp.QuoteMeta(val)
+			re := regexp.MustCompile(pattern)
+			if !re.MatchString(txt) {
+				return fmt.Errorf("validation failed: missing key-value pair %q in format for key %q", val, key)
+			}
+		}
+	}
+	return nil
 }
 
 // extractTextFromPDF uses the `pdftotext` command to extract text from a PDF file.

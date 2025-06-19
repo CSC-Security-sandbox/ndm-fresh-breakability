@@ -28,6 +28,9 @@ const JobConfig = () => {
             form={jobConfigForm}
             options={mountPaths}
             isOptional
+            /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. */
+            disabled={true}
           />
         ) : (
           // SELECT BOX IF WE ARE CREATING AND WE DON"T HAVE MOUNT PATHS
@@ -37,20 +40,25 @@ const JobConfig = () => {
             form={jobConfigForm}
             placeholder="Enter Export Path"
             isOptional
+            /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. */
+            disabled={true}
           />
         )}
         <FormFieldInputNew
           form={jobConfigForm}
-          disabled={
+          /* Disabling this field as it is related to speed-test and not included in Alpha release.
+            When we decide to enable speed-test then remove this comment and below line of code. Enable below commented code. */
+          /*disabled={
             isEditMode
               ? jobConfigForm?.formState?.pathId?.value?.length === 0
               : jobConfigForm?.formState?.pathName?.length === 0
-          }
+          }*/
+          disabled={true}
           name="workingDirectory"
           placeholder="Working Directory"
           label="Working Directory"
         />
-
       </Box>
     </FormFrame>
   );
