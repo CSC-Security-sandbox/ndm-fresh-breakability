@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RedisService } from "src/redis/redis.service";
 import { buildTask } from "../utils/utils";
+import * as crypto from "crypto";
 
 
 
@@ -16,6 +17,14 @@ export class MigrateCommonService {
       private readonly redisService: RedisService,
     ) {}
 
+    calculateHash(commands: Command[]): string {
+        const commandIds = commands.map(cmd => cmd.commandId);
+        commandIds.sort(); // Sort to ensure consistent order
+        const concatenatedIds = commandIds.join(',');
+        return crypto.createHash('sha256'). update(concatenatedIds).digest('hex');
+
+    }
+
     async getGroupOfTasksActivity(jobRunId,  groupSize =1000): Promise<string[]> {
     let taskIds: string[] = [];
       try{
@@ -27,14 +36,16 @@ export class MigrateCommonService {
           if (commands.length >= 100) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             taskIds.push(task.id);
-            await jobContext.setTask(task.id, task);            
+            const hashKey = this.calculateHash(commands); 
+            await jobContext.setTask(hashKey, task);            
             commands = [];
           }
         }
         if (commands.length > 0) {
           const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
           taskIds.push(task.id);
-           await jobContext.setTask(task.id, task);   
+          const hashKey = this.calculateHash(commands); 
+           await jobContext.setTask(hashKey, task);   
           commands = [];
         }
         if(streamIds.length > 0) 
@@ -44,4 +55,7 @@ export class MigrateCommonService {
       }
       return taskIds;
     }
+
+    
+    
 }
