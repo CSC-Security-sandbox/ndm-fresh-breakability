@@ -195,11 +195,7 @@ jobs:
       provider: ${{ matrix.provider }}
       component: ${{ matrix.component }}
       image_name: ${{ steps.image-info.outputs.image_name }}
-    steps:
-      - name: echo build version
-        run: |
-          echo "Build version: ${{ env.PKR_VAR_build_version }}"
-        
+    steps:  
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -286,7 +282,6 @@ jobs:
           name: datamigrator-images
           path: app-deployment/artifacts/
 
-      
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }}
         id: worker-binary
@@ -471,35 +466,58 @@ jobs:
             echo "GCP Image ID: $IMAGE_ID"
             ;;
           esac
+          
+      - name: Generate services array for manifest 
+        id: services-array
+        run: |
+          chmod +x ./app-deployment/scripts/generate_services_manifest.sh
+          ./app-deployment/scripts/generate_services_manifest.sh services.json
+          echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
 
-      - name: Generate VM image manifest metadata.json
+      - name: Generate charts array for manifest
+        id: charts-array
+        run: |
+          CHARTS_DIR="app-deployment/artifacts"
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          BUILD_VERSION="${{ env.build_version }}"
+
+          CHARTS_JSON="["
+          for f in "$CHARTS_DIR"/*.tgz; do
+            fname=$(basename "$f")
+            chart_name="${fname%-${BUILD_VERSION}.tgz}"
+            chart_path="builds/$BUILD_TYPE/$BUILD_VERSION/helm/$fname"
+            CHARTS_JSON="${CHARTS_JSON}{\"name\":\"$chart_name\",\"version\":\"$BUILD_VERSION\",\"path\":\"$chart_path\"},"
+          done
+          CHARTS_JSON="${CHARTS_JSON%,}]"
+          echo "$CHARTS_JSON" > charts.json
+          echo "charts_json=$CHARTS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Generate metadata.json for provider
         id: generate-metadata
         run: |
           BUILD_VERSION="${{ env.build_version }}"
           PROVIDER="${{ matrix.provider }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
-          IMAGE_ID="${{ steps.image-info.outputs.image_id || steps.image-info.outputs.aws_image_id || steps.image-info.outputs.gcp_image_id }}"
-          RESOURCE_GROUP="${{ steps.image-info.outputs.resource_group }}"
-          LOCATION="${{ steps.image-info.outputs.location }}"
           BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           COMMIT="${GITHUB_SHA}"
           SHORT_COMMIT="${GITHUB_SHA::7}"
           RUN_ID="${GITHUB_RUN_ID}"
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
+          CHARTS_JSON=$(cat charts.json)
+          SERVICES_JSON=$(cat services.json)
 
           cat <<EOF > metadata.json
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
             "image_name": "$IMAGE_NAME",
-            "image_id": "$IMAGE_ID",
-            "resource_group": "$RESOURCE_GROUP",
-            "location": "$LOCATION",
             "build_timestamp": "$BUILD_TIMESTAMP",
             "commit": "$COMMIT",
             "short_commit": "$SHORT_COMMIT",
             "workflow_run_id": "$RUN_ID",
-            "workflow_run_url": "$WORKFLOW_RUN_URL"
+            "workflow_run_url": "$WORKFLOW_RUN_URL",
+            "charts": $CHARTS_JSON,
+            "services": $SERVICES_JSON
           }
           EOF
 
@@ -509,7 +527,15 @@ jobs:
           BUILD_VERSION="${{ env.build_version }}"
           PROVIDER="${{ matrix.provider }}"
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          METADATA_PATH="builds/${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
+          else
+            METADATA_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
+          fi
+          DOCKER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+          HELM_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
 
           # Generate provider-specific latest.json
           cat <<EOF > latest.json
@@ -518,11 +544,33 @@ jobs:
             "provider": "$PROVIDER",
             "commit": "${GITHUB_SHA}",
             "short_commit": "${GITHUB_SHA::7}",
-            "updated_at": "$ISO_TIME",
+            "timestamp": "$ISO_TIME",
             "metadata_path": "$METADATA_PATH",
+            "docker_images_path": "$DOCKER_PATH",
+            "helm_chart_path": "$HELM_PATH",
             "published_by": "${{ github.actor }}"
           }
           EOF
+
+      - name: Upload provider metadata.json to Artifactory
+        run: |
+          BUILD_VERSION="${{ env.build_version }}"
+          PROVIDER="${{ matrix.provider }}"
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
+          else
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
+          fi
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+            echo "Uploading metadata.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "metadata.json uploaded successfully to $TARGET_URL."
+          done
 
       - name: Upload provider latest.json to Artifactory
         run: |
@@ -534,39 +582,54 @@ jobs:
           else
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${PROVIDER}-latest.json"
           fi
-          curl --silent --show-error --fail --request PUT --upload-file latest.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-
-      - name: Upload VM metadata.json to Artifactory
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
-          PROVIDER="${{ matrix.provider }}"
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}.json"
-          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+            echo "Uploading latest.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file latest.json \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "latest.json uploaded successfully to $TARGET_URL."
+          done
 
       - name: Upload Docker image tar to Artifactory
         if: ${{ matrix.component == 'control-plane' }}
         run: |
           BUILD_VERSION="${{ env.build_version }}"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
-          curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+          else
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+          fi
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+            echo "Uploading Docker tar to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "Docker tar uploaded successfully to $TARGET_URL."
+          done
 
       - name: Upload Helm chart tgz to Artifactory
         if: ${{ matrix.component == 'control-plane' }}
         run: |
           BUILD_VERSION="${{ env.build_version }}"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
-          curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          else
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          fi
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+            echo "Uploading Helm chart to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "Helm chart uploaded successfully to $TARGET_URL."
+          done
 
       - name: Upload OVA file to Artifactory
         if: ${{ matrix.provider == 'vsphere' }}
@@ -576,16 +639,24 @@ jobs:
           OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
           BUILD_VERSION="${{ env.build_version }}"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-
-          ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
+          else
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
+          fi
 
           if [ -f "$OVA_FILE" ]; then
             echo "Found OVA file: $OVA_FILE"
-            curl --silent --show-error --fail --request PUT --upload-file \
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading OVA file to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file \
               "$OVA_FILE" \
-              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+              "$TARGET_URL" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "OVA file uploaded successfully to ${ARTIFACTORY_PATH}."
+              echo "OVA file uploaded successfully to $TARGET_URL."
+            done
           else
             echo "Error: OVA file not found at $OVA_FILE"
             exit 1
