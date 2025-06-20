@@ -18,8 +18,6 @@ import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
 import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity";
 import { PreCheckService } from "./precheck.service";
 import { JwtAuthGuard, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import request from "supertest";
-import { NestFactory } from '@nestjs/core';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
