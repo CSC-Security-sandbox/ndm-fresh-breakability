@@ -166,4 +166,85 @@ describe('MetricsService', () => {
       expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting network IO metrics:', 'fail-net');
     });
   });
+
+  describe('onModuleInit', () => {
+    beforeEach(() => {
+      jest.spyOn((service as any).logger, 'warn').mockImplementation(jest.fn());
+      jest.spyOn((service as any).logger, 'log').mockImplementation(jest.fn());
+      jest.spyOn(global, 'setInterval').mockImplementation(((fn: any) => fn()) as any);
+    });
+    afterEach(() => jest.restoreAllMocks());
+    it('should not start metrics if METRICS_ENABLED is false', () => {
+      process.env.METRICS_ENABLED = 'false';
+      (service as any).onModuleInit();
+      expect((service as any).logger.warn).toHaveBeenCalledWith('[MetricsService] Metrics collection is disabled.');
+    });
+    it('should start metrics with custom intervals', () => {
+      process.env.METRICS_ENABLED = 'true';
+      process.env.METRICS_COLLECTION_INTERVAL = '1';
+      process.env.METRICS_PUSH_INTERVAL = '1';
+      (service as any).onModuleInit();
+      expect((service as any).logger.log).toHaveBeenCalledWith('[MetricsService] Starting metrics collection');
+    });
+  });
+
+  describe('onModuleDestroy', () => {
+    it('should clear intervals and handle delete error', async () => {
+      (service as any).pushInterval = setInterval(() => {}, 1000);
+      (service as any).collectSystemMetricsInterval = setInterval(() => {}, 1000);
+      const deleteMock = jest.fn().mockRejectedValue(new Error('fail-delete'));
+      (service as any).pushgateway.delete = deleteMock;
+      jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
+      await (service as any).onModuleDestroy();
+      expect(deleteMock).toHaveBeenCalled();
+      expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Failed to delete metrics on shutdown:', 'fail-delete');
+    });
+  });
+
+  describe('incrementHttpCounter and extractHost', () => {
+    beforeEach(() => {
+      jest.spyOn((service as any).httpRequestCounter, 'inc').mockImplementation(jest.fn());
+    });
+    it('should handle missing config and url', () => {
+      (service as any).incrementHttpCounter(undefined, 500);
+      expect((service as any).httpRequestCounter.inc).toHaveBeenCalledWith({
+        worker_id: (service as any).workerId,
+        method: 'UNKNOWN',
+        status_code: 500,
+        host: 'unknown',
+      });
+    });
+    it('should handle invalid url in extractHost', () => {
+      expect((service as any).extractHost('not-a-url')).toBe('unknown');
+    });
+  });
+
+  describe('metric collection edge cases', () => {
+    beforeEach(() => {
+      gauges.forEach(gauge => jest.spyOn((service as any)[gauge], 'set').mockImplementation(jest.fn()));
+      jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
+    });
+    afterEach(() => jest.restoreAllMocks());
+    it('collectCPUMetrics: should handle empty cpus array', async () => {
+      jest.spyOn(require('systeminformation'), 'currentLoad').mockResolvedValue({ cpus: [], avgLoad: 0 });
+      await (service as any).collectCPUMetrics();
+      expect((service as any).cpuUsageGauge.set).toHaveBeenCalledWith({ worker_id: (service as any).workerId, core: 'average' }, 0);
+    });
+    it('collectDiskUsageMetrics: should handle empty disks array', async () => {
+      jest.spyOn(require('systeminformation'), 'fsSize').mockResolvedValue([]);
+      await (service as any).collectDiskUsageMetrics();
+      expect((service as any).diskUsageGauge.set).not.toHaveBeenCalledWith(expect.anything(), expect.anything());
+    });
+    it('collectNetworkIOMetrics: should handle all interfaces down', async () => {
+      jest.spyOn(require('systeminformation'), 'networkInterfaces').mockResolvedValue([{ iface: 'eth0', operstate: 'down' }]);
+      await (service as any).collectNetworkIOMetrics();
+      expect((service as any).networkIOGauge.set).not.toHaveBeenCalled();
+    });
+    it('collectNetworkIOMetrics: should handle empty stats array', async () => {
+      jest.spyOn(require('systeminformation'), 'networkInterfaces').mockResolvedValue([{ iface: 'eth0', operstate: 'up' }]);
+      jest.spyOn(require('systeminformation'), 'networkStats').mockResolvedValue([]);
+      await (service as any).collectNetworkIOMetrics();
+      expect((service as any).networkIOGauge.set).not.toHaveBeenCalled();
+    });
+  });
 });
