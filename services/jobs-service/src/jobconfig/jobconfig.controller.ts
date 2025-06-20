@@ -166,9 +166,6 @@ export class JobConfigController {
     @Param('id') id: string,
     @Body() jobConfigData: JobConfigDto,
   ): Promise<JobConfigEntity> {
-    // if (!authorization) {
-    //   throw new BadRequestException('Authorization header is missing.');
-    // }
     return await this.jobConfigService.updateJobConfig(id, jobConfigData);
   }
 
