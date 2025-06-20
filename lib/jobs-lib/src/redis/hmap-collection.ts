@@ -17,6 +17,7 @@ export interface WorkerRunningTaskMapCollection<T extends Serializable> {
     assignToSelf(key: string): Promise<T | null>;
     isEmpty(): Promise<boolean>;
     getSize(): Promise<number>;
+    setValueIfNotExists(key: string, value: T): Promise<boolean>;
 }
 
 export interface RunningScanTaskCollection extends WorkerRunningTaskMapCollection<any> {}

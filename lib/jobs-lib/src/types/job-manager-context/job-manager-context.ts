@@ -95,6 +95,10 @@ export class JobManagerContext {
         await this.taskMap.setValue(key, value);
     }
 
+    async setTaskIfNotExists(key: string, value: Task): Promise<boolean> {
+        return await this.taskMap.setValueIfNotExists(key, value);
+    }
+
     async getTask(key: string): Promise<Task | null> {
         return await this.taskMap.getValue(key);
     }
