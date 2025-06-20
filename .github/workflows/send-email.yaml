@@ -1,0 +1,38 @@
+name: Send Email
+
+on:
+  push:
+    branches:
+      - main
+      - send-email
+  workflow_dispatch:
+
+jobs:
+  send_email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Send email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # SMTP server configuration
+          server_address: smtp.outlook.com
+          server_port: 587
+          username: ${{ secrets.NDM_NEXUS_USERNAME }}
+          password: ${{ secrets.NDM_NEXUS_PASSWORD }}
+          
+          # Email details
+          subject: GitHub Actions Workflow Notification
+          body: |
+            Hello,
+
+            This is a notification from your GitHub Actions workflow.
+            
+            Best regards,
+            Your GitHub Actions Bot
+          from: si82974@netapp.com
+          to: si82974@netapp.com
+          secure: false
