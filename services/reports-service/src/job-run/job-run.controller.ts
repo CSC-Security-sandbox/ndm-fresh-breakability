@@ -47,12 +47,18 @@ export class JobRunController {
     return serializeJobRunDetailsResponse(response);
   }
 
+  private validateJobRunId(jobRunId: string): boolean {
+    const regexToTest = /^[a-zA-Z0-9-]+$/;
+    return regexToTest.test(jobRunId);
+  }
+
   @ApiOperation({ summary: "Get COC Report by JobRunId" })
   @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
   @ApiResponse({ status: 404, description: "COC report not found." })
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
-    if (!/^[a-zA-Z0-9-]+$/.test(jobRunId)) {
+    this.validateJobRunId(jobRunId);
+    if (!this.validateJobRunId(jobRunId)) {
       throw new BadRequestException("Invalid JobRunId format.");
     }
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);
