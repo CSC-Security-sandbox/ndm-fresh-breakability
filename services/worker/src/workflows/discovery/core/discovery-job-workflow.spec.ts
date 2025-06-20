@@ -27,9 +27,13 @@ describe('DiscoveryJobWorkflow', () => {
             env = await TestWorkflowEnvironment.createTimeSkipping();
         } catch (e) {
             console.error('Error during test environment setup:', e);
-            if (!!env) {
-                await env.teardown();
-            }
+        }                       
+    });
+
+    afterAll(async () => {
+        if (env) {
+            await env.teardown();
+            env = undefined;
         }
     });
 
@@ -168,6 +172,7 @@ describe('DiscoveryJobWorkflow', () => {
     });
 
     mockPublishTask.mockResolvedValue();
+
 
     worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
         connection: env.nativeConnection,

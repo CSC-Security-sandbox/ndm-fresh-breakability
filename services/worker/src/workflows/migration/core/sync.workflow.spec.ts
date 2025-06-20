@@ -310,4 +310,4 @@ describe('SyncWorkflow', () => {
             expect(syncCallCount).toBeGreaterThan(10);
         });
     });
-});
+}); 
