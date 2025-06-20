@@ -4,7 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { ResponseInterceptor } from './util/response-handler/response-Interceptor';
+import { ResponseInterceptor } from './utils/response-handler/response-Interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -12,28 +12,27 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.setGlobalPrefix('api/v1')
-  
+  app.setGlobalPrefix('api/v1');
+
   const serverEndpoint = `http://${host}:${port}`;
-  app.useGlobalPipes(new ValidationPipe())
+  app.useGlobalPipes(new ValidationPipe());
   const config = new DocumentBuilder()
-  .setTitle('Config service')
-  .setDescription('Configuration Management')
-  .setVersion('1.0')
-  .addServer(serverEndpoint, `Environment`)
-  .addBearerAuth()
-  .build();
-  
+    .setTitle('Config service')
+    .setDescription('Configuration Management')
+    .setVersion('1.0')
+    .addServer(serverEndpoint, `Environment`)
+    .addBearerAuth()
+    .build();
+
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('config-docs', app, document,{
+  SwaggerModule.setup('config-docs', app, document, {
     jsonDocumentUrl: 'swagger/json',
   });
-  
+
   app.enableShutdownHooks();
   app.set('trust proxy', true);
   app.enableCors();

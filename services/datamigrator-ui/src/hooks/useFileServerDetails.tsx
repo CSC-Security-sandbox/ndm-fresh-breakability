@@ -9,7 +9,7 @@ import { useParams } from "react-router-dom";
 
 const useFileServerDetails = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
-  const { data: _fileServerDetails } = useGetFileServerByIdQuery(
+  const { data: result } = useGetFileServerByIdQuery(
     { fileServerId },
     {
       pollingInterval: Number(
@@ -18,6 +18,8 @@ const useFileServerDetails = () => {
       skipPollingIfUnfocused: true,
     }
   );
+  const _fileServerDetails = result?.data?.items;
+  console.log('_fileServerDetails',_fileServerDetails);
   const [allExportPaths, setAllExportPaths] = useState<VolumeType[]>([]);
   const [allWorkersList, setAllWorkersList] = useState<WorkerApiType[]>([]);
   const [fileServerDetails, setFileServerDetails] =

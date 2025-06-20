@@ -1,10 +1,13 @@
-import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
-import { WorkFlows } from "src/work-manager/work-manager.types";
-import { ValidateWorkerConnectionWorkflow } from "./validate-worker-connection.workflow";
-import { ApiResponse, CreatApiResponse, RESPONSESTATUS } from '../utils/response-handler/create-api-response';
+import {
+  ChildWorkflowCancellationType,
+  executeChild,
+  ParentClosePolicy,
+} from '@temporalio/workflow';
+import { WorkFlows } from 'src/work-manager/work-manager.types';
+import { ValidateWorkerConnectionWorkflow } from './validate-worker-connection.workflow';
 
 async function log(traceId: string, message: string) {
-    console.log(`[${traceId}] ${message}`);
+  console.log(`[${traceId}] ${message}`);
 }
 /**
  * This is parent workflow that will call ValidateWorkerConnectionWorkflow for each workerId
@@ -13,9 +16,16 @@ async function log(traceId: string, message: string) {
  * @param options Options to pass to this workflow and all child workflows
  * @returns Returns the result of all child workflows
  */
-export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) => {
-//  log( traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,);
-  console.log('PayLOAD<<<<<<<<',payload, traceId, options);
+export const ValidateConnectionsWorkflow = async ({
+  traceId,
+  payload,
+  options,
+}) => {
+  log(
+    traceId,
+    `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,
+  );
+  console.log('PayLOAD<<<<<<<<', payload, traceId, options);
   const responseArray = await Promise.all(
     payload.workerIds.map((workerId) =>
       executeChild(ValidateWorkerConnectionWorkflow, {
@@ -23,27 +33,23 @@ export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) =
           {
             traceId: traceId,
             fileServer: payload.fileServer,
-            feature: payload.feature
-          }
+            feature: payload.feature,
+          },
         ],
         workflowId: `${WorkFlows.VALIDATE_CONNECTION}-${traceId}-${workerId}`,
         taskQueue: `${workerId}-TaskQueue`,
         ...options,
-        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+        cancellationType:
+          ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       }),
     ),
   );
-/*  console.log('REsponseeeeArray', responseArray);
-  const apiResponse: ApiResponse = CreatApiResponse.apiResponse(
-    RESPONSESTATUS.ERROR,
-    responseArray,
-  );
-  console.log('responseeeeee', apiResponse);*/
   const result = responseArray.flat();
   log(
-    traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
+    traceId,
+    `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
   );
   console.log('PostFlat Arry', result);
   return result;
-}
+};

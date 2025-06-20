@@ -4,10 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import {
-  ApiResponse,
   CreatApiResponse,
   RESPONSESTATUS,
-} from '../../workflows/utils/response-handler/create-api-response';
+} from '../../utils/response-handler/create-api-response';
+import { ApiResponse } from '../../utils/response-handler/response.interface';
 
 @Injectable()
 export class ValidateConnectionActivity {
@@ -36,6 +36,7 @@ export class ValidateConnectionActivity {
       paths: [],
       protocolVersions: [],
       message: ``,
+      status: '',
     };
 
     try {
@@ -43,6 +44,7 @@ export class ValidateConnectionActivity {
         ProtocolTypes[protocolType],
       );
       await protocol.validateConnection(traceId, payload);
+      console.log('call inisidethe validateConnection', feature);
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);
       }
@@ -57,31 +59,19 @@ export class ValidateConnectionActivity {
       //   const disconnectResponse = await protocol.disconnectSession(traceId, payload);
       //   this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
       // }
+      response.status = RESPONSESTATUS.SUCCESS;
       response.message = `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`;
       this.logger.log(`[${traceId}] Paths: ${response.paths}`);
-      const result: ApiResponse = CreatApiResponse.apiResponse(
+      const result: ApiResponse<any> = CreatApiResponse.apiResponse(
         RESPONSESTATUS.SUCCESS,
         response,
       );
-  /*    response.status = RESPONSESTATUS.SUCCESS;*/
-      //console.log('CreatApiResponse.apiResponse(response);', result);
-      //return CreatApiResponse.apiResponse(response);
       return result;
     } catch (error) {
-    //  response.status = RESPONSESTATUS.ERROR;
-      response.message = error.message;
+      response.status = RESPONSESTATUS.ERROR;
+      response.message = error;
       console.log('call inisidethe Exception nn', error);
-      /* const errorDetails = {
-        traceId: traceId,
-        status: 'error',
-        protocolType: protocolType,
-        hostname: payload.hostname,
-        workerId: this.workerId,
-        paths: [],
-        protocolVersions: [],
-        message: `${error}`,
-      };*/
-      const result: ApiResponse = CreatApiResponse.apiResponse(
+      const result: ApiResponse<any> = CreatApiResponse.apiResponse(
         RESPONSESTATUS.ERROR,
         response,
       );

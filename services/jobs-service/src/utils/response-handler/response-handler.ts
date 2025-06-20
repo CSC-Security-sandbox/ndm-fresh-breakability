@@ -1,28 +1,22 @@
 // src/common/utils/response-handler.ts
 
-import { ApiResponse } from './response.interface';
+import { ApiResponse } from "./response.interface";
 
 export class ResponseHandler {
-  static success<T, msg extends string>(
-    data: T,
-    message :msg,
-    statusCode = 200,
-  ): ApiResponse<T> {
+  static success<T>(data: T, message = "Success"): ApiResponse<T> {
     return {
-      status: 'COMPLETE',
-      statusCode,
+      status: data["status"] || "success",
       message,
-      data: data,
+      data: !!data["items"] ? data : { items: data },
     };
   }
+
   static error(
-    message = 'An error occurred',
+    message = "An error occurred",
     error: any = null,
-    statusCode = 500,
   ): ApiResponse<null> {
     return {
-      status: 'error',
-      statusCode,
+      status: "error",
       message,
       error,
     };

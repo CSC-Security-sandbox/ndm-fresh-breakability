@@ -101,15 +101,15 @@ const NextAndSubmitButton = () => {
       serverTypeForm?.formState?.configName
     ) {
       try {
-        await getUniqueFileServerName({
+       let result = await getUniqueFileServerName({
           projectId: selectedProjectId,
           configName: serverTypeForm?.formState?.configName,
         }).unwrap();
-
+       console.log('call inside the handle check server name', result);
         handleNextClick();
       } catch (err) {
         console.log(err?.data?.message || "File Server creation error");
-        notify.error("File Server Name already exists.");
+        notify.error(err?.data?.message);
       }
     }
   };

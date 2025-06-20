@@ -67,7 +67,7 @@ export class ConfigurationController{
     @ApiQuery({ name: 'projectId', type: 'string', required: true })
     @ApiQuery({ name: 'configName', type: 'string', required: true })
     @ApiResponse({ status: 200, description: 'Returns true if unique config name' })
-    @ApiResponse({ status: 400, description: 'Config name already exists' })
+   // @ApiResponse({ status: 400, description: 'Config name already exists' })
     @ApiResponse({ status: 404, description: 'Project ID not found' })
     @ApiBearerAuth()
     @Auth(Permission.ManageConfig)

@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   CreatApiResponse,
   RESPONSESTATUS,
-} from '../../workflows/utils/response-handler/create-api-response';
+} from '../../utils/response-handler/create-api-response';
 
 @Injectable()
 export class ListPathActivity {
@@ -45,24 +45,17 @@ export class ListPathActivity {
         RESPONSESTATUS.SUCCESS,
         response,
       );
-     // console.log('result in the Pathsss', result);
+      // console.log('result in the Pathsss', result);
       return result;
     } catch (error) {
+      response.status = RESPONSESTATUS.ERROR;
+      response.message = error.message;
       console.log('error on the list pathhhs', error);
       const result = CreatApiResponse.apiResponse(
         RESPONSESTATUS.ERROR,
         response,
       );
-      console.log('result in the Pathsss', result);
-      return; /*{
-        traceId: traceId,
-        status: 'error',
-        protocolType: protocolType,
-        hostname: payload.hostname,
-        workerId: this.workerId,
-        paths: [],
-        message: `Failed to List Path for ${payload.hostname} of type ${protocolType}: ${error}`,
-      };*/
+      return result;
     }
   }
 }

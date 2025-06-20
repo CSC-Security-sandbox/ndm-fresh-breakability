@@ -29,7 +29,7 @@ const ExportPathsTable = ({
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
   const dispatch = useDispatch();
-  
+
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
     rows: allExportPaths,
@@ -46,7 +46,7 @@ const ExportPathsTable = ({
     }
 
     notify.error(
-      `Failed to refresh the list, reason - ${error?.message || "unknown."}`
+      `Failed to refresh the list, reason - ${error?.message || "unknown."}`,
     );
     console.error({ level: "File server overview - refresh list.", error });
   };
@@ -62,7 +62,7 @@ const ExportPathsTable = ({
 
       interval.current = setInterval(async () => {
         const data = await getWorkFlowStatus({
-          id: response?.workflowId,
+          id: response?.data?.items?.workflowId,
         }).unwrap();
 
         if (data?.status === ValidateConnectionStatus.COMPLETED) {
@@ -72,12 +72,12 @@ const ExportPathsTable = ({
           clearInterval(interval.current);
         } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
           const error = new Error(
-            `Seems like request to refresh paths got terminated, please try again.`
+            `Seems like request to refresh paths got terminated, please try again.`,
           );
           showErrorOnRefetchFailure(error);
         } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
           const error = new Error(
-            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`,
           );
           showErrorOnRefetchFailure(error);
         }

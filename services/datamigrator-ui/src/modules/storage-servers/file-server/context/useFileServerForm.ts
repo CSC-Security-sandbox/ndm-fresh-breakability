@@ -184,9 +184,10 @@ export const useFileServerForm = () => {
 
       return new Promise((resolve) => {
         interval.current = setInterval(async () => {
-          const data = await checkConnectionRespApi({
+          const result = await checkConnectionRespApi({
             id: resp?.data?.items?.workflowId,
           }).unwrap();
+            const data = result?.data.items;
           console.log('inside the Ptomise USer File Server', data )
           if (data?.status === ValidateConnectionStatus.COMPLETED) {
             const errorMessageList = await handleConnectionValidationComplete(
@@ -245,9 +246,9 @@ export const useFileServerForm = () => {
     const nfsFailedWorkers: string[] = [];
     const smbFailedWorkers: string[] = [];
     const newErrorMessageList: ErroredWorkersDetailsType[] = [];
-
+  console.log('status inside the handleConnectionValidationComplete', status);
     status.completed.forEach((row:any) => {
-
+    console.log('row inside the handleConnectionValidationComplete', row);
       if (row?.status === WorkerConnectionStatus.SUCCESS) {
         const rowData= row?.data;
         if (rowData?.protocolType === ProtocolType.NFS)
@@ -256,7 +257,6 @@ export const useFileServerForm = () => {
           smbValidatedWorkers.push(rowData?.workerId);
       } else if (row?.status === WorkerConnectionStatus.ERROR) {
         const errorDetails= row?.error;
-        console.log('row>>>>>>>>>>>>>>>', errorDetails)
         newErrorMessageList.push({
           errorMessage: errorDetails?.displayMessage || "Unknown-Error",
           workerId: errorDetails?.details.workerId,

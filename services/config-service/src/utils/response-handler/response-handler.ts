@@ -3,14 +3,9 @@
 import { ApiResponse } from './response.interface';
 
 export class ResponseHandler {
-  static success<T>(
-    data: T,
-    message = 'Success',
-    statusCode = 200,
-  ): ApiResponse<T> {
+  static success<T>(data: T, message = 'Success'): ApiResponse<T> {
     return {
-      status: '',
-      statusCode,
+      status: data['status'] || 'success',
       message,
       data: {
         items: data,
@@ -21,11 +16,9 @@ export class ResponseHandler {
   static error(
     message = 'An error occurred',
     error: any = null,
-    statusCode = 500,
   ): ApiResponse<null> {
     return {
       status: 'error',
-      statusCode,
       message,
       error,
     };

@@ -5,7 +5,7 @@ import React, { useContext } from "react";
 import { PopoverWrapperType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 const NFSStatusRenderer = (
-  params: BlueXpTableRowType<GetAllWorkersApiType, GetAllWorkersApiType>
+  params: BlueXpTableRowType<GetAllWorkersApiType, GetAllWorkersApiType>,
 ) => {
   const { workerId } = params?.row ?? {};
 
@@ -28,7 +28,7 @@ const NFSStatusRenderer = (
 
   if (nfsFailedWorkersIds.includes(workerId)) {
     const workerError = errorMessageList.find(
-      (worker) => worker.workerId === workerId
+      (worker) => worker.workerId === workerId,
     );
 
     return (
@@ -40,7 +40,9 @@ const NFSStatusRenderer = (
   }
 
   if (nfsValidatedWorkersIds.includes(workerId)) {
-    return <PopoverWrapper status="success" message="" />;
+    return (
+      <PopoverWrapper status="success" message="Validate connection Success" />
+    );
   }
   return "-";
 };

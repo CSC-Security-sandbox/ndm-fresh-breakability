@@ -16,3 +16,17 @@ export interface ApiResponse<T> {
     correctiveAction?: string; // Suggested corrective action for the user
   };
 }
+
+export const ErrorCatalog = {
+  ERR_INVALID_ARG_TYPE: {
+    message: `The "command" argument must be of type string. Received undefined`,
+    displayMessage: 'Please provide a valid command as a string.',
+  },
+  INVALID_INPUT: {
+    message: 'The input provided is invalid.',
+    displayMessage: 'Check your input and try again.',
+  },
+  // Add more key-value pairs as needed
+};
+
+

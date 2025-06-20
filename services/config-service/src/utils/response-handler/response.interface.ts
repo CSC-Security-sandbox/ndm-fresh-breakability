@@ -1,9 +1,8 @@
 export interface ApiResponse<T> {
-  statusCode?: number; // HTTP status code
-  status: string;
+  status: string; // success, error, Complete, running
   message: string; // General message for the response
   data?: {
-    items: T;
+    items?: T;
     meta?: {
       total?: number; // For pagination: total items
       page?: number; // For pagination: current page
@@ -12,14 +11,8 @@ export interface ApiResponse<T> {
     };
   }; // Payload for successful responses
   error?: {
-    message: string; // Error message
     displayMessage?: string; // User-friendly error message
-    details?: any; // Additional error details (e.g., validation errors)
-    code?: string | number; // Custom error code
-    stack?: string; // Stack trace (optional, for debugging)
+    details?: any; // Additional error details (e.g.,traceID, workerID, ProjectId)
     correctiveAction?: string; // Suggested corrective action for the user
   };
-
-  timestamp?: string; // ISO timestamp of the response
-  path?: string; // Request path
 }
