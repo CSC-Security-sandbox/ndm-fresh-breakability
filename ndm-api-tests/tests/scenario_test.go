@@ -2,13 +2,14 @@ package tests
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"ndm-api-tests/internal/scenario"
 	. "ndm-api-tests/utils"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 // sharedVars holds the common variables used in scenario tests.
@@ -74,7 +75,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 					volumeName := fmt.Sprintf("%v", rawMap["volume_name"])
 
 					configId := sharedVars["configId"].(string)
-					volumeID, err := GetVolumeIDByName(volumeName, localAuthToken, configId)
+					volumeID, err := GetExportPathID(volumeTypeStr, volumeName, configId, GetHeaders(AuthToken, ContentTypeJSON))
 					if err != nil {
 						fmt.Printf("Error handling volume for '%s': %v\n", scData.Name, err)
 						continue
