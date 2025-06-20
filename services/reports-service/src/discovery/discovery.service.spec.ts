@@ -94,7 +94,7 @@ describe('DiscoveryService', () => {
 
     beforeEach(() => {
       // Mock filePathValidation to avoid validation errors on paths
-      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => filePath);
+      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => true || false);
 
       mockInventoryRepo.query.mockImplementation((query, params) => {
         if (query.includes('generate_discovery_report')) {

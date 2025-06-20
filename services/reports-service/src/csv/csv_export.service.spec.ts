@@ -40,7 +40,7 @@ describe("CsvService", () => {
   describe("generateCsv", () => {
     beforeEach(() => {
       // Mock filePathValidation to avoid validation errors on paths
-      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => filePath);
+      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => true || false);
     });
     
     it("should generate CSV file and write data in batches", async () => {

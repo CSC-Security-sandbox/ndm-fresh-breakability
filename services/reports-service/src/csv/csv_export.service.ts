@@ -10,10 +10,11 @@ export class CsvService {
     constructor(private readonly dataSource: DataSource) { }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
-        const sanitisedFilePath = filePathValidation(filePath);
-        if (sanitisedFilePath !== filePath) {
+        if (!filePathValidation(filePath)) {
             this.logger.error(`File path contains invalid characters: ${filePath}`);
             throw new Error('File path contains invalid characters.');
+        } else {
+            this.logger.log(`File path validation passed: ${filePath}`);
         }
         const queryRunner = this.dataSource.createQueryRunner();
         await queryRunner.connect();

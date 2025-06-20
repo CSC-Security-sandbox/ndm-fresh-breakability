@@ -67,10 +67,11 @@ export class DiscoveryService {
       const pdfBuffer = await this.generatePdfFromData(reportData);
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
-      const sanitisedFilePath = filePathValidation(pdfFilePath);
-      if (sanitisedFilePath !== pdfFilePath) {
+      if (!filePathValidation(pdfFilePath)) {
         this.logger.error(`File path contains invalid characters: ${pdfFilePath}`);
         throw new Error('File path contains invalid characters.');
+      } else {
+        this.logger.log(`File path validation passed: ${pdfFilePath}`);
       }
       fs.writeFileSync(pdfFilePath, pdfBuffer); 
 
@@ -194,9 +195,11 @@ export class DiscoveryService {
 
  formatAndWriteToFile(reportData: any[], filePath: string) {
   const sanitisedFilePath = filePathValidation(filePath);
-  if (sanitisedFilePath !== filePath) {
+  if (!filePathValidation(filePath)) {
     this.logger.error(`File path contains invalid characters: ${filePath}`);
     throw new Error('File path contains invalid characters.');
+  } else {
+    this.logger.log(`File path validation passed: ${filePath}`);
   }
   const predefinedHeaders = Object.values(ReportHeaders);
   const dynamicHeaders = new Set<string>();
