@@ -5,6 +5,7 @@ import { InventoryEntity } from '../entities/inventory.entity';
 import { ReportsEntity } from '../entities/reports.entity';
 import * as fs from 'fs';
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import * as validation from '../utils/filepath-validation';
 
 jest.mock('puppeteer', () => ({
   launch: jest.fn().mockResolvedValue({
@@ -92,7 +93,9 @@ describe('DiscoveryService', () => {
     const reportType = 'DISCOVERY';
 
     beforeEach(() => {
-      // Mock the procedure call
+      // Mock filePathValidation to avoid validation errors on paths
+      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => filePath);
+
       mockInventoryRepo.query.mockImplementation((query, params) => {
         if (query.includes('generate_discovery_report')) {
           return Promise.resolve();

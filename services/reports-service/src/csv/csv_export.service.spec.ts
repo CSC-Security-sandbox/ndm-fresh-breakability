@@ -4,6 +4,7 @@ import { DataSource } from "typeorm";
 import * as fs from "fs";
 import * as fastCsv from "fast-csv";
 import exp from "constants";
+import * as validation from '../utils/filepath-validation';
 
 jest.mock("fs");
 jest.mock("fast-csv");
@@ -37,6 +38,11 @@ describe("CsvService", () => {
   });
 
   describe("generateCsv", () => {
+    beforeEach(() => {
+      // Mock filePathValidation to avoid validation errors on paths
+      jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => filePath);
+    });
+    
     it("should generate CSV file and write data in batches", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
