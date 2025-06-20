@@ -18,6 +18,8 @@ import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
 import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity";
 import { PreCheckService } from "./precheck.service";
 import { JwtAuthGuard, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import request from "supertest";
+import { NestFactory } from '@nestjs/core';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
@@ -44,23 +46,6 @@ describe("JobConfigController", () => {
     getNoticeBoardDetailsByProjectId: jest.fn(),
     precheckValidation: jest.fn(),
     createSpeedTest: jest.fn(),
-  };
-
-  const mockJwtService = {
-    verifyToken: jest.fn().mockResolvedValue({
-      user: {
-        roles: [
-          {
-            permissions: ['permission1', 'permission2'],
-            projects: ['project1'],
-          },
-        ],
-      },
-    }),
-    configService: {},
-    client: jest.fn(),
-    logger: jest.fn(),
-    getKey: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -94,9 +79,8 @@ describe("JobConfigController", () => {
         },
         {
           provide: JwtService,
-          useValue: mockJwtService,
+          useValue: {},
         },
-        JwtAuthGuard,
       ],
     }).compile();
 
@@ -274,6 +258,8 @@ describe("JobConfigController", () => {
           );
           expect(service.updateJobConfig).toHaveBeenCalledWith("1", jobConfig);
         });
+  // The following test is removed because NestFactory.create(module) is not valid in unit tests.
+  // Move this test to an e2e test suite if you want to test HTTP status codes and permissions.
       });
 
       describe("deleteJobConfig", () => {
