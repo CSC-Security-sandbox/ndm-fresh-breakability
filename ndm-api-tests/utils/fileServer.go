@@ -207,9 +207,7 @@ func ClearVolume(export string) error {
 }
 
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
-
 func AddDataToVolume(export string) error {
-	fmt.Println("Adding Delta data, and export is : ", export)
 	destMount := "/mnt/data_add"
 	deltaDir := "/" + DeltaFolder
 
