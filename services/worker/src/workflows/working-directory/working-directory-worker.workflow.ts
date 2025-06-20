@@ -39,7 +39,6 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
 
   if(exportPathWorkingDirectoryProvided) {
-    // const exportPath = paths.includes(args.payload.exportPath);
     args.payload['exportPathPresent'] = !!args.payload.exportPath;
   }
 

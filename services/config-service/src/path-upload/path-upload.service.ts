@@ -45,17 +45,17 @@ export class PathUploadService {
   async processFileUpload(importVolumePathsDto: ImportVolumePathsDto, fileServerId: string, userDetails?: UserDetails): Promise<any> {
     try {
       const fileServer = await this.fileServerRepo.findOneBy({ id: fileServerId });
-      if (!fileServer) throw new NotFoundException('File server does not exists');
+      if (!fileServer) throw new BadRequestException('File server does not exists');
 
       if (!!fileServer && fileServer.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
         this.logger.warn(`File server with ID ${fileServerId} is not configured for manual import`);
-        throw new NotFoundException(`File server with ID ${fileServerId} is not configured for manual import`);
+        throw new BadRequestException(`File server with ID ${fileServerId} is not configured for manual import`);
       }
 
       const parsedData = importVolumePathsDto.contents.split('\n').map(line => line.split(','));
       // check if the first line exists and is "path" if not return error if yes remove it
       if (parsedData.length === 0 || !parsedData[0][0].startsWith('path')) {
-        throw new NotFoundException('CSV file is empty or does not contain valid data');
+        throw new BadRequestException('CSV file is empty or does not contain valid data');
       }
       // If the first line is "path" then remove it
       if (parsedData[0][0].startsWith('path')) parsedData.shift();
