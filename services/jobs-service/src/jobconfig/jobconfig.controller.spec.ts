@@ -17,6 +17,7 @@ import {
 import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
 import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity";
 import { PreCheckService } from "./precheck.service";
+import { JwtAuthGuard, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
@@ -43,6 +44,23 @@ describe("JobConfigController", () => {
     getNoticeBoardDetailsByProjectId: jest.fn(),
     precheckValidation: jest.fn(),
     createSpeedTest: jest.fn(),
+  };
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -74,6 +92,11 @@ describe("JobConfigController", () => {
           provide: "VolumeRepository",
           useValue: {},
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
+        JwtAuthGuard,
       ],
     }).compile();
 
