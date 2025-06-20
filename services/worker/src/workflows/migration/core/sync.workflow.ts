@@ -1,9 +1,9 @@
 import * as wf from '@temporalio/workflow';
 import { ContinueAsNew, continueAsNew, proxyActivities } from "@temporalio/workflow";
-import { CommonActivityService } from "src/activities/common/common.service";
-import { JobRunStatus } from "src/activities/discovery/enums";
-import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
-import { SyncTaskOutput } from 'src/activities/migrate/migrate.type';
+import { CommonActivityService } from "../../../activities/common/common.service";
+import { JobRunStatus } from "../../../activities/discovery/enums";
+import { MigrationSyncService } from "../../../activities/migrate/migrate.sync.service";
+import { SyncTaskOutput } from '../../../activities/migrate/migrate.type';
 
 interface SyncWorkflowInput {
     jobRunId: string;

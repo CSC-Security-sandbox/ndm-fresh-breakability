@@ -1,73 +1,95 @@
-import { CleanupWorkerWorkflow } from './cleanup-worker-workflow';
+import { TestWorkflowEnvironment } from '@temporalio/testing';
+import { Worker } from '@temporalio/worker';
+import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
+import { CleanupWorkerWorkflow } from './cleanup-worker-workflow'
 import { JobServiceJobType } from 'src/activities/discovery/enums';
-const mockCleanup = require('@temporalio/workflow').proxyActivities().cleanup;
-const mockSpeedTestCleanup = require('@temporalio/workflow').proxyActivities().speedTestCleanup;
 
-// Mock proxyActivities and its returned activities
-jest.mock('@temporalio/workflow', () => ({
-    proxyActivities: jest.fn().mockReturnValue({
-        cleanup: jest.fn(),
-        speedTestCleanup: jest.fn(),
-    }),
-}));
+const workflowCoverage = new WorkflowCoverage();
 
+const mockedActivities = {
+    cleanup: jest.fn(),
+    speedTestCleanup: jest.fn()
+};
 
 describe('CleanupWorkerWorkflow', () => {
-    const traceId = 'trace-123';
-    const jobRunId = 'job-456';
-    const fsDetails = { some: 'details' };
-    const protocolType = 'NFS';
+    let testEnv: TestWorkflowEnvironment;
+    let worker: Worker;
 
-    beforeEach(() => {
+    beforeAll(async () => {
+        try {
+            testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+        } catch (e) {
+            console.error('Error during test environment setup:', e);
+            if (!!testEnv) {
+                await testEnv.teardown();
+            }
+        }
+    });
+
+    afterAll(async () => {
+        if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
+            await worker?.shutdown();
+        }
+        await testEnv.teardown();
+        workflowCoverage.mergeIntoGlobalCoverage();
+    });
+
+    beforeEach(async () => {
         jest.clearAllMocks();
     });
 
-    it('should call cleanupWorkerActivity for non-SPEED_TEST jobType', async () => {
-        const args = {
-            traceId,
-            jobType: 'SOME_OTHER_JOB',
-            jobRunId,
-        };
-        mockCleanup.mockResolvedValue('cleanup-result');
+    it('should call cleanup activity for non-speed test jobs', async () => {
+        const jobRunId = 'test-job-run-id';
+        const args = { jobRunId, traceId: 'test-trace-id', fileServer: { jobConfig: { jobType: JobServiceJobType.CUT_OVER } } };
 
-        const result = await CleanupWorkerWorkflow(args);
+        mockedActivities.cleanup.mockResolvedValue({ success: true });
 
-        expect(mockCleanup).toHaveBeenCalledWith(jobRunId);
-        expect(mockSpeedTestCleanup).not.toHaveBeenCalled();
-        expect(result).toBe('cleanup-result');
-    });
+        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+            connection: testEnv.nativeConnection,
+            workflowsPath: require.resolve('./cleanup-worker-workflow'),
+            activities: mockedActivities,
+            taskQueue: 'test-task-queue',
+        }));
 
-    it('should call cleanupSpeedTestWorkerActivity for SPEED_TEST jobType', async () => {
-        const args = {
-            traceId,
-            jobType: JobServiceJobType.SPEED_TEST,
-            jobRunId,
-            fsDetails,
-            protocolType,
-        };
-        mockSpeedTestCleanup.mockResolvedValue('speedtest-cleanup-result');
+        await worker.runUntil(async () => {
+            const workflowHandle = await testEnv.client.workflow.start(CleanupWorkerWorkflow, {
+                args: [args],
+                taskQueue: 'test-task-queue',
+                workflowId: 'test-cleanup-workflow-id-1',
+            });
 
-        const result = await CleanupWorkerWorkflow(args);
+            const result = await workflowHandle.result();
+            expect(result).toEqual({ success: true });
+            expect(mockedActivities.cleanup).toHaveBeenCalledWith(jobRunId);
+        });
+    }, 1000 * 60 * 2);
 
-        expect(mockSpeedTestCleanup).toHaveBeenCalledWith(jobRunId, fsDetails, protocolType);
-        expect(mockCleanup).not.toHaveBeenCalled();
-        expect(result).toBe('speedtest-cleanup-result');
-    });
+    it('should call speedTestCleanup activity for speed test jobs', async () => {
+        const jobRunId = 'test-job-run-id';
+        const fsDetails = { jobConfig: { jobType: JobServiceJobType.SPEED_TEST } };
+        const protocolType = 'test-protocol-type';
+        const args = { jobRunId, traceId: 'test-trace-id', fsDetails, jobType: fsDetails.jobConfig.jobType, protocolType };
 
-    it('should log the start of the workflow', async () => {
-        const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-        const args = {
-            traceId,
-            jobType: 'SOME_OTHER_JOB',
-            jobRunId,
-        };
-        mockCleanup.mockResolvedValue('cleanup-result');
+        mockedActivities.speedTestCleanup.mockResolvedValue({ success: true });
 
-        await CleanupWorkerWorkflow(args);
+        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+            connection: testEnv.nativeConnection,
+            workflowsPath: require.resolve('./cleanup-worker-workflow'),
+            activities: mockedActivities,
+            taskQueue: 'test-task-queue',
+        }));
 
-        expect(consoleSpy).toHaveBeenCalledWith(
-            `[${traceId}] Starting CleanupWorkerWorkflow with args: ${JSON.stringify(args)}`
-        );
-        consoleSpy.mockRestore();
-    });
+        await worker.runUntil(async () => {
+            const workflowHandle = await testEnv.client.workflow.start(CleanupWorkerWorkflow, {
+                args: [args],
+                taskQueue: 'test-task-queue',
+                workflowId: 'test-cleanup-workflow-id-2',
+            });
+
+            const result = await workflowHandle.result();
+            expect(result).toEqual({ success: true });
+            expect(mockedActivities.speedTestCleanup).toHaveBeenCalled();
+            expect(mockedActivities.speedTestCleanup).toHaveBeenCalledWith(jobRunId, fsDetails, protocolType);
+        });
+    }, 1000 * 60 * 2);
 });

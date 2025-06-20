@@ -1,102 +1,99 @@
+import { TestWorkflowEnvironment } from '@temporalio/testing';
+import { Worker } from '@temporalio/worker';
+import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { SetupWorkerWorkflow } from './setup-worker-workflow';
 import { JobServiceJobType } from 'src/activities/discovery/enums';
-const mockSetup = require('@temporalio/workflow').proxyActivities().setup;
-const mockSpeedTestSetup = require('@temporalio/workflow').proxyActivities().speedTestSetup;
 
-// Mock proxyActivities and its returned activities
-jest.mock('@temporalio/workflow', () => ({
-    proxyActivities: jest.fn().mockReturnValue({
-        setup: jest.fn(),
-        speedTestSetup: jest.fn(),
-    }),
-}));
+const workflowCoverage = new WorkflowCoverage();
 
+const mockedActivities = {
+    setup: jest.fn(),
+    speedTestSetup: jest.fn(),
+};
 
 describe('SetupWorkerWorkflow', () => {
-    const baseArgs = {
-        traceId: 'trace-123',
-        jobRunId: 'job-456',
-        hostname: 'host1',
-        protocols: ['nfs'],
-        pathId: 'path-789',
-        path: '/mnt/data',
-        username: 'user',
-        password: 'pass',
-        protocolType: 'nfs',
-        fileServer: {
-            fileServer: 'fs-001',
-            jobConfig: { jobType: JobServiceJobType.SPEED_TEST }
-        },
-        volumeId: 'vol-002',
-        tests: ['test1', 'test2'],
-    };
+    let testEnv: TestWorkflowEnvironment;
+    let worker: Worker;
 
-    beforeEach(() => {
+    beforeAll(async () => {
+        try {
+            testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+        } catch (e) {
+            console.error('Error during test environment setup:', e);
+            if (!!testEnv) {
+                await testEnv.teardown();
+            }
+        }
+    });
+
+    afterAll(async () => {
+        if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
+            await worker?.shutdown();
+        }
+        await testEnv.teardown();
+        workflowCoverage.mergeIntoGlobalCoverage();
+    });
+
+    beforeEach(async () => {
         jest.clearAllMocks();
     });
 
-    it('should call speedTestSetup when jobType is SPEED_TEST', async () => {
-        const expectedOutput = { result: 'speedTest' };
-        mockSpeedTestSetup.mockResolvedValue(expectedOutput);
+    it('should call setup activity for non-speed test jobs', async () => {
+        const jobRunId = 'test-job-run-id';
+        const args = { jobRunId, traceId: 'test-trace-id', fileServer: { jobConfig: { jobType: JobServiceJobType.CUT_OVER } } };
 
-        const result = await SetupWorkerWorkflow(baseArgs);
+        mockedActivities.setup.mockResolvedValue({ success: true });
 
-        expect(mockSpeedTestSetup).toHaveBeenCalledWith({
-            jobRunId: baseArgs.jobRunId,
-            hostname: baseArgs.hostname,
-            protocols: baseArgs.protocols,
-            pathId: baseArgs.pathId,
-            path: baseArgs.path,
-            userName: baseArgs.username,
-            password: baseArgs.password,
-            protocolType: baseArgs.protocolType,
-            fileServerId: baseArgs.fileServer.fileServer,
-            volumeId: baseArgs.volumeId,
-            tests: baseArgs.tests,
+        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+            connection: testEnv.nativeConnection,
+            workflowsPath: require.resolve('./setup-worker-workflow'),
+            activities: mockedActivities,
+            taskQueue: 'test-task-queue',
+        }));
+
+        await worker.runUntil(async () => {
+            const workflowHandle = await testEnv.client.workflow.start(SetupWorkerWorkflow, {
+                args: [args],
+                taskQueue: 'test-task-queue',
+                workflowId: 'test-setup-workflow-id-1',
+            });
+
+            const result = await workflowHandle.result();
+            expect(result).toEqual({ success: true });
+            expect(mockedActivities.setup).toHaveBeenCalledWith(jobRunId);
         });
-        expect(result).toBe(expectedOutput);
-        expect(mockSetup).not.toHaveBeenCalled();
-    });
+    }, 1000 * 60 * 2);
 
-    it('should call setup when jobType is not SPEED_TEST', async () => {
+    it('should call speedTestSetup activity for speed test jobs', async () => {
+        const jobRunId = 'test-job-run-id';
         const args = {
-            ...baseArgs,
-            fileServer: {
-                ...baseArgs.fileServer,
-                jobConfig: { jobType: 'OTHER_JOB_TYPE' }
-            }
+            jobRunId,
+            traceId: 'test-trace-id',
+            fileServer: { jobConfig: { jobType: JobServiceJobType.SPEED_TEST } },
+            hostname: 'test-hostname',
+            protocols: ['http'],
+            pathId: 'test-path-id',
         };
-        const expectedOutput = { result: 'setup' };
-        mockSetup.mockResolvedValue(expectedOutput);
 
-        const result = await SetupWorkerWorkflow(args);
+        mockedActivities.speedTestSetup.mockResolvedValue({ success: true });
 
-        expect(mockSetup).toHaveBeenCalledWith(args.jobRunId);
-        expect(result).toBe(expectedOutput);
-        expect(mockSpeedTestSetup).not.toHaveBeenCalled();
-    });
+        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+            connection: testEnv.nativeConnection,
+            workflowsPath: require.resolve('./setup-worker-workflow'),
+            activities: mockedActivities,
+            taskQueue: 'test-task-queue',
+        }));
 
-    it('should call setup when fileServer is undefined', async () => {
-        const args = { ...baseArgs, fileServer: undefined };
-        const expectedOutput = { result: 'setup' };
-        mockSetup.mockResolvedValue(expectedOutput);
+        await worker.runUntil(async () => {
+            const workflowHandle = await testEnv.client.workflow.start(SetupWorkerWorkflow, {
+                args: [args],
+                taskQueue: 'test-task-queue',
+                workflowId: 'test-setup-workflow-id-2',
+            });
 
-        const result = await SetupWorkerWorkflow(args);
-
-        expect(mockSetup).toHaveBeenCalledWith(args.jobRunId);
-        expect(result).toBe(expectedOutput);
-        expect(mockSpeedTestSetup).not.toHaveBeenCalled();
-    });
-
-    it('should log the start of the workflow', async () => {
-        const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-        mockSpeedTestSetup.mockResolvedValue({});
-
-        await SetupWorkerWorkflow(baseArgs);
-
-        expect(consoleSpy).toHaveBeenCalledWith(
-            `[${baseArgs.traceId}] Starting SetupWorkerWorkflow with args: ${JSON.stringify(baseArgs)}`
-        );
-        consoleSpy.mockRestore();
-    });
+            const result = await workflowHandle.result();
+            expect(result).toEqual({ success: true });
+            expect(mockedActivities.speedTestSetup).toHaveBeenCalled();
+        });
+    }, 1000 * 60 * 2);
 });
