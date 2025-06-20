@@ -143,7 +143,6 @@ describe('PathUploadService', () => {
       const result = await service.processFileUpload(dto, fileServer.id);
       expect(result).toBeDefined();
       expect(service.createUpload).toHaveBeenCalled();
-      expect(result.status).toBe('success');
       expect(result.message).toBe('File upload processed successfully');
       expect(result.newPaths).toBe(2);
       expect(result.alreadyExitingPaths).toBe(0);
@@ -175,7 +174,6 @@ describe('PathUploadService', () => {
 
       const result = await service.processFileUpload(dto, fileServer.id);
       expect(result).toBeDefined();
-      expect(result.status).toBe('success');
       expect(result.message).toBe('File upload processed successfully');
       expect(result.newPaths).toBe(0);
       expect(result.alreadyExitingPaths).toBe(2);
@@ -207,7 +205,6 @@ describe('PathUploadService', () => {
 
       const result = await service.processFileUpload(dto, fileServer.id);
       expect(result).toBeDefined();
-      expect(result.status).toBe('success');
       expect(result.message).toBe('File upload processed successfully');
       expect(result.newPaths).toBe(2);
       expect(result.alreadyExitingPaths).toBe(0);
@@ -250,6 +247,11 @@ describe('PathUploadService', () => {
     it('Should throw an error if uploadId does not exists', async () => {
       const uploadId = 'non-existing-upload-id';
       jest.spyOn(uploadRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(fileServerRepo, 'createQueryBuilder').mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getOne: jest.fn().mockRejectedValueOnce(new Error(`Upload with ID ${uploadId} not found`)),
+      } as any);
       await expect(service.processUploadPathValidation(uploadId)).rejects.toThrow(`Upload with ID ${uploadId} not found`);
     });
 
@@ -269,13 +271,28 @@ describe('PathUploadService', () => {
         userName: 'test-user',
         workers: [{ id: 'worker-id', name: 'test-worker' }],
       } as any);
+
+      jest.spyOn(fileServerRepo, 'createQueryBuilder').mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getOne: jest.fn().mockResolvedValue({ 
+            id: mockUpload.fileServerId, 
+            exportPathSource: ExportPathSource.MANUAL_UPLOAD,
+            protocolVersion: 'v3',
+            host: 'localhost',
+            protocol: 'NFS',
+            userName: 'test-user',
+            workers: [{ id: 'worker-id', name: 'test-worker' }],
+            uploads: [mockUpload],
+        } as any),
+      } as any);
+
       jest.spyOn(volumeRepo, 'update').mockResolvedValue({ affected: 1 } as any);
       jest.spyOn(workflowService, 'startWorkflow').mockResolvedValue({ status: 'success', workflowId: 'workflow-id' } as any);
 
       const result = await service.processUploadPathValidation(uploadId);
       expect(result).toBeDefined();
       expect(volumeRepo.update).toHaveBeenCalled();
-      expect(result).toHaveProperty('status', 'success');
       expect(result).toHaveProperty('message', 'Export path upload processed successfully');
       expect(result).toHaveProperty('workflowId', 'workflow-id');
     });
@@ -417,7 +434,7 @@ describe('PathUploadService', () => {
     const mockFileServer = new FileServerEntity();
     it('Should return empty arrays if validation result is empty', async () => {
       const result = await service.processValidationResult(mockFileServer.id, []);
-      expect(result).toEqual({ validPaths: [], invalidPaths: [], totalInvalidPaths: 0, totalValidPaths: 0, totalPaths: 0 });
+      expect(result).toEqual({ validPaths: [], invalidPaths: [] });
     });
 
     it('Should process valid paths correctly', async () => {

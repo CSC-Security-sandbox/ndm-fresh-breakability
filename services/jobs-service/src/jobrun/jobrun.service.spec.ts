@@ -1028,7 +1028,7 @@ describe("JobRunService", () => {
       try{
       await initService.createJobRun(mockJob, new Date());
       } catch (error) {
-        expect(error).toBeInstanceOf(TypeError)
+        expect(error).toBeInstanceOf(NotFoundException)
       }
     });
   });

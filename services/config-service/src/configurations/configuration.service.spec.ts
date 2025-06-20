@@ -2275,14 +2275,8 @@ describe('ConfigurationService', () => {
     });
 
     it('Should return true if upload is in progress for file server', async () => {
-      jest.spyOn(pathUploadRepository, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue({
-          fileServerId: 'file-server-id',
-          workers: ['worker-1'],
-          uploadId: 'upload-id',
-        }),
+      jest.spyOn(pathUploadRepository, 'findOne').mockReturnValue({
+        uploadId: 'upload-id',
       } as any);
 
       const mockWorkflowResult = {
@@ -2296,11 +2290,7 @@ describe('ConfigurationService', () => {
     });
 
     it('Should return false if got into catch block', async () => {
-      jest.spyOn(pathUploadRepository, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockRejectedValue(new Error('Database error')),
-      } as any);
+      jest.spyOn(pathUploadRepository, 'findOne').mockRejectedValue(new Error('Database error'));
 
       const result = await service.isUploadInProgress(['file-server-id']);
       expect(result).toBe(false);
