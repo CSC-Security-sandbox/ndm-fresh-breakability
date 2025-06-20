@@ -3,6 +3,7 @@ import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
 import { Logger, BadRequestException } from '@nestjs/common';
+import { validateJobRunId } from 'src/utils/jobrunid-validation';
 
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
@@ -32,9 +33,8 @@ describe('JobRunController', () => {
   it('should validate jobRunId format correctly', () => {
     const validJobRunId = 'abc123-XYZ';
     const invalidJobRunId = 'abc123@XYZ';
-
-    expect(controller['validateJobRunId'](validJobRunId)).toBe(true);
-    expect(controller['validateJobRunId'](invalidJobRunId)).toBe(false);
+    expect(validateJobRunId(validJobRunId)).toBe(true);
+    expect(validateJobRunId(invalidJobRunId)).toBe(false);
   });
 
   it('should throw BadRequestException for invalid jobRunId in getCocReportByJobRunId', async () => {

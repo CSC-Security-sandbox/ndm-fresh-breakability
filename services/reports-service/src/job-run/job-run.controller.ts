@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, SerializeOptions, Logger, BadRequestExce
 import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
-import { validateJobRunId } from 'src/utils/jobrunId-validation';
+import { validateJobRunId } from 'src/utils/jobrunid-validation';
 @ApiTags("job-run")
 @Controller("job-run")
 export class JobRunController {
