@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, SerializeOptions, Logger, BadRequestExce
 import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobRunService } from './job-run.service';
 import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
-
+import { validateJobRunId } from 'src/utils/jobrunId-validation';
 @ApiTags("job-run")
 @Controller("job-run")
 export class JobRunController {
@@ -47,18 +47,12 @@ export class JobRunController {
     return serializeJobRunDetailsResponse(response);
   }
 
-  private validateJobRunId(jobRunId: string): boolean {
-    const regexToTest = /^[a-zA-Z0-9-]+$/;
-    return regexToTest.test(jobRunId);
-  }
-
   @ApiOperation({ summary: "Get COC Report by JobRunId" })
   @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
   @ApiResponse({ status: 404, description: "COC report not found." })
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
-    this.validateJobRunId(jobRunId);
-    if (!this.validateJobRunId(jobRunId)) {
+    if (!validateJobRunId(jobRunId)) {
       throw new BadRequestException("Invalid JobRunId format.");
     }
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);
