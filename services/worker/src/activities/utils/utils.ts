@@ -317,3 +317,11 @@ export const getUserACLs = (line: string, path:string): ACL[] => {
     .filter((item): item is ACL => item !== null);
 };
 
+
+export const  calculateCommandHash = (commands: Command[]): string => {
+  const commandIds = commands.map(cmd => cmd.commandId);
+  commandIds.sort(); // Sort to ensure consistent order
+  const concatenatedIds = commandIds.join(',');
+  return crypto.createHash('sha256').update(concatenatedIds).digest('hex');
+
+}

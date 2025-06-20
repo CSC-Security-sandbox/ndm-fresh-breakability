@@ -1,9 +1,7 @@
-import { Command, GroupReaderType, Task, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { Inject, Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Injectable, Logger } from "@nestjs/common";
+import { Command, GroupReaderType, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { RedisService } from "src/redis/redis.service";
-import { buildTask } from "../utils/utils";
-import * as crypto from "crypto";
+import { buildTask, calculateCommandHash } from "../utils/utils";
 
 
 
@@ -17,13 +15,6 @@ export class MigrateCommonService {
       private readonly redisService: RedisService,
     ) {}
 
-    calculateHash(commands: Command[]): string {
-        const commandIds = commands.map(cmd => cmd.commandId);
-        commandIds.sort(); // Sort to ensure consistent order
-        const concatenatedIds = commandIds.join(',');
-        return crypto.createHash('sha256'). update(concatenatedIds).digest('hex');
-
-    }
 
     async getGroupOfTasksActivity(jobRunId,  groupSize =1000): Promise<string[]> {
     let taskIds: string[] = [];
@@ -35,23 +26,26 @@ export class MigrateCommonService {
           streamIds.push(id);
           if (commands.length >= 100) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-            taskIds.push(task.id);
-            const hashKey = this.calculateHash(commands); 
-            await jobContext.setTask(hashKey, task);            
+            const hashKey = calculateCommandHash(commands); 
+            taskIds.push(hashKey);
+             this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
+            await jobContext.setTaskIfNotExists(hashKey, task);   
             commands = [];
           }
         }
         if (commands.length > 0) {
           const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-          taskIds.push(task.id);
-          const hashKey = this.calculateHash(commands); 
-           await jobContext.setTask(hashKey, task);   
+          const hashKey = calculateCommandHash(commands); 
+          taskIds.push(hashKey);
+          this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
+          await jobContext.setTaskIfNotExists(hashKey, task);   
           commands = [];
         }
         if(streamIds.length > 0) 
           await jobContext.groupAckCommandStream(streamIds, GroupReaderType.WORKER);
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
+        throw new Error(`Failed to get group of tasks activity: ${error.message}`);
       }
       return taskIds;
     }
