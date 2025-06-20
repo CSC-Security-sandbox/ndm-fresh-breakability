@@ -13,7 +13,7 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
-import { filePathValidation } from 'src/utils/filepath-validation';
+import { validateFilePath } from 'src/utils/filepath-validation';
 
 @Injectable()
 export class DiscoveryService {
@@ -42,6 +42,15 @@ export class DiscoveryService {
       }
 
       this.logger.log("procedure started")
+      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
+      const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
+      if (!validateFilePath(pdfFilePath)) {
+        this.logger.error(`File path contains invalid characters: ${pdfFilePath}`);
+        throw new Error('File path contains invalid characters.');
+      } else {
+        this.logger.log(`File path validation passed: ${pdfFilePath}`);
+      }
+
       const startTime = Date.now();
       await this.inventoryRepo.query(
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
@@ -65,14 +74,6 @@ export class DiscoveryService {
       this.formatAndWriteToFile(reportData, csvFilePath);
 
       const pdfBuffer = await this.generatePdfFromData(reportData);
-      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
-      const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
-      if (!filePathValidation(pdfFilePath)) {
-        this.logger.error(`File path contains invalid characters: ${pdfFilePath}`);
-        throw new Error('File path contains invalid characters.');
-      } else {
-        this.logger.log(`File path validation passed: ${pdfFilePath}`);
-      }
       fs.writeFileSync(pdfFilePath, pdfBuffer); 
 
       return {
@@ -194,8 +195,7 @@ export class DiscoveryService {
   }
 
  formatAndWriteToFile(reportData: any[], filePath: string) {
-  const sanitisedFilePath = filePathValidation(filePath);
-  if (!filePathValidation(filePath)) {
+  if (!validateFilePath(filePath)) {
     this.logger.error(`File path contains invalid characters: ${filePath}`);
     throw new Error('File path contains invalid characters.');
   } else {

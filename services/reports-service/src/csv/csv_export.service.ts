@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
-import { filePathValidation } from 'src/utils/filepath-validation';
+import { validateFilePath } from 'src/utils/filepath-validation';
 
 @Injectable()
 export class CsvService {
@@ -10,7 +10,7 @@ export class CsvService {
     constructor(private readonly dataSource: DataSource) { }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
-        if (!filePathValidation(filePath)) {
+        if (!validateFilePath(filePath)) {
             this.logger.error(`File path contains invalid characters: ${filePath}`);
             throw new Error('File path contains invalid characters.');
         } else {
