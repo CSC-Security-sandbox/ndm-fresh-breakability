@@ -93,7 +93,7 @@ describe('DiscoveryService', () => {
     const reportType = 'DISCOVERY';
 
     beforeEach(() => {
-      // Mock filePathValidation to avoid validation errors on paths
+      // Mock the procedure call
       jest.spyOn(validation, 'filePathValidation').mockImplementation((filePath: string) => true || false);
 
       mockInventoryRepo.query.mockImplementation((query, params) => {
