@@ -1,5 +1,5 @@
 import { CsvService } from "./../csv/csv_export.service";
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, NotAcceptableException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -219,7 +219,7 @@ export class JobRunService {
       const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(/[^a-zA-Z0-9-_.]/g, "");
       const filePath = path.join(this.getReportsDirectory, sanitizedFileName);
       if (!filePath.startsWith(this.getReportsDirectory)) {
-        throw new Error(`Invalid file path: ${filePath}`);
+        throw new NotAcceptableException(`Invalid file path: ${filePath}`);
       }
 
       if (fs.existsSync(filePath)) return filePath; 
