@@ -256,8 +256,6 @@ describe("JobConfigController", () => {
           );
           expect(service.updateJobConfig).toHaveBeenCalledWith("1", jobConfig);
         });
-  // The following test is removed because NestFactory.create(module) is not valid in unit tests.
-  // Move this test to an e2e test suite if you want to test HTTP status codes and permissions.
       });
 
       describe("deleteJobConfig", () => {
