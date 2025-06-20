@@ -3,7 +3,7 @@ import { WorkersConfig } from "src/config/app.config";
 
 import { Logger } from "src/logger/logger.service";
 import { ProtocolPayload } from "./protocol.type";
-
+import * as fs from 'fs';
 
 export abstract class Protocol {
     protected logger = new  Logger();
@@ -43,10 +43,7 @@ export abstract class Protocol {
           ?.replaceAll('${MOUNT_PATH}', payload?.path)
           ?.replaceAll('${DIR_PATH}', directoryPath)
           ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
-        const sanitizedCommand = command
-          ?.replace(/${PASSWORD}=[^ ]+/g, '${PASSWORD}=***')
-          ?.replace(/${USERNAME}=[^ ]+/g, '${USERNAME}=***');
-        this.logger.log(`command: ${sanitizedCommand}`);
+        this.logger.log(`command: ${command}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
             this.logger.info(
@@ -70,4 +67,57 @@ export abstract class Protocol {
           });
         });
       }    
+}
+
+
+
+// Update fstab entry for NFS mounts
+export function updateFSTabEntry({ platform, fstabPath, logger, workerId, fstabEntry}, payload, action, traceId) {
+  try {
+    if (platform === 'linux') {
+      const fstabContent = fs.readFileSync(fstabPath, 'utf-8');
+      const entryExists = fstabContent.includes(fstabEntry);
+
+      if (action === 'insert') {
+        if (!entryExists) {
+          fs.appendFileSync(fstabPath, fstabEntry);
+          logger.info(`[${traceId}] Added entry to /etc/fstab`);
+        } else {
+          logger.info(`[${traceId}] Entry already exists in /etc/fstab`);
+        }
+      } else if (action === 'delete') {
+        if (entryExists) {
+          // Remove the line
+          const newContent = fstabContent
+            .split('\n')
+            .filter(line => line !== fstabEntry.trim())
+            .join('\n') + '\n';
+          fs.writeFileSync(fstabPath, newContent);
+          logger.info(`[${traceId}] Removed entry from /etc/fstab`);
+        } else {
+          logger.info(`[${traceId}] Entry not found in /etc/fstab`);
+        }
+      } else {
+        logger.error(`[${traceId}] Unknown action: ${action}`);
+        return {
+          traceId,
+          status: 'error',
+          protocolType: 'NFS',
+          hostname: payload.hostname,
+          workerId,
+          message: `[${traceId}] Unknown action: ${action}`,
+        };
+      }
+    }
+  } catch (error) {
+    logger.error(`[${traceId}] Error updating /etc/fstab: ${error.message}`);
+    return {
+      traceId,
+      status: 'error',
+      protocolType: 'NFS',
+      hostname: payload.hostname,
+      workerId,
+      message: `[${traceId}] Error updating /etc/fstab: ${error.message}`,
+    };
+  }
 }

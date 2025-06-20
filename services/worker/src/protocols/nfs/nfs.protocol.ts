@@ -1,47 +1,47 @@
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
-import { Protocol } from 'src/protocols/protocol/protocol';
+import { Protocol, updateFSTabEntry } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
-import { ProtocolTypes } from 'src/protocols/protocols';
-import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
+import { ProtocolTypes } from 'src/protocols/protocols';
+import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
 export class NFSProtocol extends Protocol {
 
-  protected getCommandPattern( key : string): string {
+  protected getCommandPattern(key: string): string {
     return CommandConfig.getNFSCommand(this.platform, key)
   }
 
-  protected fstabPath =  CommandConfig.getFstabPath(this.platform);
+  protected fstabPath = CommandConfig.getFstabPath(this.platform);
 
   // --------------------------- Validate Connection -------------------------- //
-  async validateConnection(traceId:string, options: ProtocolPayload ): Promise<any> {
+  async validateConnection(traceId: string, options: ProtocolPayload): Promise<any> {
     const client = new net.Socket();
     const timeout = 2000;
     try {
       this.logger.info(`[${traceId}] Attempting to connect... Protocol: ${ProtocolTypes.NFS}`);
       await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            client.destroy();
-            reject(new Error(`Connection timed out`));
-          }, timeout);
-          client.connect(2049, options.hostname, () => {
-              clearTimeout(timer);
-              resolve();
-          });
-          client.on('error', (err) => {
-              clearTimeout(timer);
-              reject(err);
-          });
+        const timer = setTimeout(() => {
+          client.destroy();
+          reject(new Error(`Connection timed out`));
+        }, timeout);
+        client.connect(2049, options.hostname, () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        client.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
       });
 
       this.logger.info(`[${traceId}] Connection established for Protocol: ${ProtocolTypes.NFS}`);
       return 'Connection established';
     } catch (error) {
-        this.logger.error(`Error during connection: ${error.message}`);
-        throw new Error(handleConnectionError(error, options.hostname, 2049));
+      this.logger.error(`Error during connection: ${error.message}`);
+      throw new Error(handleConnectionError(error, options.hostname, 2049));
     } finally {
-        client.end();
-        client.destroy();
+      client.end();
+      client.destroy();
     }
   }
 
@@ -80,7 +80,7 @@ export class NFSProtocol extends Protocol {
     });
   }
 
-    // --------------------------- Available Disc Space -------------------------- //
+  // --------------------------- Available Disc Space -------------------------- //
   async getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<{ size: number }> {
     try {
       this.logger.log(`[${traceId}] Checking available disk space at path: ${payload?.path}`);
@@ -97,7 +97,7 @@ export class NFSProtocol extends Protocol {
         this.logger.log(`[${traceId}] Available space at ${payload?.path}: ${availableBytes} bytes`);
         return { size: availableBytes };
       });
-     
+
     } catch (error) {
       this.logger.error(`[${traceId}] Error checking disk space for path ${payload?.path}: ${error.message}`);
       throw new Error(`Failed to get available disk space at ${payload?.path}`);
@@ -161,36 +161,27 @@ export class NFSProtocol extends Protocol {
       } else {
         this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
       }
+      const fstabEntry = `${payload.hostname}:${payload.path} ${payload.mountDir} nfs defaults 0 0\n`;
 
-       // Platform-specific logic for removing mount entries
-       if (this.platform === 'linux') {
-        // Linux: Remove the corresponding entry from /etc/fstab
-        try {
-          const fstabEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+      updateFSTabEntry(
+        {
+          platform: this.platform,
+          fstabPath: this.fstabPath,
+          logger: this.logger,
+          workerId: this.workerId,
+          fstabEntry: fstabEntry.trim(),
+        },
+        payload,
+        'delete',
+        traceId
+      );
 
-          if (fs.existsSync(this.fstabPath)) {
-            const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
-            const updatedFstabContent = fstabContent
-              .split('\n')
-              .filter((line) => line.trim() !== fstabEntry.trim())
-              .join('\n');
-
-            fs.writeFileSync(this.fstabPath, updatedFstabContent);
-            this.logger.info(`[${traceId}] Removed entry from /etc/fstab: ${fstabEntry.replace(payload.password, '****')}`);
-          } else {
-            this.logger.warn(`[${traceId}] /etc/fstab does not exist.`);
-          }
-        } catch (error) {
-          this.logger.error(`[${traceId}] Error removing entry from /etc/fstab: ${error.message}`);
-        }
-      }
-      
       return response;
     }
   }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
-   console.log(
+    console.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${payload} from ${this.workerId}`,
     );
 
@@ -206,9 +197,9 @@ export class NFSProtocol extends Protocol {
         message: `[${traceId}] Directory already exists: ${mountDir}`,
       }
     } else {
-      try{
-      fs.mkdirSync(mountDir,{ recursive: true });
-      this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+      try {
+        fs.mkdirSync(mountDir, { recursive: true });
+        this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
       } catch (error) {
         this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
         return {
@@ -230,37 +221,28 @@ export class NFSProtocol extends Protocol {
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`); 
-    
-    // Ensure the mount persists across reboots by updating /etc/fstab
-  try {
-    if (this.platform === 'linux') {
-      const fstabEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);
 
-      // Check if the entry already exists in /etc/fstab
-      const fstabContent = fs.readFileSync(this.fstabPath, 'utf-8');
-      if (!fstabContent.includes(fstabEntry)) {
-        fs.appendFileSync(this.fstabPath, fstabEntry);
-        this.logger.info(`[${traceId}] Added entry to /etc/fstab `);
-      } else {
-        this.logger.info(`[${traceId}] Entry already exists in /etc/fstab`);
-      }
-    }
-  } catch (error) {
-    this.logger.error(`[${traceId}] Error updating /etc/fstab: ${error.message}`);
-    return {
-      traceId,
-      status: 'error',
-      protocolType: ProtocolTypes.NFS,
-      hostname: payload.hostname,
-      workerId: this.workerId,
-      message: `[${traceId}] Error updating /etc/fstab: ${error.message}`,
-    };
-  }
-   
+    const fstabEntry = `${payload.hostname}:${payload.path} ${payload.mountDir} nfs defaults 0 0\n`;
+
+    updateFSTabEntry(
+      {
+        platform: this.platform,
+        fstabPath: this.fstabPath,
+        logger: this.logger,
+        workerId: this.workerId,
+        fstabEntry: fstabEntry.trim(),
+      },
+      payload,
+      'insert',
+      traceId
+    );
+
     return mountResult;
   }
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
     throw new Error('Method not implemented.');
   }
 }
+
+
