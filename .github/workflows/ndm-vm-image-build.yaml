@@ -231,7 +231,7 @@ jobs:
         run: |
           # Create credentials directory
           mkdir -p $GITHUB_WORKSPACE/credentials
-
+          echo "PKR_VAR_build_version=${{ env.build_version }}" >> $GITHUB_ENV
           echo "Setting up credentials for provider: ${{ matrix.provider }}"
           echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
           case "${{ matrix.provider }}" in
@@ -246,7 +246,6 @@ jobs:
               ;;
             vsphere)
               echo "Decoding and exporting vSphere credentials..."
-              echo "PKR_VAR_build_version=${{ env.build_version }}" >> $GITHUB_ENV
               echo "PKR_VAR_vsphere_endpoint=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_vsphere_username=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
@@ -620,12 +619,14 @@ jobs:
         run: |
           BUILD_VERSION="${{ env.build_version }}"
           PROVIDER="${{ matrix.provider }}"
+          COMPONENT="${{ matrix.component }}"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             RELEASE_BRANCH="${BASH_REMATCH[1]}"
             ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
           else
-            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+          fi
           for REPO_PATH in "cicd/ndm" "team/ndm"; do
             TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
             echo "Uploading metadata.json to $TARGET_URL..."
@@ -638,6 +639,7 @@ jobs:
       - name: Upload provider latest.json to Artifactory
         run: |
           PROVIDER="${{ matrix.provider }}"
+          COMPONENT="${{ matrix.component }}"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             RELEASE_BRANCH="${BASH_REMATCH[1]}"
