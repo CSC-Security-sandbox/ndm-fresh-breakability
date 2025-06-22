@@ -115,10 +115,12 @@ export const routeConfig: RouteConfigType[] = [
     path: "job-discovery-preview/:jobRunId",
     element: <DiscoveryPreviewPage />,
   },
-  {
+  /* Disable this routing of speed test as it is not included in Alpha release
+    When we want to enable this routing then remove this comment and uncomment the commented code below */
+  /*{
     path: "speed-test",
     element: <SpeedTestPage />,
-  },
+  }, */
   {
     path: "speed-test/config",
     element: <SpeedTestConfigPage />,

@@ -66,4 +66,14 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         await this.deleteValue(existingEntry.key);
         return existingEntry.value;
     }
+
+    async isEmpty(): Promise<boolean> {
+        return await this.redisClient.hLen(this.redisMapKey) === 0;
+    }
+
+    async getSize(): Promise<number> {
+        const allValues = await this.getAll();
+        if (!allValues) return 0;
+        return Object.keys(allValues).length;
+    }
 }

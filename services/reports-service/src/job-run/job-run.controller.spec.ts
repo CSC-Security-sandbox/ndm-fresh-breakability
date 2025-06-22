@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
+import { Logger } from '@nestjs/common';
 
 const mockJobRunService = {
   getJobStatsId: jest.fn(),
@@ -12,12 +13,15 @@ const mockJobRunService = {
 describe('JobRunController', () => {
   let controller: JobRunController;
   let service: JobRunService;
+  let logger: Logger;
+
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobRunController],
       providers: [
         { provide: JobRunService, useValue: mockJobRunService },
+        Logger,
       ],
     }).compile();
 

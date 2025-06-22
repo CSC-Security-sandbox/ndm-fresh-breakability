@@ -5,21 +5,13 @@ on:
     branches:
       - main
       - 'release*'
-  workflow_dispatch:
-    inputs:
-      selected_services:
-        description: 'Select services to test'
-        required: false
-        type: choice
-        options:
-          - all
-          - db-writer
-          - reports-service
-          - admin-service
-          - config-service
-          - jobs-service
-          - worker
-        default: all
+    paths:
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/jobs-service/**'
+      - 'services/reports-service/**'
+      - 'services/worker/**'
 
 permissions:
   contents: read
@@ -34,37 +26,32 @@ jobs:
       - name: Checkout Code with full history
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2
-
-      - id: set-matrix
+          fetch-depth: 0
+      - name: Set matrix for changed services
+        id: set-matrix
         shell: bash
         run: |
-          # List of all known service directories
           all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" )
 
-          # If workflow_dispatch and input is set, use it, else use all
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.selected_services }}" ]]; then
-            if [[ "${{ github.event.inputs.selected_services }}" == "all" ]]; then
-              services=( "${all_services[@]}" )
-            else
-              services=( "${{ github.event.inputs.selected_services }}" )
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.sha }}"
+          affected_services=()
+          for service in "${all_services[@]}"; do
+            if git diff --name-only "$base_sha" "$head_sha" | grep -q "^services/$service/"; then
+              affected_services+=("$service")
             fi
-          else
-            services=( "${all_services[@]}" )
-          fi
+          done
 
-          # Convert services array to JSON on a single line using jq
-          service_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -s . | tr -d '\n')
+          # Convert to JSON for matrix
+          service_json=$(printf '%s\n' "${affected_services[@]}" | jq -R . | jq -s . | tr -d '\n')
           echo "Matrix for selected services: $service_json"
-
-          # Write outputs ensuring the JSON is on one line
           echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
-
 
   unit-test-cases-and-code-coverage:
     runs-on: ubuntu-latest
     needs: determine-matrix
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
     steps:
       - name: Checkout code

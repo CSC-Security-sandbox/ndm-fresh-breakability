@@ -33,6 +33,7 @@ const TableWrapper = ({
   secondaryLabel,
   isRefreshing,
   refetchTableData,
+  notReachableExportPaths = [],
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -95,6 +96,11 @@ const TableWrapper = ({
     }
   }, [tableState?.selectionState?.count]);
 
+
+  const checkDisabled = (row) => {
+    return notReachableExportPaths.includes(row?.id);
+  };
+
   return (
     <Box>
       {showFilters && (
@@ -103,6 +109,7 @@ const TableWrapper = ({
           columnsToFilter={columnsToFilter}
           setFilters={setCurrentFilters}
           preSelectedFilter={preSelectedFilter}
+          gotoPage={pagination?.gotoPage}
         />
       )}
       <Box
@@ -160,7 +167,7 @@ const TableWrapper = ({
           rowState={rowState}
           updateRowState={updateRowState}
           selectionState={selectionState}
-          isRowDisabled={isRowDisabled}
+          isRowDisabled={checkDisabled}
           isLoading={isRefreshing || isLoading}
           rowMenu={rowMenu}
           originalColumns={originalColumns || tableState.columns}

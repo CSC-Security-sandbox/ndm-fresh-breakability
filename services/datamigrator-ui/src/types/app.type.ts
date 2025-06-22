@@ -553,6 +553,7 @@ export interface AllFileServerWithVolumesApiType {
     volumes: {
       id: string;
       volumePath: string;
+      reachableCount: number;
     }[];
   }[];
 }
@@ -613,6 +614,7 @@ export type FiltersType = {
   columnsToFilter?: ColumnFilterType[];
   setFilters?: Function;
   preSelectedFilter?: any;
+  gotoPage?: (page: number) => void;
 };
 
 export type LegendWrapperPropsType = {

@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { RedisService } from "src/redis/redis.service";
 import { CommonActivityService } from "../common/common.service";
-import { basePrefix, buildTask, dmError, getFileInfo, isContentUpdate, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
+import { basePrefix, buildTask, createServerDownErrorMessage, dmError, getFileInfo, getServerInfoFromPath, isContentUpdate, isFatalError, removePrefix, shouldExcludeOrSkip } from "../utils/utils";
 import { Operation, Origin } from "../utils/utils.types";
 import { PublishMigrationTaskInput, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Context } from '@temporalio/activity';
@@ -18,6 +18,7 @@ export class MigrationScanService {
     readonly maxRetryCount: number ;
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
+    readonly operationTimeout: number;
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly logger: Logger,
@@ -28,12 +29,28 @@ export class MigrationScanService {
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;   
+        this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
     }
 
-    async getDirectoryContents(directoryPath: string): Promise<string[]> {
-        if (!fs.existsSync(directoryPath)) 
-            return [];
-        return  await fs.promises.readdir(directoryPath);
+    async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<string[]> {
+        this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
+
+        await fs.promises.access(directoryPath, fs.constants.R_OK);
+
+        const result = await Promise.race<string[]>([
+            fs.promises.readdir(directoryPath),
+
+            new Promise<never>((_, reject) => {
+                const serverInfo = getServerInfoFromPath(directoryPath, jobContext);
+                const errorMessage = createServerDownErrorMessage('ETIMEDOUT', serverInfo);
+                const err = new Error(errorMessage);
+                (err as any).code = 'ETIMEDOUT';
+                setTimeout(() => reject(err), this.operationTimeout);
+            })
+        ]);
+
+        this.logger.debug(`[${jobContext.jobRunId}] Successfully read directory: ${directoryPath}`);
+        return result;
     }
 
     async publishMigrationTask({ jobContext, commands}: PublishMigrationTaskInput)  {
@@ -50,7 +67,7 @@ export class MigrationScanService {
         let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
         
         try {
-            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath));
+            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath, jobContext));
         }catch(error) {
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
             await jobContext.appendToErrorList(dmErr);
@@ -59,7 +76,7 @@ export class MigrationScanService {
         }
 
         try {
-            targetContent = new Set<string>(await this.getDirectoryContents(targetPath));           
+            targetContent = new Set<string>(await this.getDirectoryContents(targetPath, jobContext));           
         }
         catch(error) {
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});

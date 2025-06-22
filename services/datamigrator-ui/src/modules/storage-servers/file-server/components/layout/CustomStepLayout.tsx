@@ -12,9 +12,9 @@ const CustomStepLayout = () => {
   const { setStep, currentStepIndex, stepPaths } = useWizard();
 
   return (
-    <WizardLayout className="pt-6 px-8 pb-24">
+    <WizardLayout className="pt-6 px-8">
       <NoForm>
-        <Box className="mx-auto pb-8">
+        <Box className="mx-auto pb-4">
           <WizardSteps
             steps={stepPaths.default}
             currentStepIndex={currentStepIndex}
@@ -23,7 +23,11 @@ const CustomStepLayout = () => {
         </Box>
         <WizardContent>
           <WizardStepTransitionRenderer>
-            {(Content: any) => <Content />}
+            {(Content: any) => (
+              <Box className="py-4">
+                <Content />
+              </Box>
+            )}
           </WizardStepTransitionRenderer>
         </WizardContent>
       </NoForm>

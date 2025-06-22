@@ -239,6 +239,26 @@ export abstract class JobContext {
     return await this.updatedTaskInfo.getLength();
   }
 
+  async getRunningSyncTaskLength(): Promise<number> {
+    return await this.runningSyncTask.getSize();
+  }
+  async getRunningScanTaskLength(): Promise<number> {
+    return await this.runningScanTask.getSize();
+  }
+  async isRunningSyncTaskEmpty(): Promise<boolean> {
+    return await this.runningSyncTask.isEmpty();
+  }
+  async isRunningScanTaskEmpty(): Promise<boolean> {
+    return await this.runningScanTask.isEmpty();    
+  }
+
+  async ackDirAndCreateTask(groupType: GroupReaderType, ids: string[], tasks: Task[]) {
+    return await this.dirsInfo.ackAndCreateTask(groupType, ids, tasks);
+  }
+
+  async *groupReadWithoutAckDirs(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: FileInfo; id: string; }> {
+    yield* this.dirsInfo.groupReadWithoutAck(readerName, batchSize,groupType);
+  }
 
   serialize(): string {
     const info = {

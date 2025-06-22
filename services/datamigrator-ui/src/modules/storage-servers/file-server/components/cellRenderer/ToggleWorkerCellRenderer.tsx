@@ -26,14 +26,15 @@ const ToggleWorkerCellRenderer = ({
 
   const isOnline = row?.status === "Online";
 
+  const isDisabled =
+    validateConnectionLoader ||
+    (isJobRunning && isOnline) ||
+    (!selectedWorkerIds.includes(value) && !isOnline && !isJobRunning);
+
   return (
     <Toggle
       value={selectedWorkerIds.includes(value)}
-      disabled={
-        validateConnectionLoader ||
-        isJobRunning ||
-        (!selectedWorkerIds.includes(value) && !isOnline)
-      }
+      disabled={isDisabled}
       toggle={handleToggle}
     />
   );
