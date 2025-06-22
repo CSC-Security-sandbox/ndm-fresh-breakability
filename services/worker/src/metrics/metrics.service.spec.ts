@@ -61,8 +61,8 @@ describe('MetricsService', () => {
 
   describe('pushMetrics', () => {
     it.each([
-      ['success', undefined, 'debug', '[MetricsService] Metrics pushed to Pushgateway'],
-      ['error', new Error('fail'), 'error', '[MetricsService] Failed to push metrics:', 'fail'],
+      ['success', undefined, 'debug', 'Metrics pushed to Pushgateway'],
+      ['error', new Error('fail'), 'error', 'Failed to push metrics:', 'fail'],
     ])('should handle %s case', async (_, mockResult, logLevel, ...logArgs) => {
       const pushAddMock = jest.fn(mockResult ? jest.fn().mockRejectedValue(mockResult) : jest.fn().mockResolvedValue(undefined));
       (service as any).pushgateway.pushAdd = pushAddMock;
@@ -85,7 +85,7 @@ describe('MetricsService', () => {
     it('should log error if any metric collection throws', async () => {
       jest.spyOn((service as any), 'collectCPUMetrics').mockRejectedValue(new Error('fail-metrics'));
       await (service as any).collectSystemMetrics();
-      expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting system metrics:', 'fail-metrics');
+      expect((service as any).logger.error).toHaveBeenCalledWith('Error collecting system metrics:', 'fail-metrics');
     });
   });
 
@@ -119,7 +119,7 @@ describe('MetricsService', () => {
       it('should log error if thrown', async () => {
         mockSystemInfo('currentLoad', Promise.reject(new Error('fail-cpu')));
         await (service as any).collectCPUMetrics();
-        expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting CPU metrics:', 'fail-cpu');
+        expect((service as any).logger.error).toHaveBeenCalledWith('Error collecting CPU metrics:', 'fail-cpu');
       });
     });
 
@@ -139,7 +139,7 @@ describe('MetricsService', () => {
       it('should log error if thrown', async () => {
         mockSystemInfo('mem', Promise.reject(new Error('fail-mem')));
         await (service as any).collectMemoryMetrics();
-        expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting memory metrics:', 'fail-mem');
+        expect((service as any).logger.error).toHaveBeenCalledWith('Error collecting memory metrics:', 'fail-mem');
       });
     });
 
@@ -167,7 +167,7 @@ describe('MetricsService', () => {
       it('should log error if thrown', async () => {
         mockSystemInfo('fsSize', Promise.reject(new Error('fail-disk')));
         await (service as any).collectDiskUsageMetrics();
-        expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting disk usage metrics:', 'fail-disk');
+        expect((service as any).logger.error).toHaveBeenCalledWith('Error collecting disk usage metrics:', 'fail-disk');
       });
     });
 
@@ -203,7 +203,7 @@ describe('MetricsService', () => {
       it('should log error if thrown', async () => {
         mockSystemInfo('networkInterfaces', Promise.reject(new Error('fail-net')));
         await (service as any).collectNetworkIOMetrics();
-        expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Error collecting network IO metrics:', 'fail-net');
+        expect((service as any).logger.error).toHaveBeenCalledWith('Error collecting network IO metrics:', 'fail-net');
       });
     });
   });
@@ -219,7 +219,7 @@ describe('MetricsService', () => {
     it('should not start metrics if METRICS_ENABLED is false', () => {
       process.env.METRICS_ENABLED = 'false';
       (service as any).onModuleInit();
-      expect((service as any).logger.warn).toHaveBeenCalledWith('[MetricsService] Metrics collection is disabled.');
+      expect((service as any).logger.warn).toHaveBeenCalledWith('Metrics collection is disabled.');
     });
 
     it('should start metrics with custom intervals', () => {
@@ -227,7 +227,7 @@ describe('MetricsService', () => {
       process.env.METRICS_COLLECTION_INTERVAL = '1';
       process.env.METRICS_PUSH_INTERVAL = '1';
       (service as any).onModuleInit();
-      expect((service as any).logger.log).toHaveBeenCalledWith('[MetricsService] Starting metrics collection');
+      expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
     });
 
     it('should handle unset intervals', () => {
@@ -235,7 +235,7 @@ describe('MetricsService', () => {
       delete process.env.METRICS_COLLECTION_INTERVAL;
       delete process.env.METRICS_PUSH_INTERVAL;
       (service as any).onModuleInit();
-      expect((service as any).logger.log).toHaveBeenCalledWith('[MetricsService] Starting metrics collection');
+      expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
     });
 
     it('should handle invalid intervals', () => {
@@ -243,7 +243,7 @@ describe('MetricsService', () => {
       process.env.METRICS_COLLECTION_INTERVAL = 'abc';
       process.env.METRICS_PUSH_INTERVAL = 'xyz';
       (service as any).onModuleInit();
-      expect((service as any).logger.log).toHaveBeenCalledWith('[MetricsService] Starting metrics collection');
+      expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
     });
   });
 
@@ -256,7 +256,7 @@ describe('MetricsService', () => {
       jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
       await (service as any).onModuleDestroy();
       expect(deleteMock).toHaveBeenCalled();
-      expect((service as any).logger.error).toHaveBeenCalledWith('[MetricsService] Failed to delete metrics on shutdown:', 'fail-delete');
+      expect((service as any).logger.error).toHaveBeenCalledWith('Failed to delete metrics on shutdown:', 'fail-delete');
     });
 
     it('should handle no intervals set', async () => {

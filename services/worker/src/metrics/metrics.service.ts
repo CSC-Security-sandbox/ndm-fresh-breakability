@@ -100,10 +100,10 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
     if (!metricsEnabled) {
-      this.logger.warn('[MetricsService] Metrics collection is disabled.');
+      this.logger.warn('Metrics collection is disabled.');
       return;
     }
-    this.logger.log('[MetricsService] Starting metrics collection');
+    this.logger.log('Starting metrics collection');
     this.collectSystemMetricsInterval = setInterval(
       () => this.collectSystemMetrics(),
       parseInt(process.env.METRICS_COLLECTION_INTERVAL || '5000')
@@ -121,16 +121,16 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.pushgateway.delete({ jobName: `worker-${this.workerId}` });
     } catch (err) {
-      this.logger.error(`[MetricsService] Failed to delete metrics on shutdown:`, err.message || err);
+      this.logger.error(`Failed to delete metrics on shutdown:`, err.message || err);
     }
   }
 
   private async pushMetrics() {
     try {
       await this.pushgateway.pushAdd({ jobName: `worker-${this.workerId}` });
-      this.logger.debug('[MetricsService] Metrics pushed to Pushgateway');
+      this.logger.debug('Metrics pushed to Pushgateway');
     } catch (err) {
-      this.logger.error('[MetricsService] Failed to push metrics:', err.message || err);
+      this.logger.error('Failed to push metrics:', err.message || err);
     }
   }
 
@@ -143,7 +143,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         this.collectNetworkIOMetrics(),
       ]);
     } catch (err) {
-      this.logger.error('[MetricsService] Error collecting system metrics:', err.message || err);
+      this.logger.error('Error collecting system metrics:', err.message || err);
     }
   }
 
@@ -156,7 +156,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }); 
     this.cpuUsageGauge.set({ worker_id: this.workerId, core: 'average' }, cpuData.avgLoad);
   } catch (err) {
-    this.logger.error('[MetricsService] Error collecting CPU metrics:', err.message || err);
+    this.logger.error('Error collecting CPU metrics:', err.message || err);
   }
 }
 
@@ -175,7 +175,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
     
   } catch (err) {
-    this.logger.error('[MetricsService] Error collecting memory metrics:', err.message || err);
+    this.logger.error('Error collecting memory metrics:', err.message || err);
   }
 }
 
@@ -210,7 +210,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (err) {
       this.logger.error(
-        '[MetricsService] Error collecting disk usage metrics:',
+        'Error collecting disk usage metrics:',
         err.message || err
       );
     }
@@ -242,7 +242,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         
       }
     } catch (err) {
-      this.logger.error('[MetricsService] Error collecting network IO metrics:', err.message || err);
+      this.logger.error('Error collecting network IO metrics:', err.message || err);
     }
   }
 }
