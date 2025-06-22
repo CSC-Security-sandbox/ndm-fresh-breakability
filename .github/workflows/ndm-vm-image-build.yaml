@@ -116,7 +116,7 @@ jobs:
         shell: bash
 
       - name: Fetch and Replace tags and bundle docker images
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
         env:
           ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
           CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
@@ -469,6 +469,15 @@ jobs:
       - name: Generate services array for manifest 
         if: ${{ matrix.component == 'control-plane' }}
         id: services-array
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
+          DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
           chmod +x ./app-deployment/scripts/generate_services_manifest.sh
           ./app-deployment/scripts/generate_services_manifest.sh services.json
