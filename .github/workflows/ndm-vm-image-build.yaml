@@ -465,10 +465,9 @@ jobs:
             echo "GCP Image ID: $IMAGE_ID"
             ;;
           esac
-          
-      - name: Generate services array for manifest 
+
+      - name: Generate and upload manifests, Docker, and Helm for control-plane
         if: ${{ matrix.component == 'control-plane' }}
-        id: services-array
         env:
           ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
           CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
@@ -479,14 +478,11 @@ jobs:
           REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
           DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
+          set -e
           chmod +x ./app-deployment/scripts/generate_services_manifest.sh
           ./app-deployment/scripts/generate_services_manifest.sh services.json
           echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
 
-      - name: Generate charts array for manifest
-        if: ${{ matrix.component == 'control-plane' }}
-        id: charts-array
-        run: |
           CHARTS_DIR="app-deployment/artifacts"
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
           BUILD_VERSION="${{ env.build_version }}"
@@ -502,68 +498,6 @@ jobs:
           echo "$CHARTS_JSON" > charts.json
           echo "charts_json=$CHARTS_JSON" >> $GITHUB_OUTPUT
 
-      - name: Generate metadata.json for worker
-        if: ${{ matrix.component == 'worker' }}
-        id: generate-worker-metadata
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
-          PROVIDER="${{ matrix.provider }}"
-          COMPONENT="${{ matrix.component }}"
-          IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
-          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          COMMIT="${GITHUB_SHA}"
-          SHORT_COMMIT="${GITHUB_SHA::7}"
-          RUN_ID="${GITHUB_RUN_ID}"
-          WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
-
-          cat <<EOF > metadata.json 
-          {
-            "build_version": "$BUILD_VERSION",
-            "provider": "$PROVIDER",
-            "component": "$COMPONENT",
-            "image_name": "$IMAGE_NAME",
-            "build_timestamp": "$BUILD_TIMESTAMP",
-            "commit": "$COMMIT",
-            "short_commit": "$SHORT_COMMIT",
-            "workflow_run_id": "$RUN_ID",
-            "workflow_run_url": "$WORKFLOW_RUN_URL"
-          }
-          EOF
-
-      - name: Generate latest.json pointer for worker
-        if: ${{ matrix.component == 'worker' }}
-        id: generate-worker-latest
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
-          PROVIDER="${{ matrix.provider }}"
-          COMPONENT="${{ matrix.component }}"
-          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            RELEASE_BRANCH="${BASH_REMATCH[1]}"
-            METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
-          else
-            METADATA_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
-          fi
-
-          cat <<EOF > latest.json
-          {
-            "build_version": "$BUILD_VERSION",
-            "provider": "$PROVIDER",
-            "component": "$COMPONENT",
-            "commit": "${GITHUB_SHA}",
-            "short_commit": "${GITHUB_SHA::7}",
-            "timestamp": "$ISO_TIME",
-            "metadata_path": "$METADATA_PATH",
-            "published_by": "${{ github.actor }}"
-          }
-          EOF
-
-      - name: Generate metadata.json for control-plane
-        if: ${{ matrix.component == 'control-plane' }}
-        id: generate-control-plane-metadata
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
@@ -575,7 +509,7 @@ jobs:
           CHARTS_JSON=$(cat charts.json)
           SERVICES_JSON=$(cat services.json)
 
-          cat <<EOF > metadata.json
+          cat > metadata.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -591,25 +525,19 @@ jobs:
           }
           EOF
 
-      - name: Generate latest.json pointer for control-plane
-        if: ${{ matrix.component == 'control-plane' }}
-        id: generate-control-plane-latest
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
-          PROVIDER="${{ matrix.provider }}"
-          COMPONENT="${{ matrix.component }}"
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             RELEASE_BRANCH="${BASH_REMATCH[1]}"
             METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/release/${RELEASE_BRANCH}/${PROVIDER}-${COMPONENT}-latest.json"
           else
-            METADATA_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+            METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
           fi
-          DOCKER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
-          HELM_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-$BUILD_VERSION.tar"
+          HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-$BUILD_VERSION.tgz"
 
-          cat <<EOF > latest.json
+          cat > latest.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -624,85 +552,128 @@ jobs:
           }
           EOF
 
-      - name: Upload provider metadata.json to Artifactory
+          for FILE in metadata.json latest.json; do
+            if [[ "$FILE" == "metadata.json" ]]; then
+              ARTIFACTORY_PATH="$METADATA_PATH"
+            else
+              ARTIFACTORY_PATH="$LATEST_PATH"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading $FILE to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file $FILE \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "$FILE uploaded successfully to $TARGET_URL."
+            done
+          done
+
+          # Upload Docker image tar
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              RELEASE_BRANCH="${BASH_REMATCH[1]}"
+              ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Docker tar to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Docker tar uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Docker tar not found, skipping upload."
+          fi
+
+          # Upload Helm chart tgz
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              RELEASE_BRANCH="${BASH_REMATCH[1]}"
+              ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Helm chart to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Helm chart uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Helm chart tgz not found, skipping upload."
+          fi
+
+      - name: Generate and upload manifests for worker
+        if: ${{ matrix.component == 'worker' }}
         run: |
+          set -e
           BUILD_VERSION="${{ env.build_version }}"
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            RELEASE_BRANCH="${BASH_REMATCH[1]}"
-            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
-          else
-            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
-          fi
-          for REPO_PATH in "cicd/ndm" "team/ndm"; do
-            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
-            echo "Uploading metadata.json to $TARGET_URL..."
-            curl --silent --show-error --fail --request PUT --upload-file metadata.json \
-              "$TARGET_URL" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "metadata.json uploaded successfully to $TARGET_URL."
-          done
+          IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT="${GITHUB_SHA}"
+          SHORT_COMMIT="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
 
-      - name: Upload provider latest.json to Artifactory
-        run: |
-          PROVIDER="${{ matrix.provider }}"
-          COMPONENT="${{ matrix.component }}"
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            RELEASE_BRANCH="${BASH_REMATCH[1]}"
-            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${PROVIDER}-${COMPONENT}-latest.json"
-          else
-            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${PROVIDER}-${COMPONENT}-latest.json"
-          fi
-          for REPO_PATH in "cicd/ndm" "team/ndm"; do
-            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
-            echo "Uploading latest.json to $TARGET_URL..."
-            curl --silent --show-error --fail --request PUT --upload-file latest.json \
-              "$TARGET_URL" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "latest.json uploaded successfully to $TARGET_URL."
-          done
+          cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL"
+          }
+          EOF
 
-      - name: Upload Docker image tar to Artifactory
-        if: ${{ matrix.component == 'control-plane' }}
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             RELEASE_BRANCH="${BASH_REMATCH[1]}"
-            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/release/${RELEASE_BRANCH}/${PROVIDER}-${COMPONENT}-latest.json"
           else
-            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
           fi
-          for REPO_PATH in "cicd/ndm" "team/ndm"; do
-            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
-            echo "Uploading Docker tar to $TARGET_URL..."
-            curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
-              "$TARGET_URL" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "Docker tar uploaded successfully to $TARGET_URL."
-          done
 
-      - name: Upload Helm chart tgz to Artifactory
-        if: ${{ matrix.component == 'control-plane' }}
-        run: |
-          BUILD_VERSION="${{ env.build_version }}"
-          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
-          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            RELEASE_BRANCH="${BASH_REMATCH[1]}"
-            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
-          else
-            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
-          fi
-          for REPO_PATH in "cicd/ndm" "team/ndm"; do
-            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
-            echo "Uploading Helm chart to $TARGET_URL..."
-            curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
-              "$TARGET_URL" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-            echo "Helm chart uploaded successfully to $TARGET_URL."
+          cat > latest.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "commit": "${GITHUB_SHA}",
+            "short_commit": "${GITHUB_SHA::7}",
+            "timestamp": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+          for FILE in metadata.json latest.json; do
+            if [[ "$FILE" == "metadata.json" ]]; then
+              ARTIFACTORY_PATH="$METADATA_PATH"
+            else
+              ARTIFACTORY_PATH="$LATEST_PATH"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading $FILE to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file $FILE \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "$FILE uploaded successfully to $TARGET_URL."
+            done
           done
 
       - name: Upload OVA file to Artifactory
