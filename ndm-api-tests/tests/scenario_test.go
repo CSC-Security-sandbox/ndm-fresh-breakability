@@ -2,13 +2,14 @@ package tests
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"ndm-api-tests/internal/scenario"
 	. "ndm-api-tests/utils"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 // sharedVars holds the common variables used in scenario tests.
@@ -18,9 +19,10 @@ var sharedVars map[string]interface{}
 var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 
 	It("executes initialization", func() {
-		projectId, workerIds, err := SetupTestEnv(1)
+		projectId, attachedWorkersConfig, err := SetupTestEnv(1)
 		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(workerIds)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+		Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 0), "Expected at least one worker to be attached")
+		workerIds := GetWorkerIds()
 		workerId := workerIds[0]
 
 		sharedVars = map[string]interface{}{
@@ -53,7 +55,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 				if scData.Delay != "" {
 					delay, err := strconv.Atoi(scData.Delay)
 					Expect(err).To(BeNil(), fmt.Sprintf("Error converting delay for '%s'", scData.Name))
-					IntroduceDelay(delay)
+					Wait(delay)
 				}
 
 				switch scData.Name {

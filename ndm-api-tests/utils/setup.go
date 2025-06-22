@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"ndm-api-tests/internal/scenario"
 	"os"
 	"path/filepath"
@@ -51,8 +50,8 @@ func InitTestEnv() {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
 
-	scenarioConfigPath := filepath.Join(projectRoot, "scenario_config.yml")
-	configBytes, err := ioutil.ReadFile(scenarioConfigPath)
+	scenarioConfigPath := filepath.Join(projectRoot, "../scenario_config.yml")
+	configBytes, err := os.ReadFile(scenarioConfigPath)
 	if err != nil {
 		LogFatalf("Error reading configuration file: %v", err)
 	}
@@ -75,7 +74,7 @@ func InitTestEnv() {
 	}
 }
 
-func SetupTestEnv(workerCount int) (string, []string, error) {
+func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 	// Create the project first.
 	projectId, err := createProject(AuthToken, AccountId)
 	if err != nil {
@@ -83,23 +82,41 @@ func SetupTestEnv(workerCount int) (string, []string, error) {
 	}
 	LogDebug(fmt.Sprintf("Project created with ID: %s", projectId))
 
-	workerIds, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
+	attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to attach workers: %w", err)
 	}
 
-	if len(workerIds) == 0 {
+	if len(attachedWorkersConfig) == 0 {
 		return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
 	}
 
-	LogDebug(fmt.Sprintf("Attached worker IDs: %v", workerIds))
-	LogDebug("Test environment setup complete.")
-	return projectId, workerIds, nil
+	workerIds := GetWorkerIds()
+	for i := 0; i < MaxPollRetries; i++ {
+		workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
+		if err != nil {
+			return "", nil, fmt.Errorf("error getting worker status: %w", err)
+		}
+		onlineWorkers := 0
+		for _, workerId := range workerIds {
+			if workerIdWithStatus[workerId] == "Online" {
+				LogDebug(fmt.Sprintf("Worker %s is Online", workerId))
+				onlineWorkers++
+			}
+		}
+		if onlineWorkers == len(workerIds) {
+			LogDebug("All workers are Online")
+			break
+		}
+		Wait(DefaultPollInterval)
+	}
+	LogDebug("Test environment setup complete and all worker are Online")
+	return projectId, attachedWorkersConfig, nil
 }
 
 func CleanupTestEnv() error {
 
-	output, err := DetachWorkers()
+	output, err := DetachAllWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)
 	}

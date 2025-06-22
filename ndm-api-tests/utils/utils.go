@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"ndm-api-tests/internal/scenario"
 	"net/http"
@@ -205,7 +204,7 @@ func FetchUserID(email, accessToken string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -497,7 +496,7 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 // and extracting any parsed fields into sharedVars.
 func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
 	defer resp.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return sharedVars, err
 	}
@@ -739,7 +738,7 @@ func DeleteAllUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -783,7 +782,7 @@ func DeleteAllUserRoles(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -829,7 +828,7 @@ func DeleteAllKeycloakUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -883,14 +882,30 @@ func AutoGenerateProjectName(prefix string) string {
 	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
 }
 
-func IntroduceDelay(delay int) {
+func Wait(delay int) {
 	time.Sleep(time.Duration(delay) * time.Second)
 }
 
 // loadEnvFromEnvFile loads environment variables from the .env file.
 func loadEnvFromEnvFile() error {
-	if err := godotenv.Load("../.env"); err != nil {
-		log.Printf("No .env file found or error loading it: %v", err)
+	currentPath, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting current working directory: %v", err)
+		return err
+	}
+	log.Printf("Current working directory: %s", currentPath)
+	envFilePath := "../.env"
+	if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+		envFilePath = "../../.env"
+
+		if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+			log.Printf("No .env file found at path: %s", envFilePath)
+			return fmt.Errorf("no .env file found at path: %s", envFilePath)
+		}
+
+	}
+	if err := godotenv.Load(envFilePath); err != nil {
+		log.Printf("Error loading .env file: %v", err)
 		return err
 	}
 	return nil
