@@ -67,7 +67,9 @@ init_microk8s() {
 
         # Recheck MicroK8s status after refreshing certificates
         log "Rechecking MicroK8s status after refreshing certificates..."
-        if ! microk8s status | grep -q "microk8s is running"; then
+        local STATUS_RETRY_DELAY=15
+        local STATUS_RETRY_TIMEOUT=120
+        if ! retry $MAX_RETRIES "microk8s status | grep -q 'microk8s is running'" $STATUS_RETRY_DELAY $STATUS_RETRY_TIMEOUT; then
             handle_failure "MicroK8s is still not running after certificate refresh"
         fi
     fi

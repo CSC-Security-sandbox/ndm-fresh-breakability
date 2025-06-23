@@ -5,6 +5,11 @@ import (
 	"os"
 )
 
+type ConfigType string
+type ServerType string
+type Protocol string
+type ProtocolVersion string
+
 // Package-level configuration variables loaded from the environment.
 var (
 	JOB_SERVICE_URL         string
@@ -29,48 +34,57 @@ var (
 
 // Default environment variable constants (if needed).
 const (
-	ContentTypeJSON                         = "application/json"
-	ContentTypeForm                         = "application/x-www-form-urlencoded"
-	AuthHeader                              = "Authorization"
-	BearerPrefix                            = "Bearer "
-	KEYCLOAK_TOKEN_URL                      = "keycloak/realms/master/protocol/openid-connect/token"
-	KEYCLOAK_BASE_URL                       = "keycloak/admin/realms/datamigrator/users"
-	KEYCLOAK_CREDENTIALS_URL                = "v1/secrets/keycloak-secrets/keycloak-creds"
-	TOKEN_URL                               = "keycloak/realms/datamigrator/protocol/openid-connect/token"
-	BASE_ACCOUNT_NAME                       = "TestAccount"
-	KEYCLOAK_CLIENT_ID                      = "admin-cli"
-	CLIENT_ID                               = "datamigrator-client"
-	GRANT_TYPE                              = "password"
-	DEFAULT_ACCOUNT_ID                      = "753975cb-2f97-4230-b632-6815515a7d0d"
-	LOGOUT_URL                              = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
-	LOGOUT_USER                             = "logout-user"
-	NFS_SOURCE_VOLUME                       = "/volSrcEDA"
-	NFS_DESTINATION_VOLUME                  = "/vol_vasu_nfs_dest"
-	NFS_SOURCE_VOLUME_1                     = "/volSrcGenomics"
-	NFS_DESTINATION_VOLUME_1                = "/volEDAs"
-	CREATE_FILESERVER_ENDPOINT              = "/api/v1/servers"
-	CREATE_DISCOVERY_ENDPOINT               = "/api/v1/jobs/bulk-discovery"
-	CREATE_MIGRATION_ENDPOINT               = "/api/v1/jobs/bulk-migrate"
-	CREATE_CUTOVER_ENDPOINT                 = "/api/v1/jobs/bulk-cutover"
-	CUTOVER_APPROVE_REJECT_ENDPOINT         = "/api/v1/job-run/cutover/approve"
-	JOB_RUN_ACTION_ENDPOINT                 = "/api/v1/job-run/action"
-	JOB_RUN_ENDPOINT                        = "/api/v1/job-run"
-	JOBS_ENDPOINT                           = "/api/v1/jobs"
-	FILE_SERVER_REFRESH_URL                 = "/api/v1/servers/refresh"
-	JobTypeDiscovery                JobType = "DISCOVER"
-	JobTypeCutover                  JobType = "CUTOVER"
-	JobTypeMigration                JobType = "MIGRATE"
-	FormatPDF                       Format  = "pdf"
-	FormatCSV                       Format  = "csv"
-	DefaultPollInterval                     = 5
-	MaxPollRetries                          = 30
-	RUNNING_JOBRUN                          = "RUNNING"
-	PAUSE_JOBRUN                            = "PAUSE"
-	COMPLETED_JOBRUN                        = "COMPLETED"
-	RESUME_JOBRUN                           = "RESUME"
-	STOP_JOBRUN                             = "STOP"
-	READY_JOBRUN                            = "READY"
-	BLOCKED_JOBRUN                          = "BLOCKED"
+	ContentTypeJSON                                 = "application/json"
+	ContentTypeForm                                 = "application/x-www-form-urlencoded"
+	AuthHeader                                      = "Authorization"
+	BearerPrefix                                    = "Bearer "
+	KEYCLOAK_TOKEN_URL                              = "keycloak/realms/master/protocol/openid-connect/token"
+	KEYCLOAK_BASE_URL                               = "keycloak/admin/realms/datamigrator/users"
+	KEYCLOAK_CREDENTIALS_URL                        = "v1/secrets/keycloak-secrets/keycloak-creds"
+	TOKEN_URL                                       = "keycloak/realms/datamigrator/protocol/openid-connect/token"
+	BASE_ACCOUNT_NAME                               = "TestAccount"
+	KEYCLOAK_CLIENT_ID                              = "admin-cli"
+	CLIENT_ID                                       = "datamigrator-client"
+	GRANT_TYPE                                      = "password"
+	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
+	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
+	LOGOUT_USER                                     = "logout-user"
+	NFS_SOURCE_VOLUME                               = "/vol_src_Automation"
+	NFS_DESTINATION_VOLUME                          = "/vol_Dst_Automation"
+	NFS_SOURCE_VOLUME_1                             = "/vol_src_Automation2"
+	NFS_DESTINATION_VOLUME_1                        = "/vol_Dst_Automation2"
+	CREATE_FILESERVER_ENDPOINT                      = "/api/v1/servers"
+	CREATE_DISCOVERY_ENDPOINT                       = "/api/v1/jobs/bulk-discovery"
+	CREATE_MIGRATION_ENDPOINT                       = "/api/v1/jobs/bulk-migrate"
+	CREATE_CUTOVER_ENDPOINT                         = "/api/v1/jobs/bulk-cutover"
+	CUTOVER_APPROVE_REJECT_ENDPOINT                 = "/api/v1/job-run/cutover/approve"
+	JOB_RUN_ACTION_ENDPOINT                         = "/api/v1/job-run/action"
+	JOB_RUN_ENDPOINT                                = "/api/v1/job-run"
+	JOBS_ENDPOINT                                   = "/api/v1/jobs"
+	FILE_SERVER_REFRESH_URL                         = "/api/v1/servers/refresh"
+	ADHOC_JOBRUN_URL                                = "/api/v1/job-run/ad-hoc"
+	JobTypeDiscovery                JobType         = "DISCOVER"
+	JobTypeCutover                  JobType         = "CUTOVER"
+	JobTypeMigration                JobType         = "MIGRATE"
+	FormatPDF                       Format          = "pdf"
+	FormatCSV                       Format          = "csv"
+	DefaultPollInterval                             = 5
+	MaxPollRetries                                  = 30
+	WORKER_TIMEOUT                                  = 180
+	RUNNING_JOBRUN                                  = "RUNNING"
+	PAUSE_JOBRUN                                    = "PAUSE"
+	COMPLETED_JOBRUN                                = "COMPLETED"
+	RESUME_JOBRUN                                   = "RESUME"
+	STOP_JOBRUN                                     = "STOP"
+	READY_JOBRUN                                    = "READY"
+	BLOCKED_JOBRUN                                  = "BLOCKED"
+	APPROVED_JOBRUN                                 = "APPROVED"
+	DeltaFolder                                     = "delta"
+	ConfigTypeFile                  ConfigType      = "FILE"
+	ServerTypeOtherNAS              ServerType      = "OtherNAS"
+	ProtocolNFS                     Protocol        = "NFS"
+	ProtocolVersion3                ProtocolVersion = "v3"
+	TIME_FORMAT                                     = "2006-01-02T15:04:05.000Z"
 )
 
 func init() {

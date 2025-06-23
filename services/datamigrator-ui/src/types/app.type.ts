@@ -553,6 +553,7 @@ export interface AllFileServerWithVolumesApiType {
     volumes: {
       id: string;
       volumePath: string;
+      reachableCount: number;
     }[];
   }[];
 }

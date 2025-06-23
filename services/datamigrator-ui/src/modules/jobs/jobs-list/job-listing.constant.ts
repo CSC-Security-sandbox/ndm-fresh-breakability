@@ -15,19 +15,24 @@ import {
 } from "@/utils/common.utils";
 import { Span } from "@netapp/bxp-design-system-react";
 import React from "react";
+import {
+  COLUMN_WIDTH_100,
+  COLUMN_WIDTH_150,
+  COLUMN_WIDTH_180,
+} from "@modules/jobs/job-run-list/grid.constants";
 
 export const JOB_LIST_COLUMN_DEFS = [
   {
     header: "Job Id",
     accessor: "jobConfigId",
     id: "jobConfigId",
-    width: 100,
+    width: COLUMN_WIDTH_100,
   },
   {
     header: "Source",
     accessor: "sourceServer",
     id: "source",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -43,19 +48,19 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Source Name",
     accessor: "sourceServer.serverName",
     id: "sourceServerName",
-    width: 100,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Source Path",
     accessor: "sourceServer.path",
     id: "sourcePath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Destination",
     accessor: "destinationServer",
     id: "destination",
-    width: 180,
+    width: COLUMN_WIDTH_180,
     sort: {
       enabled: false,
     },
@@ -71,19 +76,19 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Destination",
     accessor: "destinationServer.serverName",
     id: "destinationServerName",
-    width: 100,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Destination Path",
     accessor: "destinationServer.path",
     id: "destinationPath",
-    width: 180,
+    width: COLUMN_WIDTH_180,
   },
   {
     header: "Protocol",
     accessor: "sourceServer.protocol",
     id: "protocol",
-    width: 150,
+    width: COLUMN_WIDTH_150,
   },
   {
     header: "Next Schedule",
@@ -101,7 +106,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Runs",
     accessor: "totalRuns",
     id: "jobRuns",
-    width: 100,
+    width: COLUMN_WIDTH_100,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["totalRuns"]>) =>
@@ -134,7 +139,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Errors",
     accessor: "errors",
     id: "errors",
-    width: 80,
+    width: COLUMN_WIDTH_100,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["errors"]>) =>
@@ -146,7 +151,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Created On",
     accessor: "createdAt",
     id: "createdAt",
-    width: 90,
+    width: COLUMN_WIDTH_150,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["createdAt"]>) =>
@@ -156,7 +161,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     header: "Updated On",
     accessor: "updatedAt",
     id: "updatedAt",
-    width: 150,
+    width: COLUMN_WIDTH_150,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRowType, JobRowType["updatedAt"]>) =>

@@ -236,6 +236,12 @@ jobs:
             const istString = now.toLocaleString('en-IN', options);
             const runTime = `${istString} (IST)`;
 
+            // Build the Security tab filtered link for this PR
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const securityLink = `https://github.com/${owner}/${repo}/security/code-scanning?query=is%3Aopen+pr%3A${prNumber}`;
+
             // Get all comments on the PR
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -248,14 +254,16 @@ jobs:
               comment.user.login === 'github-actions[bot]' && comment.body.startsWith(marker)
             );
 
+            const securityLine = `\n\nYou can also view vulnerabilities for this PR in the [GitHub Security tab](${securityLink}).`;
+
             let newBody;
             if (botComment) {
               // Append new summary to existing comment
               newBody = `${botComment.body}
             ---
             ## :hourglass: Trivy Scan Run at ${runTime}
-
-            ${summary}`;
+      
+            ${summary}${securityLine}`;
               // Update the existing comment
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -267,8 +275,8 @@ jobs:
               // Create a new comment for this service
               newBody = `${marker}
             ## :hourglass: Trivy Scan Run at ${runTime}
-
-            ${summary}`;
+      
+            ${summary}${securityLine}`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -298,7 +306,7 @@ jobs:
       fail-fast: false
     env:
       IMAGE_NAME: ${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}
-      IMAGE_TAG: ${{ github.sha }}-test
+      IMAGE_TAG: ${{ github.sha }}
 
     steps:
       - name: Checkout Code

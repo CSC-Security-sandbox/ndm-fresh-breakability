@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Logger, Module } from "@nestjs/common";
 import { HealthcheckController } from "./healthcheck.controller";
 import { HealthcheckService } from "./healthcheck.service";
 import { LoggerModule } from "@netapp-cloud-datamigrate/logger-lib";
@@ -14,6 +14,6 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
     AuthKeycloakModule,
   ],
   controllers: [HealthcheckController],
-  providers: [HealthcheckService],
+  providers: [HealthcheckService, Logger],
 })
 export class HealthcheckModule {}
