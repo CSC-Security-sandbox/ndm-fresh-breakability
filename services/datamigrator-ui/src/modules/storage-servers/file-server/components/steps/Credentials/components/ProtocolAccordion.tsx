@@ -9,6 +9,7 @@ import { ReactNode } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { useContext } from "react";
 import ExportPathSource from "@modules/storage-servers/file-server/components/steps/Credentials/components/ExportPathSource";
+import { PROTOCOLS } from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
 
 interface ProtocolAccordion {
   children: ReactNode;
@@ -25,7 +26,7 @@ const ProtocolAccordion = ({ children, title }: ProtocolAccordion) => {
             <AccordionCardContent className="w-full">
               <Box className="flex flex-col gap-4">
                 <Box className="gap-4 inline-flex">{children}</Box>
-                {title === "NFS" && <ExportPathSource />}
+                {title === PROTOCOLS.NFS && <ExportPathSource />}
               </Box>
               {isJobRunning && (
                 <InlineNotification type="warning">
