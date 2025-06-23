@@ -9,10 +9,27 @@ import (
 )
 
 type GetJobResponse struct {
-	JobRuns []struct {
+	JobConfigId  string `json:"jobConfigId"`
+	JobType      string `json:"jobType"`
+	SourceServer struct {
+		ServerName string `json:"serverName"`
+		Path       string `json:"path"`
+		Protocol   string `json:"protocol"`
+	} `json:"sourceServer"`
+	DestinationServer struct{} `json:"destinationServer"`
+	Status            string   `json:"status"`
+	CreatedAt         string   `json:"createdAt"`
+	JobRuns           []struct {
 		JobRunId string `json:"jobRunId"`
 		Status   string `json:"status"`
 	} `json:"jobRuns"`
+	AggregateData struct {
+		TimeElapsed             int    `json:"timeElapsed"`
+		ScannedFilesCount       string `json:"scannedFilesCount"`
+		ScannedDirectoriesCount string `json:"scannedDirectoriesCount"`
+		TotalScannedSize        string `json:"totalScannedSize"`
+	} `json:"aggregateData"`
+	Errors []interface{} `json:"errors"`
 }
 
 type JobResponse []struct {
@@ -37,6 +54,15 @@ type DiscoveryJobParams struct {
 	StartDelay               string
 
 	Extra map[string]interface{}
+}
+
+type AdHocJobRunRequest struct {
+	JobConfigId string `json:"jobConfigId"`
+}
+
+// Struct for response (top-level id is jobRunId)
+type AdHocJobRunResponse struct {
+	ID string `json:"id"`
 }
 
 // CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
@@ -238,7 +264,7 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
-func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResponse, *http.Response, error) {
+func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAttempt ...bool) (GetJobResponse, *http.Response, error) {
 	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
 	var resp *http.Response
 
@@ -258,6 +284,10 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string) (GetJobResp
 		err = json.Unmarshal(bodyBytes, &getJobsResp)
 		if err != nil {
 			return GetJobResponse{}, resp, fmt.Errorf("error unmrashling response: %w", err)
+		}
+
+		if len(needRetryAttempt) > 0 {
+			return getJobsResp, resp, nil
 		}
 
 		if len(getJobsResp.JobRuns) > 0 {
@@ -281,8 +311,8 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
-		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 
+		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 		if err != nil {
 			return err
 		}
@@ -381,4 +411,43 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 	}
 	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
 	return nil
+}
+
+func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
+	url := fmt.Sprintf("%s%s", CONFIG_SERVICE_URL, ADHOC_JOBRUN_URL)
+	// Prepare request body
+	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId}
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", nil, err
+	}
+	// Prepare headers
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+
+	// Send request using your utility
+	resp, err := SendAPIRequest(http.MethodPost, url, payloadBytes, headers)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+
+	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
+	// Read response
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp, err
+	}
+
+	// Parse response
+	var jobRunResp AdHocJobRunResponse
+	err = json.Unmarshal(bodyBytes, &jobRunResp)
+	if err != nil {
+		return "", resp, err
+	}
+
+	if jobRunResp.ID == "" {
+		return "", resp, fmt.Errorf("JobRunId not found in response")
+	}
+
+	return jobRunResp.ID, resp, nil
 }

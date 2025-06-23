@@ -17,6 +17,10 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
   const url = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunDetails?.id}/tasks`;
   const workersUrl = `/workers/${jobRunDetails?.id}`;
 
+  const generateUrl = (status: TASK_STATUS_TYPE_ENUM, count: number) => {
+    return `${url}?status=${status}&count=${count}`;
+  };
+
   return (
     <Card className="flex gap-16 p-10">
       <TaskInfoCard
@@ -32,7 +36,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.PENDING} />
         }
         value={pending}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.PENDING}`}
+        url={generateUrl(TASK_STATUS_TYPE_ENUM.PENDING, pending)}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -40,7 +44,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.RUNNING} />
         }
         value={running}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.RUNNING}`}
+        url={generateUrl(TASK_STATUS_TYPE_ENUM.RUNNING, running)}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -48,7 +52,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.COMPLETED} />
         }
         value={completed}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.COMPLETED}`}
+        url={generateUrl(TASK_STATUS_TYPE_ENUM.COMPLETED, completed)}
       />
       <Divider orientation="vertical" flexItem />
       <TaskInfoCard
@@ -56,7 +60,7 @@ const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
           <JobRunStatusCellRenderer status={TASK_STATUS_TYPE_ENUM.ERRORED} />
         }
         value={errored}
-        url={`${url}?status=${TASK_STATUS_TYPE_ENUM.ERRORED}`}
+        url={generateUrl(TASK_STATUS_TYPE_ENUM.ERRORED, errored)}
       />
     </Card>
   );

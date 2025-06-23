@@ -5,11 +5,12 @@ import {
   Text,
   Popover,
 } from "@netapp/bxp-design-system-react";
-import cronstrue from "cronstrue";
 import { useContext, useMemo, useState } from "react";
 import ScheduleOptions from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/ScheduleOptions/ScheduleOptions";
 import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
+import { isValidCron } from "cron-validator";
+import cronstrue from "cronstrue";
 
 const IncrementalSyncSchedule = () => {
   const { optionForm } = useContext(BulkMigrateContext);
@@ -24,12 +25,23 @@ const IncrementalSyncSchedule = () => {
     }
     try {
       optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
-      return cronstrue.toString(incremental_sync_schedule_cron_expression);
+
+      if (!isValidCron(incremental_sync_schedule_cron_expression)) {
+      throw new Error("Invalid cron expression");
+      } 
+      /* 
+        Convert cron expression to a human-readable string
+        using cronstrue library
+        */
+       const readable = cronstrue.toString(incremental_sync_schedule_cron_expression);
+      return readable;
     } catch (error) {
       setCronErrorMessage(
-        (error as string) || "Failed to build cron expression"
+        (error as Error).message || "Failed to validate cron expression"
       );
-      optionForm.formState.incremental_sync_schedule_cron_expression_error = (error as string);
+      optionForm.formState.incremental_sync_schedule_cron_expression_error = (
+        error as Error
+      ).message;
       return "";
     }
   }, [incremental_sync_schedule_cron_expression]);
