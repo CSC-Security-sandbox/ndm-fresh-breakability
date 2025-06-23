@@ -11,6 +11,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
+import { RetryableError } from 'src/errors/errors.types';
 @Injectable()
 export class SetupActivityService {
 

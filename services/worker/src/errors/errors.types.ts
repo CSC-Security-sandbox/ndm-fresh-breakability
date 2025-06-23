@@ -1,4 +1,4 @@
-class RetryableError extends Error {
+export class RetryableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RetryableError';
@@ -7,7 +7,7 @@ class RetryableError extends Error {
 
 
 
-class FatalError extends Error {
+export class FatalError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'FatalError';

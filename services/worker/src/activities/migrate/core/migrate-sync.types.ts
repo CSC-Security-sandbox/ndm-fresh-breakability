@@ -1,14 +1,13 @@
-import { Command, CommandOperation, ErrorType, JobManagerContext, MetaData, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, CommandOperation, ErrorType, JobManagerContext, MetaData, OPS_STATUS, Task, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface SyncTaskOutput {
     errors: {
         source: string[]
         target: string[]
     };
-    success: number;
+    status: TaskStatus;
     error: number,
     retryCount: number;
-    isFatal : boolean
 }
 
 
@@ -54,4 +53,21 @@ export interface SyncOperationOutput {
         targetChecksum?:string
     }
     errorType?: ErrorType | undefined;
+}
+
+export interface handleSyncTaskUpdateInput {
+    taskHashId: string;
+    jobContext: JobManagerContext;
+    errors: {
+        source: string[];
+        target: string[];
+    }
+    task: Task,
+    retryCount: number;
+}
+
+
+export interface handleInitTaskInput {
+    task: Task;
+    jobContext: JobManagerContext;
 }
