@@ -277,12 +277,7 @@ export class SetupActivityService {
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
-      return {
-        jobRunId,
-        status: 'error',
-        workerId: this.workerId,
-        message: `Cleanup failed: ${error.message}`,
-      };
+      throw new RetryableError(`Cleanup failed: ${error.message}`);
     }
   }
 }

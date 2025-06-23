@@ -7,6 +7,7 @@ import * as path from "path";
 import { basePrefix, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { RedisService } from "src/redis/redis.service";
 import { PublishCommandInput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput } from "./migrate-scan.type";
+import { Context } from '@temporalio/activity';
 
 @Injectable()
 export class MigrateScanService {
@@ -36,7 +37,6 @@ export class MigrateScanService {
             await jobContext.publishToCommandStream(command);
 
     }
-
 
 
     async scanDirectory({excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, jobRunId, skipFile, }: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
@@ -112,6 +112,10 @@ export class MigrateScanService {
     }
 
     async scanDirectories ({jobRunId, dirsToScan}: ScanActivityInput): Promise<ScanActivityOutput>  {
+        const scanActivityContext = Context.current();
+        const heartbeatInterval = setInterval(() => {
+            scanActivityContext.heartbeat({});
+        }, 2000);
         const output: ScanActivityOutput = {
             dirCount: 0,
             fileCount: 0,
@@ -129,6 +133,7 @@ export class MigrateScanService {
         
         for (let i = 0; i < dirsToScan.length; i += this.maxConcurrency) {
             const batch = dirsToScan.slice(i, i + this.maxConcurrency);
+    
             await Promise.allSettled(
                 batch.map(async (dirPath) => {
                     const scanDirectoryInput : ScanDirectoryInput = {
@@ -147,6 +152,7 @@ export class MigrateScanService {
                 })
             )
         }
+        clearInterval(heartbeatInterval);
         return output
     }
 
