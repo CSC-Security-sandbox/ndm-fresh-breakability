@@ -38,6 +38,14 @@
 - name: Update umbrella chart dependencies
   command: helm dependency update {{ main_chart_dir }}
 
+- name: Show rendered values.yaml
+  shell: cat {{ values_output }}
+  register: rendered_values
+
+- name: Debug rendered values.yaml
+  debug:
+    var: rendered_values.stdout
+
 - name: Package the umbrella chart (with templated values.yaml and Chart.yaml)
   command: >
     helm package {{ main_chart_dir }} --version {{ build_version }} -d {{ charts_output_dir }}

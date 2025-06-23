@@ -16,16 +16,16 @@ on:
         description: 'OVF VM template name for worker'
         required: true
         type: string
-  # workflow_call: 
-  #   inputs:
-  #     control_plane_template:
-  #       description: 'OVF VM template name for control-plane'
-  #       required: true
-  #       type: string
-  #     worker_template:
-  #       description: 'OVF VM template name for worker'
-  #       required: true
-  #       type: string
+  workflow_call: 
+    inputs:
+      control_plane_template:
+        description: 'OVF VM template name for control-plane'
+        required: true
+        type: string
+      worker_template:
+        description: 'OVF VM template name for worker'
+        required: true
+        type: string
 
 permissions: 
   contents: read
@@ -79,8 +79,12 @@ jobs:
           echo "TF_VAR_vsphere_server=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
           echo "TF_VAR_vsphere_user=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
           echo "TF_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
-          echo "TF_VAR_worker_ovf_template_name=${{ github.event.inputs.worker_template }}" >> $GITHUB_ENV
-          echo "TF_VAR_control_plane_ovf_template_name=${{ github.event.inputs.control_plane_template }}" >> $GITHUB_ENV
+          
+          CONTROL_PLANE_TEMPLATE="${{ inputs.control_plane_template || github.event.inputs.control_plane_template }}"
+          WORKER_TEMPLATE="${{ inputs.worker_template || github.event.inputs.worker_template }}"
+
+          echo "TF_VAR_worker_ovf_template_name=$WORKER_TEMPLATE" >> $GITHUB_ENV
+          echo "TF_VAR_control_plane_ovf_template_name=$CONTROL_PLANE_TEMPLATE" >> $GITHUB_ENV
 
       - name: Initialize Terraform
         run: |

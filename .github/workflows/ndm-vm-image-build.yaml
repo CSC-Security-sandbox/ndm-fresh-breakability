@@ -74,6 +74,97 @@ permissions:
   contents: read
 
 jobs:
+  package-artifacts:
+    runs-on: openlab
+    outputs:
+      build_version: ${{ steps.build_version.outputs.build_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Export Azure credentials
+        run: |
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+      - name: Determine build version
+        id: build_version
+        run: |
+          DATE_BASE=$(date +'%Y.%m.')
+          TIME_PART=$(date +'%d%H%M%S')
+          VERSION_BASE="${DATE_BASE}${TIME_PART}"
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-nightly"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-adhoc"
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            SUFFIX="${BASH_REMATCH[1]}"
+            BUILD_VERSION="${VERSION_BASE}-${SUFFIX}"
+          else
+            echo "Error: Unsupported event type or branch format for build versioning."
+            exit 1
+          fi
+          echo "BUILD_VERSION=$BUILD_VERSION"
+          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Fetch and Replace tags and bundle docker images
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
+          DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
+          build_version: ${{ steps.build_version.outputs.build_version }}
+        run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          else
+            REF_TYPE="branches"
+            REF_NAME="main"
+          fi
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh $build_version "$REF_TYPE" "$REF_NAME"
+
+      - name: Run helm package ansible playbook
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        run: |
+          ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
+
+      - name: Upload Ansible vars.yaml
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-vars
+          path: app-deployment/ansible/control-plane/config/group_vars/vars.yaml
+
+      - name: Upload Helm chart artifact
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: app-deployment/artifacts/datamigrator-*.tgz
+
+      - name: Upload Docker image tar artifact
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: datamigrator-images
+          path: app-deployment/artifacts/datamigrator-*.tar
+          
   determine-matrix:
     runs-on: openlab
     outputs:
@@ -82,12 +173,8 @@ jobs:
       - id: set-matrix
         run: |
           # Set components based on input
-          if [[ "${{ github.event.inputs.component }}" == "all" || "${{ github.event.inputs.component }}" == "" ]]; then
-            if [[ "${{ github.event.inputs.provider }}" == "vsphere" ]]; then
-              COMPONENTS='["control-plane", "worker"]'
-            else
-              COMPONENTS='["control-plane", "worker"]'
-            fi
+          if [[ "${{ github.event.inputs.component }}" == "all" ]]; then
+            COMPONENTS='["control-plane", "worker"]'
           else
             COMPONENTS='["${{ github.event.inputs.component }}"]'
           fi
@@ -104,7 +191,9 @@ jobs:
 
     
   packer:
-    needs: determine-matrix
+    needs: [package-artifacts, determine-matrix]
+    env:
+      build_version: ${{ needs.package-artifacts.outputs.build_version }}
     name: Build ${{ matrix.component }} on ${{ matrix.provider }}
     runs-on: openlab
     strategy:
@@ -114,14 +203,9 @@ jobs:
       provider: ${{ matrix.provider }}
       component: ${{ matrix.component }}
       image_name: ${{ steps.image-info.outputs.image_name }}
-    steps:
-      - name: Show current user
-        run: |
-          echo "Whoami: $(whoami)"
-          id
-          echo "User: $USER"
-          echo "UID: $UID"
-
+      control_plane_template: ${{ steps.set-template.outputs.control_plane_template }}
+      worker_template: ${{ steps.set-template.outputs.worker_template }}
+    steps:  
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -157,7 +241,7 @@ jobs:
         run: |
           # Create credentials directory
           mkdir -p $GITHUB_WORKSPACE/credentials
-
+          echo "PKR_VAR_build_version=${{ env.build_version }}" >> $GITHUB_ENV
           echo "Setting up credentials for provider: ${{ matrix.provider }}"
           echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
           case "${{ matrix.provider }}" in
@@ -185,49 +269,27 @@ jobs:
               echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
               ;;
           esac
-
-      - name: Determine build version and export as Packer variable
-        id: build_version
-        run: |
-          DATE_BASE=$(date +'%Y.%m.')
-          TIME_PART=$(date +'%d%H%M%S')
-          VERSION_BASE="${DATE_BASE}${TIME_PART}"
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            BUILD_VERSION="${VERSION_BASE}-nightly"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BUILD_VERSION="${VERSION_BASE}-adhoc"
-          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            SUFFIX="${BASH_REMATCH[1]}"
-            BUILD_VERSION="${VERSION_BASE}-${SUFFIX}"
-          else
-            echo "Error: Unsupported event type or branch format for build versioning."
-            exit 1
-          fi
-          echo "BUILD_VERSION=$BUILD_VERSION"
-          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
-          echo "PKR_VAR_build_version=$BUILD_VERSION" >> $GITHUB_ENV
-        shell: bash
       
-      - name: Fetch and Replace tags and bundle docker images
-        if: ${{ matrix.component != 'worker' }}
-        env:
-          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
-          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
-          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
-          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
-          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
-          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
-          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
-          DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
-          build_version: ${{ steps.build_version.outputs.build_version }}
-        run: |
-          chmod +x ./app-deployment/scripts/get_tags.sh
-          ./app-deployment/scripts/get_tags.sh $build_version
+      - name: Download Ansible vars.yaml
+        if: ${{ matrix.component == 'control-plane' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ansible-vars
+          path: app-deployment/ansible/control-plane/config/group_vars/
 
-      - name: Run helm package ansible playbook
-        if: ${{ matrix.component != 'worker' }}
-        run: |
-          ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}"
+      - name: Download Helm chart artifact
+        if: ${{ matrix.component == 'control-plane' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-chart
+          path: app-deployment/artifacts/
+
+      - name: Download Docker image tar artifact
+        if: ${{ matrix.component == 'control-plane' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: datamigrator-images
+          path: app-deployment/artifacts/
 
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }}
@@ -283,7 +345,7 @@ jobs:
 
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
             echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
-            NEW_BINARY_NAME="datamigrator-worker-${{ steps.build_version.outputs.build_version }}"
+            NEW_BINARY_NAME="datamigrator-worker-${{ needs.package-artifacts.outputs.build_version }}"
             mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$NEW_BINARY_NAME"
             echo "Renamed binary to $NEW_BINARY_NAME"
           else
@@ -414,21 +476,236 @@ jobs:
             ;;
           esac
 
+      - name: Generate and upload images and manifests for control-plane
+        if: ${{ matrix.component == 'control-plane' }}
+        env:
+          ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ github.event.inputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ github.event.inputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ github.event.inputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ github.event.inputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
+          DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
+        run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          else
+            REF_TYPE="branches"
+            REF_NAME="main"
+          fi
+          chmod +x ./app-deployment/scripts/services_manifest.sh
+          ./app-deployment/scripts/services_manifest.sh services.json "$REF_TYPE" "$REF_NAME"
+          echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
+
+          CHARTS_DIR="app-deployment/artifacts"
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          BUILD_VERSION="${{ env.build_version }}"
+
+          CHARTS_JSON="["
+          for f in "$CHARTS_DIR"/*.tgz; do
+            fname=$(basename "$f")
+            chart_name="${fname%-${BUILD_VERSION}.tgz}"
+            chart_path="builds/$BUILD_TYPE/$BUILD_VERSION/helm/$fname"
+            CHARTS_JSON="${CHARTS_JSON}{\"name\":\"$chart_name\",\"version\":\"$BUILD_VERSION\",\"path\":\"$chart_path\"},"
+          done
+          CHARTS_JSON="${CHARTS_JSON%,}]"
+          echo "$CHARTS_JSON" > charts.json
+          echo "charts_json=$CHARTS_JSON" >> $GITHUB_OUTPUT
+
+          PROVIDER="${{ matrix.provider }}"
+          COMPONENT="${{ matrix.component }}"
+          IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT="${GITHUB_SHA}"
+          SHORT_COMMIT="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
+          CHARTS_JSON=$(cat charts.json)
+          SERVICES_JSON=$(cat services.json)
+
+          cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL",
+            "charts": $CHARTS_JSON,
+            "services": $SERVICES_JSON
+          }
+          EOF
+
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/release/${RELEASE_BRANCH}/${PROVIDER}-${COMPONENT}-latest.json"
+          else
+            METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
+          fi
+          DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-$BUILD_VERSION.tar"
+          HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-$BUILD_VERSION.tgz"
+
+          cat > latest.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "commit": "${GITHUB_SHA}",
+            "short_commit": "${GITHUB_SHA::7}",
+            "timestamp": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "docker_images_path": "$DOCKER_PATH",
+            "helm_chart_path": "$HELM_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+          for FILE in metadata.json latest.json; do
+            if [[ "$FILE" == "metadata.json" ]]; then
+              ARTIFACTORY_PATH="$METADATA_PATH"
+            else
+              ARTIFACTORY_PATH="$LATEST_PATH"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading $FILE to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file $FILE \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "$FILE uploaded successfully to $TARGET_URL."
+            done
+          done
+
+          # Upload Docker image tar
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              RELEASE_BRANCH="${BASH_REMATCH[1]}"
+              ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Docker tar to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Docker tar uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Docker tar not found, skipping upload."
+          fi
+
+          # Upload Helm chart tgz
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              RELEASE_BRANCH="${BASH_REMATCH[1]}"
+              ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Helm chart to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Helm chart uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Helm chart tgz not found, skipping upload."
+          fi
+
+      - name: Generate and upload manifests for worker
+        if: ${{ matrix.component == 'worker' }}
+        run: |
+          set -e
+          BUILD_VERSION="${{ env.build_version }}"
+          PROVIDER="${{ matrix.provider }}"
+          COMPONENT="${{ matrix.component }}"
+          IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT="${GITHUB_SHA}"
+          SHORT_COMMIT="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
+
+          cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL"
+          }
+          EOF
+
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            METADATA_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/release/${RELEASE_BRANCH}/${PROVIDER}-${COMPONENT}-latest.json"
+          else
+            METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
+            LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
+          fi
+
+          cat > latest.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "commit": "${GITHUB_SHA}",
+            "short_commit": "${GITHUB_SHA::7}",
+            "timestamp": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+          for FILE in metadata.json latest.json; do
+            if [[ "$FILE" == "metadata.json" ]]; then
+              ARTIFACTORY_PATH="$METADATA_PATH"
+            else
+              ARTIFACTORY_PATH="$LATEST_PATH"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading $FILE to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file $FILE \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "$FILE uploaded successfully to $TARGET_URL."
+            done
+          done
+
       - name: Upload OVA file to Artifactory
         if: ${{ matrix.provider == 'vsphere' }}
         run: |
           echo "Uploading OVA file to Artifactory..."
 
           OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
-          BUILD_TYPE="${{ github.event_name }}"
-          DATE=$(date -u +'%Y-%m-%d')
-          TIME=$(date -u +'%H%M%S')
-          COMMIT_HASH="${GITHUB_SHA::6}"
-
-          if [ "$BUILD_TYPE" = "schedule" ]; then
-            ARTIFACTORY_PATH="builds/nightly/${DATE}/${{ matrix.component }}/${{ matrix.component }}-nightly-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+          BUILD_VERSION="${{ env.build_version }}"
+          BUILD_TYPE="${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            RELEASE_BRANCH="${BASH_REMATCH[1]}"
+            ARTIFACTORY_PATH="builds/release/${RELEASE_BRANCH}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
           else
-            ARTIFACTORY_PATH="builds/adhoc/${DATE}/${{ matrix.component }}/${{ matrix.component }}-${DATE}-${TIME}-${COMMIT_HASH}.ova"
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
           fi
 
           if [ -f "$OVA_FILE" ]; then
@@ -446,16 +723,22 @@ jobs:
             echo "Error: OVA file not found at $OVA_FILE"
             exit 1
           fi
+      
+      - name: Set template output
+        id: set-template
+        if: ${{ matrix.provider == 'vsphere' }}
+        run: |
+          if [ "${{ matrix.component }}" == "control-plane" ]; then
+            echo "control_plane_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.component }}" == "worker" ]; then
+            echo "worker_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
+          fi
 
-  # deploy-and-test:
-  #   if: ${{ needs.packer.outputs.provider == 'vsphere' && github.event_name == 'schedule' }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
-  #   needs: [ packer, determine-matrix ]
-  #   uses: ./.github/workflows/run-api-tests.yaml
-  #   with:
-  #     control_plane_template: "control-plane-template-name"
-  #     worker_template: "worker-template-name"
-  #   secrets: inherit
-  
+  deploy-and-test:
+    if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}
+    needs: [packer, determine-matrix]
+    uses: ./.github/workflows/run-api-tests.yaml
+    with:
+      control_plane_template: ${{ needs.packer.outputs.control_plane_template }}
+      worker_template: ${{ needs.packer.outputs.worker_template }}
+    secrets: inherit
