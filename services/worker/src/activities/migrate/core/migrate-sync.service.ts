@@ -13,7 +13,7 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { OPS_CMD, } from '../migrate.type';
 import { StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { CommonActivityService } from 'src/activities/common/common.service';
-
+import { Context } from '@temporalio/activity';
 
 @Injectable()
 export class MigrateSyncService {
@@ -264,90 +264,97 @@ export class MigrateSyncService {
     return syncOperation ;
   }
 
-  async syncTaskActivity({ jobRunId , taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
-    const syncOutput: SyncTaskOutput = { errors: {source: [], target: []}, success: 0, error: 0, retryCount : 0, isFatal: false };
+  async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
+    const syncActivityCtx= Context.current();
+    const heartBeatInterval = setInterval(() => {
+      syncActivityCtx.heartbeat({});
+    }, 2000);
+    const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, success: 0, error: 0, retryCount: 0, isFatal: false };
     const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
     let task = undefined;
-    try{
-        task = await jobContext.getTask(taskId);
-        if (!task) {
-          this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
-          return syncOutput;
-        }
+    try {
+      task = await jobContext.getTask(taskId);
+      if (!task) {
+        this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
+        return syncOutput;
+      }
 
-        this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
+      this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
-        task.status = TaskStatus.RUNNING
-        task.workerId = this.workerId
-        for (let i = 0;  i < task.commands.length; i++) 
-        if(task.commands[i].status !== CommandStatus.COMPLETED)
-            task.commands[i].status = CommandStatus.IN_PROCESS
+      task.status = TaskStatus.RUNNING
+      task.workerId = this.workerId
+      for (let i = 0; i < task.commands.length; i++)
+        if (task.commands[i].status !== CommandStatus.COMPLETED)
+          task.commands[i].status = CommandStatus.IN_PROCESS
 
-        this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
-        
-        await jobContext.publishToTaskStream(task);
-        
-        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+      this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
 
-        for( const command of task.commands) {
-            if (command.status === CommandStatus.COMPLETED) continue;
-            const scanInput: SyncOperationInput = {
-                    sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-                    targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-                    ops: command.ops,
-                    command,
-                    jobContext,
-                    errorType: command.retryCount+1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
-                };
-            //TODO: revisit and improve this .
-            const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
-            if (syncOperationOp.errors.source.size > 0 || syncOperationOp.errors.target.size > 0) {
-                    command.retryCount++;
-                    task.retryCount = Math.max(command.retryCount, task.retryCount);
-                    command.status = CommandStatus.ERROR;
-                    syncOperationOp.errors.source.forEach(error => task.errors.source.add(error));
-                    syncOperationOp.errors.target.forEach(error => task.errors.target.add(error));
-                } else {
-                    const fileInfo: FileInfo = await this.getFileInfo({
-                        name: command.fPath,
-                        fullFilePath: `${task.tPath}${command.fPath}`,
-                        relativePath: command.fPath,
-                        checksums: syncOperationOp.checksums,
-                        getID: jobContext.jobConfig.options.isIdentityMappingAvailable
-                    });
+      await jobContext.publishToTaskStream(task);
 
-                    await jobContext.publishToFileStream(fileInfo);                  
-                    command.status = CommandStatus.COMPLETED;
-                    //TODO:  can we do this in batch?
-                    await jobContext.setTask(taskId, task);
-                }
-        }
-        // task handling 
-        if (task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
-            task.status = TaskStatus.COMPLETED;
-            this.logger.debug(`[${jobRunId}] Task ${task.id} completed successfully.`);
-            await jobContext.publishToTaskStream(task);
-            await jobContext.deleteTask(taskId);        
+      const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+      const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+
+      for (const [index, command] of task.commands.entries()) {
+        if (command.status === CommandStatus.COMPLETED) continue;
+        const scanInput: SyncOperationInput = {
+          sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+          targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+          ops: command.ops,
+          command,
+          jobContext,
+          errorType: command.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+        };
+        //TODO: revisit and improve this .
+        const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
+        if (syncOperationOp.errors.source.size > 0 || syncOperationOp.errors.target.size > 0) {
+          command.retryCount++;
+          task.retryCount = Math.max(command.retryCount, task.retryCount);
+          command.status = CommandStatus.ERROR;
+          syncOperationOp.errors.source.forEach(error => task.errors.source.add(error));
+          syncOperationOp.errors.target.forEach(error => task.errors.target.add(error));
         } else {
-            task.status = TaskStatus.ERRORED;
-            this.logger.error(`[${jobRunId}] Task ${task.id} failed with errors: ${JSON.stringify(task.errors)}`);
-            if(task.retryCount >= this.maxRetryCount){
-                await jobContext.publishToTaskStream(task);  
-                await jobContext.deleteTask(taskId);
-            }else{
-                // TODO: This gets retried by temporal autoamtically but name the error better like retryableError.
-                throw new Error("Failed to complete task");
-            }
+          const fileInfo: FileInfo = await this.getFileInfo({
+            name: command.fPath,
+            fullFilePath: `${task.tPath}${command.fPath}`,
+            relativePath: command.fPath,
+            checksums: syncOperationOp.checksums,
+            getID: jobContext.jobConfig.options.isIdentityMappingAvailable
+          });
+
+          await jobContext.publishToFileStream(fileInfo);
+          command.status = CommandStatus.COMPLETED;
+          //TODO:  can we do this in batch?
+          await jobContext.setTask(taskId, task);
         }
-    }catch(error){
-        // TODO: rename this error to retryableError.
-        throw new Error("SyncTaskActivity Failed: " + error.message);
+      }
+      // task handling 
+      if (task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
+        task.status = TaskStatus.COMPLETED;
+        this.logger.debug(`[${jobRunId}] Task ${task.id} completed successfully.`);
+        await jobContext.publishToTaskStream(task);
+        await jobContext.deleteTask(taskId);
+      } else {
+        task.status = TaskStatus.ERRORED;
+        this.logger.error(`[${jobRunId}] Task ${task.id} failed with errors: ${JSON.stringify(task.errors)}`);
+        if (task.retryCount >= this.maxRetryCount) {
+          await jobContext.publishToTaskStream(task);
+          await jobContext.deleteTask(taskId);
+        } else {
+          // TODO: This gets retried by temporal autoamtically but name the error better like retryableError.
+          throw new Error("Failed to complete task");
+        }
+      }
+    } catch (error) {
+      // TODO: rename this error to retryableError.
+      // handle hearbeat cacellation
+      throw new Error("SyncTaskActivity Failed: " + error.message);
+
     }
     syncOutput.success = task.status;
+    clearInterval(heartBeatInterval);
     return syncOutput;
 
-}
+  }
 
 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {

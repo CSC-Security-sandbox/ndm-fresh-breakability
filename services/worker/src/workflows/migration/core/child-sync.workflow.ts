@@ -19,18 +19,21 @@ interface SyncWorkflowInput {
 }
 
 const {
-    updateStatus: updateStatusActivity,
     updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m',});
   
 
 const {
     syncTaskActivity: SyncTaskActivity,
-} = proxyActivities<MigrateSyncService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
+} = proxyActivities<MigrateSyncService>({ 
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+     startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
-}= proxyActivities<MigrateCommonService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
+}= proxyActivities<MigrateCommonService>({
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+    startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
 
 
 /*

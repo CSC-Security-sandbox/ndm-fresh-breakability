@@ -138,10 +138,7 @@ export const MigrationWorkflow = async ({
   const scanWorkflowResult = await scanWorkflow.result()
   workFlowStatus.isScanIsRunning = false;
   if(scanWorkflowResult.status === JobRunStatus.Errored) workFlowStatus.isJobFailed = true;
-  // scanWorkflowResult.failedWorkers.map((workerId) => {
-  //   if(!workFlowStatus.failedWorkers.includes(workerId)) 
-  //     workFlowStatus.failedWorkers.push(workerId);
-  // })
+  
 
   console.log(`[${traceId}] ScanWorkflow result: ${JSON.stringify(scanWorkflowResult)}`);
 
@@ -151,17 +148,7 @@ export const MigrationWorkflow = async ({
   workFlowStatus.isSyncIsRunning = false;
   if(syncWorkflowResult.status === JobRunStatus.Errored) 
     workFlowStatus.isJobFailed = true;
-  // syncWorkflowResult.failedWorkers.map((workerId) => {
-  //   if(!workFlowStatus.failedWorkers.includes(workerId)) 
-  //     workFlowStatus.failedWorkers.push(workerId);
-  // })
-  // console.log(`[${traceId}] SyncWorkflow result: ${JSON.stringify(syncWorkflowResult)}`);
 
-
-  // if(workFlowStatus.setupCompletedWorkers.length === workFlowStatus.failedWorkers.length) {
-  //   console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
-  //   workFlowStatus.isJobFailed = true;
-  // }
   await ReportingWorkflow(traceId, reportingSignal, workFlowStatus.isJobFailed);
 
   if (workFlowStatus.setupCompletedWorkers.length > 0) {
@@ -178,7 +165,11 @@ export const MigrationWorkflow = async ({
         parentClosePolicy: ParentClosePolicy.TERMINATE,
         });
       } catch (error) {
-        console.error(`[${traceId}] Error in CleanupWorkerWorkflow: ${error}`);
+          if(error instanceof wf.ActivityFailure){
+              console.error(`[${traceId}] ActivityFailure in CleanupWorkerWorkflow with message: ${error.message}`);   
+          }
+          throw error;
+                  
       }
     }),
     )

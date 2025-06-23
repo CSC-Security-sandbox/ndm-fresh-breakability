@@ -21,7 +21,7 @@ const {
         maximumAttempts: 3,
         initialInterval: '10s',
         backoffCoefficient: 2.0,
-        nonRetryableErrorTypes: ['ActivityFailure', 'ApplicationFailure'],
+        nonRetryableErrorTypes: ['ActivityFailure', 'ApplicationFailure', 'FatalError'],
     },
     startToCloseTimeout: '24h',
     heartbeatTimeout: '2m',
