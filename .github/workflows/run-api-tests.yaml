@@ -16,16 +16,16 @@ on:
         description: 'OVF VM template name for worker'
         required: true
         type: string
-  # workflow_call: 
-  #   inputs:
-  #     control_plane_template:
-  #       description: 'OVF VM template name for control-plane'
-  #       required: true
-  #       type: string
-  #     worker_template:
-  #       description: 'OVF VM template name for worker'
-  #       required: true
-  #       type: string
+  workflow_call: 
+    inputs:
+      control_plane_template:
+        description: 'OVF VM template name for control-plane'
+        required: true
+        type: string
+      worker_template:
+        description: 'OVF VM template name for worker'
+        required: true
+        type: string
 
 permissions: 
   contents: read
