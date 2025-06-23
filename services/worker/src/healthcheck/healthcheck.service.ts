@@ -97,7 +97,11 @@ export class HealthcheckService implements OnModuleInit {
       this.httpService.post(url, payload, {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
-    ).catch((error) => {
+    ).then(() => {
+      this.logger.debug(
+        `Healthcheck results posted successfully for worker ${this.workerId}`,
+      );
+    }).catch((error) => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
