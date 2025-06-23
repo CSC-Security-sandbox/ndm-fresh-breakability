@@ -1,12 +1,12 @@
 #!/bin/bash
 # generate_services_manifest.sh
-# Usage: ./generate_services_manifest.sh <output_json>
+# Usage: ./generate_services_manifest.sh <output_json> <ref_type> <ref_name>
 
 set -euo pipefail
 
 ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests"
-REF_TYPE="branches"
-REF_NAME="main"
+REF_TYPE=${2:-branches}
+REF_NAME="ad-build-manifests"
 ACR_NAME="datamigratedev"
 OUTPUT_JSON=${1:-services.json}
 

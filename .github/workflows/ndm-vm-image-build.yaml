@@ -128,8 +128,16 @@ jobs:
           DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
           build_version: ${{ steps.build_version.outputs.build_version }}
         run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          else
+            REF_TYPE="branches"
+            REF_NAME="main"
+          fi
           chmod +x ./app-deployment/scripts/get_tags.sh
-          ./app-deployment/scripts/get_tags.sh $build_version
+          ./app-deployment/scripts/get_tags.sh $build_version "$REF_TYPE" "$REF_NAME"
 
       - name: Run helm package ansible playbook
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
@@ -480,9 +488,16 @@ jobs:
           REPORTS_SERVICE_TAG: ${{ github.event.inputs.reports_service_tag }}
           DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
-          set -e
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          else
+            REF_TYPE="branches"
+            REF_NAME="main"
+          fi
           chmod +x ./app-deployment/scripts/services_manifest.sh
-          ./app-deployment/scripts/services_manifest.sh services.json
+          ./app-deployment/scripts/services_manifest.sh services.json "$REF_TYPE" "$REF_NAME"
           echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
 
           CHARTS_DIR="app-deployment/artifacts"
@@ -719,43 +734,11 @@ jobs:
             echo "worker_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
           fi
 
-  check-vsphere-success:
-    needs: packer
-    runs-on: openlab
-    outputs:
-      ready: ${{ steps.check.outputs.ready }}
-    steps:
-      - name: Check vsphere packer results
-        id: check
-        run: |
-          set -e
-          CONTROL_PLANE_OK=false
-          WORKER_OK=false
-          for result in $(echo '${{ toJson(needs.packer) }}' | jq -c '.[]'); do
-            PROVIDER=$(echo "$result" | jq -r '.provider // empty')
-            COMPONENT=$(echo "$result" | jq -r '.component // empty')
-            if [ "$PROVIDER" = "vsphere" ]; then
-              if [ "$COMPONENT" = "control-plane" ]; then
-                CONTROL_PLANE_OK=true
-              elif [ "$COMPONENT" = "worker" ]; then
-                WORKER_OK=true
-              fi
-            fi
-          done
-          if $CONTROL_PLANE_OK && $WORKER_OK; then
-            echo "Both vsphere control-plane and worker builds succeeded."
-            echo "ready=true" >> $GITHUB_OUTPUT
-          else
-            echo "One or both vsphere builds failed or did not run."
-            echo "ready=false" >> $GITHUB_OUTPUT
-          fi
-
   deploy-and-test:
-    if: ${{ needs.check-vsphere-success.outputs.ready == 'true' }}
-    needs: [packer, determine-matrix, check-vsphere-success]
+    if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}
+    needs: [packer, determine-matrix]
     uses: ./.github/workflows/run-api-tests.yaml
     with:
       control_plane_template: ${{ needs.packer.outputs.control_plane_template }}
       worker_template: ${{ needs.packer.outputs.worker_template }}
     secrets: inherit
-

@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests"
-REF_TYPE="branches"
-REF_NAME="main"
+REF_TYPE=${2:-branches}
+REF_NAME="ad-build-manifests"
 ACR_NAME="datamigratedev"
 TAR_PREFIX="datamigrator"
 VERSION=$1

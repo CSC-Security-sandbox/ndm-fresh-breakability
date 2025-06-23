@@ -358,7 +358,7 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
             -t "$IMAGE_NAME:$IMAGE_TAG" \
-            -t "$IMAGE_NAME:latest-test" \
+            -t "$IMAGE_NAME:latest" \
             --push "$CONTEXT"
         env:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
