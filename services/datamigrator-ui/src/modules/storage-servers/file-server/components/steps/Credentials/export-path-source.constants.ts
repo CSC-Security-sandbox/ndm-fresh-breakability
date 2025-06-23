@@ -20,3 +20,8 @@ export const VALIDATION_STATUS = {
   VALID: "Valid",
   INVALID: "Invalid",
 };
+
+export const PROTOCOLS = {
+  NFS: "NFS",
+  SMB: "SMB",
+};
