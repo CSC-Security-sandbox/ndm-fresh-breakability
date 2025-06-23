@@ -1,4 +1,4 @@
-import { sync } from './../../../../../jobs-service/node_modules/enhanced-resolve/types.d';
+
 import { proxyActivities, log } from '@temporalio/workflow';
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrateSyncService } from "src/activities/migrate/core/migrate-sync.service";
@@ -6,6 +6,7 @@ import { isScanCompletedSignal } from "./sync.workflow";
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { MigrateCommonService } from 'src/activities/migrate/migrate-common.service';
+import { FatalError, RetryableError } from 'src/errors/errors.types';
 
 interface SyncWorkflowOutput{
     jobRunId: string;
@@ -92,6 +93,14 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
                     console.debug(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
                 } catch (error) {
+                    if(error instanceof FatalError)  {
+                        console.error(`FatalError occurred for taskId: ${taskId} with error: ${error.message}`);
+                        throw wf.ApplicationFailure.nonRetryable(error.message);
+                    }
+                    if(error instanceof RetryableError) {
+                        console.error(`RetryableError occurred for taskId: ${taskId} with error: ${error.message}`);
+                        throw wf.ApplicationFailure.retryable(error.message);
+                    }
                     console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
                     return { taskId, error: error.message };
                 }
@@ -109,3 +118,7 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
     await updateLastEntryActivity(jobRunId)
     return syncWorkflowOutput; 
 }
+
+
+
+

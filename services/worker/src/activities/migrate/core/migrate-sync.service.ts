@@ -1,6 +1,7 @@
-import { CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_STATUS, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_STATUS, Task, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Context } from '@temporalio/activity';
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -9,11 +10,18 @@ import { ACL, getFileInfoInput, Operation, Origin } from 'src/activities/utils/u
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
-import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs } from '../../utils/utils';
+import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../../utils/utils';
 import { OPS_CMD, } from '../migrate.type';
-import { StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { Context } from '@temporalio/activity';
+import { handleInitTaskInput, handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
+import { FatalError, RetryableError } from 'src/errors/errors.types';
+
+
+const isRandomTrue = (probability: number) => {
+  if (probability < 0 || probability > 1) {
+    throw new Error('Probability must be between 0 and 1');
+  }
+  return Math.random() < probability;
+};
 
 @Injectable()
 export class MigrateSyncService {
@@ -24,7 +32,6 @@ export class MigrateSyncService {
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly commonService: CommonActivityService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
     private readonly shellService: ShellService,
@@ -227,6 +234,7 @@ export class MigrateSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
+          if(isRandomTrue(0.80)) throw new Error("Random Error for testing");
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
           });
@@ -266,10 +274,9 @@ export class MigrateSyncService {
 
   async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncActivityCtx= Context.current();
-    const heartBeatInterval = setInterval(() => {
-      syncActivityCtx.heartbeat({});
-    }, 2000);
-    const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, success: 0, error: 0, retryCount: 0, isFatal: false };
+    const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
+
+    const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
     const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
     let task = undefined;
     try {
@@ -279,16 +286,11 @@ export class MigrateSyncService {
         return syncOutput;
       }
 
-      this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
+      this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
 
-      task.status = TaskStatus.RUNNING
-      task.workerId = this.workerId
-      for (let i = 0; i < task.commands.length; i++)
-        if (task.commands[i].status !== CommandStatus.COMPLETED)
-          task.commands[i].status = CommandStatus.IN_PROCESS
-
-      this.logger.debug(`[${jobRunId}] Running Task => ${task?.id} | stats : ${task?.status} | command : ${task?.commands?.length}`);
-
+      task = await this.validateTask({ task, jobContext });
+      task.status = TaskStatus.RUNNING;
+      task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
 
       const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
@@ -308,10 +310,10 @@ export class MigrateSyncService {
         const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
         if (syncOperationOp.errors.source.size > 0 || syncOperationOp.errors.target.size > 0) {
           command.retryCount++;
-          task.retryCount = Math.max(command.retryCount, task.retryCount);
+          syncOutput.retryCount = Math.max(command.retryCount, syncOutput.retryCount);
           command.status = CommandStatus.ERROR;
-          syncOperationOp.errors.source.forEach(error => task.errors.source.add(error));
-          syncOperationOp.errors.target.forEach(error => task.errors.target.add(error));
+          syncOperationOp.errors.source.forEach(error => syncOutput.errors.source.push(error));
+          syncOperationOp.errors.target.forEach(error => syncOutput.errors.target.push(error));
         } else {
           const fileInfo: FileInfo = await this.getFileInfo({
             name: command.fPath,
@@ -324,38 +326,22 @@ export class MigrateSyncService {
           await jobContext.publishToFileStream(fileInfo);
           command.status = CommandStatus.COMPLETED;
           //TODO:  can we do this in batch?
-          await jobContext.setTask(taskId, task);
         }
+        await jobContext.setTask(taskId, task);
       }
-      // task handling 
-      if (task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
-        task.status = TaskStatus.COMPLETED;
-        this.logger.debug(`[${jobRunId}] Task ${task.id} completed successfully.`);
-        await jobContext.publishToTaskStream(task);
-        await jobContext.deleteTask(taskId);
-      } else {
-        task.status = TaskStatus.ERRORED;
-        this.logger.error(`[${jobRunId}] Task ${task.id} failed with errors: ${JSON.stringify(task.errors)}`);
-        if (task.retryCount >= this.maxRetryCount) {
-          await jobContext.publishToTaskStream(task);
-          await jobContext.deleteTask(taskId);
-        } else {
-          // TODO: This gets retried by temporal autoamtically but name the error better like retryableError.
-          throw new Error("Failed to complete task");
-        }
-      }
+      await this.handleUpdateTask({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
+      syncOutput.status = TaskStatus.COMPLETED;
     } catch (error) {
-      // TODO: rename this error to retryableError.
-      // handle hearbeat cacellation
-      throw new Error("SyncTaskActivity Failed: " + error.message);
-
+      // if(error instanceof FatalError) 
+      //   throw error;
+      this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);
+      throw new RetryableError("SyncTaskActivity Failed: " + error.message);
     }
-    syncOutput.success = task.status;
-    clearInterval(heartBeatInterval);
+    finally{
+      clearInterval(heartBeatInterval);
+    }
     return syncOutput;
-
   }
-
 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
       const lStat = await fs.promises.lstat(fullFilePath);
@@ -392,5 +378,47 @@ export class MigrateSyncService {
 
 
 
+  async handleUpdateTask({errors, jobContext , taskHashId , task , retryCount}: handleSyncTaskUpdateInput): Promise<void> {
+    if(task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
+      task.status = TaskStatus.COMPLETED;
+      await jobContext.publishToTaskStream(task);
+      await jobContext.deleteTask(taskHashId);
+      return
+    }
 
+    if((errors.source.length > 0 || errors.target.length > 0) && (retryCount > this.maxRetryCount)) {
+      task.status = TaskStatus.ERRORED;
+      await jobContext.publishToTaskStream(task);
+      await jobContext.deleteTask(taskHashId);
+
+    for(const error of errors.source)
+      if(isSourceFatalError(error)) 
+        throw new FatalError(`Fatal Error in Sync Task From Source Side: ${error}`);
+
+    for(const error of errors.target)
+      if(isFatalError(error)) 
+        throw new FatalError(`Fatal Error in Sync Task From Target Side: ${error}`);  
+    }
+
+    throw new RetryableError(`Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`);
+  }
+
+
+  async validateTask({task , jobContext}: handleInitTaskInput) : Promise<Task> {
+    let retryCount = 0;
+    for (let i = 0; i < task.commands.length; i++) {
+      retryCount = Math.max(retryCount, task.commands[i].retryCount);
+      if (task.commands[i].status !== CommandStatus.COMPLETED)
+        task.commands[i].status = CommandStatus.IN_PROCESS
+    }
+
+    if (retryCount >= this.maxRetryCount) {
+      task.status = TaskStatus.ERRORED;
+      await jobContext.publishToTaskStream(task);
+      throw new FatalError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
+    }
+
+    return task;
+  }
 }
+
