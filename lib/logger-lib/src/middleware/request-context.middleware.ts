@@ -8,7 +8,8 @@ import {RequestContext, RequestContextData} from "./request-context";
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
   constructor(
-    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger, 
+    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+    @Inject(RequestContext) private readonly requestContext: RequestContext
   ) {}
 
   use(req: Request, res: Response, next: NextFunction) {
@@ -20,7 +21,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     const context: RequestContextData = { trackId: trackId };
     req['trackId'] = trackId;
 
-    RequestContext.run(context, () => {
+    this.requestContext.run(context, () => {
       this.logger.info({
         context: RequestContextMiddleware.name,
         trackId,

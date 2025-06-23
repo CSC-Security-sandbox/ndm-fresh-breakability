@@ -1,21 +1,25 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import {Inject, Injectable} from "@nestjs/common";
 
 export interface RequestContextData {
     trackId: string;
 }
 
+@Injectable()
 export class RequestContext {
-    private static asyncLocalStorage = new AsyncLocalStorage<RequestContextData>();
+    // Using AsyncLocalStorage to maintain context across asynchronous calls
+    constructor(@Inject(AsyncLocalStorage) private readonly asyncLocalStorage: AsyncLocalStorage<RequestContextData>) {
+    }
 
-    static run(context: RequestContextData, callback: () => void) {
+    run(context: RequestContextData, callback: () => void) {
         this.asyncLocalStorage.run(context, callback);
     }
 
-    static getContext(): RequestContextData | undefined {
+    getContext(): RequestContextData | undefined {
         return this.asyncLocalStorage.getStore();
     }
 
-    static getTrackId(): string | undefined {
+    getTrackId(): string | undefined {
         return this.getContext()?.trackId;
     }
 }

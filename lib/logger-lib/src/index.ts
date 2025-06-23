@@ -5,3 +5,5 @@ export * from "./logger/logger.factory"
 export * from './logger/logger.service'
 export * from './middleware/request-context';
 export * from './middleware/request-context.middleware';
+export * from './middleware/request-context.module';
+export * from './async-local-storage/async-local-storage.module';
