@@ -184,7 +184,7 @@ func fetchReport(
 		// Retry on 500 Internal Server Error
 		if resp.StatusCode == http.StatusInternalServerError {
 			if attempt < maxRetries {
-				IntroduceDelay(retryDelay)
+				Wait(retryDelay)
 				continue
 			}
 			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
