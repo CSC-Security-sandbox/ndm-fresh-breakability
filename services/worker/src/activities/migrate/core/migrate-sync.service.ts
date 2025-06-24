@@ -13,7 +13,7 @@ import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../../utils/utils';
 import { OPS_CMD, } from '../migrate.type';
 import { handleInitTaskInput, handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
-import { FatalError, RetryableError } from 'src/errors/errors.types';
+import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 
 
 const isRandomTrue = (probability: number) => {
@@ -234,7 +234,7 @@ export class MigrateSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          if(isRandomTrue(0.80)) throw new Error("Random Error for testing");
+          if(isRandomTrue(0.10)) throw new Error("Random Error for testing");
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
           });
@@ -332,10 +332,10 @@ export class MigrateSyncService {
       await this.handleUpdateTask({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
       syncOutput.status = TaskStatus.COMPLETED;
     } catch (error) {
-      // if(error instanceof FatalError) 
-      //   throw error;
+      if(error instanceof FatalError) 
+        throw error;
       this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);
-      throw new RetryableError("SyncTaskActivity Failed: " + error.message);
+      throw new RetryableError(error.message);
     }
     finally{
       clearInterval(heartBeatInterval);
@@ -377,32 +377,41 @@ export class MigrateSyncService {
   }
 
 
+  async handleUpdateTask({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
+    const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
 
-  async handleUpdateTask({errors, jobContext , taskHashId , task , retryCount}: handleSyncTaskUpdateInput): Promise<void> {
-    if(task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED)) {
+    if (allCompleted) {
       task.status = TaskStatus.COMPLETED;
       await jobContext.publishToTaskStream(task);
       await jobContext.deleteTask(taskHashId);
-      return
+      return;
     }
 
-    if((errors.source.length > 0 || errors.target.length > 0) && (retryCount > this.maxRetryCount)) {
-      task.status = TaskStatus.ERRORED;
-      await jobContext.publishToTaskStream(task);
+    const hasFatalSourceError = errors.source.some(isSourceFatalError);
+    const hasFatalTargetError = errors.target.some(isFatalError);
+    const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
+
+    task.status = TaskStatus.ERRORED;
+    await jobContext.publishToTaskStream(task);
+
+    if (isFatalErrored) {
       await jobContext.deleteTask(taskHashId);
-
-    for(const error of errors.source)
-      if(isSourceFatalError(error)) 
-        throw new FatalError(`Fatal Error in Sync Task From Source Side: ${error}`);
-
-    for(const error of errors.target)
-      if(isFatalError(error)) 
-        throw new FatalError(`Fatal Error in Sync Task From Target Side: ${error}`);  
+      throw new FatalError(
+        `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+      );
     }
 
-    throw new RetryableError(`Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`);
-  }
+    if (retryCount >= this.maxRetryCount) {
+      await jobContext.deleteTask(taskHashId);
+      throw new RetryExceededError(
+        `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`
+      );
+    }
 
+    throw new RetryableError(
+      `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+    );
+  }
 
   async validateTask({task , jobContext}: handleInitTaskInput) : Promise<Task> {
     let retryCount = 0;

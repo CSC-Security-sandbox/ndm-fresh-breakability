@@ -15,3 +15,9 @@ export class FatalError extends Error {
 }
 
 
+export class RetryExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RetryExceededError';
+  }
+}
