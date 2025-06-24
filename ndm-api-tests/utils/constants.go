@@ -87,13 +87,6 @@ const (
 	TIME_FORMAT                                     = "2006-01-02T15:04:05.000Z"
 )
 
-var (
-	TC_008_VALIDATION_JSON = []string{
-		"vol_src_automation_migration_coc1.json",
-		"vol_src_automation_migration_coc2.json",
-	}
-)
-
 func init() {
 	// Load the .env file.
 	if err := loadEnvFromEnvFile(); err != nil {
