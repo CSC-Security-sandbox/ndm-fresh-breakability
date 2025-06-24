@@ -34,7 +34,7 @@ export const SPEED_TEST_COLUMN_DEF = [
       TooltipCopyCellRenderer(value),
   },
   {
-    header: "Start Time (UST)",
+    header: "Start Time (UTC)",
     accessor: "startTime",
     id: 2,
     Renderer: ({
@@ -45,7 +45,7 @@ export const SPEED_TEST_COLUMN_DEF = [
       }),
   },
   {
-    header: "End Time (UST)",
+    header: "End Time (UTC)",
     accessor: "endTime",
     id: 3,
     Renderer: ({

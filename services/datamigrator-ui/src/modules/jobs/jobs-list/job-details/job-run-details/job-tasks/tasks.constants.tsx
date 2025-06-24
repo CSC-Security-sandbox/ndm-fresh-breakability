@@ -55,7 +55,7 @@ export const TASKS_COLUMN_DEFS = [
       toTitleCase(value),
   },
   {
-    header: "Start Time (UST)",
+    header: "Start Time (UTC)",
     accessor: "createdAt",
     id: "createdAt",
     width: 80,
@@ -66,7 +66,7 @@ export const TASKS_COLUMN_DEFS = [
     ),
   },
   {
-    header: "End Time (UST)",
+    header: "End Time (UTC)",
     accessor: "updatedAt",
     id: "updatedAt",
     width: 80,

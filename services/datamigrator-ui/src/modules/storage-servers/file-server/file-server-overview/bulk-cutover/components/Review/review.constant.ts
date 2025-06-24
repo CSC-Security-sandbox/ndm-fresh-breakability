@@ -23,7 +23,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
       getJobType(value),
   },
   {
-    header: "Start Time (UST)",
+    header: "Start Time (UTC)",
     accessor: "startTime",
     id: "startTime",
     width: 100,

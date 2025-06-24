@@ -91,7 +91,7 @@ export const JOB_LIST_COLUMN_DEFS = [
     width: COLUMN_WIDTH_150,
   },
   {
-    header: "Next Schedule (UST)",
+    header: "Next Schedule (UTC)",
     accessor: "nextScheduleDate",
     id: "nextSchedule",
     width: 170,
@@ -148,7 +148,7 @@ export const JOB_LIST_COLUMN_DEFS = [
         : React.createElement(Span, null, "-"),
   },
   {
-    header: "Created On (UST)",
+    header: "Created On (UTC)",
     accessor: "createdAt",
     id: "createdAt",
     width: COLUMN_WIDTH_150,
@@ -158,7 +158,7 @@ export const JOB_LIST_COLUMN_DEFS = [
       React.createElement(DateCellRenderer, { value }),
   },
   {
-    header: "Updated On (UST)",
+    header: "Updated On (UTC)",
     accessor: "updatedAt",
     id: "updatedAt",
     width: COLUMN_WIDTH_150,
