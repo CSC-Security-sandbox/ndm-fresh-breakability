@@ -219,7 +219,9 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
@@ -274,10 +276,10 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		AfterEach(func() {
-			err := RestoreOriginalDataOnVolume(sourceVolumePath1)
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
-			err = RestoreOriginalDataOnVolume(sourceVolumePath2)
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
 
 			err = ClearVolume(destinationVolumePath1)
@@ -285,6 +287,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			err = ClearVolume(destinationVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")

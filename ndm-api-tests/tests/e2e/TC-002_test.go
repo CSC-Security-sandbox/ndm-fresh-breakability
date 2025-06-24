@@ -318,11 +318,19 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		})
 
 		AfterEach(func() {
-			ClearVolume(destinationVolumePath1)
-			ClearVolume(destinationVolumePath2)
-			RemoveDeltaFromVolume(sourceVolumePath1)
-			RemoveDeltaFromVolume(sourceVolumePath2)
-			err := CleanupTestEnv()
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
 		})

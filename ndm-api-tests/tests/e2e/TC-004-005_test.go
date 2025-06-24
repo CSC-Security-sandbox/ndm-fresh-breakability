@@ -210,7 +210,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				if i == 0 {
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-					result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
+					result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../../validator/PDFDetails.json")
 					Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
 					LogDebug(fmt.Sprintf("validate report result : %s", result))
 					continue
@@ -359,7 +359,19 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 		})
 
 		AfterEach(func() {
-			err := CleanupTestEnv()
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
 		})
