@@ -68,7 +68,7 @@ on:
       #   required: false
       #   type: string
   schedule:
-    - cron: '30 18 * * *'
+    - cron: '15 19 * * *'
 
 permissions: 
   contents: read
@@ -173,7 +173,7 @@ jobs:
       - id: set-matrix
         run: |
           # Set components based on input
-          if [[ "${{ github.event.inputs.component }}" == "all" ]]; then
+          if [[ "${{ github.event.inputs.component }}" == "all" || "${{ github.event.inputs.component }}" == "" ]]; then
             COMPONENTS='["control-plane", "worker"]'
           else
             COMPONENTS='["${{ github.event.inputs.component }}"]'
