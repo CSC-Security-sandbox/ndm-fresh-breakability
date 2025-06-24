@@ -30,10 +30,11 @@ export const SPEED_TEST_COLUMN_DEF = [
     id: 1,
     Renderer: ({
       value,
-    }: BlueXpTableRowType<SpeedTestJobsType, SpeedTestJobsType["jobRunId"]>) => TooltipCopyCellRenderer(value),
+    }: BlueXpTableRowType<SpeedTestJobsType, SpeedTestJobsType["jobRunId"]>) =>
+      TooltipCopyCellRenderer(value),
   },
   {
-    header: "Start Time",
+    header: "Start Time (UST)",
     accessor: "startTime",
     id: 2,
     Renderer: ({
@@ -44,7 +45,7 @@ export const SPEED_TEST_COLUMN_DEF = [
       }),
   },
   {
-    header: "End Time",
+    header: "End Time (UST)",
     accessor: "endTime",
     id: 3,
     Renderer: ({
