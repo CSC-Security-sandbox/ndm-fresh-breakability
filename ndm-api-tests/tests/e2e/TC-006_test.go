@@ -131,7 +131,11 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			// Get migration job run IDs and wait for completion
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
+			migration_validators := []string{
+				"nfs_src_to_dest_vol_migration.json",
+				"nfs_src2_to_dest_vol_migration.json",
+			}
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -141,10 +145,16 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/COCDetails.json")
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/TC-006-JSON%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
+
+			By("Adding Delta Data")
+			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
+			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
@@ -192,18 +202,26 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 
 			By("Validating cutover reports")
 			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../utils/validator/COCDetails.json")
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../validators/cutover_validation.json")
 				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			}
 		})
 
 		AfterEach(func() {
-			RestoreOriginalDataOnVolume(sourceVolumePath1)
-			RestoreOriginalDataOnVolume(sourceVolumePath2)
-			ClearVolume(destinationVolumePath1)
-			ClearVolume(destinationVolumePath2)
-			err := CleanupTestEnv()
+			err := RestoreOriginalDataOnVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RestoreOriginalDataOnVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
 		})
