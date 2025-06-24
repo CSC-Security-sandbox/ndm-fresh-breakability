@@ -1,11 +1,12 @@
 package tests
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	. "ndm-api-tests/utils"
 	"os"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 func TestMain(m *testing.M) {

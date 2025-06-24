@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module,Logger} from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { JobRunController } from './job-run.controller';
@@ -11,6 +11,6 @@ import { CsvService } from 'src/csv/csv_export.service';
 @Module({
   imports: [TypeOrmModule.forFeature([JobRunEntity,InventoryEntity, TaskEntity, ReportsEntity])],
   controllers: [JobRunController],
-  providers: [JobRunService, CsvService]
+  providers: [JobRunService, CsvService,Logger]
 })
 export class JobRunModule {}

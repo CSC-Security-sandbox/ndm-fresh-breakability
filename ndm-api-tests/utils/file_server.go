@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 )
@@ -89,7 +88,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp, err
 	}
@@ -120,18 +119,21 @@ func GetExportPathID(
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
 	var getSourceResp FileServerInfo
-	var resp *http.Response
-	var err error
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
-		resp, err = SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+		if err != nil {
+			return "", fmt.Errorf("error refreshing file server: %w", err)
+		}
+		defer resp.Body.Close()
+
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return "", err
 		}
 		defer resp.Body.Close()
 
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", err
 		}
@@ -147,7 +149,7 @@ func GetExportPathID(
 		}
 
 		if attempt < MaxPollRetries {
-			IntroduceDelay(DefaultPollInterval) // Wait before retrying
+			Wait(DefaultPollInterval) // Wait before retrying
 		}
 	}
 
@@ -158,7 +160,6 @@ func GetExportPathID(
 	if len(getSourceResp.FileServers[0].Volumes) == 0 {
 		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
-
 	// Now fetch the volume ID
 	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
 	if err != nil {
