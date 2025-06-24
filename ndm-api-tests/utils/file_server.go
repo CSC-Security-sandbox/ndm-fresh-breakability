@@ -187,7 +187,6 @@ func ClearVolume(export string) error {
 		Password: NDM_VM_PASSWORD,
 	}
 
-	// return nil
 	script := fmt.Sprintf(`
 	set -e
 	sudo mkdir -p "%s"

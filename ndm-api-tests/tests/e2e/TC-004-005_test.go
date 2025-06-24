@@ -38,12 +38,6 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
-
-			err = ClearVolume(destinationVolumePath1)
-			fmt.Println("error while clearing volume : ", err)
-			err = ClearVolume(destinationVolumePath2)
-			fmt.Println("error while clearing volume2 : ", err)
-
 		})
 
 		It("TC-004 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
