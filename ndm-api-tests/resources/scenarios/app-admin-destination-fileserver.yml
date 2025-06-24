@@ -32,7 +32,7 @@ scenarios:
     delay: "5"
     data:
       type: destination
-      volume_name : "/vol_vasu_nfs_dest"
+      volume_name : "/vol_dest_automation"
 
   - name: create-new-discovery-job-for-destination
     url: /api/v1/jobs/bulk-discovery

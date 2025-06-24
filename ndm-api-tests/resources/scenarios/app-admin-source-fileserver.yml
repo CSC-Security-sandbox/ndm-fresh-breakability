@@ -32,7 +32,7 @@ scenarios:
     delay: "5"
     data:
       type : source
-      volume_name : "/volSrcEDA"
+      volume_name : "/volSrcAuto"
 
 
 
