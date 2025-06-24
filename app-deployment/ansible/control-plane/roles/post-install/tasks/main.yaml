@@ -19,40 +19,40 @@
   args:
     chdir: $HOME
 
-- name: Run script to add admin
-  become: yes
-  shell: |
-    kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator
-    sleep 5
-    kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrator
+# - name: Run script to add admin
+#   become: yes
+#   shell: |
+#     kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator
+#     sleep 5
+#     kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrator
 
-- name: Wait for job to complete successfully
-  become: yes
-  shell: |
-    kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrator
-  register: job_wait_result
-  retries: 5
-  delay: 10
-  until: job_wait_result.rc == 0
+# - name: Wait for job to complete successfully
+#   become: yes
+#   shell: |
+#     kubectl wait --for=condition=complete --timeout=600s job/admin-entry-job -n datamigrator
+#   register: job_wait_result
+#   retries: 5
+#   delay: 10
+#   until: job_wait_result.rc == 0
 
-- name: Get logs from the job pod
-  become: yes
-  shell: |
-    POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
-    kubectl logs $POD_NAME -n datamigrator
-  register: job_logs
-  when: job_wait_result.rc == 0
+# - name: Get logs from the job pod
+#   become: yes
+#   shell: |
+#     POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
+#     kubectl logs $POD_NAME -n datamigrator
+#   register: job_logs
+#   when: job_wait_result.rc == 0
 
-- name: Debug job logs
-  debug:
-    var: job_logs.stdout_lines
-  when: job_wait_result.rc == 0
+# - name: Debug job logs
+#   debug:
+#     var: job_logs.stdout_lines
+#   when: job_wait_result.rc == 0
 
-- name: Clean up admin entry configmap and job files
-  become: yes
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - $HOME/admin-entry-configmap.yaml
-    - $HOME/admin-entry-job.yaml
+# - name: Clean up admin entry configmap and job files
+#   become: yes
+#   file:
+#     path: "{{ item }}"
+#     state: absent
+#   loop:
+#     - $HOME/admin-entry-configmap.yaml
+#     - $HOME/admin-entry-job.yaml

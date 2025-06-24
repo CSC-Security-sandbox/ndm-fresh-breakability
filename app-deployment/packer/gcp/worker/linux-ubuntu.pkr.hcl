@@ -12,6 +12,12 @@ packer {
   }
 }
 
+// Build Version
+variable "build_version" {
+  type        = string
+  description = "The version of the build."
+}
+
 // Project Settings
 variable "project_name" {
   type    = string
@@ -135,7 +141,8 @@ build {
     ]
     extra_arguments = [
       "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "local_binary_path=${var.worker_binary_path}"
+      "--extra-vars", "local_binary_path=${var.worker_binary_path}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 

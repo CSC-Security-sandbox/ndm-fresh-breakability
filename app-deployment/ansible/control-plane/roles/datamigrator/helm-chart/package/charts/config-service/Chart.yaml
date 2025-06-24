@@ -1,5 +1,0 @@
-apiVersion: v2
-name: config-service
-description: Helm chart to deploy config-service 
-version: 0.1.0
-type: application

@@ -1,6 +1,86 @@
 #!/bin/bash
 
+set -euo pipefail
+
+ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests"
+REF_TYPE=${2:-branches}
+REF_NAME=${3:-main}
 ACR_NAME="datamigratedev"
+TAR_PREFIX="datamigrator"
+VERSION=$1
+
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    PLATFORM="linux/amd64"
+elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+    PLATFORM="linux/arm64"
+else
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+fi
+echo "Detected architecture: $ARCH, using platform: $PLATFORM"
+
+# Explicit mapping: artifactory_name:vars_yaml_tag:acr_image_name
+services=(
+    "admin-service:admin_service_tag:ndm-admin-service"
+    "config-service:config_service_tag:ndm-config-service"
+    "datamigrator-ui:datamigrator_ui_tag:ndm-datamigrator-ui"
+    "db-writer:db_writer_service_tag:ndm-db-writer"
+    "db-migrations:db_migrations_tag:ndm-db-migrations"
+    "jobs-service:jobs_service_tag:ndm-jobs-service"
+    "reports-service:reports_service_tag:ndm-reports-service"
+    "keycloak-customizations:keycloak_customizations_tag:ndm-keycloak-customizations"
+)
+
+echo "Outputting tags from Artifactory for all images..."
+
+TAG_LINES=()
+IMAGES=()
+for mapping in "${services[@]}"; do
+    IFS=":" read -r artifactory_service tag_var acr_image_name <<< "$mapping"
+
+    # Environment variable name is the uppercase of the tag_var
+    env_tag_var="$(echo "$tag_var" | tr '[:lower:]' '[:upper:]')"
+    custom_tag="${!env_tag_var:-}"
+
+    if [[ -n "$custom_tag" ]]; then
+        short_sha="${custom_tag:0:7}"
+        meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${short_sha}/metadata.json"
+        echo "[INFO] Fetching $meta_url"
+        json=$(curl -sf "$meta_url")
+        image_tag=$(echo "$json" | jq -r '.image_tag')
+        if [[ "$image_tag" != "$custom_tag" ]]; then
+            echo "[WARNING] image_tag in metadata.json ($image_tag) does not match requested custom tag ($custom_tag) for $artifactory_service"
+        fi
+    else
+        latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
+        echo "[INFO] Fetching $latest_url"
+        json=$(curl -sf "$latest_url")
+        image_tag=$(echo "$json" | jq -r '.image_tag')
+    fi
+
+    if [[ -z "$image_tag" || "$image_tag" == "null" ]]; then
+        echo "[ERROR] Failed to extract image tag for $artifactory_service"
+        exit 1
+    fi
+
+    echo "[INFO] $tag_var -> tag: $VERSION"
+    TAG_LINES+=("$tag_var: \"$VERSION\"")
+
+    # Compose the full ACR image name using the explicit mapping
+    full_image_name="${ACR_NAME}.azurecr.io/${acr_image_name}:${image_tag}"
+    IMAGES+=("$full_image_name")
+done
+
+VARS_YAML="app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
+{
+  echo "# Microservices release tags of docker images"
+  for tag in "${TAG_LINES[@]}"; do
+    echo "$tag"
+  done
+} > "$VARS_YAML"
+
+echo "[INFO] Wrote tags to $VARS_YAML"
 
 # Validate Azure CLI Installation
 if ! command -v az > /dev/null 2>&1; then
@@ -32,67 +112,52 @@ if [ $? -ne 0 ]; then
 fi
 echo "[INFO] Azure login successful."
 
-# Define services and their images using a colon-delimited format
-services=(
-    "admin_service:ndm-admin-service"
-    "config_service:ndm-config-service"
-    "datamigrator_ui:ndm-datamigrator-ui"
-    "db_writer_service:ndm-db-writer"
-    "db_migrations:ndm-db-migrations"
-    "jobs_service:ndm-jobs-service"
-    "reports_service:ndm-reports-service"
-    "keycloak_customizations:ndm-keycloak-customizations"
-)
+echo "------------------------------------------------------------"
+echo "[INFO] Logging in to Azure Container Registry ($ACR_NAME)..."
+echo "------------------------------------------------------------"
+az acr login --name "$ACR_NAME"
+if [ $? -ne 0 ]; then
+    echo "[ERROR] ACR login failed. Exiting."
+    exit 1
+fi
+echo "[INFO] ACR login successful."
 
-# Function: Fetch Latest Commit-Hash Tag
-get_latest_commit_tag() {
-    local repo="$1"
-    az acr repository show-tags --name "$ACR_NAME" \
-        --repository "$repo" \
-        --orderby time_desc \
-        --output tsv | grep -v "latest" 2>/dev/null | head -n 1
-}
+# Pull, retag, and save images
+echo "------------------------------------------------------------"
+echo "[INFO] Pulling images, retagging with version (${VERSION}), and preparing for tarball..."
+echo "------------------------------------------------------------"
+LOCAL_IMAGES=()
+for IMAGE in "${IMAGES[@]}"; do
+    echo "[INFO] Pulling $IMAGE"
+    docker pull --platform $PLATFORM "$IMAGE"
 
-# Output latest commit hash for all images in each service
-echo "Outputting latest commit hashes for all images..."
+    # Strip ACR prefix and use new version tag
+    IMAGE_WITHOUT_REGISTRY=$(echo "$IMAGE" | sed "s|^${ACR_NAME}\.azurecr\.io/||")
+    IMAGE_BASE=$(echo "$IMAGE_WITHOUT_REGISTRY" | cut -d: -f1)
+    NEW_TAG="${IMAGE_BASE}:${VERSION}"
 
-# Collect tag lines
-TAG_LINES=()
-for service_entry in "${services[@]}"; do
-    service="${service_entry%%:*}"
-    repos="${service_entry#*:}"
-    echo "[INFO] Repositories for service '$service': $repos"
-    for repo in $repos; do
-        # Map service to env var
-        env_var_name="${service^^}_TAG"
-        tag="${!env_var_name}"
-        if [[ -n "$tag" ]]; then
-            if az acr repository show-tags --name "$ACR_NAME" --repository "$repo" --output tsv | grep -Fxq "$tag"; then
-                echo "[INFO] Using custom tag '$tag' for repository '$repo'."
-            else
-                echo "[ERROR] Provided custom tag '$tag' does not exist in repository '$repo'."
-                exit 1
-            fi
-        else
-            tag=$(get_latest_commit_tag "$repo")
-        fi
-        if [[ -z "$tag" ]]; then
-            echo "[ERROR] No tag found for repository '$repo'."
-            exit 1
-        else
-            echo "${service}_tag: \"$tag\""
-            TAG_LINES+=("${service}_tag: \"$tag\"")
-        fi
-    done
+    echo "[INFO] Retagging $IMAGE as $NEW_TAG"
+    docker tag "$IMAGE" "$NEW_TAG"
+    LOCAL_IMAGES+=("$NEW_TAG")
 done
 
+# Output the list of images to be saved
+echo "------------------------------------------------------------"
+echo "[INFO] List of images to be saved to tarball:"
+echo "------------------------------------------------------------"
+for IMAGE in "${LOCAL_IMAGES[@]}"; do
+    echo "$IMAGE"
+done
 
-VARS_YAML="app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
-{
-  echo "# Microservices release tags of docker images"
-  for tag in "${TAG_LINES[@]}"; do
-    echo "$tag"
-  done
-} > "$VARS_YAML"
+# Define the artifacts directory relative to the script location
+ARTIFACT_DIR="$(dirname "$0")/../artifacts"
+mkdir -p "$ARTIFACT_DIR"
 
-echo "[INFO] Wrote tags to $VARS_YAML"
+TAR_NAME="${TAR_PREFIX}-${VERSION}.tar"
+TAR_PATH="${ARTIFACT_DIR}/${TAR_NAME}"
+
+echo "------------------------------------------------------------"
+echo "[INFO] Saving images to $TAR_PATH..."
+echo "------------------------------------------------------------"
+docker save "${LOCAL_IMAGES[@]}" -o "$TAR_PATH"
+echo "[INFO] Docker images saved to $TAR_PATH"

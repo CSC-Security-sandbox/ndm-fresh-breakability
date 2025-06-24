@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e  # Exit on any error
 
+# Detect system architecture
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    PLATFORM="linux/amd64"
+elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+    PLATFORM="linux/arm64"
+else
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+fi
+echo "Detected architecture: $ARCH, using platform: $PLATFORM"
+
 # check if AZ_USERNAME, AZ_PASSWORD and AZ_TENANT environment variables are set or not
 if [ -z "$AZ_USERNAME" ] || [ -z "$AZ_PASSWORD" ] || [ -z "$AZ_TENANT" ]
 then
@@ -82,7 +94,7 @@ for service in "${services[@]}"; do
     image_tag="${repo_url}/ndm-${service_name}:${service_version}"
     
     echo -e "\nBuilding service image: $image_tag"
-    docker build --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+    docker build --platform $PLATFORM --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
         -t "$image_tag" \
         -f "$docker_file_path" "$build_context"
 

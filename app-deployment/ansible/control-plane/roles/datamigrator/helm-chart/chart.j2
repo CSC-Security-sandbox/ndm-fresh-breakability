@@ -1,0 +1,18 @@
+apiVersion: v2
+name: datamigrator
+version: {{ build_version | default('0.1.0') }}
+dependencies:
+  - name: admin-service
+    version: {{ build_version | default('0.1.0') }}
+  - name: config-service
+    version: {{ build_version | default('0.1.0') }}
+  - name: db-writer
+    version: {{ build_version | default('0.1.0') }}
+  - name: jobs-service
+    version: {{ build_version | default('0.1.0') }}
+  - name: reports-service
+    version: {{ build_version | default('0.1.0') }}
+  - name: datamigrator-ui
+    version: {{ build_version | default('0.1.0') }}
+  - name: db-migrations
+    version: {{ build_version | default('0.1.0') }}

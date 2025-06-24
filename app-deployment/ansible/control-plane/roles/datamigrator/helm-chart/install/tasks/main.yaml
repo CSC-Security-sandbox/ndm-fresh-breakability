@@ -1,32 +1,50 @@
 ---
+- name: Copy Docker image tar file to target
+  copy:
+    src: "../../../artifacts/datamigrator-{{ build_version }}.tar"
+    dest: "$HOME/datamigrator-images-{{ build_version }}.tar"
+    mode: '0644'
+  when: local_cluster is not defined
+
+- name: Copy helm chart tgz file to target
+  copy:
+    src: "../../../artifacts/datamigrator-{{ build_version }}.tgz"
+    dest: "$HOME/datamigrator-helmchart-{{ build_version }}.tgz"
+  when: local_cluster is not defined
+
 - name: Copy contents of helm-chart values.yaml
   become: no
   local_action:
     module: template
     src: "../../values.j2"
     dest: "../roles/datamigrator/helm-chart/package/values.yaml"
+  when: local_cluster is defined
 
 - name: Package the tarball
   become: no
   local_action:
     module: command
     cmd: helm package ../roles/datamigrator/helm-chart/package/ -d ../roles/datamigrator/helm-chart/package/
+  when: local_cluster is defined
 
 - name: Copy the tarball to the remote host
   become: yes
   copy:
     src: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
     dest: "$HOME/helm-chart.tgz"
+  when: local_cluster is defined
 
 - name: Install Helm chart
   become: yes
   shell: |
     helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz
   register: helm_install_output
+  when: local_cluster is defined
 
 - name: Debug Helm install output
   debug:
     var: helm_install_output.stdout_lines
+  when: local_cluster is defined
 
 - name: Wait for pods to come up and handle failure
   block:
@@ -53,20 +71,24 @@
     - name: Fail the play due to pod readiness failure
       fail:
         msg: "Pods did not become ready within the expected time frame."
+  when: local_cluster is defined
 
 - name: debug output
   ansible.builtin.debug:
     msg: "Get pods (datamigrator): {{ kubectl_get_pods.stdout | split('\n') }}"
+  when: local_cluster is defined
 
 - name: Check datamigrator pod status
   shell: kubectl get pods -n datamigrator
   register: pod_status
+  when: local_cluster is defined
 
 - name: Delete the tarball from the remote host
   become: yes
   file:
     path: $HOME/helm-chart.tgz
     state: absent
+  when: local_cluster is defined
 
 - name: Delete the local tarball
   become: no
@@ -74,6 +96,7 @@
     module: file
     path: "../roles/datamigrator/helm-chart/package/datamigrator-0.1.0.tgz"
     state: absent
+  when: local_cluster is defined
 
 - name: Delete the local values.yaml in package folder
   become: no
@@ -81,3 +104,4 @@
     module: file
     path: "../roles/datamigrator/helm-chart/package/values.yaml"
     state: absent
+  when: local_cluster is defined
