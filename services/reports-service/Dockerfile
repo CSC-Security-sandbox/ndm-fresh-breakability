@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/alpine:3.21.0 
+FROM public.ecr.aws/docker/library/alpine:3.22.0
 
 # Install required packages
 RUN apk update && \
