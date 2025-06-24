@@ -1,21 +1,24 @@
 #!/bin/bash
 
-# Run the regression test
-ginkgo run --focus="RTC-001-002" ./tests/regression &> test_regression_output.log
-
-# Run the e2e test
-ginkgo run --focus="TC-001" ./tests/e2e  &> test_e2e_output.log
+set -e  # Exit on any error
 
 # Prepare the report file
 report_file="test_report.txt"
 
 # Clear or create the report file
-> "$report_file"
+: > "$report_file"
 
+# Function to run tests and log output
+run_tests() {
+    local test_type=$1
+    local test_path=$2
 
-echo -e "\n\033[1;36m#########  Regression test case output:  #######\033[0m" | tee -a "$report_file"
-tail -n 7 test_regression_output.log | tee -a "$report_file"
+    echo " \n\n Running $test_type tests  \n\n" | tee -a "$report_file"
+    ginkgo run "$test_path" | tee -a "$report_file"
+}
 
+# Run regression tests
+run_tests "regression" "./tests/regression"
 
-echo -e "\n\n \033[1;36m#########  E2E Test case output:  #######\033[0m" | tee -a "$report_file"
-tail -n 7 test_e2e_output.log | tee -a "$report_file"
+# Run end-to-end tests
+run_tests "end-to-end" "./tests/e2e"
