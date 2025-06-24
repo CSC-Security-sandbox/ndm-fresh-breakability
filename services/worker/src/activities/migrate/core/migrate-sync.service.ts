@@ -288,7 +288,7 @@ export class MigrateSyncService {
 
       this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
 
-      task = await this.validateTask({ task, jobContext });
+      task = await this.ensureTaskValid({ task, jobContext });
       task.status = TaskStatus.RUNNING;
       task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
@@ -329,15 +329,13 @@ export class MigrateSyncService {
         }
         await jobContext.setTask(taskId, task);
       }
-      await this.handleUpdateTask({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
+      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
       syncOutput.status = TaskStatus.COMPLETED;
     } catch (error) {
-      if(error instanceof FatalError) 
+        if(error instanceof FatalError) throw error;
+        this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
         throw error;
-      this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);
-      throw new RetryableError(error.message);
-    }
-    finally{
+    } finally {
       clearInterval(heartBeatInterval);
     }
     return syncOutput;
@@ -377,7 +375,7 @@ export class MigrateSyncService {
   }
 
 
-  async handleUpdateTask({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
+  async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
     const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
 
     if (allCompleted) {
@@ -413,7 +411,7 @@ export class MigrateSyncService {
     );
   }
 
-  async validateTask({task , jobContext}: handleInitTaskInput) : Promise<Task> {
+  async ensureTaskValid({task , jobContext}: handleInitTaskInput) : Promise<Task> {
     let retryCount = 0;
     for (let i = 0; i < task.commands.length; i++) {
       retryCount = Math.max(retryCount, task.commands[i].retryCount);
@@ -424,7 +422,7 @@ export class MigrateSyncService {
     if (retryCount >= this.maxRetryCount) {
       task.status = TaskStatus.ERRORED;
       await jobContext.publishToTaskStream(task);
-      throw new FatalError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
+      throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
     }
 
     return task;

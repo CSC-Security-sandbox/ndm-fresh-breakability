@@ -78,15 +78,15 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
         jobRunId,
         status: JobRunStatus.Pending,
     }
-    let flag = true; 
-    while(flag){
+    let syncInProgress = true; 
+    while(syncInProgress){
         const taskIds: string[] = await getGroupOfTasksActivity(jobRunId, 1000);
 
         if(taskIds.length === 0 && isScanCompleted) {
-            flag = false;
+            syncInProgress = false;
             continue;
         }
-        await Promise.all(
+        const results = await Promise.all(
             taskIds.map(async (taskId) => {
                 try {
                     const output = await SyncTaskActivity({ jobRunId, taskId });
@@ -95,19 +95,22 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
                 } catch (error) {
                     if(error instanceof FatalError)  {
                         console.error(`FatalError occurred for taskId: ${taskId} with error: ${error.message}`);
+                        //TODO: add activity to shutdown the worker with workerId. 
                         throw wf.ApplicationFailure.nonRetryable(error.message);
+
                     }
+                    //TODO: do we need to try this error? workflow level there is no retry.  
+                    // we only need to capture the ActivityFailure error here.
                     if(error instanceof RetryableError) {
-                        console.error(`RetryableError occurred for taskId: ${taskId} with error: ${error.message}`);
+                        console.error(`RetryableError occurred for taskId: ${taskId} with error: ${error.message}`);                        
                         throw wf.ApplicationFailure.retryable(error.message);
                     }
                     console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
                     return { taskId, error: error.message };
                 }
             })
-        ).then(async (results) => {
-            failedTasks = results.filter(result => result.error);
-        });                                
+        )
+        failedTasks = results.filter(result => result.error);        
     }
     if(failedTasks.length > 0) {
         syncWorkflowOutput.status = JobRunStatus.Failed;
