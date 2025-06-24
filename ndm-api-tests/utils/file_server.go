@@ -178,14 +178,37 @@ func GetExportPathID(
 func ClearVolume(export string) error {
 	destMount := "/mnt/remove_data"
 
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	// return nil
 	script := fmt.Sprintf(`
 	set -e
 	sudo mkdir -p "%s"
 	sudo mount -t nfs "%s" "%s"
-	sudo rm -rf "%s"/*
+
+	# Remove all files, directories, and hidden files
+	sudo rm -rf "%s"/* "%s"/.[!.]* "%s"/..?*
+
+	# Remove all symlinks (soft links)
+	sudo find "%s" -type l -exec rm -f {} +
+
+	# Remove all files with more than one hardlink (hard links)
+	sudo find "%s" -type f -links +1 -exec rm -f {} +
+
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, export, destMount, destMount, destMount, destMount)
+	`, destMount, export, destMount,
+		destMount, destMount, destMount,
+		destMount,
+		destMount,
+		destMount, destMount)
 
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
@@ -196,7 +219,16 @@ func ClearVolume(export string) error {
 
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
 func AddDataToVolume(export string) error {
-	destMount := "/mnt/data_tmp"
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+	destMount := "/mnt/data_add"
 	deltaDir := "/" + DeltaFolder
 
 	script := fmt.Sprintf(`
@@ -234,7 +266,15 @@ func AddDataToVolume(export string) error {
 
 // RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
 func RemoveDeltaFromVolume(export string) error {
-	destMount := "/mnt/data_tmp"
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
 	set -e
@@ -263,6 +303,88 @@ func RemoveDeltaFromVolume(export string) error {
 	return nil
 }
 
+// ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
+func ModifyDataOnVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+	destMount := "/mnt/data_modify"
+
+	// Lines to append
+	appendLines := "\n# MODIFIED LINE 1\n# MODIFIED LINE 2\n"
+
+	script := fmt.Sprintf(`
+    set -e
+
+    # Mount export NFS export
+    sudo mkdir -p "%s"
+    sudo mount -t nfs "%s" "%s"
+
+    # Append lines to each file
+    echo "%s" | sudo tee -a "%s/modify1.text" > /dev/null
+    echo "%s" | sudo tee -a "%s/modify2.text" > /dev/null
+    echo "%s" | sudo tee -a "%s/modify3.text" > /dev/null
+
+    # Unmount and cleanup
+    sudo umount "%s"
+    sudo rm -rf "%s"
+    `, destMount, export, destMount,
+		appendLines, destMount,
+		appendLines, destMount,
+		appendLines, destMount,
+		destMount, destMount)
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return fmt.Errorf("ModifyDataOnVolume failed: %w\noutput: %s", err, output)
+	}
+	return nil
+}
+
+// RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
+func RestoreOriginalDataOnVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+	destMount := "/mnt/data_restore"
+
+	script := fmt.Sprintf(`
+    set -e
+
+    # Mount export NFS export
+    sudo mkdir -p "%s"
+    sudo mount -t nfs "%s" "%s"
+
+    # Remove appended lines from each file
+    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify1.text"
+    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify2.text"
+    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify3.text"
+
+    # Unmount and cleanup
+    sudo umount "%s"
+    sudo rm -rf "%s"
+    `, destMount, export, destMount,
+		destMount,
+		destMount,
+		destMount,
+		destMount, destMount)
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
+	}
+	return nil
+}
+
+// GetVolumeID retrieves the ID of a volume by its path from the FileServerInfo response.
 func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
