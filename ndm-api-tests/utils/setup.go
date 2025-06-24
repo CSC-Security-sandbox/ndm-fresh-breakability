@@ -2,7 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"ndm-api-tests/internal/scenario"
+	"ndm-api-tests/tests/smoke/parser"
+
 	"os"
 	"path/filepath"
 
@@ -13,16 +14,16 @@ var (
 	// Path to the scenarios directory (relative to the project root).
 	wd, _                                                                                                = os.Getwd()
 	projectRoot                                                                                          = filepath.Dir(wd)
-	ScenariosDir                                                                                         = filepath.Join(projectRoot, "resources", "scenarios")
+	ScenariosDir                                                                                         = filepath.Join(projectRoot, "smoke", "scenarios")
 	ScenarioFileNames                                                                                    []string
 	ScenarioFiles                                                                                        []string
 	AccountId                                                                                            = DEFAULT_ACCOUNT_ID
 	AuthToken, RefreshToken, KeycloakUser, KeycloakPassword, AppAdminId, ProjectAdminId, ProjectViewerId string
 )
 
-// InitTestEnv sets up variables, loads configuration,
-// and performs one‑time setup tasks for the tests.
-func InitTestEnv() {
+// InitTestEnvForSMoke sets up variables, loads configuration,
+// and performs one‑time setup tasks for the smoke(yaml) tests.
+func InitTestEnvForSMoke() {
 	var tokenErr, keycloakErr, roleIdsErr error
 
 	creds, keycloakErr := GetKeyCloakAdminCredentials()
@@ -49,14 +50,15 @@ func InitTestEnv() {
 	if roleIdsErr != nil {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
-
-	scenarioConfigPath := filepath.Join(projectRoot, "../scenario_config.yml")
+	LogDebug(fmt.Sprintf("Project root: %s", projectRoot))
+	scenarioConfigPath := filepath.Join(projectRoot, "smoke/scenarios/scenario_config.yml")
+	LogDebug(fmt.Sprintf("Reading scenario configuration from: %s", scenarioConfigPath))
 	configBytes, err := os.ReadFile(scenarioConfigPath)
 	if err != nil {
 		LogFatalf("Error reading configuration file: %v", err)
 	}
 
-	var scConfig scenario.ScenarioConfig
+	var scConfig parser.ScenarioConfig
 	if err = yaml.Unmarshal(configBytes, &scConfig); err != nil {
 		LogFatalf("Error parsing scenario configuration file: %v", err)
 	}
@@ -71,6 +73,37 @@ func InitTestEnv() {
 	ScenarioFiles = make([]string, len(ScenarioFileNames))
 	for i, name := range ScenarioFileNames {
 		ScenarioFiles[i] = filepath.Join(ScenariosDir, name)
+	}
+}
+
+// InitTestEnv sets up variables, loads configuration,
+// and performs one‑time setup tasks for the smoke(yaml) tests.
+func InitTestEnv() {
+	var tokenErr, keycloakErr, roleIdsErr error
+
+	creds, keycloakErr := GetKeyCloakAdminCredentials()
+	if keycloakErr != nil {
+		LogFatalf("Error getting Keycloak secrets: %v", keycloakErr)
+	} else {
+		KeycloakUser = creds.AdminUser
+		KeycloakPassword = creds.AdminPassword
+		CLIENT_SECRET = creds.ClientSecret
+	}
+
+	// Update the app admin profile during the first login.
+	err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
+	if err != nil {
+		LogFatalf("Error updating app admin: %v", err)
+	}
+
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
+	if tokenErr != nil {
+		LogFatalf("Error getting bearer token: %v", tokenErr)
+	}
+
+	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
+	if roleIdsErr != nil {
+		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
 }
 

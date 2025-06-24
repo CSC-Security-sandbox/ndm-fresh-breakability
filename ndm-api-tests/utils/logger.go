@@ -2,6 +2,7 @@ package utils
 
 import "log"
 
+// LogDebug logs debug messages.
 func LogDebug(msg string) {
 	log.Print("[DEBUG] " + msg)
 }

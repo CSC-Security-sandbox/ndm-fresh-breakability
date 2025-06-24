@@ -8,12 +8,17 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestE2e(t *testing.T) {
+func TestSmoke(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "E2e Suite")
+	RunSpecs(t, "Smoke Suite")
+}
+
+func TestRegression(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Regression Suite")
 }
 
 var _ = BeforeSuite(func() {
 	LogDebug("Setting before the suite")
-	InitTestEnv()
+	InitTestEnvForSMoke()
 })

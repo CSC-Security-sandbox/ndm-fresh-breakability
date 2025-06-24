@@ -1,12 +1,12 @@
 scenarios:
-  #  source fileserver
-  - name: create-source-file-server
+  #  destination fileserver
+  - name: create-destination-file-server
     url: /api/v1/servers
     method: post
-    service_name: config_service
     delay: "60"
+    service_name: config_service
     data:
-      configName: "source-file-server"
+      configName: "destination-file-server"
       configType: "FILE"
       projectId: "$project_id"
       fileServers:
@@ -15,7 +15,7 @@ scenarios:
           password: ""
           protocol: "NFS"
           protocolVersion: "v3"
-          host: "$source_host_IP"
+          host: "$destination_host_IP"
           volumes: []
           workers:
             - "$workerId"
@@ -31,12 +31,10 @@ scenarios:
   - name: get-file-server-by-id
     delay: "5"
     data:
-      type : source
-      volume_name : "/volSrcEDA"
+      type: destination
+      volume_name : "/vol_dest_automation"
 
-
-
-  - name: create-new-discovery-job-for-source
+  - name: create-new-discovery-job-for-destination
     url: /api/v1/jobs/bulk-discovery
     method: post
     service_name: job_service
@@ -45,8 +43,8 @@ scenarios:
       excludeFilePatterns: ""
       preserveAccessTime: false
       firstRunAt: "2025-03-19T17:33:44.590Z"
-      sourcePathIds:
-        - "$sourcePathId"
+      sourcePathIds: 
+        - "$destinationPathId"
       createdBy: null
       options:
         workflowExecutionTimeout: "60s"
@@ -59,7 +57,7 @@ scenarios:
       jobConfigId: "[0].id"
 
 
-  - name: get-jobs-by-job-config-id-for-source
+  - name: get-jobs-by-job-config-id-for-destination
     url: /api/v1/jobs/{jobConfigId}
     method: get
     service_name: job_service
@@ -70,4 +68,4 @@ scenarios:
     params:
       jobConfigId: jobConfigId
     parse:
-      SourceDiscoveryJobRunId: jobRuns[0].jobRunId
+      DestinationDiscoveryJobRunId: jobRuns[0].jobRunId

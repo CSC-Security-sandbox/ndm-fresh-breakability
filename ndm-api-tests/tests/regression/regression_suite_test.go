@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"fmt"
 	. "ndm-api-tests/utils"
 	"testing"
 
@@ -15,6 +14,6 @@ func TestRegression(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	fmt.Println("Setting before the suite")
+	LogDebug("Setting before the suite")
 	InitTestEnv()
 })
