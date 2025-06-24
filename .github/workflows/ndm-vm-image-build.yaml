@@ -68,7 +68,7 @@ on:
       #   required: false
       #   type: string
   schedule:
-    - cron: '15 19 * * *'
+    - cron: '45 19 * * *'
 
 permissions: 
   contents: read
@@ -116,7 +116,7 @@ jobs:
         shell: bash
 
       - name: Fetch and Replace tags and bundle docker images
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         env:
           ADMIN_SERVICE_TAG: ${{ github.event.inputs.admin_service_tag }}
           CONFIG_SERVICE_TAG: ${{ github.event.inputs.config_service_tag }}
@@ -140,26 +140,26 @@ jobs:
           ./app-deployment/scripts/get_tags.sh $build_version "$REF_TYPE" "$REF_NAME"
 
       - name: Run helm package ansible playbook
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
           ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 
       - name: Upload Ansible vars.yaml
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: ansible-vars
           path: app-deployment/ansible/control-plane/config/group_vars/vars.yaml
 
       - name: Upload Helm chart artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: helm-chart
           path: app-deployment/artifacts/datamigrator-*.tgz
 
       - name: Upload Docker image tar artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: datamigrator-images
