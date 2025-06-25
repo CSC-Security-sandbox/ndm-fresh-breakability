@@ -253,7 +253,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
