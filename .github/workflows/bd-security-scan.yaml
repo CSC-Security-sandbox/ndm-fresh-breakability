@@ -1,10 +1,11 @@
-name: BDS
+name: Run BDS for NDM
 
 on:
-  push:
-    branches: [main, sm/bd-action-workflow]
   pull_request:
-    branches: [main, sm/bd-action-workflow]
+    branches:
+      - main
+      - sm/bd-action-workflow
+
   workflow_dispatch:
 
 env:
@@ -13,6 +14,8 @@ env:
   VERSION_NAME: test_v3
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  NODE_VERSION: 22.15.0
+  JAVA_VERSION: 17.0.11
 
 jobs:
   black-duck-sca-scan:
@@ -54,20 +57,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "${{ env.NODE_VERSION }}"
           registry-url: "https://npm.pkg.github.com"
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "${{ env.JAVA_VERSION }}"
 
       - name: Replace GitHub Token Placeholder in .npmrc (if exists)
         working-directory: ${{ matrix.service.path }}
@@ -100,24 +101,19 @@ jobs:
             echo "⚠️ package.json not found. Skipping build."
           fi
 
-      - name: Validate environment
-        run: |
-          if [ -z "$BLACKDUCK_API_TOKEN" ]; then
-            echo "❌ ❌ ❌ ❌  BLACKDUCK_API_TOKEN is not set. Please add it to GitHub Secrets.❌ ❌ ❌ ❌ "
-            exit 1
-          fi
-
-          if [ -z "$GITOPS_USER_GITHUB_TOKEN" ]; then
-            echo "❌ ❌ ❌ ❌❌ GITOPS_USER_GITHUB_TOKEN is not set. Please add it to GitHub Secrets.❌ ❌ ❌ ❌ "
-            exit 1
-          fi
-
-          echo "✅ Environment validation passed"
-
       - name: Download Black Duck Detect
         run: |
           echo "📥 Downloading Black Duck Detect..."
           curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ]; then
+            echo "Failed to download Black Duck Detect (curl error $CURL_EXIT_CODE)"
+            exit 1
+          fi
+          if ! [ -s detect10.sh ]; then
+            echo "❌ Downloaded detect10.sh is empty."
+            exit 1
+          fi
           chmod +x detect10.sh
           echo "✅ Black Duck Detect downloaded successfully"
 
