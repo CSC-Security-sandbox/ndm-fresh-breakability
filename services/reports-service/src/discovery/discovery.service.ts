@@ -13,8 +13,8 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
+import { groupAndOrder } from "../utils/group-order";
 import { validateFilePath } from 'src/utils/utils';
-import { groupAndOrderByCategory } from "../utils/group-order-category";
 import { ReportType } from "../constants/enums";
 
 @Injectable()
@@ -89,7 +89,7 @@ export class DiscoveryService {
     }
   }
   generateHtmlTable(data: any[]): string {
-    const categories: { [key: string]: any[] } = groupAndOrderByCategory(
+    const categories: { [key: string]: any[] } = groupAndOrder(
       data,
       ReportType.DISCOVERY,
     );
@@ -127,10 +127,10 @@ export class DiscoveryService {
         <table>
           <tr>
             <th>Sub Category</th>
-            <th>Count or Space</th>
+            <th></th>
           </tr>
       `;
-  
+
       categories[category].forEach((entry) => {
         const subCategory = entry.sub_category;
         const value =  entry.value;
@@ -141,21 +141,21 @@ export class DiscoveryService {
           </tr>
         `;
       });
-  
+
       htmlString += `</table>`;
     }
-  
+
     htmlString += `
       </body>
       </html>
     `;
-  
+
     return htmlString;
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
     const htmlOutput = this.generateHtmlTable(reportData);
-    
+
     const browser = await puppeteer.launch({
       headless: true,
       args: [
