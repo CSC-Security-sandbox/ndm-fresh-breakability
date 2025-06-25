@@ -29,6 +29,7 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 		})
 
 		It("RTC-001-002: Check worker status when worker goes down/becomes unhealthy", func() {
+			By("########################## RTC-001-002 start ################################")
 
 			for {
 				workerIdWithStatus, err := GetWorkerStatus(ProjectId, []string{workerId1})
@@ -77,6 +78,8 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 				Wait(DefaultPollInterval)
 			}
 			Expect(workerOnline).To(BeTrue(), "Worker should be online after starting it again")
+
+			By("########################## RTC-001-002 end ################################")
 		})
 
 		AfterEach(func() {

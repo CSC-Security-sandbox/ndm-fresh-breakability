@@ -2,10 +2,11 @@ package tests
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	. "ndm-api-tests/utils"
 	"net/http"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS", func() {
@@ -31,6 +32,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 		})
 
 		It("RTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS", func() {
+			By("########################## RTC-005 start ################################")
 
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
@@ -114,7 +116,6 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			err = WaitForJobState(JobRunID, RUNNING_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not start running successfully, err: %s", err))
 
-
 			By("Make one worker go down by stopping the worker service")
 			_, err = StopWorker(attachedWorkersConfig[workerId1])
 			Expect(err).NotTo(HaveOccurred(), "Error stopping worker service")
@@ -129,7 +130,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			By("Checking if Migration job is completed")
 			err = WaitForJobState(JobRunID, COMPLETED_JOBRUN, 60)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not complete successfully, err: %s", err))
-
+			By("########################## RTC-005 end ################################")
 		})
 
 		AfterEach(func() {

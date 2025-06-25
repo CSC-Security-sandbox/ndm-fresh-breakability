@@ -40,7 +40,8 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 		})
 
-		It("TC-004 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
+		It("TC-004-005 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
+			By("########################## TC-004-005 start ################################")
 			var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs []string
 			var migrationJobRunID string
@@ -347,6 +348,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverJobRunIDs[i])
 				resp.Body.Close()
 			}
+			By("########################## TC-004-005 end ################################")
 		})
 
 		AfterEach(func() {

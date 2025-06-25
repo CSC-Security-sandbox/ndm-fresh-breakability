@@ -2,10 +2,11 @@ package tests
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	. "ndm-api-tests/utils"
 	"net/http"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
@@ -29,6 +30,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 		})
 
 		It("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
+			By("########################## RTC-003 start ################################")
 
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
@@ -102,7 +104,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			By("Checking if discovery job is completed")
 			err = WaitForJobState(JobRunID, COMPLETED_JOBRUN, 60)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Discovery job did not complete successfully, err: %s", err))
-
+			By("########################## RTC-003 end ################################")
 		})
 
 		AfterEach(func() {
