@@ -81,7 +81,7 @@ echo "Current build version: $BUILD_VERSION"
 
 load_docker_images() {
     log "Loading Docker images into MicroK8s registry..."
-    retry $MAX_RETRIES "microk8s images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load Docker images"
+    retry $MAX_RETRIES "microk8s ctr images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load Docker images"
 }
 
 install_helm_chart() {
