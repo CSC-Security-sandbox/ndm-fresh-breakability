@@ -36,7 +36,7 @@ for mapping in "${services[@]}"; do
         latest_json=$(curl -sf "$latest_url")
         meta_path=$(echo "$latest_json" | jq -r '.metadata_path // empty')
         if [[ -n "$meta_path" ]]; then
-            meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${meta_path##*/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/}"
+            meta_url="${ARTIFACTORY_BASE}/${meta_path}"
             json=$(curl -sf "$meta_url")
         else
             json="$latest_json"
