@@ -27,13 +27,9 @@ describe('DiscoveryJobWorkflow', () => {
             env = await TestWorkflowEnvironment.createTimeSkipping();
         } catch (e) {
             console.error('Error during test environment setup:', e);
-        }                       
-    });
-
-    afterAll(async () => {
-        if (env) {
-            await env.teardown();
-            env = undefined;
+            if (!!env) {
+                await env.teardown();
+            }
         }
     });
 
