@@ -42,6 +42,8 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+			By("########################## TC-001 start ################################")
+
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
@@ -273,6 +275,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
+			By("########################## TC-001 end ################################")
 		})
 
 		AfterEach(func() {
