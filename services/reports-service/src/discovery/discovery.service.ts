@@ -14,6 +14,8 @@ import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
 import { validateFilePath } from 'src/utils/utils';
+import { groupAndOrderByCategory } from "../utils/group-order-category";
+import { ReportType } from "../constants/enums";
 
 @Injectable()
 export class DiscoveryService {
@@ -68,13 +70,13 @@ export class DiscoveryService {
       }
 
       const reportData = JSON.parse(latestReport[0]?.reportData);
-
+      console.log("Report Data: ", reportData);
       const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
       const csvFilePath = path.join(this.reportsDirectory, csvFileName);
       this.formatAndWriteToFile(reportData, csvFilePath);
 
       const pdfBuffer = await this.generatePdfFromData(reportData);
-      fs.writeFileSync(pdfFilePath, pdfBuffer); 
+      fs.writeFileSync(pdfFilePath, pdfBuffer);
 
       return {
         message: "Report generated successfully",
@@ -82,22 +84,16 @@ export class DiscoveryService {
     } catch (error) {
       this.logger.log(error);
       throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
       );
     }
   }
-
   generateHtmlTable(data: any[]): string {
-    const categories: { [key: string]: any[] } = {};
-    if (data && data.length > 0) {
-      data.forEach((entry) => {
-          const category = entry.category;
-          if (!categories[category]) {
-            categories[category] = [];
-          }
-          categories[category].push(entry);
-      });
-    }
+    const categories: { [key: string]: any[] } = groupAndOrderByCategory(
+      data,
+      ReportType.DISCOVERY,
+    );
+    console.log("inside the categories>>>> ", JSON.stringify(categories));
     let htmlString = `
       <html>
       <head>
@@ -231,7 +227,7 @@ export class DiscoveryService {
 
   const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
 
-  fs.writeFileSync(filePath, csvContent); 
+  fs.writeFileSync(filePath, csvContent);
   console.log(`Data has been written to ${filePath}`);
 }
 
