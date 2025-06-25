@@ -315,12 +315,18 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 		if err != nil {
 			return err
 		}
+
+		LogDebug(fmt.Sprintf("Current job run status: %s", status))
+
+		if status == ERRORED_JOBRUN {
+			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
+		}
+
 		if status == desiredJobState {
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
 		Wait(DefaultPollInterval)
-
 	}
 
 	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
