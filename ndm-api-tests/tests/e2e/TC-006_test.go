@@ -209,10 +209,10 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		})
 
 		AfterEach(func() {
-			err := RestoreOriginalDataOnVolume(sourceVolumePath1)
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
-			err = RestoreOriginalDataOnVolume(sourceVolumePath2)
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
 
 			err = ClearVolume(destinationVolumePath1)
