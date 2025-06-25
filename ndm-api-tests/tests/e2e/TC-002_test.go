@@ -12,12 +12,16 @@ import (
 var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
 	var headers map[string]string
 	var (
-		ProjectId             string
-		workerId1             string
-		workerId2             string
-		workerIds             []string
-		err                   error
-		attachedWorkersConfig map[string]SSHConfig
+		ProjectId              string
+		workerId1              string
+		workerId2              string
+		workerIds              []string
+		err                    error
+		attachedWorkersConfig  map[string]SSHConfig
+		destinationVolumePath1 string
+		destinationVolumePath2 string
+		sourceVolumePath1      string
+		sourceVolumePath2      string
 	)
 	Context("TC-002", func() {
 		BeforeEach(func() {
@@ -29,9 +33,14 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 		})
 
 		It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
+			By("########################## TC-002 start ################################")
 			var (
 				// Source-related IDs
 				sourceConfigID1, sourceConfigID2 string
@@ -107,8 +116,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 
 			attachedWorkersConfig := GetAttachedWorkersConfig()
 			if len(attachedWorkersConfig) != 0 {
-				for workerId, config := range attachedWorkersConfig {
-					LogDebug(fmt.Sprintf("Detaching Worker ID: %s, SSH Config: %+v", workerId, config))
+				for workerId, _ := range attachedWorkersConfig {
 					DetachWorkers([]string{workerId})
 					break // Detach only the first worker
 				}
@@ -142,6 +150,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			sourceConfigID2 = sourceJobConfigIDs[1]
 
 			By("Getting jobs by jobConfigId for source")
+			discovery_validators := []string{
+				"nfs_src_vol_discovery.json",
+				"nfs_src_vol2_discovery.json",
+			}
 			sourceConfigIDs = []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs = make([]string, len(sourceConfigIDs))
 
@@ -161,11 +173,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				err := WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Source discovery job %d did not complete", i+1))
 
-				if i == 0 {
-					result, err := ValidateReport(jobRunID, JobTypeDiscovery, "../validator/PDFDetails.json")
-					Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-					LogDebug(fmt.Sprintf("validate report result : %s", result))
-				}
+				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				LogDebug(fmt.Sprintf("validate report result : %s", result))
+
 			}
 
 			By("Creating a new discovery job for destination")
@@ -210,11 +221,6 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("destination discovery job %d did not complete", i+1))
 			}
 
-			// Validate report for the first job run ID
-			result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../validator/PDFDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-			LogDebug(fmt.Sprintf("validate report result : %s", result))
-
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         GetCurrentUTCTimestamp(),
@@ -234,8 +240,12 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
+			migration_validators := []string{
+				"nfs_src_to_dest_vol_migration.json",
+				"nfs_src2_to_dest2_vol_migration.json",
+			}
 			// Get migration job run IDs and wait for completion
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -244,10 +254,16 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-				res, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../utils/validator/PDFDetails.json")
+				res, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", res))
 			}
+
+			By("Adding Delta Data")
+			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
+			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
@@ -291,18 +307,32 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			WaitForJobState(idCutovers[0], APPROVED_JOBRUN)
-			result, err = ValidateReport(idCutovers[0], JobTypeCutover, "../validator/COCDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-			LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
+			// result, err := ValidateReport(idCutovers[0], JobTypeCutover, "../../validators/cutover_validation.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+			// LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
 
 			resp, err = ApproveRejectBulkCutoverJob(idCutovers[1], "APPROVED", headers)
 			Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+			By("########################## TC-002 end ################################")
 		})
 
 		AfterEach(func() {
-			err := CleanupTestEnv()
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
 		})

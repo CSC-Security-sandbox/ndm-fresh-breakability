@@ -69,7 +69,7 @@ const (
 	FormatPDF                       Format          = "pdf"
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
-	MaxPollRetries                                  = 70
+	MaxPollRetries                                  = 50
 	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
@@ -79,6 +79,8 @@ const (
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
 	APPROVED_JOBRUN                                 = "APPROVED"
+	ERRORED_JOBRUN                                  = "ERRORED"
+	PAUSED_JOBRUN                                   = "PAUSED"
 	DeltaFolder                                     = "delta"
 	ConfigTypeFile                  ConfigType      = "FILE"
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"

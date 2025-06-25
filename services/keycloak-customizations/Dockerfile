@@ -5,7 +5,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 
-FROM public.ecr.aws/docker/library/busybox:stable-glibc
+FROM public.ecr.aws/docker/library/busybox:1.37.0-glibc
 
 RUN mkdir -p /keycloak/custom/themes && \
     mkdir -p /keycloak/custom/providers 

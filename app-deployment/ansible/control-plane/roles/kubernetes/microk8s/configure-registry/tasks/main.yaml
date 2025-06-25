@@ -5,21 +5,25 @@
     src: "../../../datamigrator/datamigrator.tar"
     dest: /tmp/docker_images.tar
     mode: '0644'
+  when: local_cluster is defined
 
 # 2. Load Docker images from the tar file
 - name: Load Docker images from tar file
   command: docker load --input /tmp/docker_images.tar
   register: docker_load_result
+  when: local_cluster is defined
 
 # 3. Extract loaded image names properly
 - name: Extract loaded image names
   set_fact:
     image_list: "{{ docker_load_result.stdout | regex_findall('Loaded image: (.+)') }}"
+  when: local_cluster is defined
 
 # 4. Debug loaded images
 - name: Display loaded images
   debug:
     msg: "Loaded images: {{ image_list | join(', ') }}"
+  when: local_cluster is defined
 
 # 5. Push images to MicroK8s registry
 - name: Push Docker images to MicroK8s registry
@@ -29,6 +33,7 @@
   delay: 5
   register: push_results
   until: push_results.rc == 0
+  when: local_cluster is defined
 
 # 6. Get list of repositories from MicroK8s registry
 - name: Get list of repositories from MicroK8s registry
@@ -37,6 +42,7 @@
     return_content: yes
   register: repo_list
   changed_when: false
+  when: local_cluster is defined
 
 # 7. Get tags for each repository and store results in a dictionary
 - name: Get tags for each repository
@@ -46,10 +52,15 @@
   loop: "{{ repo_list.json.repositories }}"
   register: tag_results
   changed_when: false
+  when: local_cluster is defined
 
 - name: Format image tags for better output
   set_fact:
     formatted_images: "{{ tag_results.results | map(attribute='json') | list }}"
+  when: 
+    - local_cluster is defined
+    - tag_results is defined
+    - tag_results.results | length > 0
 
 # 8. Display repositories with their available tags
 - name: Display images with tags
@@ -59,11 +70,16 @@
       {% for repo in formatted_images %}
       - {{ repo.name }}: {{ repo.tags | default([]) | join(', ') }}
       {% endfor %}
-  when: formatted_images | length > 0
+  when: 
+    - local_cluster is defined
+    - formatted_images is defined
+    - formatted_images | length > 0
 
 # 9. Remove tar file after loading
 - name: Remove tar file from target
   file:
     path: /tmp/docker_images.tar
     state: absent
-  when: image_list | length > 0
+  when:
+    - local_cluster is defined
+    - image_list | length > 0

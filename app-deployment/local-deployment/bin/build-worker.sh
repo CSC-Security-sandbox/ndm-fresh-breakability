@@ -24,7 +24,7 @@ fi
  
 script_dir=$(dirname "$0")
 base_dir=$(realpath "$script_dir/../../..")
-worker_dir="$base_dir/worker"
+worker_dir="$base_dir/services/worker"
 app_deployment_dir="$base_dir/app-deployment"
 
 echo "Building worker image from $worker_dir"

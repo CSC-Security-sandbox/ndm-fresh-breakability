@@ -1,5 +1,0 @@
-apiVersion: v2
-name: datamigrator-ui
-description: Helm chart to deploy datamigrator-ui service 
-version: 0.1.0
-type: application

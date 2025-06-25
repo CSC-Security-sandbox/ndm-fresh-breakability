@@ -178,6 +178,15 @@ func GetExportPathID(
 func ClearVolume(export string) error {
 	destMount := "/mnt/remove_data"
 
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
 	script := fmt.Sprintf(`
 	set -e
 	sudo mkdir -p "%s"
@@ -209,6 +218,15 @@ func ClearVolume(export string) error {
 
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
 func AddDataToVolume(export string) error {
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
 	destMount := "/mnt/data_add"
 	deltaDir := "/" + DeltaFolder
 
@@ -247,6 +265,14 @@ func AddDataToVolume(export string) error {
 
 // RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
 func RemoveDeltaFromVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
 	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
@@ -278,7 +304,13 @@ func RemoveDeltaFromVolume(export string) error {
 
 // ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
 func ModifyDataOnVolume(export string) error {
-	fmt.Println("modify data : ", export)
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
 	destMount := "/mnt/data_modify"
 
 	// Lines to append
@@ -314,6 +346,13 @@ func ModifyDataOnVolume(export string) error {
 
 // RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
 func RestoreOriginalDataOnVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
 	destMount := "/mnt/data_restore"
 
 	script := fmt.Sprintf(`

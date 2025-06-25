@@ -17,6 +17,7 @@ import {
 import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
 import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity";
 import { PreCheckService } from "./precheck.service";
+import { JwtAuthGuard, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
@@ -72,6 +73,10 @@ describe("JobConfigController", () => {
         },
         {
           provide: "VolumeRepository",
+          useValue: {},
+        },
+        {
+          provide: JwtService,
           useValue: {},
         },
       ],

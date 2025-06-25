@@ -23,7 +23,7 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
       getJobType(value),
   },
   {
-    header: "Start Time",
+    header: "Start Time (UTC)",
     accessor: "startTime",
     id: "startTime",
     width: 100,
@@ -71,7 +71,10 @@ export const JOB_RUN_LIST_COLUMN_DEFS_REVIEW = [
     accessor: "totalScannedSize",
     id: "size",
     width: 80,
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      row.jobType === JOBS_TYPE.DISCOVERY
+        ? row.totalScannedSize
+        : row.totalMigratedSize,
   },
   {
     header: "Status",
