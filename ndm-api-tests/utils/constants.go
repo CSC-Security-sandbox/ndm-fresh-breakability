@@ -79,6 +79,7 @@ const (
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
 	APPROVED_JOBRUN                                 = "APPROVED"
+	ERRORED_JOBRUN                                  = "ERRORED"
 	DeltaFolder                                     = "delta"
 	ConfigTypeFile                  ConfigType      = "FILE"
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
