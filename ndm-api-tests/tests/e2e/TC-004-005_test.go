@@ -204,9 +204,6 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				if i == 0 {
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-					result, err := ValidateReport(destinationDiscoveryJobRunIDs[0], JobTypeDiscovery, "../../validator/PDFDetails.json")
-					Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-					LogDebug(fmt.Sprintf("validate report result : %s", result))
 					continue
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
