@@ -7,11 +7,13 @@ import { WorkersStatusPageDto } from "./dto/workers.page.dto";
 import { WorkerStatus } from "src/constants/enums";
 import { ConfigService } from "@nestjs/config";
 import { HealthStatus } from "./worker.types";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 describe("WorkersService", () => {
   let service: WorkersService;
   let repository: Repository<WorkerEntity>;
   let configService: jest.Mocked<ConfigService>;
+  let workerJobRunMapRepository: Repository<WorkerJobRunMap>;
 
   beforeEach(async () => {
     configService = {
@@ -29,6 +31,14 @@ describe("WorkersService", () => {
           },
         },
         {
+          provide: getRepositoryToken(WorkerJobRunMap),
+          useValue: {
+            findOne: jest.fn(),
+            update: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
           provide: ConfigService,
           useValue: configService,
         },
@@ -38,6 +48,9 @@ describe("WorkersService", () => {
     service = module.get<WorkersService>(WorkersService);
     repository = module.get<Repository<WorkerEntity>>(
       getRepositoryToken(WorkerEntity),
+    );
+    workerJobRunMapRepository = module.get<Repository<WorkerJobRunMap>>(
+      getRepositoryToken(WorkerJobRunMap),
     );
   });
 
@@ -253,5 +266,122 @@ describe("WorkersService", () => {
     expect(result.data[0].status).toBe(WorkerStatus.Online);
     expect(result.data[1].status).toBe(WorkerStatus.Offline);
     expect(result.data[2].status).toBe(WorkerStatus.Offline);
+  });
+
+  describe("updateWorkerJobRunStatus", () => {
+    let workerJobRunMapFindOne: jest.SpyInstance;
+    let workerJobRunMapSave: jest.SpyInstance;
+
+    beforeEach(() => {
+      workerJobRunMapFindOne = jest
+        .spyOn(workerJobRunMapRepository, "findOne")
+        .mockImplementation();
+      workerJobRunMapSave = jest
+        .spyOn(workerJobRunMapRepository, "save")
+        .mockImplementation();
+    });
+
+    it("should update isActive and save when mapping exists", async () => {
+      const workerId = "worker-1";
+      const jobRunId = "jobrun-1";
+      const active = true;
+      const mockMap = { workerId, jobRunId, isActive: false };
+      workerJobRunMapFindOne.mockResolvedValueOnce(mockMap as any);
+      workerJobRunMapSave.mockResolvedValueOnce({ ...mockMap, isActive: active });
+
+      const result = await service.updateWorkerJobRunStatus(workerId, jobRunId, active);
+
+      expect(workerJobRunMapFindOne).toHaveBeenCalledWith({
+        where: { workerId, jobRunId },
+      });
+      expect(workerJobRunMapSave).toHaveBeenCalledWith({ ...mockMap, isActive: active });
+      expect(result).toEqual({ ...mockMap, isActive: active });
+    });
+
+    it("should throw BadRequestException if mapping does not exist", async () => {
+      const workerId = "worker-2";
+      const jobRunId = "jobrun-2";
+      workerJobRunMapFindOne.mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.updateWorkerJobRunStatus(workerId, jobRunId, true),
+      ).rejects.toThrow(
+        `Worker Job Run mapping not found for workerId: ${workerId} and jobrunId: ${jobRunId}`,
+      );
+      expect(workerJobRunMapFindOne).toHaveBeenCalledWith({
+        where: { workerId, jobRunId },
+      });
+      expect(workerJobRunMapSave).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateWorkerStatus", () => {
+    it("should set status to Offline if stats is missing", () => {
+      jest.spyOn(configService, "get").mockReturnValue(60);
+      const workers = [
+        { id: "1", name: "Worker1", stats: undefined, status: WorkerStatus.Online },
+        { id: "2", name: "Worker2", stats: null, status: WorkerStatus.Online },
+      ];
+      const result = service.updateWorkerStatus(workers as any);
+      expect(result[0].status).toBe(WorkerStatus.Offline);
+      expect(result[1].status).toBe(WorkerStatus.Offline);
+    });
+
+    it("should set status to Offline if healthStatus is missing", () => {
+      jest.spyOn(configService, "get").mockReturnValue(60);
+      const workers = [
+        { id: "1", name: "Worker1", stats: {}, status: WorkerStatus.Online },
+      ];
+      const result = service.updateWorkerStatus(workers as any);
+      expect(result[0].status).toBe(WorkerStatus.Offline);
+    });
+
+    it("should set status to Offline if healthStatus is not Healthy", () => {
+      jest.spyOn(configService, "get").mockReturnValue(60);
+      const workers = [
+        {
+          id: "1",
+          name: "Worker1",
+          stats: { healthStatus: HealthStatus.Unhealthy, updatedAt: new Date() },
+          status: WorkerStatus.Online,
+        },
+      ];
+      const result = service.updateWorkerStatus(workers as any);
+      expect(result[0].status).toBe(WorkerStatus.Offline);
+    });
+
+    it("should set status to Offline if updatedAt is older than timeout", () => {
+      jest.spyOn(configService, "get").mockReturnValue(60);
+      const workers = [
+        {
+          id: "1",
+          name: "Worker1",
+          stats: {
+            healthStatus: HealthStatus.Healthy,
+            updatedAt: new Date(Date.now() - 61000),
+          },
+          status: WorkerStatus.Online,
+        },
+      ];
+      const result = service.updateWorkerStatus(workers as any);
+      expect(result[0].status).toBe(WorkerStatus.Offline);
+    });
+
+    it("should set status to Online if healthStatus is Healthy and updatedAt is recent", () => {
+      jest.spyOn(configService, "get").mockReturnValue(60);
+      const workers = [
+        {
+          id: "1",
+          name: "Worker1",
+          stats: {
+            healthStatus: HealthStatus.Healthy,
+            updatedAt: new Date(),
+          },
+          status: WorkerStatus.Offline,
+        },
+      ];
+      const result = service.updateWorkerStatus(workers as any);
+      expect(result[0].status).toBe(WorkerStatus.Online);
+    });
   });
 });
