@@ -13,6 +13,8 @@ import React from "react";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 import {
   COLUMN_WIDTH_120,
+  COLUMN_WIDTH_135,
+  COLUMN_WIDTH_140,
   COLUMN_WIDTH_150,
   COLUMN_WIDTH_180,
 } from "@modules/jobs/job-run-list/grid.constants";
@@ -38,20 +40,20 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
       getJobType(value),
   },
   {
-    header: "Start Time",
+    header: "Start Time (UTC)",
     accessor: "startTime",
     id: "startTime",
-    width: COLUMN_WIDTH_120,
+    width: COLUMN_WIDTH_140,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["startTime"]>) =>
       React.createElement(DateCellRenderer, { value }),
   },
   {
-    header: "End Time",
+    header: "End Time (UTC)",
     accessor: "endTime",
     id: "endTime",
-    width: COLUMN_WIDTH_120,
+    width: COLUMN_WIDTH_135,
     Renderer: ({
       value,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["endTime"]>) =>

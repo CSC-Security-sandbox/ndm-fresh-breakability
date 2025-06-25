@@ -1,9 +1,3 @@
-{% if not local_cluster | default(false) %}
-global:
-  imagePullSecrets:
-    - azure-dev-acr-creds
-{% endif %}
-
 postgresql:
     enabled: false
 
@@ -64,8 +58,8 @@ serviceAccount:
 
 initContainers:
     - name: keycloak-customizations
-      image: {{ acr_registry }}/ndm-keycloak-customizations:{{ keycloak_customizations_tag | default(common_tag) | default("latest") }}
-      imagePullPolicy: Always
+      image: "{% if acr_registry %}{{ acr_registry }}/{% endif %}ndm-keycloak-customizations:{{ keycloak_customizations_tag | default(common_tag) | default('latest') }}"
+      imagePullPolicy: "{% if local_cluster is defined %}Always{% else %}Never{% endif %}"
       command:
         - sh
       args:

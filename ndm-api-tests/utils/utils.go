@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"ndm-api-tests/internal/scenario"
+	"ndm-api-tests/tests/smoke/parser"
 	"net/http"
 	"net/url"
 	"os"
@@ -390,7 +390,7 @@ func createAccount(authToken string) (string, error) {
 // buildRequestBody builds the JSON payload directly from the YAML "data" field.
 // Only keys defined in the YAML data are included; values that start with "$" are replaced
 // using sharedVars.
-func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
+func BuildRequestBody(s parser.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
 	// Convert s.Data into a map[string]interface{}.
 	converted, ok := ConvertToStringMap(s.Data)
 	if !ok {
@@ -407,7 +407,7 @@ func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([
 
 // buildFullURL constructs the full API URL by substituting any URL placeholders (from s.Params)
 // with values from sharedVars. Also uses service_name to compute the base URL.
-func BuildFullURL(s scenario.Scenario, sharedVars map[string]interface{}) string {
+func BuildFullURL(s parser.Scenario, sharedVars map[string]interface{}) string {
 	apiPath := s.URL
 	for paramKey, paramVal := range s.Params {
 		if v, exists := sharedVars[paramVal]; exists {
@@ -494,7 +494,7 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 
 // handleResponse validates the response by checking the status code, verifying expected fields,
 // and extracting any parsed fields into sharedVars.
-func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
+func HandleResponse(resp *http.Response, s parser.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
 	defer resp.Body.Close()
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -893,7 +893,7 @@ func loadEnvFromEnvFile() error {
 		log.Printf("Error getting current working directory: %v", err)
 		return err
 	}
-	log.Printf("Current working directory: %s", currentPath)
+	LogDebug(fmt.Sprintf("Current working directory: %s", currentPath))
 	envFilePath := "../.env"
 	if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
 		envFilePath = "../../.env"
@@ -911,7 +911,7 @@ func loadEnvFromEnvFile() error {
 	return nil
 }
 
-func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{}) (string, string, error) {
+func HandleNewLogin(scData parser.Scenario, sharedVars map[string]interface{}) (string, string, error) {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return "", "", fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
@@ -941,7 +941,7 @@ func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{})
 
 // handleKeycloakResetPassword processes keycloak-reset-password scenarios by converting data,
 // resolving required fields, and resetting user password.
-func HandleKeycloakResetPassword(scData scenario.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
+func HandleKeycloakResetPassword(scData parser.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
