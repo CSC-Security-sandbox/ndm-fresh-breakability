@@ -112,15 +112,13 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			err = WaitForJobState(JobRunID, RUNNING_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not start running successfully, err: %s", err))
 
-			//let the migration job run for a while
-			Wait(10)
-
 			By("Make the worker go down by stopping the worker service")
 			_, err = StopWorker(attachedWorkersConfig[workerId])
 			Expect(err).NotTo(HaveOccurred(), "Error stopping worker service")
 
-			//waiting for worker to go offline
-			Wait(WORKER_TIMEOUT)
+			By("Checking if Migration job is paused")
+			err = WaitForJobState(JobRunID, PAUSED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not pause successfully, err: %s", err))
 
 			By("Bringing the worker back online by starting the worker service")
 			_, err = StartWorker(attachedWorkersConfig[workerId])
