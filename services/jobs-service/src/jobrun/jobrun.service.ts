@@ -176,10 +176,6 @@ export class JobRunService {
 
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[], reason?: PausedReason) {
-    await this.workerJobRunMapRepo.update(
-      { jobRunId: In(jobRuns) },
-      { isActive: false }
-    );
     await this.jobRunRepo.update(
       { id: In(jobRuns) },
       { status: JobRunStatus.Paused, pausedReason: reason }
@@ -195,7 +191,7 @@ export class JobRunService {
   //  ------------------- JobRun actions STOP ------------------ //
   async stopJobRuns(jobRuns: string[]) {
     const mappings = await this.workerJobRunMapRepo.find({
-      where: { jobRunId: In(jobRuns), isActive: true },
+      where: { jobRunId: In(jobRuns)},
       select: { workerId: true, jobRunId: true },
     });
     const worker = new Map<string, string[]>();
@@ -295,20 +291,11 @@ export class JobRunService {
 
   //  ------------------- JobRun actions RESUME ------------------ //
   async resumeJobRuns(jobRuns: string[]) {
-    const mappings = await this.workerJobRunMapRepo.find({
-      where: { jobRunId: In(jobRuns) },
-      select: { workerId: true },
-    });
-    await this.workerJobRunMapRepo.update(
-      { jobRunId: In(jobRuns) },
-      { isActive: true }
-    );
     await this.jobRunRepo.update(
       { id: In(jobRuns), status: JobRunStatus.Paused },
       { status: JobRunStatus.Running, pausedReason: null }
     );
-    this.logger.debug(mappings);
-
+    
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Running;
@@ -319,7 +306,6 @@ export class JobRunService {
     }
     return { details: "Operation Completed Successfully" };
   }
-
 
   async resumeJobRun(jobRunId: string) {
     try {
@@ -695,7 +681,7 @@ export class JobRunService {
         targetPath: { fileServer: true },
       },
     });
-    if (status !== JobRunStatus.Running && status !== JobRunStatus.Pending) {
+    if (status !== JobRunStatus.Running) {
       if (
         jobConfig &&
         jobConfig.futureScheduleAt &&

@@ -76,7 +76,7 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
     let failedTasks = [];
     const syncWorkflowOutput: SyncWorkflowOutput = {
         jobRunId,
-        status: JobRunStatus.Pending,
+        status: JobRunStatus.Ready,
     }
     let syncInProgress = true; 
     while(syncInProgress){

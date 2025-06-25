@@ -13,7 +13,8 @@ export enum JobRunStatus {
   Stopped = 'STOPPED',
   Completed = 'COMPLETED',
   Failed = 'FAILED',
-  Errored = 'ERRORED'
+  Errored = 'ERRORED',
+  Blocked = 'BLOCKED'
 }
 
 @Entity({ name: 'jobrun' })
@@ -23,7 +24,7 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Ready, name:'status' })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
