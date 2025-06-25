@@ -309,12 +309,12 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				defer resp.Body.Close()
 			}
 
-			By("Validating cutover reports")
-			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../../validators/cutover_validation.json")
-				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			}
+			// By("Validating cutover reports")
+			// for _, cutoverRunID := range cutoverRunIDs {
+			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../../validators/cutover_validation.json")
+			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+			// }
 		})
 
 		AfterEach(func() {

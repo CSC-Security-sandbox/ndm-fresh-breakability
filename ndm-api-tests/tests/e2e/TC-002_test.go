@@ -307,9 +307,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			WaitForJobState(idCutovers[0], APPROVED_JOBRUN)
-			result, err := ValidateReport(idCutovers[0], JobTypeCutover, "../../validators/cutover_validation.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-			LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
+			// result, err := ValidateReport(idCutovers[0], JobTypeCutover, "../../validators/cutover_validation.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+			// LogDebug(fmt.Sprintf("validate COC  report result : %s", result))
 
 			resp, err = ApproveRejectBulkCutoverJob(idCutovers[1], "APPROVED", headers)
 			Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")

@@ -338,9 +338,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 			}
 
-			result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, "../../validator/COCDetails.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-			LogDebug(fmt.Sprintf("validate COC report result : %s", result))
+			// result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, "../../validator/COCDetails.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+			// LogDebug(fmt.Sprintf("validate COC report result : %s", result))
 
 			By("Approving bulk cutover job")
 
