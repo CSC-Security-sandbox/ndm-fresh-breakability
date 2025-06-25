@@ -1,8 +1,8 @@
-package scenario
+package parser
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"gopkg.in/yaml.v2"
 )
@@ -33,7 +33,7 @@ type ScenarioConfig struct {
 // parseScenarioDefinition reads a YAML file and unmarshals it into a ScenarioDefinition structure.
 func ParseScenarioDefinition(fp string) (ScenarioDefinition, error) {
 	var sd ScenarioDefinition
-	data, err := ioutil.ReadFile(fp)
+	data, err := os.ReadFile(fp)
 	if err != nil {
 		return sd, fmt.Errorf("could not read file %s: %w", fp, err)
 	}

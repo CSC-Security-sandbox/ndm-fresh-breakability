@@ -22,6 +22,12 @@ packer {
 //  BLOCK: variable
 //  Defines the input variables.
 
+// Build Version
+variable "build_version" {
+  type        = string
+  description = "The version of the build."
+}
+
 // Project Settings
 variable "project_name" {
   type    = string
@@ -702,6 +708,7 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
   provisioner "ansible" {
@@ -719,6 +726,7 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 
@@ -736,6 +744,7 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 

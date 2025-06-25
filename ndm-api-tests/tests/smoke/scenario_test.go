@@ -2,9 +2,8 @@ package tests
 
 import (
 	"fmt"
-	"ndm-api-tests/internal/scenario"
+	"ndm-api-tests/tests/smoke/parser"
 	. "ndm-api-tests/utils"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -38,16 +37,17 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 		fmt.Println("Initialization complete.")
 	})
 
-	for _, filePath := range ScenarioFiles {
-		fp := filePath // capture current value of filePath
-		It(fmt.Sprintf("executes scenario from file: %s", filepath.Base(fp)), func() {
+	It("executes scenario files", func() {
+		for _, filePath := range ScenarioFiles {
+			LogDebug(fmt.Sprintf("Processing scenario file: %s", filePath))
+			fp := filePath // capture current value of filePath
 			localAuthToken := AuthToken
 
 			// Use the global sharedVars established during initialization.
 			Expect(sharedVars).NotTo(BeNil(), "sharedVars should be initialized")
 
 			// Parse the scenario definition from the YAML file.
-			sd, err := scenario.ParseScenarioDefinition(fp)
+			sd, err := parser.ParseScenarioDefinition(fp)
 			Expect(err).To(BeNil(), fmt.Sprintf("Failed to parse scenario file: %s", fp))
 
 			for _, scData := range sd.Scenarios {
@@ -76,7 +76,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 					volumeName := fmt.Sprintf("%v", rawMap["volume_name"])
 
 					configId := sharedVars["configId"].(string)
-					volumeID, err := GetVolumeIDByName(volumeName, localAuthToken, configId)
+					volumeID, err := GetExportPathID(volumeTypeStr, volumeName, configId, GetHeaders(AuthToken, ContentTypeJSON))
 					if err != nil {
 						fmt.Printf("Error handling volume for '%s': %v\n", scData.Name, err)
 						continue
@@ -122,8 +122,8 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 			keycloakAuthToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
 			Expect(err).To(BeNil(), "Error getting Keycloak Access Token")
 			CleanupUsers(AuthToken, keycloakAuthToken)
-		})
-	}
+		}
+	})
 
 	It("executes cleanup", func() {
 		err := CleanupTestEnv()

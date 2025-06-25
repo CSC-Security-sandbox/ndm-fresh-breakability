@@ -180,6 +180,16 @@ func GetAttachedWorkersConfig() map[string]SSHConfig {
 	return attachedWorkersConfig
 }
 
+func GetAttachedWorkerDetails() SSHConfig {
+	WorkerConfigs := GetAttachedWorkersConfig()
+	var firstWorkerConfig SSHConfig
+	for _, cfg := range WorkerConfigs {
+		firstWorkerConfig = cfg
+		break // Take only the first one
+	}
+	return firstWorkerConfig
+}
+
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
 // If a count is provided, it detaches that many workers from the start of the attachedWorkers slice.
 func DetachWorkers(workerIdsToDelete []string) (string, error) {

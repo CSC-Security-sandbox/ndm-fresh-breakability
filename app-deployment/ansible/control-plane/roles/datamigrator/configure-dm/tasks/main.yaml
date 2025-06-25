@@ -1,3 +1,27 @@
+- name: Ensure destination directories exist
+  become: yes
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: "0755"
+  loop:
+    - { path: "/opt/datamigrator" }
+    - { path: "/opt/datamigrator/bin" }
+    - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/logs" }
+    - { path: "/var/log/datamigrator" }
+
+- name: Configure NDM Versions
+  become: yes
+  copy:
+    content: |
+      initial_version={{ build_version }}
+      current_version={{ build_version }}
+      previous_version=N/A
+    dest: "/opt/datamigrator/conf/versions.conf"
+
 - name: Cleanup service account
   become: yes
   shell: |
@@ -5,12 +29,12 @@
   ignore_errors: yes
   when: dm_uninstall is defined
 
-- name: delete acr pull secert when dm_uninstall is defined
-  become: yes
-  shell: |
-    kubectl delete secret azure-dev-acr-creds --namespace datamigrator
-  ignore_errors: yes
-  when: dm_uninstall is defined and local_cluster is not defined
+# - name: delete acr pull secert when dm_uninstall is defined
+#   become: yes
+#   shell: |
+#     kubectl delete secret azure-dev-acr-creds --namespace datamigrator
+#   ignore_errors: yes
+#   when: dm_uninstall is defined and local_cluster is not defined
 
 - name: Create service account and namespace
   become: yes
@@ -18,13 +42,13 @@
     kubectl create namespace datamigrator
     kubectl create serviceaccount -n datamigrator datamigrator-openbao-sa
 
-- name: Create acr pull secert
-  become: yes
-  shell: |
-    kubectl create secret docker-registry azure-dev-acr-creds \
-        --namespace datamigrator \
-        --docker-server={{ acr_registry }} \
-        --docker-username={{ azure_client_id }} \
-        --docker-password={{ azure_client_secret }}
-  ignore_errors: yes
-  when: local_cluster is not defined
+# - name: Create acr pull secert
+#   become: yes
+#   shell: |
+#     kubectl create secret docker-registry azure-dev-acr-creds \
+#         --namespace datamigrator \
+#         --docker-server={{ acr_registry }} \
+#         --docker-username={{ azure_client_id }} \
+#         --docker-password={{ azure_client_secret }}
+#   ignore_errors: yes
+#   when: local_cluster is not defined

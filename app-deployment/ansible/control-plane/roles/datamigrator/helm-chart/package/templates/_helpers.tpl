@@ -18,12 +18,12 @@ spec:
       labels:
         app: {{ .Values.appName  }}
     spec:
-      {{- if not .Values.global.local_cluster }}
-      {{- if .Values.imagePullSecrets }}
-      imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets }}
-      {{- end }}
-      {{- end }}
+      # {{- if not .Values.global.local_cluster }}
+      # {{- if .Values.imagePullSecrets }}
+      # imagePullSecrets:
+      #   - name: {{ .Values.imagePullSecrets }}
+      # {{- end }}
+      # {{- end }}
       {{- if .Values.differentNodes }}
       affinity:
         podAntiAffinity:
@@ -50,7 +50,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Values.appName }}
-        image: {{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        image: {{ if .Values.global.registry }}{{ .Values.global.registry }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
         {{- if .Values.command }}
         command: [{{ .Values.command }}]
         {{- end }}
@@ -91,7 +91,7 @@ spec:
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 20 }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 5 }}
         {{- end }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ if .Values.global.local_cluster }}Always{{ else }}Never{{ end }}
         {{- if and .Values.persistentVolume .Values.persistentVolume.enabled }}
         volumeMounts:
           - name: {{ .Values.persistentVolume.name }}
@@ -213,17 +213,17 @@ spec:
         {{- toYaml .Values.annotations | nindent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccountName }}
-      {{- if not .Values.global.local_cluster }}
-      {{- if .Values.imagePullSecrets }}
-      imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets }}
-      {{- end }}
-      {{- end }}
+      # {{- if not .Values.global.local_cluster }}
+      # {{- if .Values.imagePullSecrets }}
+      # imagePullSecrets:
+      #   - name: {{ .Values.imagePullSecrets }}
+      # {{- end }}
+      # {{- end }}
       restartPolicy: OnFailure
       containers:
         - name: db-migrations
-          image: {{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
-          imagePullPolicy: IfNotPresent
+          image: {{ if .Values.global.registry }}{{ .Values.global.registry }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ if .Values.global.local_cluster }}Always{{ else }}Never{{ end }}
           env:
             {{- toYaml .Values.env | nindent 12 }}
           args:

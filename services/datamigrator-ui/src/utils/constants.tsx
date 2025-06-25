@@ -33,7 +33,7 @@ export const COL_DEF_FOR_USER = [
     width: 300,
   },
   {
-    header: "Created On",
+    header: "Created On (UTC)",
     accessor: "created_at",
     Renderer: ({ value }: any) =>
       value ? format(value, "dd MMM yyyy hh:mm aa") : "",
@@ -76,7 +76,7 @@ export const COL_DEF_FOR_PROJECT = [
     },
   },
   {
-    header: "Created On",
+    header: "Created On (UTC)",
     accessor: "created_at",
     id: "column_project_created_at",
     width: 100,

@@ -35,6 +35,8 @@ import { SendMailService } from "src/utils/send-email";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { PreCheckService } from "./precheck.service";
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+
 
 @Module({
   imports: [
@@ -62,6 +64,7 @@ import { PreCheckService } from "./precheck.service";
       WorkerJobRunMap
     ]),
     RedisModule,
+    AuthKeycloakModule,
   ],
   providers: [JobConfigService, WorkflowService, SendMailService, PreCheckService],
   controllers: [JobConfigController],
