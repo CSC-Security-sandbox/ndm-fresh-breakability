@@ -16,6 +16,15 @@
     - { path: "/var/log/datamigrator" }
     - { path: "/mnt/datamigrator" }
 
+- name: 4.1.1 Configure NDM Versions
+  become: yes
+  copy:
+    content: |
+      initial_version={{ build_version }}
+      current_version={{ build_version }}
+      previous_version=N/A
+    dest: "/opt/datamigrator/conf/versions.conf"
+
 - name: 4.2. Copy binary file to remote server
   become: yes
   ansible.builtin.copy:

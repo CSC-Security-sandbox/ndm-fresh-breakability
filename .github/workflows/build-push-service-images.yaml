@@ -138,8 +138,6 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            --cache-from type=gha,scope=${{ matrix.service }} \
-            --cache-to type=gha,mode=max,scope=${{ matrix.service }} \
             -t "$IMAGE_NAME:$IMAGE_TAG" \
             --load "$CONTEXT"
         env:
@@ -294,9 +292,14 @@ jobs:
           exit 1
 
   build-and-push:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: determine-matrix
+    outputs:
+      metadata_path: ${{ steps.metadata_paths.outputs.metadata_path }}
+      latest_path: ${{ steps.metadata_paths.outputs.latest_path }}
+      ref_type: ${{ steps.metadata_paths.outputs.ref_type }}
+      ref_name: ${{ steps.metadata_paths.outputs.ref_name }}
     strategy:
       matrix:
         service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
@@ -325,8 +328,10 @@ jobs:
         run: |
           if [ "${{ matrix.service }}" = "db-migrations" ]; then
             echo "CONTEXT=liquibase" >> $GITHUB_ENV
+            echo "DOCKERFILE_PATH=liquibase/Dockerfile" >> $GITHUB_ENV
           else
             echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
+            echo "DOCKERFILE_PATH=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_ENV
           fi
 
       - name: Authenticate to ACR
@@ -341,13 +346,17 @@ jobs:
           docker buildx create --name multiarch --driver docker-container --use
           docker buildx inspect --bootstrap
 
+      - name: Set build timestamp
+        id: build_time
+        run: |
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+
       - name: Build and Push Docker Image for ${{ matrix.service }} (multi-arch)
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            --cache-from type=gha,scope=${{ matrix.service }} \
-            --cache-to type=gha,mode=max,scope=${{ matrix.service }} \
             -t "$IMAGE_NAME:$IMAGE_TAG" \
             -t "$IMAGE_NAME:latest" \
             --push "$CONTEXT"
@@ -355,3 +364,147 @@ jobs:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
           CONTEXT: ${{ env.CONTEXT }}
+
+      - name: Parse Base Image for ${{ matrix.service }}
+        id: fetch_info
+        run: |
+          BASE_IMAGE=$(grep -i "^FROM " "$DOCKERFILE_PATH" | head -1 | awk '{print $2}')
+          echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
+        env:
+          DOCKERFILE_PATH: ${{ env.DOCKERFILE_PATH }}
+
+      - name: Get Commit Info
+        id: commit_info
+        run: |
+          AUTHOR=$(git log -1 --pretty=format:'%an')
+          MESSAGE=$(git log -1 --pretty=format:'%s')
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+
+      - name: Determine metadata paths
+        id: metadata_paths
+        run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == "refs/heads/main" ]]; then
+            REF_TYPE="branches"
+            REF_NAME="main"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          elif [[ "$REF" == refs/heads/* ]]; then
+            REF_TYPE="branches"
+            REF_NAME="$(echo "${REF#refs/heads/}" | sed 's#/#-#g')"
+          else
+            echo "Unsupported ref: $REF"
+            exit 1
+          fi
+          echo "ref_type=$REF_TYPE" >> $GITHUB_OUTPUT
+          echo "ref_name=$REF_NAME" >> $GITHUB_OUTPUT
+          echo "metadata_path=services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json" >> $GITHUB_OUTPUT
+          echo "latest_path=services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker image manifest metadata.json
+        run: |
+          SERVICE="${{ matrix.service }}"
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          BRANCH="${GITHUB_REF_NAME}"
+          IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
+          BUILD_TIME="${{ steps.build_time.outputs.build_time }}"
+          WORKFLOW="${GITHUB_WORKFLOW}"
+          RUN_NUMBER="${GITHUB_RUN_NUMBER}"
+          JOB="build-and-push"
+          REPOSITORY="${GITHUB_REPOSITORY}"
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER}"
+          AUTHOR="${{ steps.commit_info.outputs.author }}"
+          COMMIT_MSG="${{ steps.commit_info.outputs.message }}"
+          OS_NAME="${{ runner.os }}"
+          RUNNER_NAME="${{ runner.name }}"
+          BASE_IMAGE="${{ steps.fetch_info.outputs.base_image }}"
+          cat <<EOF > metadata.json
+          {
+            "service": "$SERVICE",
+            "commit": "$FULL_SHA",
+            "short_commit": "$SHORT_SHA",
+            "image": "$IMAGE",
+            "image_tag": "$IMAGE_TAG",
+            "build_time": "$BUILD_TIME",
+            "branch": "$BRANCH",
+            "workflow": "$WORKFLOW",
+            "run_id": "$RUN_ID",
+            "run_number": "$RUN_NUMBER",
+            "job": "$JOB",
+            "repository": "$REPOSITORY",
+            "repository_owner": "$REPOSITORY_OWNER",
+            "commit_author": "$AUTHOR",
+            "commit_message": "$COMMIT_MSG",
+            "os": "$OS_NAME",
+            "runner_name": "$RUNNER_NAME",
+            "base_image": "$BASE_IMAGE"
+          }
+          EOF
+
+      - name: Generate latest.json pointer
+        run: |
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          METADATA_PATH="${{ steps.metadata_paths.outputs.metadata_path }}"
+          cat <<EOF > latest.json
+          {
+            "service": "${{ matrix.service }}",
+            "commit": "$FULL_SHA",
+            "short_commit": "$SHORT_SHA",
+            "image": "${IMAGE_NAME}:${IMAGE_TAG}",
+            "image_tag": "$IMAGE_TAG",
+            "updated_at": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+      - name: Upload build artifacts for upload step
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-artifacts-${{ matrix.service }}
+          path: |
+            metadata.json
+            latest.json
+
+  upload-artifactory:
+    runs-on: openlab
+    needs: [determine-matrix, build-and-push]
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
+      fail-fast: false
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: build-artifacts-${{ matrix.service }}
+
+      - name: Upload manifest metadata.json to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+          REF_TYPE: ${{ needs.build-and-push.outputs.ref_type }}
+          REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
+        run: |
+          METADATA_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json"
+          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${METADATA_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+      - name: Upload latest.json pointer to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+          REF_TYPE: ${{ needs.build-and-push.outputs.ref_type }}
+          REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
+        run: |
+          LATEST_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json"
+          curl --silent --show-error --fail --request PUT --upload-file latest.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${LATEST_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -101,7 +100,7 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -168,7 +167,7 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -221,7 +220,7 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -294,7 +293,7 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return getJobsResp, resp, nil
 		}
 
-		IntroduceDelay(DefaultPollInterval)
+		Wait(DefaultPollInterval)
 	}
 
 	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d ", MaxPollRetries)
@@ -316,11 +315,18 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 		if err != nil {
 			return err
 		}
+
+		LogDebug(fmt.Sprintf("Current job run status: %s", status))
+
+		if status == ERRORED_JOBRUN {
+			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
+		}
+
 		if status == desiredJobState {
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
-		IntroduceDelay(DefaultPollInterval)
+		Wait(DefaultPollInterval)
 
 	}
 
@@ -354,7 +360,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-			IntroduceDelay(DefaultPollInterval)
+			Wait(DefaultPollInterval)
 		}
 		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
@@ -433,7 +439,7 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 
 	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
 	// Read response
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp, err
 	}

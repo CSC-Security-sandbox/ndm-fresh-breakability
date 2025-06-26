@@ -8,6 +8,7 @@ import { LoggerModule } from './logger/logger.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
 import { AuthModule } from './auth/auth.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from './auth/auth.module';
     ActivitiesModule,
     HealthcheckModule,
     AuthModule,
+    MetricsModule,
   ],
   providers: [WorkersConfig, CommandConfig],
 })

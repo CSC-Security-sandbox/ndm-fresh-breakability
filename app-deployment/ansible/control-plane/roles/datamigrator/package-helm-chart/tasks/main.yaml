@@ -1,0 +1,84 @@
+---
+- debug:
+    msg: "build_version={{ build_version }}"
+
+- name: Ensure charts output directory exists
+  file:
+    path: "{{ charts_output_dir }}"
+    state: directory
+
+- name: Template each subchart's Chart.yaml
+  template:
+    src: "{{ chart_service_template }}"
+    dest: "{{ services_dir }}/{{ item }}/Chart.yaml"
+  loop: "{{ chart_names }}"
+  vars:
+    build_version: "{{ build_version }}"
+    service_name: "{{ item }}"
+
+- name: Template umbrella chart's Chart.yaml
+  template:
+    src: "{{ chart_umbrella_template }}"
+    dest: "{{ main_chart_dir }}/Chart.yaml"
+  vars:
+    build_version: "{{ build_version }}"
+
+- name: Package each subchart
+  command: >
+    helm package {{ services_dir }}/{{ item }} --version {{ build_version }} --destination {{ charts_output_dir }}
+  loop: "{{ chart_names }}"
+
+- name: Template umbrella chart's values.yaml
+  template:
+    src: "{{ values_template }}"
+    dest: "{{ values_output }}"
+  vars:
+    build_version: "{{ build_version }}"
+
+- name: Update umbrella chart dependencies
+  command: helm dependency update {{ main_chart_dir }}
+
+- name: Show rendered values.yaml
+  shell: cat {{ values_output }}
+  register: rendered_values
+
+- name: Debug rendered values.yaml
+  debug:
+    var: rendered_values.stdout
+
+- name: Package the umbrella chart (with templated values.yaml and Chart.yaml)
+  command: >
+    helm package {{ main_chart_dir }} --version {{ build_version }} -d {{ charts_output_dir }}
+
+# Optional cleanup steps
+- name: Clean up rendered subchart Chart.yaml files
+  file:
+    path: "{{ services_dir }}/{{ item }}/Chart.yaml"
+    state: absent
+  loop: "{{ chart_names }}"
+  ignore_errors: yes
+
+- name: Clean up umbrella chart Chart.yaml
+  file:
+    path: "{{ main_chart_dir }}/Chart.yaml"
+    state: absent
+  ignore_errors: yes
+
+- name: Clean up umbrella chart values.yaml
+  file:
+    path: "{{ values_output }}"
+    state: absent
+  ignore_errors: yes
+
+- name: Clean up packaged subcharts
+  file:
+    path: "{{ charts_output_dir }}/{{ item }}-{{ build_version }}.tgz"
+    state: absent
+  loop: "{{ chart_names }}"
+  ignore_errors: yes
+
+- name: Clean up chart.lock file
+  file: 
+    path: "{{ main_chart_dir }}/Chart.lock"
+    state: absent
+  ignore_errors: yes

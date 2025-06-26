@@ -49,10 +49,10 @@ const (
 	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                                     = "logout-user"
-	NFS_SOURCE_VOLUME                               = "/vol_src_Automation"
-	NFS_DESTINATION_VOLUME                          = "/vol_Dst_Automation"
-	NFS_SOURCE_VOLUME_1                             = "/vol_src_Automation2"
-	NFS_DESTINATION_VOLUME_1                        = "/vol_Dst_Automation2"
+	NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
+	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
+	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
 	CREATE_FILESERVER_ENDPOINT                      = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                       = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                       = "/api/v1/jobs/bulk-migrate"
@@ -69,7 +69,7 @@ const (
 	FormatPDF                       Format          = "pdf"
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
-	MaxPollRetries                                  = 30
+	MaxPollRetries                                  = 50
 	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
@@ -79,6 +79,8 @@ const (
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
 	APPROVED_JOBRUN                                 = "APPROVED"
+	ERRORED_JOBRUN                                  = "ERRORED"
+	PAUSED_JOBRUN                                   = "PAUSED"
 	DeltaFolder                                     = "delta"
 	ConfigTypeFile                  ConfigType      = "FILE"
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
