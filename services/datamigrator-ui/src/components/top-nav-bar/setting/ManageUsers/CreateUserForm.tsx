@@ -73,7 +73,7 @@ const CreateUserForm = ({
         await associateUserApi({
           account_id: localStorage.getItem("account_id"),
           user_id: createUserResponse?.data?.items?.user.id,
-          role_id: roles?.data?.items.find(
+          role_id: roles?.find(
             (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN,
           )?.id,
           project_id: "",
