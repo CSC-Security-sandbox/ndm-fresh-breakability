@@ -12,17 +12,18 @@ import SwitchProjectContent from "@components/top-nav-bar/switch-project/SwitchP
 const SwitchProject = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
+  const { data: projectListItems } = useGetAllProjectsQuery(accountDetails?.id);
 
   const dispatch = useDispatch();
   const drawerProps = useSelector(
-    (state: RootStateType) => state?.commonComponentSlice?.drawerProps
+    (state: RootStateType) => state?.commonComponentSlice?.drawerProps,
   );
   const isActive = drawerProps.isOpen && drawerProps.id === "SwitchProject";
 
   const { openDrawer } = drawerFunctions(drawerProps, dispatch);
+  const projectList = projectListItems?.data?.items || [];
   const selectedProjectName = projectList?.find(
-    (row: any) => row.id === selectedProjectId
+    (row: any) => row.id === selectedProjectId,
   )?.project_name;
 
   const showSwitchProject = () =>
@@ -31,7 +32,7 @@ const SwitchProject = () => {
       <SwitchProjectContent
         selectedProjectId={selectedProjectId}
         projectList={projectList}
-      />
+      />,
     );
 
   return (

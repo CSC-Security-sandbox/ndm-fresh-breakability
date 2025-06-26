@@ -51,7 +51,7 @@ const CreateUserForm = ({
 
   const form = useForm(
     initialUserFormState,
-    CREATE_USER_FORM_VALIDATION_SCHEMA
+    CREATE_USER_FORM_VALIDATION_SCHEMA,
   );
 
   const clearUserForm = () => {
@@ -68,32 +68,23 @@ const CreateUserForm = ({
 
     try {
       const createUserResponse = await createUserApi(body).unwrap();
-      setTemporaryPassword(createUserResponse.tempPassword);
+      setTemporaryPassword(createUserResponse?.data?.items?.tempPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({
           account_id: localStorage.getItem("account_id"),
-          user_id: createUserResponse.user.id,
+          user_id: createUserResponse?.data?.items?.user.id,
           role_id: roles?.find(
-            (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN
+            (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN,
           )?.id,
           project_id: "",
         }).unwrap();
       }
-      notify.success(`Users added successfully.`);
+      notify.success(createUserResponse.message);
       setShowTemporaryPassword(true);
     } catch (err) {
-      let errorMsg = "Failed to add User.";
       const errorData = (err as any)?.data;
-      const errorMessage = errorData?.message as string | undefined;
-      if (
-        errorMessage &&
-        errorMessage.toLowerCase().includes("email id") &&
-        errorMessage.toLowerCase().includes("already exists")
-      ) {
-        errorMsg = errorMessage;
-      }
+      const errorMsg = errorData.error.displayMessage || errorData.message;
       notify.error(errorMsg);
-      console.error({ err, level: "Add user" });
     }
   };
 

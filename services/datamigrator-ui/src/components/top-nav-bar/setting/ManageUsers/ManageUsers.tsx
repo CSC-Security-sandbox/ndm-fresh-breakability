@@ -29,7 +29,7 @@ const ManageUsers = () => {
   } = useGetAllUsersQuery("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
-    (state: RootStateType) => state.permissionSlice
+    (state: RootStateType) => state.permissionSlice,
   );
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
@@ -41,7 +41,7 @@ const ManageUsers = () => {
         notify.success(
           `${body.enable ? "Enabled" : "Disabled"} access for user ${
             body.email
-          }`
+          }`,
         );
       })
       .catch((err) => {
@@ -51,7 +51,7 @@ const ManageUsers = () => {
   };
 
   const canManageProject: boolean = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.CreateUser
+    USER_PERMISSION_TYPE_ENUM.CreateUser,
   );
   const rowMenu = (row: any) => [
     {
@@ -77,10 +77,10 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(res?.newPassword);
+            setTemporaryPassword(res?.data?.items?.newPassword);
           })
           .catch((err) => {
-            notify.error("Failed to reset password.");
+            notify.error(err.message);
             console.error({ err, level: "Generate Temporary Password." });
           });
       },
@@ -91,10 +91,9 @@ const ManageUsers = () => {
     setIsCreateFormVisible(false);
     setTemporaryPassword("");
   };
-
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData,
+    rows: userData?.data?.items || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,
