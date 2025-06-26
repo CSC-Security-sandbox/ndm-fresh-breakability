@@ -3,12 +3,11 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
 import { ChildScanWorkflowInput } from "./chid-scan.workflow.type";
+import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 
 
 const {
   updateStatus: updateJobStatusActivity,
-  getJobState: getJobStateActivity,
-  setJobState: setJobStateActivity,
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
@@ -21,7 +20,7 @@ const {
         maximumAttempts: 3,
         initialInterval: '10s',
         backoffCoefficient: 2.0,
-        nonRetryableErrorTypes: ['ActivityFailure', 'ApplicationFailure', 'FatalError'],
+        nonRetryableErrorTypes: ['ActivityFailure','FatalError',],
     },
     startToCloseTimeout: '24h',
     heartbeatTimeout: '2m',
@@ -66,10 +65,20 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     const results = await Promise.all(
       batches.map(async (dirs) =>{
         try{
-            return scanDirectories({jobRunId, dirsToScan: dirs});
+            return await scanDirectories({jobRunId, dirsToScan: dirs});
         }catch(error){
             wf.log.error(`Error scanning directories: ${error}`);
             errors.push(error.message || 'Activity failed error');
+             if(error instanceof FatalError || error instanceof RetryExceededError) { 
+                console.error(`FatalError occurred for taskId: ${jobRunId} with error: ${error.message}`);
+                //TODO: add activity to shutdown the worker with workerId. 
+                throw wf.ApplicationFailure.nonRetryable(error.message);
+              }
+              // if
+            if(error instanceof RetryableError) {
+                console.error(`RetryableError occurred for taskId: ${jobRunId} with error: ${error.message}`);                        
+                throw wf.ApplicationFailure.retryable(error.message);
+            }
             return { jobRunId, fileCount: 0, dirCount: 0, subDirs: [], error: error.message || 'Activity failed error' };
         }
       }));

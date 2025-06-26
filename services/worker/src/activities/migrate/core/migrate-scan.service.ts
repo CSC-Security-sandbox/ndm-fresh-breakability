@@ -1,61 +1,74 @@
-import { Command, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, ErrorType, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { basePrefix, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { basePrefix, dmError, getFileInfo, isContentUpdate, isSourceFatalError, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { RedisService } from "src/redis/redis.service";
-import { PublishCommandInput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput } from "./migrate-scan.type";
+import { DirContentsInput, PublishCommandInput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, UpdateAndReportTaskInput } from "./migrate-scan.type";
 import { Context } from '@temporalio/activity';
+import { CommonActivityService } from "src/activities/common/common.service";
+import { Operation, Origin } from "src/activities/utils/utils.types";
+import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
+
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 @Injectable()
 export class MigrateScanService {
     readonly workerId: string;
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
+    readonly maxRetryCount: number;
+
     constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
         private readonly logger: Logger,
         private readonly redisService: RedisService,
+        private readonly commonService: CommonActivityService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
-        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;   
+        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
     }
 
 
-    async getDirectoryContents(directoryPath: string): Promise<string[]> {
-        if (!fs.existsSync(directoryPath)) 
-            return [];
-        return  await fs.promises.readdir(directoryPath);
-    
-    }
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
         //TODO: make bulk publish to command stream. 
         for(const command of commands)
             await jobContext.publishToCommandStream(command);
     }
 
-    async getDirContents(path: string): Promise<Set<string>>{
+    async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            content = new Set<string>( await this.getDirectoryContents(path)); 
+            if (!fs.existsSync(path)) {
+                if (origin === Origin.SOURCE)  
+                    throw new FatalError(`Source directory does not exist: ${path}`);
+                return content; 
+            }
+            content = new Set<string>( await fs.promises.readdir(path)); 
         }catch(error){
-                this.logger.error(`Error reading directory ${path}: ${error}`);
-                throw error;
+            if(error instanceof FatalError) 
+                errorType = ErrorType.FATAL_ERROR;
+            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
+            await jobContext.publishToErrorStream(ndmError);
+            throw error; 
         }
         return content;
     }
 
-    async scanDirectory({excludePatterns = [], jobContext, sourcePath, sourcePrefix, targetPath, jobRunId, skipFile, }: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
-        const output: ScanDirectoryOutput = {jobRunId, fileCount: 0, dirCount: 0, subDirs: []};
-        let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
-        let commands: Command[] = [];
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
-        sourceContent = await this.getDirContents(sourcePath);
-        targetContent = await this.getDirContents(targetPath);
+        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
+        let commands: Command[] = [], errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+
+        const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
+
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
@@ -67,8 +80,8 @@ export class MigrateScanService {
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,
-                    excludePatterns,
-                    skipTime: skipFile,
+                    excludePatterns: settings.excludePatterns,
+                    skipTime: settings.skipFile,
                     olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
                     jobType: jobContext.jobConfig.jobType
                 })) continue;
@@ -102,7 +115,9 @@ export class MigrateScanService {
                 
             }catch(error) {
                 this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
-                //TODO: if fatal error , raise non-retryable error else just throw error back. 
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+                await jobContext.publishToErrorStream(dmErr);
+                throw error; 
             }
         }
         if (commands.length > 0) {
@@ -113,49 +128,75 @@ export class MigrateScanService {
     }
 
     async scanDirectories ({jobRunId, dirsToScan}: ScanActivityInput): Promise<ScanActivityOutput>  {
+        
         const scanActivityContext = Context.current();
         const heartbeatInterval = setInterval(() => {
             scanActivityContext.heartbeat({});
         }, 2000);
-        const output: ScanActivityOutput = {
-            dirCount: 0,
-            fileCount: 0,
-            subDirs: [],
-            jobRunId: jobRunId
-        }
+
+        // await delay(10000)
+        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId }
+        let errors: string[] = [], retryCount: number = 0;
+
         try{                           
             const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
-            const jobConfig = jobContext.getJobConfig()
-            this.logger.debug(`Job Config is : ${jobConfig}`)
-
-            const baseSourcePrefixPath = basePrefix(jobRunId, jobConfig.sourceFileServer.pathId);
-            const baseTargetPrefixPath = basePrefix(jobRunId, jobConfig.destinationFileServer.pathId);
-            const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : [];
-            const skipFile = jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '';
             
-            for (let i = 0; i < dirsToScan.length; i += this.maxConcurrency) {
-                const batch = dirsToScan.slice(i, i + this.maxConcurrency);
+            let task = await this.commonService.buildOrGetValidScanTask({
+                dirToScans: dirsToScan,
+                taskHashId: scanActivityContext.info.activityId,
+                jobContext,
+                jobRunId
+            });
+
+            task.status = TaskStatus.RUNNING;
+            task.workerId = this.workerId;
+            await jobContext.publishToTaskStream(task);
+
+            const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
+            const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
+            const settings: ScanDirectorySettings = {
+                skipFile: jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '',
+                excludePatterns: jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : []
+            }
+
+            for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
+                const batch = task.commands.slice(i, i + this.maxConcurrency);
         
                 await Promise.allSettled(
-                    batch.map(async (dirPath) => {
+                    batch.map(async (command) => {
                         const scanDirectoryInput : ScanDirectoryInput = {
-                            excludePatterns,
-                            sourcePath: `${baseSourcePrefixPath}${dirPath}`,
+                            settings,
+                            sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
                             sourcePrefix: baseSourcePrefixPath,
-                            targetPath: `${baseTargetPrefixPath}${dirPath}`,
-                            jobRunId,
+                            targetPath: `${baseTargetPrefixPath}${command.fPath}`,
                             jobContext,
-                            skipFile,
+                            command
                         }
-                        const result = await this.scanDirectory(scanDirectoryInput);
-                        output.fileCount += result.fileCount;
-                        output.dirCount += result.dirCount;
-                        output.subDirs.push(...result.subDirs);
+                        try {
+                            const result = await this.scanDirectory(scanDirectoryInput);
+                            output.fileCount += result.fileCount;
+                            output.dirCount += result.dirCount;
+                            output.subDirs.push(...result.subDirs);
+                        }catch(error) {
+                            errors.push(error.code ?? '')
+                        }
+                        command.retryCount++;
+                        retryCount = Math.max(command.retryCount, retryCount);
+                        jobContext.setTask( scanActivityContext.info.activityId, task)
                     })
                 )
             }
+            await this.updateAndReportTaskStatus({
+                errors,
+                jobContext,
+                taskHashId: scanActivityContext.info.activityId,  
+                task,
+                retryCount
+            })    
         }catch(error){
-            //TODO: if fatal error , raise a non retryable error. else just throw the error back . 
+            if(error instanceof FatalError || error instanceof RetryExceededError) 
+                throw error;       
+            throw new RetryableError(error.message)
         }        
         finally{
             clearInterval(heartbeatInterval);
@@ -187,5 +228,29 @@ export class MigrateScanService {
             );
 
         return undefined;
+    }
+
+    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: UpdateAndReportTaskInput) {
+        if(errors.length == 0) {
+            task.status = TaskStatus.COMPLETED
+            await jobContext.publishToTaskStream(task);
+            await jobContext.deleteTask(taskHashId);   
+            return;
+        }
+        
+        task.status = TaskStatus.ERRORED
+        await jobContext.publishToTaskStream(task);
+       
+        if (errors.some(isSourceFatalError)) {
+            await jobContext.deleteTask(taskHashId);
+            throw new FatalError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);
+        }
+
+        if (retryCount >= this.maxRetryCount) {
+            await jobContext.deleteTask(taskHashId);
+            throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
+        }
+        throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);
+        
     }
 }

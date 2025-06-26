@@ -14,14 +14,15 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { OPS_CMD, } from '../migrate.type';
 import { handleInitTaskInput, handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 
-const isRandomTrue = (probability: number) => {
-  if (probability < 0 || probability > 1) {
-    throw new Error('Probability must be between 0 and 1');
-  }
-  return Math.random() < probability;
-};
+// const isRandomTrue = (probability: number) => {
+//   if (probability < 0 || probability > 1) {
+//     throw new Error('Probability must be between 0 and 1');
+//   }
+//   return Math.random() < probability;
+// };
 
 @Injectable()
 export class MigrateSyncService {
@@ -36,6 +37,7 @@ export class MigrateSyncService {
     private readonly redisService: RedisService,
     private readonly shellService: ShellService,
     private readonly workerThreadService: WorkerThreadService,
+    private readonly commonService: CommonActivityService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -234,7 +236,7 @@ export class MigrateSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          if(isRandomTrue(0.10)) throw new Error("Random Error for testing");
+          // if(isRandomTrue(0.10)) throw new Error("Random Error for testing");
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
           });
@@ -288,7 +290,7 @@ export class MigrateSyncService {
 
       this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
 
-      task = await this.ensureTaskValid({ task, jobContext });
+      task = await this.commonService.ensureTaskValid({ task, jobContext });
       task.status = TaskStatus.RUNNING;
       task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
@@ -409,23 +411,6 @@ export class MigrateSyncService {
     throw new RetryableError(
       `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
     );
-  }
-
-  async ensureTaskValid({task , jobContext}: handleInitTaskInput) : Promise<Task> {
-    let retryCount = 0;
-    for (let i = 0; i < task.commands.length; i++) {
-      retryCount = Math.max(retryCount, task.commands[i].retryCount);
-      if (task.commands[i].status !== CommandStatus.COMPLETED)
-        task.commands[i].status = CommandStatus.IN_PROCESS
-    }
-
-    if (retryCount >= this.maxRetryCount) {
-      task.status = TaskStatus.ERRORED;
-      await jobContext.publishToTaskStream(task);
-      throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
-    }
-
-    return task;
   }
 }
 

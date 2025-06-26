@@ -448,6 +448,8 @@ export class RedisConsumerService {
      * @param jobRunId - The unique identifier for the job.
      * @param jobContext - The job context containing metadata.
      */
+
+
     private async processData(stream: any, consumerType: string, jobRunId: string, jobContext: JobManagerContext) {
         try {
 
@@ -458,7 +460,7 @@ export class RedisConsumerService {
                         if (stream?.data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                             await this.stopConsumer(jobRunId, ConsumerType.errors);
                         } else {
-                            await this.handleErrors(stream.data);
+                            await this.handleErrors(stream.data.data);
                         }
                         await jobContext.groupAckErrorStream([stream.id], GroupReaderType.DB_WRITER);
                     } catch (e) {
