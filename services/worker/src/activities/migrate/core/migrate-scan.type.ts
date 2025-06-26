@@ -53,3 +53,9 @@ export interface UpdateAndReportTaskInput {
     task: Task,
     retryCount: number;
 }
+
+export interface TaskExecResult{
+    result: ScanActivityOutput; 
+    errors: string[];
+    retryCount: number;
+}

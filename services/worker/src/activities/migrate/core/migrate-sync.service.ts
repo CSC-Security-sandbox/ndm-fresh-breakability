@@ -278,7 +278,7 @@ export class MigrateSyncService {
     const syncActivityCtx= Context.current();
     const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
 
-    const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
+    let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
     const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
     let task = undefined;
     try {
@@ -287,19 +287,32 @@ export class MigrateSyncService {
         this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
         return syncOutput;
       }
-
       this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
-
       task = await this.commonService.ensureTaskValid({ task, jobContext });
       task.status = TaskStatus.RUNNING;
       task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
+      syncOutput = await this.executeSyncTask(taskId, task, jobContext);
+      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
+      syncOutput.status = TaskStatus.COMPLETED;
+    } catch (error) {
+        if(error instanceof FatalError) throw error;
+        this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
+        throw error;
+    } finally {
+      clearInterval(heartBeatInterval);
+    }
+    return syncOutput;
+  }
 
+  executeSyncTask = async (taskHashId:string, task: Task, jobContext: JobManagerContext, ): Promise<SyncTaskOutput> => {
+      const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
       const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
       const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
 
       for (const [index, command] of task.commands.entries()) {
         if (command.status === CommandStatus.COMPLETED) continue;
+
         const scanInput: SyncOperationInput = {
           sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
           targetPath: `${baseTargetPrefixPath}${command.fPath}`,
@@ -308,7 +321,7 @@ export class MigrateSyncService {
           jobContext,
           errorType: command.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
         };
-        //TODO: revisit and improve this .
+        //TODO: revisit and improve this. It is not trivial to read this. 
         const syncOperationOp: SyncOperationOutput = await this.syncOperation(scanInput);
         if (syncOperationOp.errors.source.size > 0 || syncOperationOp.errors.target.size > 0) {
           command.retryCount++;
@@ -324,23 +337,12 @@ export class MigrateSyncService {
             checksums: syncOperationOp.checksums,
             getID: jobContext.jobConfig.options.isIdentityMappingAvailable
           });
-
-          await jobContext.publishToFileStream(fileInfo);
           command.status = CommandStatus.COMPLETED;
-          //TODO:  can we do this in batch?
+          await jobContext.publishToFileStream(fileInfo);          
         }
-        await jobContext.setTask(taskId, task);
+        await jobContext.setTask(taskHashId, task);
       }
-      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
-      syncOutput.status = TaskStatus.COMPLETED;
-    } catch (error) {
-        if(error instanceof FatalError) throw error;
-        this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
-        throw error;
-    } finally {
-      clearInterval(heartBeatInterval);
-    }
-    return syncOutput;
+      return syncOutput
   }
 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
