@@ -40,6 +40,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 		})
 
 		It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
+			By("########################## TC-002 start ################################")
 			var (
 				// Source-related IDs
 				sourceConfigID1, sourceConfigID2 string
@@ -115,8 +116,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 
 			attachedWorkersConfig := GetAttachedWorkersConfig()
 			if len(attachedWorkersConfig) != 0 {
-				for workerId, config := range attachedWorkersConfig {
-					LogDebug(fmt.Sprintf("Detaching Worker ID: %s, SSH Config: %+v", workerId, config))
+				for workerId, _ := range attachedWorkersConfig {
 					DetachWorkers([]string{workerId})
 					break // Detach only the first worker
 				}
@@ -315,6 +315,8 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+			By("########################## TC-002 end ################################")
 		})
 
 		AfterEach(func() {

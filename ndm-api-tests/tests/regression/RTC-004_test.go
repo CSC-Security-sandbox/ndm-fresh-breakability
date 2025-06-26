@@ -2,10 +2,11 @@ package tests
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	. "ndm-api-tests/utils"
 	"net/http"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS", func() {
@@ -29,6 +30,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 		})
 
 		It("RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS", func() {
+			By("########################## RTC-004 start ################################")
 
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
@@ -127,6 +129,8 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			By("Checking if Migration job is completed")
 			err = WaitForJobState(JobRunID, COMPLETED_JOBRUN, 60)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not complete successfully, err: %s", err))
+
+			By("########################## RTC-004 end ################################")
 
 		})
 
