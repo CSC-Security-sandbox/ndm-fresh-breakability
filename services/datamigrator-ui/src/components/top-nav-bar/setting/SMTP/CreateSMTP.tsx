@@ -40,7 +40,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
   const { data: userData } = useGetAllUsersQuery("");
   const toEmailOptions =
-    userData?.map((user) => ({ label: user.email, value: user.email })) || [];
+    userData?.data?.items.map((user) => ({
+      label: user.email,
+      value: user.email,
+    })) || [];
 
   const { data: smtpExistingData, isLoading: smtpLoading } =
     useGetSmtpDetailsQuery("");
@@ -114,7 +117,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
             err?.message ||
             `Failed to ${isEdit ? "update" : "add"} SMTP Details.`
           }
-        />
+        />,
       );
     }
   };

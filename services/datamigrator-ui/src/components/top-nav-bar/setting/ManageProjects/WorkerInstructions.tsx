@@ -19,9 +19,10 @@ const WorkerInstallation = ({
     useLazyGenerateSecretForWorkerQuery();
 
   const showWorkerInstructions = async () => {
-    const data = await generateSecretAPI({
+    const generateSecretAPIResult = await generateSecretAPI({
       projectId: project_id,
     }).unwrap();
+    const data = generateSecretAPIResult?.data?.items;
     dispatch(
       setModalProps({
         isOpen: true,
@@ -38,7 +39,7 @@ const WorkerInstallation = ({
         modalFooter: (
           <Button onClick={() => dispatch(setModalClose())}>Close</Button>
         ),
-      })
+      }),
     );
   };
 

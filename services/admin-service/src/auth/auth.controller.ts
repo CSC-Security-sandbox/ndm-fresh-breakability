@@ -106,9 +106,6 @@ export class AuthController {
   async setUserStatus(@Body() userStatusDto: UserStatusDto) {
     const { email, enable } = userStatusDto;
     const user = await this.authService.setUserStatus(email, enable);
-    return {
-      message: `User ${enable ? 'enabled' : 'disabled'} successfully`,
-      user,
-    };
+    return user;
   }
 }
