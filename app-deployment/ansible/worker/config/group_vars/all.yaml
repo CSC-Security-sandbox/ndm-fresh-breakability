@@ -1,4 +1,7 @@
 ---
+# Build Version
+build_version: "0.1.0"
+
 # Binary file paths
 vm_username: datamigrator
 vm_uid: 1030

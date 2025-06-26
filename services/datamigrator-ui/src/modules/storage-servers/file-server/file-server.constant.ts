@@ -75,11 +75,11 @@ export const FILE_SERVER_LIST_COLUMN_DEFS: any[] = [
     id: 7,
   },
   {
-    header: "Created On",
+    header: "Created On (UTC)",
     accessor: "createdAt",
     id: 8,
     Renderer: (
-      props: BlueXpTableRowType<FileServerApiType, FileServerApiType>
+      props: BlueXpTableRowType<FileServerApiType, FileServerApiType>,
     ) =>
       React.createElement(DateCellRenderer, { value: props?.row?.createdAt }),
   },

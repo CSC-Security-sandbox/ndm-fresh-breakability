@@ -6,9 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
-	"ndm-api-tests/internal/scenario"
+	"ndm-api-tests/tests/smoke/parser"
 	"net/http"
 	"net/url"
 	"os"
@@ -205,7 +204,7 @@ func FetchUserID(email, accessToken string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -391,7 +390,7 @@ func createAccount(authToken string) (string, error) {
 // buildRequestBody builds the JSON payload directly from the YAML "data" field.
 // Only keys defined in the YAML data are included; values that start with "$" are replaced
 // using sharedVars.
-func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
+func BuildRequestBody(s parser.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
 	// Convert s.Data into a map[string]interface{}.
 	converted, ok := ConvertToStringMap(s.Data)
 	if !ok {
@@ -408,7 +407,7 @@ func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([
 
 // buildFullURL constructs the full API URL by substituting any URL placeholders (from s.Params)
 // with values from sharedVars. Also uses service_name to compute the base URL.
-func BuildFullURL(s scenario.Scenario, sharedVars map[string]interface{}) string {
+func BuildFullURL(s parser.Scenario, sharedVars map[string]interface{}) string {
 	apiPath := s.URL
 	for paramKey, paramVal := range s.Params {
 		if v, exists := sharedVars[paramVal]; exists {
@@ -495,9 +494,9 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 
 // handleResponse validates the response by checking the status code, verifying expected fields,
 // and extracting any parsed fields into sharedVars.
-func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
+func HandleResponse(resp *http.Response, s parser.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
 	defer resp.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return sharedVars, err
 	}
@@ -739,7 +738,7 @@ func DeleteAllUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -783,7 +782,7 @@ func DeleteAllUserRoles(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -829,7 +828,7 @@ func DeleteAllKeycloakUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -883,20 +882,36 @@ func AutoGenerateProjectName(prefix string) string {
 	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
 }
 
-func IntroduceDelay(delay int) {
+func Wait(delay int) {
 	time.Sleep(time.Duration(delay) * time.Second)
 }
 
 // loadEnvFromEnvFile loads environment variables from the .env file.
 func loadEnvFromEnvFile() error {
-	if err := godotenv.Load("../.env"); err != nil {
-		log.Printf("No .env file found or error loading it: %v", err)
+	currentPath, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting current working directory: %v", err)
+		return err
+	}
+	LogDebug(fmt.Sprintf("Current working directory: %s", currentPath))
+	envFilePath := "../.env"
+	if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+		envFilePath = "../../.env"
+
+		if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+			log.Printf("No .env file found at path: %s", envFilePath)
+			return fmt.Errorf("no .env file found at path: %s", envFilePath)
+		}
+
+	}
+	if err := godotenv.Load(envFilePath); err != nil {
+		log.Printf("Error loading .env file: %v", err)
 		return err
 	}
 	return nil
 }
 
-func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{}) (string, string, error) {
+func HandleNewLogin(scData parser.Scenario, sharedVars map[string]interface{}) (string, string, error) {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return "", "", fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
@@ -926,7 +941,7 @@ func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{})
 
 // handleKeycloakResetPassword processes keycloak-reset-password scenarios by converting data,
 // resolving required fields, and resetting user password.
-func HandleKeycloakResetPassword(scData scenario.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
+func HandleKeycloakResetPassword(scData parser.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return fmt.Errorf("failed to convert scenario Data to map[string]interface{}")

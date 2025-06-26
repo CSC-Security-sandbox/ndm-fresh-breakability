@@ -1,5 +1,5 @@
 import { CsvService } from "./../csv/csv_export.service";
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, NotAcceptableException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -216,8 +216,13 @@ export class JobRunService {
         throw new NotFoundException(
           `Job Run with id ${jobRunId} is not a migration job`
         );
-      const filePath = path.join(this.getReportsDirectory, `${jobRunId}-coc-report.csv`);
-      if (fs.existsSync(filePath)) return filePath;
+      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(/[^a-zA-Z0-9-_.]/g, "");
+      const filePath = path.join(this.getReportsDirectory, sanitizedFileName);
+      if (!filePath.startsWith(this.getReportsDirectory)) {
+        throw new NotAcceptableException(`Invalid file path: ${filePath}`);
+      }
+
+      if (fs.existsSync(filePath)) return filePath; 
       await this.csvService.generateCsv(filePath, jobRunId);
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -225,10 +230,10 @@ export class JobRunService {
         await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
       }
 
-      if (!fs.existsSync(filePath))
+      if (!fs.existsSync(filePath)) 
         throw new Error(`File not found: ${filePath}`);
 
-      const fileBuffer = fs.readFileSync(filePath);
+      const fileBuffer = fs.readFileSync(filePath); 
       const reportData = {
         filePath,
         size: fileBuffer.length,

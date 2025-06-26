@@ -1,0 +1,5 @@
+apiVersion: v2
+name: {{ service_name }}
+description: Helm chart to deploy {{ service_name }}
+version: {{ build_version | default('0.1.0') }}
+type: application

@@ -11,10 +11,11 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     accessor: "jobRunId",
     Renderer: ({
       value,
-    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) => TooltipCopyCellRenderer(value),
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunId"]>) =>
+      TooltipCopyCellRenderer(value),
   },
   {
-    header: "Start Date & Time",
+    header: "Start Date & Time (UTC)",
     accessor: "startTime",
     id: "startTime",
     width: 100,
@@ -25,7 +26,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     ),
   },
   {
-    header: "End Date & Time",
+    header: "End Date & Time (UTC)",
     accessor: "endTime",
     id: "endTime",
     width: 100,
@@ -62,7 +63,10 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     header: "Size",
     accessor: "totalScannedSize",
     id: "totalScannedSize",
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => row.jobType === JOBS_TYPE.DISCOVERY ? row.totalScannedSize : row.totalMigratedSize,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      row.jobType === JOBS_TYPE.DISCOVERY
+        ? row.totalScannedSize
+        : row.totalMigratedSize,
     width: 80,
   },
   {
