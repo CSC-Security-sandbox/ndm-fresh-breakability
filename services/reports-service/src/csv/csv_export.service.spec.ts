@@ -4,7 +4,7 @@ import { DataSource } from "typeorm";
 import * as fs from "fs";
 import * as fastCsv from "fast-csv";
 import exp from "constants";
-import * as validation from '../utils/filepath-validation';
+import * as validation from '../utils/utils';
 
 jest.mock("fs");
 jest.mock("fast-csv");

@@ -1,4 +1,4 @@
-import { validateFilePath } from './filepath-validation';
+import { validateFilePath } from './utils';
 describe('validateFilePath', () => {
   it('should return true for a valid file path', () => {
     expect(validateFilePath('valid-file_path123.txt')).toBe(true);

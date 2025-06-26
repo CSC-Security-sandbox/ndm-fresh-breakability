@@ -5,7 +5,7 @@ import { InventoryEntity } from '../entities/inventory.entity';
 import { ReportsEntity } from '../entities/reports.entity';
 import * as fs from 'fs';
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import * as validation from '../utils/filepath-validation';
+import * as validation from '../utils/utils';
 
 jest.mock('puppeteer', () => ({
   launch: jest.fn().mockResolvedValue({

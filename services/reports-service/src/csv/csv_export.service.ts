@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
-import { validateFilePath } from 'src/utils/filepath-validation';
+import { validateFilePath } from 'src/utils/utils';
 
 @Injectable()
 export class CsvService {

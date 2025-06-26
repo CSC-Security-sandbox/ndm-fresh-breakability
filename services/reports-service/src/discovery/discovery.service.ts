@@ -13,7 +13,7 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
-import { validateFilePath } from 'src/utils/filepath-validation';
+import { validateFilePath } from 'src/utils/utils';
 
 @Injectable()
 export class DiscoveryService {
