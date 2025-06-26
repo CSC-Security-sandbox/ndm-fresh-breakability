@@ -27,14 +27,14 @@ const {
 const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<MigrateSyncService>({ 
-    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
-     startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+     startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
 }= proxyActivities<MigrateCommonService>({
-    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
-    startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+    startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
 
 /*
