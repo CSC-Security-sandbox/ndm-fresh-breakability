@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/alpine:3.21.0 
+FROM public.ecr.aws/docker/library/alpine:3.22.0
 
 RUN apk update && \
     apk upgrade --no-cache --purge && \

@@ -1,0 +1,73 @@
+scenarios:
+  #  source fileserver
+  - name: create-source-file-server
+    url: /api/v1/servers
+    method: post
+    service_name: config_service
+    delay: "60"
+    data:
+      configName: "source-file-server"
+      configType: "FILE"
+      projectId: "$project_id"
+      fileServers:
+        - serverType: "OtherNAS"
+          userName: "root"
+          password: ""
+          protocol: "NFS"
+          protocolVersion: "v3"
+          host: "$source_host_IP"
+          volumes: []
+          workers:
+            - "$workerId"
+      workingDirectory:
+        workingDirectory: ""
+        pathId: null
+        pathName: ""
+    response:
+      - status_code: 201
+    parse:
+      configId: id 
+
+  - name: get-file-server-by-id
+    delay: "5"
+    data:
+      type : source
+      volume_name : "/volSrcAuto"
+
+
+
+  - name: create-new-discovery-job-for-source
+    url: /api/v1/jobs/bulk-discovery
+    method: post
+    service_name: job_service
+    data:
+      excludeOlderThan: "2025-03-20T06:55:32.491Z"
+      excludeFilePatterns: ""
+      preserveAccessTime: false
+      firstRunAt: "2025-03-19T17:33:44.590Z"
+      sourcePathIds:
+        - "$sourcePathId"
+      createdBy: null
+      options:
+        workflowExecutionTimeout: "60s"
+        workflowTaskTimeout: "30s"
+        workflowRunTimeout: "30s"
+        startDelay: "10s"
+    response:
+      - status_code: 201
+    parse:
+      jobConfigId: "[0].id"
+
+
+  - name: get-jobs-by-job-config-id-for-source
+    url: /api/v1/jobs/{jobConfigId}
+    method: get
+    service_name: job_service
+    delay: "30"
+    data: {}
+    response:
+      - status_code: 200
+    params:
+      jobConfigId: jobConfigId
+    parse:
+      SourceDiscoveryJobRunId: jobRuns[0].jobRunId

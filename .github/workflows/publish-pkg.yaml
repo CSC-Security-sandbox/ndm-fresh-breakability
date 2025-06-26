@@ -2,6 +2,7 @@ name: Publish NDM libs to Github Registry
 
 env:
   SEMVER_VERSION: '7.7.2'
+
 on:
   workflow_dispatch:
     inputs:
@@ -20,11 +21,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: openlab
     permissions:
       contents: read
       packages: write
     steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@NetApp-Cloud-DataMigrate'
+
       - name: Install semver
         run: npm install semver@${{ env.SEMVER_VERSION }}
 
@@ -35,12 +47,8 @@ jobs:
             echo "Provided version '$version' is not a valid semantic version."
             exit 1
           fi
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@NetApp-Cloud-DataMigrate'
+
+
       - name: Get latest published version from GitHub Packages
         id: get_latest
         run: |
@@ -67,14 +75,88 @@ jobs:
           fi
 
           echo "Version is valid"
+
       - name: Install dependencies
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm i && npm run build
+
       - name: Update version in package.json
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm version --new-version ${{ github.event.inputs.version_to_publish }} --no-git-tag-version
+
       - name: Publish package
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+
+      - name: Generate package manifest metadata.json
+        run: |
+          cat <<EOF > metadata.json
+          {
+            "library": "${{ github.event.inputs.lib_name }}",
+            "version": "${{ github.event.inputs.version_to_publish }}",
+            "build_time": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "commit": "${GITHUB_SHA}",
+            "short_commit": "${GITHUB_SHA::7}",
+            "branch": "${GITHUB_REF_NAME}",
+            "workflow": "${GITHUB_WORKFLOW}",
+            "run_id": "${GITHUB_RUN_ID}",
+            "run_number": "${GITHUB_RUN_NUMBER}",
+            "repository": "${GITHUB_REPOSITORY}",
+            "repository_owner": "${GITHUB_REPOSITORY_OWNER}",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+      - name: Upload manifest to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_TYPE="${{ github.event_name }}"
+          LIB_NAME="${{ github.event.inputs.lib_name }}"
+          VERSION="${{ github.event.inputs.version_to_publish }}"
+
+          if [ "$BUILD_TYPE" = "workflow_dispatch" ]; then
+            ARTIFACTORY_PATH="manifests/libs/adhoc/${LIB_NAME}/${VERSION}/metadata.json"
+          fi
+
+          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+
+      - name: Generate latest.json pointer
+        run: |
+          LIB_NAME="${{ github.event.inputs.lib_name }}"
+          VERSION="${{ github.event.inputs.version_to_publish }}"
+          COMMIT="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          DATE=$(date -u +'%Y-%m-%d')
+          METADATA_PATH="manifests/libs/adhoc/${LIB_NAME}/${VERSION}/metadata.json"
+
+          cat <<EOF > latest.json
+          {
+            "library": "$LIB_NAME",
+            "version": "$VERSION",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_SHA",
+            "date": "$DATE",
+            "updated_at": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+      - name: Upload latest.json pointer to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          LIB_NAME="${{ github.event.inputs.lib_name }}"
+          LATEST_VERSION_PATH="manifests/libs/adhoc/${LIB_NAME}/latest.json"
+
+          curl --silent --show-error --fail --request PUT --upload-file latest.json \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${LATEST_VERSION_PATH}" \
+            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"

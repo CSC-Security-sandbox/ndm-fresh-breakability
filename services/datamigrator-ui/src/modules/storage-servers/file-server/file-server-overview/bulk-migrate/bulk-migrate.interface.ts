@@ -133,6 +133,7 @@ export interface BulkMigrateContextType {
   mappingStepTableState: BlueXpTableStateType<any>;
   setFileName: (arg: string) => void;
   fileName: string;
+  listOfNotReachableExportPaths: string[];
 }
 
 export interface ErrorsValidateMappingStepFormType {

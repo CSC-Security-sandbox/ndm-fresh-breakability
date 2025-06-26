@@ -3,11 +3,11 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { WinstonModule } from "nest-winston";
 import 'winston-daily-rotate-file';
 import loggerConfig from "../config/logger.config";
-import { RequestLoggerMiddleware } from "../middleware/request-logger.middleware";
 import { format, transports } from "winston";
 import { LoggerService } from "./logger.service";
 import { LoggerFactory } from "./logger.factory";
-
+import { RequestContextModule } from "../middleware/request-context.module";
+import { AsyncLocalStorageModule } from "../async-local-storage/async-local-storage.module";
 
 @Module({})
 export class LoggerModule {
@@ -15,6 +15,9 @@ export class LoggerModule {
         return {
             module: LoggerModule,
             imports : [
+                // Importing RequestContextModule to provide RequestContext
+                RequestContextModule,
+                AsyncLocalStorageModule,
                 ConfigModule.forRoot({load: [loggerConfig]}),
                 WinstonModule.forRootAsync({
                     imports: [ConfigModule],
@@ -44,13 +47,13 @@ export class LoggerModule {
                                     format.printf((info) => `${info.timestamp} ${info.level}: ${info.message} ${JSON.stringify(info)}`),
                                 ),
                             }),
-                
+
                         ]
                     })
                 })
             ],
-            exports: [LoggerModule, RequestLoggerMiddleware, LoggerFactory, LoggerService],
-            providers:[RequestLoggerMiddleware, LoggerFactory, LoggerService]
+            exports: [LoggerFactory, LoggerService, RequestContextModule, AsyncLocalStorageModule],
+            providers:[LoggerFactory, LoggerService]
         }
     }
 }

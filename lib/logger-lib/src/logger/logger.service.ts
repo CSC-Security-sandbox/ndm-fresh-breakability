@@ -1,12 +1,14 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
+import { RequestContext } from '../middleware/request-context';
 
 @Injectable({ scope: Scope.TRANSIENT }) 
 export class LoggerService {
   private parentContext: string;
 
-  constructor(@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger) {}
+  constructor(@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+              @Inject(RequestContext) private readonly requestContext: RequestContext) {}
 
   setParentContext(context: string) {
     this.parentContext = context;
@@ -15,7 +17,7 @@ export class LoggerService {
   log(message: string, trackId?: string, context?: string) {
     this.logger.log('info', {
       context: context ?? this.parentContext ?? LoggerService.name,
-      trackId,
+      trackId: trackId ?? this.requestContext.getTrackId(),
       message,
     });
   }
@@ -23,7 +25,7 @@ export class LoggerService {
   error(message: string, trackId?: string, context?: string) {
     this.logger.log('error', {
       context: context ?? this.parentContext ?? LoggerService.name,
-      trackId,
+      trackId: trackId ?? this.requestContext.getTrackId(),
       message,
     });
   }
@@ -31,7 +33,7 @@ export class LoggerService {
   debug(message: string, trackId?: string, context?: string) {
     this.logger.log('debug', {
       context: context ?? this.parentContext ?? LoggerService.name,
-      trackId,
+      trackId: trackId ?? this.requestContext.getTrackId(),
       message,
     });
   }
@@ -39,7 +41,7 @@ export class LoggerService {
   warn(message: string, trackId?: string, context?: string) {
     this.logger.log('warn', {
       context: context ?? this.parentContext ?? LoggerService.name,
-      trackId,
+      trackId: trackId ?? this.requestContext.getTrackId(),
       message,
     });
   }
