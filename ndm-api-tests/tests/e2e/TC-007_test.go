@@ -153,7 +153,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			//Validating the NextScheduled TIme from response is within +-1 minutes and is 3 minutes later than 1st run
 			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
-			Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
+			Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
 
 			expectedNext := parsedBase.Add(3 * time.Minute)
 
