@@ -18,60 +18,115 @@ env:
   JAVA_VERSION: 17.0.11
 
 jobs:
+  filter-changed-services:
+    name: Filter Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      app_deployment: ${{ steps.filter.outputs.app_deployment }}
+      auth_lib: ${{ steps.filter.outputs.auth_lib }}
+      jobs_lib: ${{ steps.filter.outputs.jobs_lib }}
+      logger_lib: ${{ steps.filter.outputs.logger_lib }}
+      admin_service: ${{ steps.filter.outputs.admin_service }}
+      config_service: ${{ steps.filter.outputs.config_service }}
+      datamigrator_ui: ${{ steps.filter.outputs.datamigrator_ui }}
+      db_writer: ${{ steps.filter.outputs.db_writer }}
+      jobs_service: ${{ steps.filter.outputs.jobs_service }}
+      keycloak_customizations: ${{ steps.filter.outputs.keycloak_customizations }}
+      reports_service: ${{ steps.filter.outputs.reports_service }}
+      worker: ${{ steps.filter.outputs.worker }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            app_deployment:
+              - 'app-deployment/**'
+            auth_lib:
+              - 'lib/auth-lib/**'
+            jobs_lib:
+              - 'lib/jobs-lib/**'
+            logger_lib:
+              - 'lib/logger-lib/**'
+            admin_service:
+              - 'services/admin-service/**'
+            config_service:
+              - 'services/config-service/**'
+            datamigrator_ui:
+              - 'services/datamigrator-ui/**'
+            db_writer:
+              - 'services/db-writer/**'
+            jobs_service:
+              - 'services/jobs-service/**'
+            keycloak_customizations:
+              - 'services/keycloak-customizations/**'
+            reports_service:
+              - 'services/reports-service/**'
+            worker:
+              - 'services/worker/**'
+
   black-duck-sca-scan:
     name: Black Duck SCA Scan
     runs-on: openlab
     timeout-minutes: 120
+    needs: filter-changed-services
     strategy:
       matrix:
-        service:
+        include:
           - name: App Deployment
             path: app-deployment
-
-          # --- LIBs ---
+            filter_output: app_deployment
           - name: Auth Lib
             path: lib/auth-lib
+            filter_output: auth_lib
           - name: Jobs Lib
             path: lib/jobs-lib
+            filter_output: jobs_lib
           - name: Logger Lib
             path: lib/logger-lib
-
-          # --- SERVICES ---
+            filter_output: logger_lib
           - name: Admin Service
             path: services/admin-service
+            filter_output: admin_service
           - name: Config Service
             path: services/config-service
+            filter_output: config_service
           - name: Datamigrator UI
             path: services/datamigrator-ui
+            filter_output: datamigrator_ui
           - name: DB Writer
             path: services/db-writer
+            filter_output: db_writer
           - name: Jobs Service
             path: services/jobs-service
+            filter_output: jobs_service
           - name: Keycloak Customizations
             path: services/keycloak-customizations
+            filter_output: keycloak_customizations
           - name: Reports Service
             path: services/reports-service
+            filter_output: reports_service
           - name: Worker
             path: services/worker
-
+            filter_output: worker
     steps:
       - name: Checkout code
+        if: ${{ needs.filter-changed-services.outputs[matrix.filter_output] == 'true' }}
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "${{ env.NODE_VERSION }}"
           registry-url: "https://npm.pkg.github.com"
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "${{ env.JAVA_VERSION }}"
-
       - name: Replace GitHub Token Placeholder in .npmrc (if exists)
-        working-directory: ${{ matrix.service.path }}
+        working-directory: ${{ matrix.path }}
         run: |
           if [ -f .npmrc ]; then
             echo "✅ .npmrc found. Replacing GitHub token..."
@@ -79,9 +134,8 @@ jobs:
           else
             echo "⚠️ .npmrc not found. Skipping replacement."
           fi
-
       - name: Install dependencies and pkg (if package.json exists)
-        working-directory: ${{ matrix.service.path }}
+        working-directory: ${{ matrix.path }}
         run: |
           if [ -f package.json ]; then
             echo "📦 Installing dependencies..."
@@ -90,9 +144,8 @@ jobs:
           else
             echo "⚠️ package.json not found. Skipping npm install."
           fi
-
       - name: Run Build (if package.json exists)
-        working-directory: ${{ matrix.service.path }}
+        working-directory: ${{ matrix.path }}
         run: |
           if [ -f package.json ]; then
             echo "🏗️ Running build..."
@@ -100,7 +153,6 @@ jobs:
           else
             echo "⚠️ package.json not found. Skipping build."
           fi
-
       - name: Download Black Duck Detect
         run: |
           echo "📥 Downloading Black Duck Detect..."
@@ -116,15 +168,14 @@ jobs:
           fi
           chmod +x detect10.sh
           echo "✅ Black Duck Detect downloaded successfully"
-
       - name: Run Black Duck Detect
         shell: bash
         env:
           BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
           JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
         run: |
-          SERVICE_NAME="${{ matrix.service.name }}"
-          SERVICE_PATH="${{ matrix.service.path }}"
+          SERVICE_NAME="${{ matrix.name }}"
+          SERVICE_PATH="${{ matrix.path }}"
           echo "🚀🚀🚀🚀 Starting Black Duck scan for $SERVICE_NAME...🚀🚀🚀🚀"
 
           CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
@@ -190,14 +241,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Upload all Black Duck Reports
         uses: actions/upload-artifact@v4
         with:
           name: blackduck-reports-all-${{ github.run_id }}
           path: blackduck-output/
           retention-days: 30
-
       - name: Final Summary
         if: always()
         run: |
