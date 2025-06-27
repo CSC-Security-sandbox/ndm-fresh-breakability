@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - sm/bd-action-workflow
-
   workflow_dispatch:
 
 env:
@@ -22,18 +21,7 @@ jobs:
     name: Filter Changed Services
     runs-on: ubuntu-latest
     outputs:
-      app_deployment: ${{ steps.filter.outputs.app_deployment }}
-      auth_lib: ${{ steps.filter.outputs.auth_lib }}
-      jobs_lib: ${{ steps.filter.outputs.jobs_lib }}
-      logger_lib: ${{ steps.filter.outputs.logger_lib }}
-      admin_service: ${{ steps.filter.outputs.admin_service }}
-      config_service: ${{ steps.filter.outputs.config_service }}
-      datamigrator_ui: ${{ steps.filter.outputs.datamigrator_ui }}
-      db_writer: ${{ steps.filter.outputs.db_writer }}
-      jobs_service: ${{ steps.filter.outputs.jobs_service }}
-      keycloak_customizations: ${{ steps.filter.outputs.keycloak_customizations }}
-      reports_service: ${{ steps.filter.outputs.reports_service }}
-      worker: ${{ steps.filter.outputs.worker }}
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
       any_changed: ${{ steps.check.outputs.any_changed }}
     steps:
       - name: Checkout code
@@ -67,6 +55,73 @@ jobs:
               - 'services/reports-service/**'
             worker:
               - 'services/worker/**'
+
+      - name: Generate matrix for changed services
+        id: generate-matrix
+        run: |
+          matrix_items=()
+
+          # Define all services with their metadata
+          if [ "${{ steps.filter.outputs.app_deployment }}" = "true" ]; then
+            matrix_items+=('{"name":"App Deployment","path":"app-deployment","filter_output":"app_deployment"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.auth_lib }}" = "true" ]; then
+            matrix_items+=('{"name":"Auth Lib","path":"lib/auth-lib","filter_output":"auth_lib"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.jobs_lib }}" = "true" ]; then
+            matrix_items+=('{"name":"Jobs Lib","path":"lib/jobs-lib","filter_output":"jobs_lib"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.logger_lib }}" = "true" ]; then
+            matrix_items+=('{"name":"Logger Lib","path":"lib/logger-lib","filter_output":"logger_lib"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.admin_service }}" = "true" ]; then
+            matrix_items+=('{"name":"Admin Service","path":"services/admin-service","filter_output":"admin_service"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.config_service }}" = "true" ]; then
+            matrix_items+=('{"name":"Config Service","path":"services/config-service","filter_output":"config_service"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.datamigrator_ui }}" = "true" ]; then
+            matrix_items+=('{"name":"Datamigrator UI","path":"services/datamigrator-ui","filter_output":"datamigrator_ui"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.db_writer }}" = "true" ]; then
+            matrix_items+=('{"name":"DB Writer","path":"services/db-writer","filter_output":"db_writer"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.jobs_service }}" = "true" ]; then
+            matrix_items+=('{"name":"Jobs Service","path":"services/jobs-service","filter_output":"jobs_service"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.keycloak_customizations }}" = "true" ]; then
+            matrix_items+=('{"name":"Keycloak Customizations","path":"services/keycloak-customizations","filter_output":"keycloak_customizations"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.reports_service }}" = "true" ]; then
+            matrix_items+=('{"name":"Reports Service","path":"services/reports-service","filter_output":"reports_service"}')
+          fi
+
+          if [ "${{ steps.filter.outputs.worker }}" = "true" ]; then
+            matrix_items+=('{"name":"Worker","path":"services/worker","filter_output":"worker"}')
+          fi
+
+          # Build the matrix JSON
+          if [ ${#matrix_items[@]} -eq 0 ]; then
+            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
+          else
+            # Join array elements with commas
+            IFS=','
+            matrix_json="{\"include\":[${matrix_items[*]}]}"
+            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Generated matrix: $matrix_json"
+
       - name: Check for any changed service/lib
         id: check
         run: |
@@ -96,47 +151,9 @@ jobs:
     needs: [filter-changed-services]
     if: needs.filter-changed-services.outputs.any_changed == 'true'
     strategy:
-      matrix:
-        include:
-          - name: App Deployment
-            path: app-deployment
-            filter_output: app_deployment
-          - name: Auth Lib
-            path: lib/auth-lib
-            filter_output: auth_lib
-          - name: Jobs Lib
-            path: lib/jobs-lib
-            filter_output: jobs_lib
-          - name: Logger Lib
-            path: lib/logger-lib
-            filter_output: logger_lib
-          - name: Admin Service
-            path: services/admin-service
-            filter_output: admin_service
-          - name: Config Service
-            path: services/config-service
-            filter_output: config_service
-          - name: Datamigrator UI
-            path: services/datamigrator-ui
-            filter_output: datamigrator_ui
-          - name: DB Writer
-            path: services/db-writer
-            filter_output: db_writer
-          - name: Jobs Service
-            path: services/jobs-service
-            filter_output: jobs_service
-          - name: Keycloak Customizations
-            path: services/keycloak-customizations
-            filter_output: keycloak_customizations
-          - name: Reports Service
-            path: services/reports-service
-            filter_output: reports_service
-          - name: Worker
-            path: services/worker
-            filter_output: worker
+      matrix: ${{ fromJSON(needs.filter-changed-services.outputs.matrix) }}
     steps:
       - name: Checkout code
-        if: ${{ needs.filter-changed-services.outputs[matrix.filter_output] == 'true' }}
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
