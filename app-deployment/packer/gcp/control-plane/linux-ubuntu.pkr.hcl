@@ -112,6 +112,7 @@ source "googlecompute" "gcp_ubuntu" {
     "CreatedBy" = "Packer"
     "Project"   = var.project_name
     "Cloud"     = "GCP"
+    block-project-ssh-keys = "true"
   }
 
   temporary_key_pair_type      = var.temporary_key_pair_type
