@@ -53,6 +53,7 @@ const (
 	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
 	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
+	NFS_SOURCE_VOLUME_2                             = "/vol_src_automation"
 	CREATE_FILESERVER_ENDPOINT                      = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                       = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                       = "/api/v1/jobs/bulk-migrate"

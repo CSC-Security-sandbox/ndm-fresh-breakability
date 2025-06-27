@@ -189,6 +189,11 @@ func ClearVolume(export string) error {
 
 	script := fmt.Sprintf(`
 	set -e
+
+	# Clean up any previous mount
+	sudo umount -f "%s" 2>/dev/null || true
+	sudo rm -rf "%s"
+
 	sudo mkdir -p "%s"
 	sudo mount -t nfs "%s" "%s"
 
@@ -203,7 +208,8 @@ func ClearVolume(export string) error {
 
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, export, destMount,
+`, destMount, destMount,
+		destMount, export, destMount,
 		destMount, destMount, destMount,
 		destMount,
 		destMount,
@@ -231,31 +237,30 @@ func AddDataToVolume(export string) error {
 	deltaDir := "/" + DeltaFolder
 
 	script := fmt.Sprintf(`
-	set -e
+set -e
 
-	# Clean up any previous run
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
+# Clean up any previous run
+sudo rm -rf "%s"
+sudo rm -rf "%s"
 
-	# Create delta directory and generate 100 txt files of 100KB each
-	sudo mkdir -p "%s"
-	for i in $(seq -w 1 100); do
-		sudo dd if=/dev/urandom of="%s/file${i}.txt" bs=100K count=1 status=none
-	done
+# Create delta directory and generate 100 txt files of 100KB each
+sudo mkdir -p "%s"
+for i in $(seq -w 1 100); do
+	sudo dd if=/dev/zero of="%s/file${i}.txt" bs=100K count=1 status=none
+done
 
-	# Mount export NFS export
-	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
+# Mount export NFS export
+sudo mkdir -p "%s"
+sudo mount -t nfs "%s" "%s"
 
-	# Copy delta to the mounted export
-	sudo cp -a "%s" "%s/"
+# Copy delta to the mounted export
+sudo cp -a "%s" "%s/"
 
-	# Unmount and cleanup
-	sudo umount "%s"
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
-	`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
-
+# Unmount and cleanup
+sudo umount "%s"
+sudo rm -rf "%s"
+sudo rm -rf "%s"
+`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
