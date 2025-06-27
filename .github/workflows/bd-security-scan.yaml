@@ -196,10 +196,9 @@ jobs:
         run: |
           echo ""
           echo "==================== 📊 Black Duck Scan Final Summary ===================="
+          echo "     
           echo "  🏷️  Project : $PROJECT_NAME"
           echo "  🗂️  Version : $VERSION_NAME"
-          echo "  📁 Reports Artifact Path:"
-          echo "     ${{ github.workspace }}/blackduck-output/"
-          echo "  🔗 Black Duck Console:"
-          echo "     $BLACKDUCK_URL"
+          echo "  🔗 Black Duck Console: $BLACKDUCK_URL"" 
+          echo "     
           echo "=========================================================================="
