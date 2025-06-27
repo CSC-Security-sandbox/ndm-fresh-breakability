@@ -68,7 +68,7 @@ on:
       #   required: false
       #   type: string
   schedule:
-    - cron: '45 19 * * *'
+    - cron: '30 18 * * *'
 
 permissions: 
   contents: read
