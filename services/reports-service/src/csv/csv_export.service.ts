@@ -1,17 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
+import { validateFilePath } from 'src/utils/utils';
 
 @Injectable()
 export class CsvService {
+    private readonly logger = new Logger(CsvService.name);
     constructor(private readonly dataSource: DataSource) { }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
+        if (!validateFilePath(filePath)) {
+            this.logger.error(`File path contains invalid characters: ${filePath}`);
+            throw new Error('File path contains invalid characters.');
+        } else {
+            this.logger.log(`File path validation passed: ${filePath}`);
+        }
         const queryRunner = this.dataSource.createQueryRunner();
         await queryRunner.connect();
         try {
-            const fileStream = fs.createWriteStream(filePath);
+            const fileStream = fs.createWriteStream(filePath); 
             const csvStream = fastCsv.format({ headers: true });
             csvStream.pipe(fileStream);
             let offset = 1;
