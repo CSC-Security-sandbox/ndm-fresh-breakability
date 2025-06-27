@@ -44,8 +44,12 @@ const CreateProjectForm = ({
   resetForm: resetProjectForm,
   handleUpdateProject,
 }: CreateProjectPropsType) => {
-  const { data: users, isLoading: usersLoading } = useGetAllUsersQuery("");
-  const { data: roles, isLoading: rolesLoading } = useGetAllRolesQuery("");
+  const { data: getAllUserResult, isLoading: usersLoading } =
+    useGetAllUsersQuery("");
+  const { data: getAllRoleSResult, isLoading: rolesLoading } =
+    useGetAllRolesQuery("");
+  const users = getAllUserResult?.data?.items || [];
+  const roles = getAllRoleSResult?.data?.items || [];
   const editMode = !!editSelectedProject?.id;
   const [getAllAssociatedUser] = useLazyGetAllUserRolesQuery();
   const [associatedUsers, setAssociatedUsers] = useState<
@@ -66,8 +70,8 @@ const CreateProjectForm = ({
           const res = await getAllAssociatedUser({
             project_id: editSelectedProject?.id,
           }).unwrap();
-          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
-            (userRoles: any) => ({
+          const tempAssociatedUsers: AssociatedUsersOptionsType[] =
+            res?.data.items.map((userRoles: any) => ({
               user: {
                 label: userRoles?.user?.email,
                 value: userRoles?.user?.id,
@@ -76,13 +80,12 @@ const CreateProjectForm = ({
                 label: userRoles?.role?.role_name,
                 value: userRoles?.role?.id,
               },
-            })
-          );
+            }));
           setAssociatedUsers(tempAssociatedUsers);
         } catch (error) {
           setFailedToFetchAssociateUsers(true);
           notify.error(
-            "Failed to get list of associated users for this project."
+            "Failed to get list of associated users for this project.",
           );
           console.error({ error, level: "Get Associate user list" });
         }
@@ -92,7 +95,7 @@ const CreateProjectForm = ({
 
   const associateUserForm: BlueXpFormType<AssociatedUsersOptionsType> = useForm(
     { user: undefined, role: undefined },
-    ASSOCIATE_USER_FORM_VALIDATION_SCHEMA
+    ASSOCIATE_USER_FORM_VALIDATION_SCHEMA,
   );
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -110,21 +113,21 @@ const CreateProjectForm = ({
         role_id: role.value,
       })),
     };
-    await associatedUserWithProjectBatch(body).unwrap();
+    let response = await associatedUserWithProjectBatch(body).unwrap();
   };
 
   const handleSubmitCreateProject = async () => {
     setIsLoading(true);
     try {
-      const response = await handleCreateProject();
-
+      const handleCreateProjectResult = await handleCreateProject();
+      const response = handleCreateProjectResult.data;
       try {
         await handleAssociateUsers(response.id);
         resetProjectForm();
         notify.success(message);
       } catch (err) {
         notify.warning(
-          `Project - "${createProjectForm.formState.project_name}" successfully created. But failed to associate the users.`
+          `Project - "${createProjectForm.formState.project_name}" successfully created. But failed to associate the users.`,
         );
         console.error({ err, level: "Associate User" });
       }
@@ -135,7 +138,7 @@ const CreateProjectForm = ({
         <ErrorMessageContainer
           title="Failed to create Project."
           message={err.data.message}
-        />
+        />,
       );
       console.error({ err, level: "Create Project" });
     } finally {
@@ -146,16 +149,21 @@ const CreateProjectForm = ({
   const handleSubmitUpdateProject = async () => {
     setIsLoading(true);
     try {
-      await handleUpdateProject(editSelectedProject?.id);
+      let result = await handleUpdateProject(editSelectedProject?.id);
+      console.log("handleUpdateProject result>>>>>>>>>>>", result);
+
       try {
-        await handleAssociateUsers(editSelectedProject?.id);
+        let associateUserResult = await handleAssociateUsers(
+          editSelectedProject?.id,
+        );
+        console.log("associateUserResult>>>>>>>>>>>>>>>", result);
         resetProjectForm();
         notify.success(message);
         handleClose();
         submitAction && submitAction();
       } catch (err) {
         notify.warning(
-          `Project - "${createProjectForm.formState.project_name}" successfully updated. But failed to update the list of associated users.`
+          `Project - "${createProjectForm.formState.project_name}" successfully updated. But failed to update the list of associated users.`,
         );
         console.error({ err, level: "Associate User" });
       }
@@ -164,7 +172,7 @@ const CreateProjectForm = ({
         <ErrorMessageContainer
           title="Error occurred."
           message={err?.message || "Failed to update Project."}
-        />
+        />,
       );
       console.error({ err, level: "Update Project" });
     }
@@ -184,7 +192,7 @@ const CreateProjectForm = ({
 
   const removeUserAction = (user: AssociatedUsersOptionsType["user"]) => {
     setAssociatedUsers((currentUsers) =>
-      currentUsers?.filter((row) => row.user.value !== user.value)
+      currentUsers?.filter((row) => row.user.value !== user.value),
     );
   };
 
@@ -251,7 +259,7 @@ const CreateProjectForm = ({
                 ?.filter(
                   (user: UserApiType) =>
                     user.user_status === USER_STATUS_ENUM.ACTIVE &&
-                    !user.isAppAdmin
+                    !user.isAppAdmin,
                 )
                 .map((user: UserApiType) => ({
                   label: user.email,
@@ -260,7 +268,7 @@ const CreateProjectForm = ({
               roleOptions={roles
                 ?.filter(
                   (roleObject: any) =>
-                    roleObject?.role_name !== USER_ROLES_ENUM.APP_ADMIN
+                    roleObject?.role_name !== USER_ROLES_ENUM.APP_ADMIN,
                 )
                 ?.map((role: any) => ({
                   label: role.role_name,
@@ -285,7 +293,7 @@ const CreateProjectForm = ({
           <Button
             style={{ width: 150 }}
             onClick={createProjectForm.handleFormSubmit(
-              editMode ? handleSubmitUpdateProject : handleSubmitCreateProject
+              editMode ? handleSubmitUpdateProject : handleSubmitCreateProject,
             )}
             disabled={
               !(createProjectForm.isValid && createProjectForm.dirty) ||

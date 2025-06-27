@@ -7,6 +7,7 @@ import {
 import { Observable, catchError, map, throwError } from 'rxjs';
 import { Request, Response } from 'express';
 import { ResponseHandler } from './response-handler';
+import { HTTPStatusCode } from './response-interface';
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
@@ -14,13 +15,18 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
     const ctx = context.switchToHttp();
     const response = ctx.getResponse<Response<any>>();
     const request = ctx.getRequest<Request>();
+
     return next.handle().pipe(
       map((data) => {
+        console.log('Responseee', data);
         return ResponseHandler.success(data, request.route.path);
       }),
       catchError((err) => {
+        let statusCode =
+          err?.response?.statusCode || HTTPStatusCode[err.code] || 500;
+        console.log('Error in ResponseInterceptor:', err);
         const errorResponse = ResponseHandler.error(err);
-        response.status(err.response.statusCode).json(errorResponse);
+        response.status(statusCode).json(errorResponse);
         return throwError(() => response); // Optional: rethrow if needed for logging
       }),
     );

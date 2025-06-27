@@ -1,5 +1,10 @@
 // src/common/utils/response-handler.ts
-import { ApiResponse, MessageCatalog } from './response-interface';
+import {
+  ApiResponse,
+  ErrorCatalog,
+  MessageCatalog,
+} from './response-interface';
+
 export const setMessage = <T, msg extends string>(message, data: T): msg => {
   let responseMessage = 'Request Processed Successfully';
   if (message) {
@@ -8,9 +13,10 @@ export const setMessage = <T, msg extends string>(message, data: T): msg => {
     if (!!data['user_status']) {
       let state =
         !!data['user_status'] && data['user_status'] === 'active'
-          ? 'enabled'
-          : 'disabled';
-      responseMessage = MessageCatalog[functionality](state).message;
+          ? 'Enabled'
+          : 'Disabled';
+      let email = data['email'] || '';
+      responseMessage = MessageCatalog[functionality](state, email).message;
     } else if (typeof data === 'object' && (data as any).message) {
       responseMessage = (data as any).message;
     } else if (MessageCatalog[functionality]?.message) {
@@ -38,7 +44,8 @@ export class ResponseHandler {
     };
   }
   static error<T>(data: T): ApiResponse<T> {
-    const errorMsg = (data as any)?.response?.message ?? 'An error occurred';
+    const errorMsg =
+      (data as any)?.response?.message ?? ErrorCatalog[data['code']]?.message;
     return {
       message: errorMsg,
       data: undefined,
