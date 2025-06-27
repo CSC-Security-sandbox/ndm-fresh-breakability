@@ -1,94 +1,103 @@
-name: Run BDS for NDM
+name: BDS Security Scan
 
 on:
+  schedule:
+    - cron: "30 18 * * *"
+  workflow_dispatch:
   pull_request:
     branches:
       - main
-      - sm/bd-action-workflow
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  PROJECT_NAME: Test_NDM
-  VERSION_NAME: test_v3
+  PROJECT_NAME: NetApp Data Migrator
+  VERSION_NAME: 25.08_preview
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   NODE_VERSION: 22.15.0
   JAVA_VERSION: 17.0.11
 
 jobs:
-  filter-changed-services:
-    name: Filter Changed Services
+  prepare-matrix:
+    name: Prepare Matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-      any_changed: ${{ steps.set-matrix.outputs.any_changed }}
+      has_services: ${{ steps.set-matrix.outputs.has_services }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set matrix using git diff
+      - name: Set matrix
         id: set-matrix
         run: |
-          echo "🔍 Detecting changed files..."
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
-          echo "$CHANGED_FILES"
+          # Define all services in one place
+          declare -a ALL_SERVICES=(
+            "App Deployment:app-deployment"
+            "Auth Lib:lib/auth-lib"
+            "Jobs Lib:lib/jobs-lib"
+            "Logger Lib:lib/logger-lib"
+            "Admin Service:services/admin-service"
+            "Config Service:services/config-service"
+            "Datamigrator UI:services/datamigrator-ui"
+            "DB Writer:services/db-writer"
+            "Jobs Service:services/jobs-service"
+            "Keycloak Customizations:services/keycloak-customizations"
+            "Reports Service:services/reports-service"
+            "Worker:services/worker"
+          )
 
           declare -a matrix_items=()
 
-          add_to_matrix() {
-            local name=$1
-            local path=$2
-            if ! printf '%s\n' "${matrix_items[@]}" | grep -q "\"path\":\"$path\""; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "🌙 Nightly/Manual scan - including all services"
+            # For nightly scans, include all services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
               matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-            fi
-          }
+            done
+          else
+            echo "🔍 PR scan - detecting changed files..."
+            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+            echo "$CHANGED_FILES"
 
-          # Define matrix: key:path-pattern
-          declare -a PATH_MATRIX=(
-            "app_deployment:app-deployment/"
-            "auth_lib:lib/auth-lib/"
-            "jobs_lib:lib/jobs-lib/"
-            "logger_lib:lib/logger-lib/"
-            "admin_service:services/admin-service/"
-            "config_service:services/config-service/"
-            "datamigrator_ui:services/datamigrator-ui/"
-            "db_writer:services/db-writer/"
-            "jobs_service:services/jobs-service/"
-            "keycloak_customizations:services/keycloak-customizations/"
-            "reports_service:services/reports-service/"
-            "worker:services/worker/"
-          )
-
-          for entry in "${PATH_MATRIX[@]}"; do
-            KEY="${entry%%:*}"
-            PATH_PREFIX="${entry##*:}"
-            NAME="$(echo "$KEY" | sed -r 's/_/ /g; s/\b(.)/\u\1/g')"  # Convert to Title Case
-
-            if echo "$CHANGED_FILES" | grep -q "^$PATH_PREFIX"; then
-              add_to_matrix "$NAME" "${PATH_PREFIX%/}"
-            fi
-          done
+            # For PR scans, only include changed services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
+              
+              if echo "$CHANGED_FILES" | grep -q "^$path/"; then
+                echo "✅ Found changes in: $name ($path)"
+                matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+              fi
+            done
+          fi
 
           if [ ${#matrix_items[@]} -eq 0 ]; then
             echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-            echo "any_changed=false" >> $GITHUB_OUTPUT
+            echo "has_services=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No services to scan"
           else
             matrix_json="{\"include\":[$(IFS=,; echo "${matrix_items[*]}")]}"
             echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-            echo "any_changed=true" >> $GITHUB_OUTPUT
+            echo "has_services=true" >> $GITHUB_OUTPUT
+            echo "📋 Matrix prepared with ${#matrix_items[@]} service(s)"
           fi
 
-  black-duck-sca-scan:
-    name: Black Duck SCA Scan
+  black-duck-scan:
+    name: Black Duck Security Scan
     runs-on: openlab
     timeout-minutes: 120
-    needs: [filter-changed-services]
-    if: needs.filter-changed-services.outputs.any_changed == 'true'
+    needs: [prepare-matrix]
+    if: needs.prepare-matrix.outputs.has_services == 'true'
     strategy:
-      matrix: ${{ fromJSON(needs.filter-changed-services.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -109,38 +118,48 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: |
           if [ -f .npmrc ]; then
-            echo "✅ .npmrc found. Replacing GitHub token..."
+            echo ".npmrc found. Replacing GitHub token..."
             sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
           else
-            echo "⚠️ .npmrc not found. Skipping replacement."
+            echo ".npmrc not found. Skipping replacement."
           fi
 
       - name: Install dependencies and pkg (if package.json exists)
         working-directory: ${{ matrix.path }}
         run: |
           if [ -f package.json ]; then
-            echo "📦 Installing dependencies..."
+            echo "Installing dependencies..."
             npm install
             npm install pkg -g
           else
-            echo "⚠️ package.json not found. Skipping npm install."
+            echo "package.json not found. Skipping npm install."
           fi
 
       - name: Run Build (if package.json exists)
         working-directory: ${{ matrix.path }}
         run: |
           if [ -f package.json ]; then
-            echo "🏗️ Running build..."
+            echo "Running build..."
             npm run build
           else
-            echo "⚠️ package.json not found. Skipping build."
+            echo "package.json not found. Skipping build."
           fi
 
       - name: Download Black Duck Detect
         run: |
-          echo "📥 Downloading Black Duck Detect..."
+          echo "Downloading Black Duck Detect..."
           curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ]; then
+            echo "Failed to download Black Duck Detect (curl error $CURL_EXIT_CODE)"
+            exit 1
+          fi
+          if ! [ -s detect10.sh ]; then
+            echo "Downloaded detect10.sh is empty."
+            exit 1
+          fi
           chmod +x detect10.sh
+          echo "Black Duck Detect downloaded successfully"
 
       - name: Run Black Duck Detect
         shell: bash
@@ -151,14 +170,24 @@ jobs:
           SERVICE_NAME="${{ matrix.name }}"
           SERVICE_PATH="${{ matrix.path }}"
 
-          echo "🚀 Starting Black Duck scan for $SERVICE_NAME"
+          echo "🔍 Starting Black Duck scan for: $SERVICE_NAME"
+          echo "📂 Service path: $SERVICE_PATH"
+          echo "🎯 Event type: ${{ github.event_name }}"
 
           CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
-          echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
+          echo "📍 Code location: $CODE_LOCATION_NAME"
 
           if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ $SERVICE_PATH does not exist"
+            echo "❌ Service path $SERVICE_PATH does not exist"
             exit 1
+          fi
+
+          echo "✅ Service path exists, contents:"
+          ls -la "$SERVICE_PATH"
+
+          # Enhanced error handling for nightly scans
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            set +e
           fi
 
           ./detect10.sh \
@@ -185,20 +214,43 @@ jobs:
             --detect.notices.report=false \
             --detect.vulnerability.report=false
 
+          SCAN_EXIT_CODE=$?
+
+          # Handle exit codes based on scan type
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case $SCAN_EXIT_CODE in
+              0)
+                echo "✅ SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
+                ;;
+              *)
+                echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
+                if [ "$SCAN_EXIT_CODE" -gt 2 ] && [ "$SCAN_EXIT_CODE" -ne 11 ]; then
+                  exit $SCAN_EXIT_CODE
+                fi
+                ;;
+            esac
+          else
+            if [ "$SCAN_EXIT_CODE" -eq 0 ]; then
+              echo "✅ SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
+            else
+              echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
+            fi
+          fi
+
   final-summary:
     name: Final Summary
     runs-on: openlab
-    needs: [black-duck-sca-scan, filter-changed-services]
-    if: needs.filter-changed-services.outputs.any_changed == 'true'
+    needs: [black-duck-scan, prepare-matrix]
+    if: always() && needs.prepare-matrix.outputs.has_services == 'true'
     steps:
       - name: Final Summary
-        if: always()
         run: |
           echo ""
-          echo "==================== 📊 Black Duck Scan Final Summary ===================="
-          echo "     
-          echo "  🏷️  Project : $PROJECT_NAME"
-          echo "  🗂️  Version : $VERSION_NAME"
-          echo "  🔗 Black Duck Console: $BLACKDUCK_URL"" 
-          echo "     
+          echo "==================== Black Duck Scan Final Summary ===================="
+          echo ""
+          echo "   Project: $PROJECT_NAME"
+          echo "   Version: $VERSION_NAME"
+          echo "   Event Type: ${{ github.event_name }}"
+          echo "   Black Duck Console: $BLACKDUCK_URL"
+          echo ""
           echo "=========================================================================="
