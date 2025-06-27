@@ -21,127 +21,51 @@ jobs:
     name: Filter Changed Services
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      any_changed: ${{ steps.check.outputs.any_changed }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      any_changed: ${{ steps.set-matrix.outputs.any_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Filter changed paths
-        id: filter
-        uses: dorny/paths-filter@v3
         with:
-          filters: |
-            app_deployment:
-              - 'app-deployment/**'
-            auth_lib:
-              - 'lib/auth-lib/**'
-            jobs_lib:
-              - 'lib/jobs-lib/**'
-            logger_lib:
-              - 'lib/logger-lib/**'
-            admin_service:
-              - 'services/admin-service/**'
-            config_service:
-              - 'services/config-service/**'
-            datamigrator_ui:
-              - 'services/datamigrator-ui/**'
-            db_writer:
-              - 'services/db-writer/**'
-            jobs_service:
-              - 'services/jobs-service/**'
-            keycloak_customizations:
-              - 'services/keycloak-customizations/**'
-            reports_service:
-              - 'services/reports-service/**'
-            worker:
-              - 'services/worker/**'
+          fetch-depth: 0
 
-      - name: Generate matrix for changed services
-        id: generate-matrix
+      - name: Set matrix using git diff
+        id: set-matrix
         run: |
-          matrix_items=()
+          echo "🔍 Detecting changed files..."
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+          echo "$CHANGED_FILES"
 
-          # Define all services with their metadata
-          if [ "${{ steps.filter.outputs.app_deployment }}" = "true" ]; then
-            matrix_items+=('{"name":"App Deployment","path":"app-deployment","filter_output":"app_deployment"}')
-          fi
+          declare -a matrix_items=()
 
-          if [ "${{ steps.filter.outputs.auth_lib }}" = "true" ]; then
-            matrix_items+=('{"name":"Auth Lib","path":"lib/auth-lib","filter_output":"auth_lib"}')
-          fi
+          add_to_matrix() {
+            local name=$1
+            local path=$2
+            if ! printf '%s\n' "${matrix_items[@]}" | grep -q "\"path\":\"$path\""; then
+              matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+            fi
+          }
 
-          if [ "${{ steps.filter.outputs.jobs_lib }}" = "true" ]; then
-            matrix_items+=('{"name":"Jobs Lib","path":"lib/jobs-lib","filter_output":"jobs_lib"}')
-          fi
+          echo "$CHANGED_FILES" | grep -q '^app-deployment/' && add_to_matrix "App Deployment" "app-deployment"
+          echo "$CHANGED_FILES" | grep -q '^lib/auth-lib/' && add_to_matrix "Auth Lib" "lib/auth-lib"
+          echo "$CHANGED_FILES" | grep -q '^lib/jobs-lib/' && add_to_matrix "Jobs Lib" "lib/jobs-lib"
+          echo "$CHANGED_FILES" | grep -q '^lib/logger-lib/' && add_to_matrix "Logger Lib" "lib/logger-lib"
+          echo "$CHANGED_FILES" | grep -q '^services/admin-service/' && add_to_matrix "Admin Service" "services/admin-service"
+          echo "$CHANGED_FILES" | grep -q '^services/config-service/' && add_to_matrix "Config Service" "services/config-service"
+          echo "$CHANGED_FILES" | grep -q '^services/datamigrator-ui/' && add_to_matrix "Datamigrator UI" "services/datamigrator-ui"
+          echo "$CHANGED_FILES" | grep -q '^services/db-writer/' && add_to_matrix "DB Writer" "services/db-writer"
+          echo "$CHANGED_FILES" | grep -q '^services/jobs-service/' && add_to_matrix "Jobs Service" "services/jobs-service"
+          echo "$CHANGED_FILES" | grep -q '^services/keycloak-customizations/' && add_to_matrix "Keycloak Customizations" "services/keycloak-customizations"
+          echo "$CHANGED_FILES" | grep -q '^services/reports-service/' && add_to_matrix "Reports Service" "services/reports-service"
+          echo "$CHANGED_FILES" | grep -q '^services/worker/' && add_to_matrix "Worker" "services/worker"
 
-          if [ "${{ steps.filter.outputs.logger_lib }}" = "true" ]; then
-            matrix_items+=('{"name":"Logger Lib","path":"lib/logger-lib","filter_output":"logger_lib"}')
-          fi
+          matrix_json="{\"include\":[$(printf "%s\n" "${matrix_items[@]}" | paste -sd "," -)]}"
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
 
-          if [ "${{ steps.filter.outputs.admin_service }}" = "true" ]; then
-            matrix_items+=('{"name":"Admin Service","path":"services/admin-service","filter_output":"admin_service"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.config_service }}" = "true" ]; then
-            matrix_items+=('{"name":"Config Service","path":"services/config-service","filter_output":"config_service"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.datamigrator_ui }}" = "true" ]; then
-            matrix_items+=('{"name":"Datamigrator UI","path":"services/datamigrator-ui","filter_output":"datamigrator_ui"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.db_writer }}" = "true" ]; then
-            matrix_items+=('{"name":"DB Writer","path":"services/db-writer","filter_output":"db_writer"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.jobs_service }}" = "true" ]; then
-            matrix_items+=('{"name":"Jobs Service","path":"services/jobs-service","filter_output":"jobs_service"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.keycloak_customizations }}" = "true" ]; then
-            matrix_items+=('{"name":"Keycloak Customizations","path":"services/keycloak-customizations","filter_output":"keycloak_customizations"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.reports_service }}" = "true" ]; then
-            matrix_items+=('{"name":"Reports Service","path":"services/reports-service","filter_output":"reports_service"}')
-          fi
-
-          if [ "${{ steps.filter.outputs.worker }}" = "true" ]; then
-            matrix_items+=('{"name":"Worker","path":"services/worker","filter_output":"worker"}')
-          fi
-
-          # Build the matrix JSON
           if [ ${#matrix_items[@]} -eq 0 ]; then
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-          else
-            # Join array elements with commas
-            IFS=','
-            matrix_json="{\"include\":[${matrix_items[*]}]}"
-            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-          fi
-
-          echo "Generated matrix: $matrix_json"
-
-      - name: Check for any changed service/lib
-        id: check
-        run: |
-          if [ \
-            "${{ steps.filter.outputs.app_deployment }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.auth_lib }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.jobs_lib }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.logger_lib }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.admin_service }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.config_service }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.datamigrator_ui }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.db_writer }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.jobs_service }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.keycloak_customizations }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.reports_service }}" = "true" ] || \
-            [ "${{ steps.filter.outputs.worker }}" = "true" ]; then
-            echo "any_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No relevant service/lib changed. Exiting workflow."
             echo "any_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "any_changed=true" >> $GITHUB_OUTPUT
           fi
 
   black-duck-sca-scan:
@@ -155,16 +79,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "${{ env.NODE_VERSION }}"
           registry-url: "https://npm.pkg.github.com"
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "${{ env.JAVA_VERSION }}"
+
       - name: Replace GitHub Token Placeholder in .npmrc (if exists)
         working-directory: ${{ matrix.path }}
         run: |
@@ -174,6 +101,7 @@ jobs:
           else
             echo "⚠️ .npmrc not found. Skipping replacement."
           fi
+
       - name: Install dependencies and pkg (if package.json exists)
         working-directory: ${{ matrix.path }}
         run: |
@@ -184,6 +112,7 @@ jobs:
           else
             echo "⚠️ package.json not found. Skipping npm install."
           fi
+
       - name: Run Build (if package.json exists)
         working-directory: ${{ matrix.path }}
         run: |
@@ -193,6 +122,7 @@ jobs:
           else
             echo "⚠️ package.json not found. Skipping build."
           fi
+
       - name: Download Black Duck Detect
         run: |
           echo "📥 Downloading Black Duck Detect..."
@@ -208,6 +138,7 @@ jobs:
           fi
           chmod +x detect10.sh
           echo "✅ Black Duck Detect downloaded successfully"
+
       - name: Run Black Duck Detect
         shell: bash
         env:
@@ -216,7 +147,7 @@ jobs:
         run: |
           SERVICE_NAME="${{ matrix.name }}"
           SERVICE_PATH="${{ matrix.path }}"
-          echo "🚀🚀🚀🚀 Starting Black Duck scan for $SERVICE_NAME...🚀🚀🚀🚀"
+          echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
 
           CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
           echo "Code location: $CODE_LOCATION_NAME"
@@ -225,7 +156,7 @@ jobs:
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
 
           if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ ❌ ❌ ❌ Service path $SERVICE_PATH does not exist ❌ ❌ ❌ ❌ "
+            echo "❌ Service path $SERVICE_PATH does not exist"
             exit 1
           fi
 
@@ -263,7 +194,7 @@ jobs:
 
           case $SCAN_EXIT_CODE in
             0)
-              echo "✅ ✅ ✅ ✅ ✅ SUCCESS: Black Duck scan completed successfully for service $SERVICE_NAME ✅ ✅ ✅ ✅ ✅  "
+              echo "✅ SUCCESS: Black Duck scan completed for $SERVICE_NAME"
               ;;
             *)
               echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
@@ -281,12 +212,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Upload all Black Duck Reports
         uses: actions/upload-artifact@v4
         with:
           name: blackduck-reports-all-${{ github.run_id }}
           path: blackduck-output/
           retention-days: 30
+
       - name: Final Summary
         if: always()
         run: |
