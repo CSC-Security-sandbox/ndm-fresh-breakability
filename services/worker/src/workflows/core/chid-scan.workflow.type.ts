@@ -4,6 +4,7 @@ export interface ChildScanWorkflowInput {
     batchSize: number;
     fileCount: number;
     dirCount: number;
+    isMigration: boolean;
 }
 
 export interface ChildScanWorkflowOutput {

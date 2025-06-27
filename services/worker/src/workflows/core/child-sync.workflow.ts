@@ -1,12 +1,12 @@
 
 import { proxyActivities, log } from '@temporalio/workflow';
 import { JobRunStatus } from "src/activities/discovery/enums";
-import { MigrateSyncService } from "src/activities/migrate/core/migrate-sync.service";
-import { isScanCompletedSignal } from "./sync.workflow";
+import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
+import { isScanCompletedSignal } from "../migration/core/sync.workflow";
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
-import { MigrateCommonService } from 'src/activities/migrate/migrate-common.service';
 import { FatalError, RetryableError } from 'src/errors/errors.types';
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 
 interface SyncWorkflowOutput{
     jobRunId: string;
@@ -32,8 +32,8 @@ const {
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
-}= proxyActivities<MigrateCommonService>({
-    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+}= proxyActivities<CommonTaskService>({
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'] },
     startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
 
@@ -92,22 +92,14 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
                     const output = await SyncTaskActivity({ jobRunId, taskId });
                     console.debug(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
-                } catch (error) {
-                    if(error instanceof FatalError)  {
-                        console.error(`FatalError occurred for taskId: ${taskId} with error: ${error.message}`);
-                        //TODO: add activity to shutdown the worker with workerId. 
-                        throw wf.ApplicationFailure.nonRetryable(error.message);
-
+                } catch (error)  {
+                    if(error instanceof wf.ActivityFailure)  {
+                        console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
+                        return { taskId, error: error.message };
                     }
-                    //TODO: do we need to try this error? workflow level there is no retry.  
-                    // we only need to capture the ActivityFailure error here.
-                    if(error instanceof RetryableError) {
-                        console.error(`RetryableError occurred for taskId: ${taskId} with error: ${error.message}`);                        
-                        throw wf.ApplicationFailure.retryable(error.message);
-                    }
-                    console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
-                    return { taskId, error: error.message };
-                }
+                    throw error
+                    // TODO: handle FatalError 
+                }    
             })
         )
         failedTasks = results.filter(result => result.error);        

@@ -1,18 +1,13 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { RedisService } from "src/redis/redis.service";
-import { buildTask, generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
-import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
-import axios from 'axios';
-import { JobRunStatus } from "../discovery/enums";
+import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import { Command, CommandStatus, GroupReaderType, JobContext, JobStatus, OPS_CMD, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { HttpService } from "@nestjs/axios";
+import axios from 'axios';
 import { AuthService } from "src/auth/auth.service";
-import { BuildOrGetScanTaskInput } from "./common.types";
-import { uuid4 } from '@temporalio/workflow';
-import { RetryExceededError } from "src/errors/errors.types";
-import { handleInitTaskInput } from "../migrate/core/migrate-sync.types";
+import { RedisService } from "src/redis/redis.service";
+import { JobRunStatus } from "../discovery/enums";
+import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
+import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
 
 @Injectable()
 export class CommonActivityService{
@@ -238,34 +233,5 @@ export class CommonActivityService{
     const jobContext = await this.redisService.getJobContext(jobRunId);
     return !(await jobContext.isRunningSyncTaskEmpty());
   }
-
-
-  async buildOrGetValidScanTask({dirToScans, jobContext , taskHashId , jobRunId}: BuildOrGetScanTaskInput): Promise<Task> {
-    let task: Task | undefined = await jobContext.getTask(taskHashId);
-    if(!task) {
-      const commands: Command[] = dirToScans.map(dir => new Command(dir, {}, `${uuid4()}`,0));
-      task =  buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
-      await jobContext.setTaskIfNotExists(taskHashId, task);
-    }
-    task = await this.ensureTaskValid({task, jobContext});
-    return task;
-  }
-
-
-  async ensureTaskValid({task, jobContext}: handleInitTaskInput) : Promise<Task> {
-      let retryCount = 0;
-      for (let i = 0; i < task.commands.length; i++) {
-        retryCount = Math.max(retryCount, task.commands[i].retryCount);
-        if (task.commands[i].status !== CommandStatus.COMPLETED)
-          task.commands[i].status = CommandStatus.IN_PROCESS
-      }
-  
-      if (retryCount >= this.maxRetryCount) {
-        task.status = TaskStatus.ERRORED;
-        await jobContext.publishToTaskStream(task);
-        throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
-      }
-      return task;
-    }
 
 }
