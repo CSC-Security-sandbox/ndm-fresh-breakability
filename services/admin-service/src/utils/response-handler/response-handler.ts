@@ -4,30 +4,49 @@ import {
   ErrorCatalog,
   MessageCatalog,
 } from './response-interface';
+import { Request } from 'express';
 
-export const setMessage = <T, msg extends string>(message, data: T): msg => {
+export const setMessage = <T, msg extends string>(req, data: T): msg => {
   let responseMessage = 'Request Processed Successfully';
-  if (message) {
-    const functionality = message.split('/').pop()!;
-
-    if (!!data['user_status']) {
+  if (req.route.path) {
+    const segments = req.route.path.split('/');
+    console.log('segments', segments);
+    const functionality = segments[segments.length - 1] || '';
+    const parentFunctionality =
+      segments[segments.length - 2] + functionality || '';
+    console.log(
+      'data inside the set Message ',
+      functionality,
+      parentFunctionality,
+      req.method,
+    );
+    if (!!data && !!data['user_status']) {
       let state =
         !!data['user_status'] && data['user_status'] === 'active'
           ? 'Enabled'
           : 'Disabled';
       let email = data['email'] || '';
-      responseMessage = MessageCatalog[functionality](state, email).message;
+      responseMessage = MessageCatalog[functionality](state, email).message; //||
+      // MessageCatalog[parentFunctionality](req.method).message;
     } else if (typeof data === 'object' && (data as any).message) {
       responseMessage = (data as any).message;
-    } else if (MessageCatalog[functionality]?.message) {
-      responseMessage = MessageCatalog[functionality]?.message;
+    } else {
+      console.log(
+        'Data inside the set MessageCatalog[parentFunctionality]?.message ',
+        req.method,
+        //  MessageCatalog[parentFunctionality](req.method).message,
+      );
+      responseMessage =
+        MessageCatalog[functionality]?.message ||
+        //MessageCatalog[parentFunctionality](req.method).message ||
+        responseMessage;
     }
   }
   return responseMessage as msg;
 };
 export class ResponseHandler {
-  static success<T, msg extends string>(data: T, message: msg): ApiResponse<T> {
-    message = setMessage(message, data);
+  static success<T, request>(data: T, request: Request): ApiResponse<T> {
+    const message = setMessage(request, data);
     let responseData: any = {};
     if (Array.isArray(data)) {
       responseData.items = [...data];

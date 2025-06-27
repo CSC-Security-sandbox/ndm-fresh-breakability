@@ -18,13 +18,19 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
 
     return next.handle().pipe(
       map((data) => {
-        console.log('Responseee', data);
-        return ResponseHandler.success(data, request.route.path);
+        // console.log('Responseee', request.method);
+        return ResponseHandler.success(data, request);
       }),
       catchError((err) => {
         let statusCode =
           err?.response?.statusCode || HTTPStatusCode[err.code] || 500;
-        console.log('Error in ResponseInterceptor:', err);
+        console.log(
+          'Error in ResponseInterceptor:',
+          err.response,
+          err.statusCode,
+          err.status,
+          err.message,
+        );
         const errorResponse = ResponseHandler.error(err);
         response.status(statusCode).json(errorResponse);
         return throwError(() => response); // Optional: rethrow if needed for logging
