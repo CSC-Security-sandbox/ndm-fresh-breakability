@@ -1,4 +1,4 @@
 export enum ExportPathSource {
-    SHOW_MOUNT = 'SHOW_MOUNT',
+    AUTO_DISCOVER = 'AUTO_DISCOVER',
     MANUAL_UPLOAD = 'MANUAL_UPLOAD',
 }

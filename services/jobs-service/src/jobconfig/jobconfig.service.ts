@@ -1114,7 +1114,7 @@ export class JobConfigService {
           },
         },
       },
-      where: { id: projectId },
+      where: { id: projectId, configs: { fileServers: { volumes: { isValid: true, isDisabled: false } }} },
       relations: {
         configs: {
           fileServers: {

@@ -55,11 +55,17 @@ export class PathUploadService {
       const parsedData = importVolumePathsDto.contents.split('\n').map(line => line.split(','));
       // check if the first line exists and is "path" if not return error if yes remove it
       if (parsedData.length === 0 || !parsedData[0][0].startsWith('path')) {
-        throw new BadRequestException('CSV file is empty or does not contain valid data');
+        throw new BadRequestException('CSV file is empty or does not contain valid data. The first line should contain "path" as the header.');
       }
       // If the first line is "path" then remove it
       if (parsedData[0][0].startsWith('path')) parsedData.shift();
       const fileName = importVolumePathsDto.fileName || null;
+
+      // parsedData should contain at least one row after removing the header
+      if (!parsedData.length) {
+        throw new BadRequestException('CSV file is empty or does not contain valid export paths.');
+      }
+
 
       const uploadStats = {
         newPaths: 0,
@@ -165,7 +171,7 @@ export class PathUploadService {
         else enabledPaths.push(path.volumePath);
       }
       await this.volumeRepo.update({ fileServerId: fileServer.id, volumePath: In(disabledPaths) }, { isDisabled: true });
-      await this.volumeRepo.update({ fileServerId: fileServer.id, volumePath: In(enabledPaths) }, { isDisabled: false, isValid: false, });
+      await this.volumeRepo.update({ fileServerId: fileServer.id, volumePath: In(enabledPaths) }, { isDisabled: false });
 
       const traceId = uploadId;
       const startWorkFlowPayload: StartWorkFlowPayload = {

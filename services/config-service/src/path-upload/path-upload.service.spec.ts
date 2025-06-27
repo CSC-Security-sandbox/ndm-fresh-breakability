@@ -109,7 +109,7 @@ describe('PathUploadService', () => {
         fileSize: 1024,
       };
       const fileServer = new FileServerEntity();
-      fileServer.exportPathSource = ExportPathSource.SHOW_MOUNT;
+      fileServer.exportPathSource = ExportPathSource.AUTO_DISCOVER;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
       await expect(service.processFileUpload(dto, fileServer.id)).rejects.toThrow(`File server with ID ${fileServer.id} is not configured for manual import`);
     });

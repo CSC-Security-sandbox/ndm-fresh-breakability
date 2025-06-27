@@ -1,1 +1,1 @@
-ALTER TABLE file_server ADD COLUMN IF NOT EXISTS export_path_source varchar(20);
+ALTER TABLE file_server ADD COLUMN IF NOT EXISTS export_path_source VARCHAR(20) DEFAULT 'AUTO_DISCOVER';

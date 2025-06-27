@@ -47,4 +47,8 @@ export class VolumeEntity extends Base {
     @ApiProperty({ description: 'isValid' })
     @Column({ type: 'boolean', nullable: true, default: true, name: 'is_valid' })
     isValid: boolean;
+
+    @ApiProperty({ description: 'isDisabled' })
+    @Column({ type: 'boolean', nullable: true, default: true, name: 'is_disabled' })
+    isDisabled: boolean;
 }

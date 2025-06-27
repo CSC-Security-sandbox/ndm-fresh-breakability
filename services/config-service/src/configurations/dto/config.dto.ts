@@ -71,7 +71,7 @@ export class FileServersDTO {
     @ValidateIf(o => o.protocol === Protocol.NFS)
     @IsEnum(ExportPathSource)
     @IsOptional()
-    @ApiProperty({ description: 'Export Path Source', enum: ExportPathSource, example: ExportPathSource.SHOW_MOUNT })
+    @ApiProperty({ description: 'Export Path Source', enum: ExportPathSource, example: ExportPathSource.AUTO_DISCOVER })
     exportPathSource?: ExportPathSource;
 }
 
