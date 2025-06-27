@@ -46,25 +46,38 @@ jobs:
             fi
           }
 
-          echo "$CHANGED_FILES" | grep -q '^app-deployment/' && add_to_matrix "App Deployment" "app-deployment"
-          echo "$CHANGED_FILES" | grep -q '^lib/auth-lib/' && add_to_matrix "Auth Lib" "lib/auth-lib"
-          echo "$CHANGED_FILES" | grep -q '^lib/jobs-lib/' && add_to_matrix "Jobs Lib" "lib/jobs-lib"
-          echo "$CHANGED_FILES" | grep -q '^lib/logger-lib/' && add_to_matrix "Logger Lib" "lib/logger-lib"
-          echo "$CHANGED_FILES" | grep -q '^services/admin-service/' && add_to_matrix "Admin Service" "services/admin-service"
-          echo "$CHANGED_FILES" | grep -q '^services/config-service/' && add_to_matrix "Config Service" "services/config-service"
-          echo "$CHANGED_FILES" | grep -q '^services/datamigrator-ui/' && add_to_matrix "Datamigrator UI" "services/datamigrator-ui"
-          echo "$CHANGED_FILES" | grep -q '^services/db-writer/' && add_to_matrix "DB Writer" "services/db-writer"
-          echo "$CHANGED_FILES" | grep -q '^services/jobs-service/' && add_to_matrix "Jobs Service" "services/jobs-service"
-          echo "$CHANGED_FILES" | grep -q '^services/keycloak-customizations/' && add_to_matrix "Keycloak Customizations" "services/keycloak-customizations"
-          echo "$CHANGED_FILES" | grep -q '^services/reports-service/' && add_to_matrix "Reports Service" "services/reports-service"
-          echo "$CHANGED_FILES" | grep -q '^services/worker/' && add_to_matrix "Worker" "services/worker"
+          # Define matrix: key:path-pattern
+          declare -a PATH_MATRIX=(
+            "app_deployment:app-deployment/"
+            "auth_lib:lib/auth-lib/"
+            "jobs_lib:lib/jobs-lib/"
+            "logger_lib:lib/logger-lib/"
+            "admin_service:services/admin-service/"
+            "config_service:services/config-service/"
+            "datamigrator_ui:services/datamigrator-ui/"
+            "db_writer:services/db-writer/"
+            "jobs_service:services/jobs-service/"
+            "keycloak_customizations:services/keycloak-customizations/"
+            "reports_service:services/reports-service/"
+            "worker:services/worker/"
+          )
 
-          matrix_json="{\"include\":[$(printf "%s\n" "${matrix_items[@]}" | paste -sd "," -)]}"
-          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          for entry in "${PATH_MATRIX[@]}"; do
+            KEY="${entry%%:*}"
+            PATH_PREFIX="${entry##*:}"
+            NAME="$(echo "$KEY" | sed -r 's/_/ /g; s/\b(.)/\u\1/g')"  # Convert to Title Case
+
+            if echo "$CHANGED_FILES" | grep -q "^$PATH_PREFIX"; then
+              add_to_matrix "$NAME" "${PATH_PREFIX%/}"
+            fi
+          done
 
           if [ ${#matrix_items[@]} -eq 0 ]; then
+            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
             echo "any_changed=false" >> $GITHUB_OUTPUT
           else
+            matrix_json="{\"include\":[$(IFS=,; echo "${matrix_items[*]}")]}"
+            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
             echo "any_changed=true" >> $GITHUB_OUTPUT
           fi
 
@@ -127,17 +140,7 @@ jobs:
         run: |
           echo "📥 Downloading Black Duck Detect..."
           curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
-          CURL_EXIT_CODE=$?
-          if [ $CURL_EXIT_CODE -ne 0 ]; then
-            echo "Failed to download Black Duck Detect (curl error $CURL_EXIT_CODE)"
-            exit 1
-          fi
-          if ! [ -s detect10.sh ]; then
-            echo "❌ Downloaded detect10.sh is empty."
-            exit 1
-          fi
           chmod +x detect10.sh
-          echo "✅ Black Duck Detect downloaded successfully"
 
       - name: Run Black Duck Detect
         shell: bash
@@ -147,23 +150,17 @@ jobs:
         run: |
           SERVICE_NAME="${{ matrix.name }}"
           SERVICE_PATH="${{ matrix.path }}"
-          echo "🚀 Starting Black Duck scan for $SERVICE_NAME..."
+
+          echo "🚀 Starting Black Duck scan for $SERVICE_NAME"
 
           CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
-          echo "Code location: $CODE_LOCATION_NAME"
-          echo "Version: $VERSION_NAME"
-
           echo "CODE_LOCATION_NAME=$CODE_LOCATION_NAME" >> $GITHUB_ENV
 
           if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ Service path $SERVICE_PATH does not exist"
+            echo "❌ $SERVICE_PATH does not exist"
             exit 1
           fi
 
-          echo "✅ Service path $SERVICE_PATH exists"
-          ls -la "$SERVICE_PATH"
-
-          set +e
           ./detect10.sh \
             --detect.project.name="$PROJECT_NAME" \
             --blackduck.url="$BLACKDUCK_URL" \
@@ -188,56 +185,21 @@ jobs:
             --detect.notices.report=false \
             --detect.vulnerability.report=false
 
-          SCAN_EXIT_CODE=$?
-
-          echo "SCAN_EXIT_CODE=$SCAN_EXIT_CODE" >> $GITHUB_ENV
-
-          case $SCAN_EXIT_CODE in
-            0)
-              echo "✅ SUCCESS: Black Duck scan completed for $SERVICE_NAME"
-              ;;
-            *)
-              echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
-              if [ "$SCAN_EXIT_CODE" -gt 2 ] && [ "$SCAN_EXIT_CODE" -ne 11 ]; then
-                exit $SCAN_EXIT_CODE
-              fi
-              ;;
-          esac
-
-  upload-artifacts:
-    name: Upload All Black Duck Reports
+  final-summary:
+    name: Final Summary
     runs-on: openlab
     needs: [black-duck-sca-scan, filter-changed-services]
     if: needs.filter-changed-services.outputs.any_changed == 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Upload all Black Duck Reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: blackduck-reports-all-${{ github.run_id }}
-          path: blackduck-output/
-          retention-days: 30
-
       - name: Final Summary
         if: always()
         run: |
           echo ""
           echo "==================== 📊 Black Duck Scan Final Summary ===================="
-          echo ""
           echo "  🏷️  Project : $PROJECT_NAME"
           echo "  🗂️  Version : $VERSION_NAME"
-          echo "  📅 Date    : $(date)"
-          echo ""
           echo "  📁 Reports Artifact Path:"
           echo "     ${{ github.workspace }}/blackduck-output/"
-          echo ""
           echo "  🔗 Black Duck Console:"
           echo "     $BLACKDUCK_URL"
-          echo ""
-          echo "  📄 All Black Duck reports have been uploaded as GitHub artifacts."
-          echo "  📝 Deep analysis data has been uploaded to the Black Duck server."
-          echo "  🕒 Full reports will be available in the Black Duck web interface once server processing completes."
-          echo ""
           echo "=========================================================================="
