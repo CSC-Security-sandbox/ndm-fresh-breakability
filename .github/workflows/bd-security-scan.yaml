@@ -7,14 +7,12 @@ on:
   pull_request:
     branches:
       - main
-
-permissions:
-  contents: read
+      - sm/bd-action-workflow
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  PROJECT_NAME: NetApp Data Migrator
-  VERSION_NAME: 25.08_preview
+  PROJECT_NAME: Test_NDM
+  VERSION_NAME: test_v3
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   NODE_VERSION: 22.15.0
