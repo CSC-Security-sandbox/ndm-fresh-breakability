@@ -13,6 +13,8 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
+import { validateFilePath } from 'src/utils/utils';
+
 @Injectable()
 export class DiscoveryService {
   private logger: Logger = new Logger(DiscoveryService.name);
@@ -40,6 +42,15 @@ export class DiscoveryService {
       }
 
       this.logger.log("procedure started")
+      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
+      const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
+      if (!validateFilePath(pdfFilePath)) {
+        this.logger.error(`File path contains invalid characters: ${pdfFilePath}`);
+        throw new Error('File path contains invalid characters.');
+      } else {
+        this.logger.log(`File path validation passed: ${pdfFilePath}`);
+      }
+
       const startTime = Date.now();
       await this.inventoryRepo.query(
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
@@ -63,9 +74,7 @@ export class DiscoveryService {
       this.formatAndWriteToFile(reportData, csvFilePath);
 
       const pdfBuffer = await this.generatePdfFromData(reportData);
-      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
-      const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
-      fs.writeFileSync(pdfFilePath, pdfBuffer);
+      fs.writeFileSync(pdfFilePath, pdfBuffer); 
 
       return {
         message: "Report generated successfully",
@@ -186,6 +195,12 @@ export class DiscoveryService {
   }
 
  formatAndWriteToFile(reportData: any[], filePath: string) {
+  if (!validateFilePath(filePath)) {
+    this.logger.error(`File path contains invalid characters: ${filePath}`);
+    throw new Error('File path contains invalid characters.');
+  } else {
+    this.logger.log(`File path validation passed: ${filePath}`);
+  }
   const predefinedHeaders = Object.values(ReportHeaders);
   const dynamicHeaders = new Set<string>();
       if (reportData && reportData.length > 0) {
@@ -216,7 +231,7 @@ export class DiscoveryService {
 
   const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
 
-  fs.writeFileSync(filePath, csvContent);
+  fs.writeFileSync(filePath, csvContent); 
   console.log(`Data has been written to ${filePath}`);
 }
 
