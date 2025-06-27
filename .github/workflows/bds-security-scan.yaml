@@ -3,7 +3,6 @@ name: BDS Security Scan
 on:
   schedule:
     - cron: "30 18 * * *"
-  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -54,8 +53,10 @@ jobs:
 
           declare -a matrix_items=()
 
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "🌙 Nightly/Manual scan - including all services"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "=================================================="
+            echo "Nightly scan - including all services"
+            echo "=================================================="
             # For nightly scans, include all services
             for service in "${ALL_SERVICES[@]}"; do
               name="${service%%:*}"
@@ -63,7 +64,9 @@ jobs:
               matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
             done
           else
-            echo "🔍 PR scan - detecting changed files..."
+            echo "=================================================="
+            echo "PR scan - detecting changed files..."
+            echo "=================================================="
             CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
             echo "$CHANGED_FILES"
 
@@ -73,7 +76,7 @@ jobs:
               path="${service##*:}"
               
               if echo "$CHANGED_FILES" | grep -q "^$path/"; then
-                echo "✅ Found changes in: $name ($path)"
+                echo "Found changes in: $name ($path)"
                 matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
               fi
             done
@@ -82,18 +85,18 @@ jobs:
           if [ ${#matrix_items[@]} -eq 0 ]; then
             echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
             echo "has_services=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No services to scan"
+            echo "No services to scan"
           else
             matrix_json="{\"include\":[$(IFS=,; echo "${matrix_items[*]}")]}"
             echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
             echo "has_services=true" >> $GITHUB_OUTPUT
-            echo "📋 Matrix prepared with ${#matrix_items[@]} service(s)"
+            echo "Matrix prepared with ${#matrix_items[@]} service(s)"
           fi
 
   black-duck-scan:
     name: Black Duck Security Scan
     runs-on: openlab
-    timeout-minutes: 120
+    timeout-minutes: 180
     needs: [prepare-matrix]
     if: needs.prepare-matrix.outputs.has_services == 'true'
     strategy:
@@ -103,13 +106,13 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "${{ env.NODE_VERSION }}"
           registry-url: "https://npm.pkg.github.com"
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
         with:
           distribution: temurin
           java-version: "${{ env.JAVA_VERSION }}"
@@ -119,7 +122,7 @@ jobs:
         run: |
           if [ -f .npmrc ]; then
             echo ".npmrc found. Replacing GitHub token..."
-            sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+            sed -i "s|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|" .npmrc
           else
             echo ".npmrc not found. Skipping replacement."
           fi
@@ -170,25 +173,20 @@ jobs:
           SERVICE_NAME="${{ matrix.name }}"
           SERVICE_PATH="${{ matrix.path }}"
 
-          echo "🔍 Starting Black Duck scan for: $SERVICE_NAME"
-          echo "📂 Service path: $SERVICE_PATH"
-          echo "🎯 Event type: ${{ github.event_name }}"
+          echo "Starting Black Duck scan for: $SERVICE_NAME"
+          echo "Service path: $SERVICE_PATH"
+          echo "Event type: ${{ github.event_name }}"
 
           CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
-          echo "📍 Code location: $CODE_LOCATION_NAME"
+          echo "Code location: $CODE_LOCATION_NAME"
 
           if [ ! -d "$SERVICE_PATH" ]; then
-            echo "❌ Service path $SERVICE_PATH does not exist"
+            echo "Service path $SERVICE_PATH does not exist"
             exit 1
           fi
 
-          echo "✅ Service path exists, contents:"
+          echo "Service path exists, contents:"
           ls -la "$SERVICE_PATH"
-
-          # Enhanced error handling for nightly scans
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            set +e
-          fi
 
           ./detect10.sh \
             --detect.project.name="$PROJECT_NAME" \
@@ -207,8 +205,8 @@ jobs:
             --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
             --detect.cleanup.bdio.files=false \
             --detect.accuracy.required=NONE \
-            --blackduck.timeout=7200 \
-            --detect.timeout=14400 \
+            --blackduck.timeout=3600   \
+            --detect.timeout=9000  \
             --detect.wait.for.results=false \
             --detect.risk.report.pdf=false \
             --detect.notices.report=false \
@@ -216,41 +214,9 @@ jobs:
 
           SCAN_EXIT_CODE=$?
 
-          # Handle exit codes based on scan type
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            case $SCAN_EXIT_CODE in
-              0)
-                echo "✅ SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
-                ;;
-              *)
-                echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
-                if [ "$SCAN_EXIT_CODE" -gt 2 ] && [ "$SCAN_EXIT_CODE" -ne 11 ]; then
-                  exit $SCAN_EXIT_CODE
-                fi
-                ;;
-            esac
+          if [ "$SCAN_EXIT_CODE" -eq 0 ]; then
+            echo "SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
           else
-            if [ "$SCAN_EXIT_CODE" -eq 0 ]; then
-              echo "✅ SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
-            else
-              echo "⚠️ Scan completed with exit code: $SCAN_EXIT_CODE"
-            fi
+            echo "Scan failed with exit code: $SCAN_EXIT_CODE"
+            exit $SCAN_EXIT_CODE
           fi
-
-  final-summary:
-    name: Final Summary
-    runs-on: openlab
-    needs: [black-duck-scan, prepare-matrix]
-    if: always() && needs.prepare-matrix.outputs.has_services == 'true'
-    steps:
-      - name: Final Summary
-        run: |
-          echo ""
-          echo "==================== Black Duck Scan Final Summary ===================="
-          echo ""
-          echo "   Project: $PROJECT_NAME"
-          echo "   Version: $VERSION_NAME"
-          echo "   Event Type: ${{ github.event_name }}"
-          echo "   Black Duck Console: $BLACKDUCK_URL"
-          echo ""
-          echo "=========================================================================="
