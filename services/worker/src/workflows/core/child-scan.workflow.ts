@@ -1,13 +1,14 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
+import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
-import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
-import { ChildScanWorkflowInput } from "./chid-scan.workflow.type";
 import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
+import { ChildScanWorkflowInput } from './chid-scan.workflow.type';
 
 
 const {
   updateStatus: updateJobStatusActivity,
+   updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
@@ -15,7 +16,7 @@ const {
 
 const {
     scanDirectories: scanDirectories,
-} = wf.proxyActivities<MigrateScanService>({
+} = wf.proxyActivities<ScanService>({
     retry:{
         maximumAttempts: 3,
         initialInterval: '10s',
@@ -35,7 +36,7 @@ interface ScanWorkflowOutput{
   error?: string;
 }
 
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0}: ChildScanWorkflowInput): Promise<ScanWorkflowOutput> => {
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false}: ChildScanWorkflowInput): Promise<ScanWorkflowOutput> => {
   
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
 
@@ -65,21 +66,15 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     const results = await Promise.all(
       batches.map(async (dirs) =>{
         try{
-            return await scanDirectories({jobRunId, dirsToScan: dirs});
+            return await scanDirectories({jobRunId, dirsToScan: dirs, isMigration});
         }catch(error){
-            wf.log.error(`Error scanning directories: ${error}`);
-            errors.push(error.message || 'Activity failed error');
-             if(error instanceof FatalError || error instanceof RetryExceededError) { 
-                console.error(`FatalError occurred for taskId: ${jobRunId} with error: ${error.message}`);
-                //TODO: add activity to shutdown the worker with workerId. 
-                throw wf.ApplicationFailure.nonRetryable(error.message);
-              }
-              // if
-            if(error instanceof RetryableError) {
-                console.error(`RetryableError occurred for taskId: ${jobRunId} with error: ${error.message}`);                        
-                throw wf.ApplicationFailure.retryable(error.message);
-            }
-            return { jobRunId, fileCount: 0, dirCount: 0, subDirs: [], error: error.message || 'Activity failed error' };
+            if(error instanceof wf.ActivityFailure)  {
+              console.error(`Activity failed for jobRunId: ${jobRunId}, dirs: ${dirs}, error: ${error.message}`);
+              errors.push(`Activity failed for jobRunId: ${jobRunId}, dirs: ${dirs}, error: ${error.message}`);
+             return { jobRunId, fileCount: 0, dirCount: 0, subDirs: [], error: error.message || 'Activity failed error' };
+          }
+          throw error
+          // TODO: handle error
         }
       }));
 
@@ -94,6 +89,8 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   }
   scanWorkflowOutput.status = JobRunStatus.Completed;
   scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
+  if(!isMigration)
+     await updateLastEntryActivity(jobRunId)
   return  scanWorkflowOutput;
 }
 

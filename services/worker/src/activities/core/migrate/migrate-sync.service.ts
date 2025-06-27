@@ -5,16 +5,17 @@ import { Context } from '@temporalio/activity';
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { CommonActivityService } from 'src/activities/common/common.service';
 import { ShellService } from 'src/activities/common/shell.service';
 import { ACL, getFileInfoInput, Operation, Origin } from 'src/activities/utils/utils.types';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
+import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
+import { OPS_CMD, } from '../../migrate/migrate.type';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../../utils/utils';
-import { OPS_CMD, } from '../migrate.type';
-import { handleInitTaskInput, handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
-import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
-import { CommonActivityService } from 'src/activities/common/common.service';
+import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
+import { CommonTaskService } from '../common/common-task.service';
 
 
 // const isRandomTrue = (probability: number) => {
@@ -37,7 +38,7 @@ export class MigrateSyncService {
     private readonly redisService: RedisService,
     private readonly shellService: ShellService,
     private readonly workerThreadService: WorkerThreadService,
-    private readonly commonService: CommonActivityService
+    private readonly commonTaskService: CommonTaskService
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -288,7 +289,7 @@ export class MigrateSyncService {
         return syncOutput;
       }
       this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
-      task = await this.commonService.ensureTaskValid({ task, jobContext });
+      task = await this.commonTaskService.ensureTaskValid({ task, jobContext });
       task.status = TaskStatus.RUNNING;
       task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
@@ -373,6 +374,7 @@ export class MigrateSyncService {
         sid
       }
   }
+  // TODO: can be this depricated in future
   getSID = async (filePath: string) => {
     const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
     return await this.shellService.runCommand(getSIDCommand);

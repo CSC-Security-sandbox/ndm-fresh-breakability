@@ -5,6 +5,7 @@ import { JobRunStatus } from 'src/activities/discovery/enums';
 import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
 import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { CleanupWorkerWorkflow } from "src/workflows/workflows";
+
 interface MigrationWorkflowInput {
   traceId: string;
   payload: {
@@ -116,7 +117,7 @@ export const MigrationWorkflow = async ({
 
   // scan workflow
   scanWorkflow = await wf.startChild('ChildScanWorkflow', {
-    args: [ { jobRunId: traceId, workers:workFlowStatus.setupCompletedWorkers, failedWorkers: [] } ],
+    args: [ { jobRunId: traceId, workers:workFlowStatus.setupCompletedWorkers, failedWorkers: [] , isMigration: true } ],
     workflowId: `ScanWorkflow-${traceId}`,
     taskQueue: `${traceId}-TaskQueue`,
     cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

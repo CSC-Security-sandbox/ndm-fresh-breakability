@@ -1,25 +1,25 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { NativeConnection } from "@temporalio/worker";
-import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
+import { CommonActivityService } from "src/activities/common/common.service";
+import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
+import { ScanService } from "src/activities/core/scan/scan-activity.service";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
+import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
 import { ListPathActivity } from "src/activities/list-path/list-path.service";
+import { CommonTaskService } from "src/activities/core/common/common-task.service";
 import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
 import { MigrationSyncService } from "src/activities/migrate/migrate.sync.service";
 import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
+import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
+import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 import { SetupActivityService } from "src/activities/setup-worker/setup.activity.service";
+import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
 import { ValidateConnectionActivity } from "src/activities/validate-connection/validate-connection.service";
+import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
-import { ValidateWorkingDirectoryActivity } from "src/activities/working-directory/working-directory.service";
-import { PrecheckActivity } from "src/activities/precheck/precheck-activity";
-import { CommonActivityService } from "src/activities/common/common.service";
-import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
-import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
-import { ConfigService } from "@nestjs/config";
-import { MigrateScanService } from "src/activities/migrate/core/migrate-scan.service";
-import { MigrateSyncService } from "src/activities/migrate/core/migrate-sync.service";
-import { MigrateCommonService } from "src/activities/migrate/migrate-common.service";
 
 
 @Injectable()
@@ -39,9 +39,9 @@ export class WorkerOptionsService {
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly redismeorycheck: RedisMemoryCheckActivity,
-    private readonly migrateScanService: MigrateScanService,
     private readonly migrateSyncService:  MigrateSyncService,
-    private readonly migrateCommonService: MigrateCommonService,
+    private readonly commonTaskService: CommonTaskService,
+    private readonly scanService: ScanService,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
@@ -121,9 +121,10 @@ export class WorkerOptionsService {
           hasRunningScanTask: this.commonActivityService.hasRunningScanTask.bind(this.commonActivityService),
           hasRunningSyncTask: this.commonActivityService.hasRunningSyncTask.bind(this.commonActivityService),
           // for new migration workflow 
-          scanDirectories: this.migrateScanService.scanDirectories.bind(this.migrateScanService),
+
           syncTaskActivity: this.migrateSyncService.syncTaskActivity.bind(this.migrateSyncService),
-          getGroupOfTasksActivity: this.migrateCommonService.getGroupOfTasksActivity.bind(this.migrateScanService),
+          getGroupOfTasksActivity: this.commonTaskService.getGroupOfTasksActivity.bind(this.commonTaskService),
+          scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
         }, this.jobTaskActivityConcurrency);
       default:
         return undefined;
