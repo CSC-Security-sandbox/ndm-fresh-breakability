@@ -41,15 +41,7 @@ const useFileServerDetails = () => {
           }))
         );
 
-        const updatedFileServerDetails = {
-          ..._fileServerDetails,
-          fileServers: _fileServerDetails.fileServers.map((fileServer) => ({
-            ...fileServer,
-            volumes: fileServer.volumes.filter((volume) => volume?.isValid),
-          })),
-        };
-
-        setFileServerDetails(updatedFileServerDetails);
+        setFileServerDetails(_fileServerDetails);
         setAllWorkersList(workers);
         setAllExportPaths(exportPaths);
       } catch (error) {

@@ -155,9 +155,7 @@ const BulkDiscover = () => {
           jobType="bulk-discovery"
           defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
           allExportPaths={allExportPaths.filter(
-            (row) =>
-              row.protocol === bulkDiscoveryForm.formState.protocol.value &&
-              row.isValid
+            (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
           )}
           fileServerDetails={fileServerDetails}
           showRefetch={false}
