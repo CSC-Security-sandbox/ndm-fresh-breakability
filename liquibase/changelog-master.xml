@@ -333,4 +333,10 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20250728_03_discovery_report_proc_added_valueType.sql" author="gm67249">
+      <sqlFile path="liquibase/20250728_03_discovery_report_proc_added_valueType.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
