@@ -120,7 +120,8 @@ export function withBulkMigrateCreateForm(
       onSubmit: () => {},
     });
 
-    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<string[]>([]);
+    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] =
+      useState<string[]>([]);
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -146,7 +147,6 @@ export function withBulkMigrateCreateForm(
             fileServer.volumes.forEach((volume, index) => {
               _migrationTableDetails.push({
                 id: index,
-                isValid: volume?.isValid,
                 sourceFileServerDetails: fileServerDetails,
                 protocol: fileServer.protocol,
                 sourcePath: {
@@ -168,18 +168,19 @@ export function withBulkMigrateCreateForm(
               });
             });
           });
-
           const notReachableVolumes = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
-
-            config?.fileServers?.flatMap((fileServer) => 
+            config?.fileServers?.flatMap((fileServer) =>
               fileServer?.volumes?.map((volume) => {
                 _destinationPaths.push({
                   protocol: fileServer.protocol,
                   pathId: volume?.id,
                   pathName: volume?.volumePath,
-                })
+                  isDisabled: volume?.isDisabled,
+                  isValid: volume?.isValid,
+                  reachableCount: volume?.reachableCount,
+                });
                 if (volume?.reachableCount === 0) {
                   notReachableVolumes.push(volume.id);
                 }
@@ -330,7 +331,10 @@ export function withBulkMigrateCreateForm(
       const offlineWorkers = availableWorkers.filter(
         (w: WorkerType) => w.status && w.status.toLowerCase() === OFFLINE_STATUS
       );
-      if (availableWorkers.length > 0 && offlineWorkers.length === availableWorkers.length) {
+      if (
+        availableWorkers.length > 0 &&
+        offlineWorkers.length === availableWorkers.length
+      ) {
         throw new Error(
           `All workers are offline. Please ensure at least one worker is online before proceeding.`
         );
