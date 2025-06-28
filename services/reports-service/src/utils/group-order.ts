@@ -1,192 +1,93 @@
-import { covertBytes } from "./mapper";
+import { covertBytes, formatSeconds } from "./mapper";
+import { ReportValueType } from "../constants/enums";
+import {
+  PDFReportHeaders,
+  ReportEntry,
+  ReportSubCategoriesHeader,
+} from "../constants/report";
 
-export const ReportHeaders = {
-  DISCOVER: [
-    "File Server Info",
-    "Number of Files",
-    "Modified",
-    "Created",
-    "Access Time",
-    "Depth",
-    "Space Used",
-    "File System Stats",
-    "Maximum Values",
-    "Job Run Stats",
-    "Biggest",
-  ],
+// Helper to format value if needed
+export const formatValue = (entry: ReportEntry): string | number => {
+  const value = Number(entry.value) || 0;
+
+  switch (entry.valueType) {
+    case ReportValueType.SIZE:
+      return value > 0 ? covertBytes(value) : "0 B";
+    case ReportValueType.TIME:
+      return value > 0 ? formatSeconds(value) : "0 s";
+    case ReportValueType.COUNT:
+      return value > 0 ? value.toLocaleString() + " Counts" : "0 Count"; // format as a number with commas 100000 to 100,000
+    default:
+      return entry.value;
+  }
 };
-export const ReportSubCategoriesHeader = {
-  "Number of Files": [
-    "File Count with File Size: 0B",
-    "File Count with File Size: <8KiB",
-    "File Count with File Size: 8-64KiB",
-    "File Count with File Size: 64KiB-1MiB",
-    "File Count with File Size: 1-10MiB",
-    "File Count with File Size: 10-100MiB",
-    "File Size: 100 MiB - 1 GiB",
-    "File Size: 1+ GiB",
-  ],
-  "Space Used": [
-    "Capacity with File Size: 0B",
-    "Capacity with File Size: <8KiB",
-    "Capacity with File Size: 8-64KiB",
-    "Capacity with File Size: 64KiB-1MiB",
-    "Capacity with File Size: 1-10MiB",
-    "Capacity with File Size: 10-100MiB",
-    "Capacity with File Size: 100 MiB - 1 GiB",
-    "Capacity with File Size: 1+ GiB",
-  ],
-};
-export const SubCategorySize = [
-  "Total Space for Regular Files",
-  "Total Space for Directories",
-  "Total Space Used",
-  "max_file_size",
-];
-export const CategoryTime = ["Created", "Modified", "Access Time"];
-export const CategorySubCategorySize = [
-  "Space Used",
-  "Capacity with Access Time future",
-  "Capacity with Access Time 10+ yr",
-  "Capacity with Creation Time future",
-  "Capacity with Creation Time 10+ yr",
-  "Capacity With Modification Time: future",
-  "Capacity With Modification Time: 10+ yr",
-  "Total Space for Regular Files",
-  "Total Space for Directories",
-  "Total Space Used",
-  "max_file_size",
-];
 
 export const groupAndOrder = (
   data: any[],
-  reportType: string,
+  reportType: string
 ): Record<string, any[]> | null => {
-  if (!data || data.length === 0) return null;
-
-  // Group entries by category
-  const grouped = data.reduce(
-    (acc, entry) => {
-      const category = entry.category;
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(entry);
-      return acc;
-    },
-    {} as Record<string, any[]>,
-  );
-
-  // Helper to format value if needed
-  const formatValue = (
-    key: string,
-    subCategory: string | undefined,
-    value: number,
-  ) => {
-    if (
-      CategorySubCategorySize.includes(key) ||
-      (subCategory && CategorySubCategorySize.includes(subCategory))
-    ) {
-      return value > 0 ? covertBytes(value) : "0 B";
+  try {
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid input: 'data' must be an array.");
     }
-    return value;
-  };
+    if (typeof reportType !== "string") {
+      throw new Error("Invalid input: 'reportType' must be a string.");
+    }
+    if (data.length === 0) return null;
 
-  return Object.fromEntries(
-    ReportHeaders[reportType].map((key) => {
-      const entries = grouped[key] || [];
-      if (ReportSubCategoriesHeader[key]) {
-        // Group by subcategory for ordering
-        const subGrouped = entries.reduce(
-          (acc, entry) => {
-            acc[entry.sub_category] = acc[entry.sub_category] || [];
-            acc[entry.sub_category].push(entry);
-            return acc;
-          },
-          {} as Record<string, any[]>,
-        );
-
-        // Order and format by subcategory
-        const ordered = ReportSubCategoriesHeader[key].flatMap((subCategory) =>
-          (subGrouped[subCategory] || []).map((entry) => ({
-            ...entry,
-            value: formatValue(key, subCategory, entry.value),
-          })),
-        );
-        return [key, ordered];
-      } else {
-        // Format values for categories without subcategories
-        const formatted = entries.map((entry) => ({
-          ...entry,
-          value: formatValue(key, entry.sub_category, entry.value),
-        }));
-        return [key, formatted];
-      }
-    }),
-  );
-};
-/*export const groupAndOrder = (
-  data: any[],
-  reportType: string,
-  //order: string[],
-): Record<string, any[]> => {
-  if (data && data.length > 0) {
-    const grouped = data?.reduce(
+    // Group entries by category
+    const grouped = data.reduce(
       (acc, entry) => {
         const category = entry.category;
+        if (!category) {
+          console.error("Missing 'category' in entry:", entry);
+          return acc;
+        }
         if (!acc[category]) acc[category] = [];
         acc[category].push(entry);
         return acc;
       },
-      {} as Record<string, any[]>,
+      {} as Record<string, any[]>
     );
+
     return Object.fromEntries(
-      ReportHeaders[reportType].map((key) => {
+      PDFReportHeaders[reportType].map((key) => {
         const entries = grouped[key] || [];
-        console.log(`Processing category: ${key}, Entries: ${entries.length}`);
         if (ReportSubCategoriesHeader[key]) {
-          let sortedCategories = [];
-          const order = ReportSubCategoriesHeader[key];
-          order.forEach((subCategory) => {
-            entries.forEach((entry) => {
-              if (entry.sub_category === subCategory) {
-                console.log(
-                  "CategorySize[key]>>>>>>>",
-                  CategorySubCategorySize.indexOf(key) !== -1,
-                  +"subCategory" +
-                    subCategory +
-                    CategorySubCategorySize.indexOf(subCategory) !==
-                    -1,
-                );
-                if (
-                  CategorySubCategorySize.indexOf(key) !== -1 ||
-                  CategorySubCategorySize.indexOf(subCategory) !== -1
-                ) {
-                  entry.value =
-                    entry.value > 0 ? covertBytes(entry.value) : "0 B";
-                }
-                sortedCategories.push(entry);
+          // Group by subcategory for ordering
+          const subGrouped = entries.reduce(
+            (acc, entry) => {
+              const subCategory = entry.sub_category;
+              if (!subCategory) {
+                console.error("Missing 'sub_category' in entry:", entry);
+                return acc;
               }
-            });
-          });
-          return [key, sortedCategories];
-        } else {
-          console.log(
-            `Processing category2222: ${key}, Entries: ${entries.length}`,
+              acc[subCategory] = acc[subCategory] || [];
+              acc[subCategory].push({
+                ...entry,
+                value: formatValue(entry),
+              });
+              return acc;
+            },
+            {} as Record<string, any[]>
           );
-          entries.forEach((entry) => {
-            if (
-              CategorySubCategorySize.indexOf(key) !== -1 ||
-              CategorySubCategorySize.indexOf(entry.sub_category) !== -1
-            ) {
-              entry.value = entry.value > 0 ? covertBytes(entry.value) : "0 B";
-            }
-          });
-          return [key, entries];
+          // Order and format by subcategory
+          const ordered = ReportSubCategoriesHeader[key].flatMap(
+            (subCategory) => subGrouped[subCategory] || []
+          );
+          return [key, ordered];
+        } else {
+          // Format values for categories without subcategories
+          const formatted = entries.map((entry) => ({
+            ...entry,
+            value: formatValue(entry),
+          }));
+          return [key, formatted];
         }
-      }),
+      })
     );
-  } else {
+  } catch (error) {
+    console.error("Error in groupAndOrder function:", error);
     return null;
   }
-};*/
-
-//export const FormatToSizeAndTime =
+};

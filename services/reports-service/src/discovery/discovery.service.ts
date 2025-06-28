@@ -2,7 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  Logger
+  Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
@@ -13,9 +13,9 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
-import { groupAndOrder } from "../utils/group-order";
-import { validateFilePath } from 'src/utils/utils';
-import { ReportType } from "../constants/enums";
+import { formatValue, groupAndOrder } from "../utils/group-order";
+import { escapeCsvValue, validateFilePath } from "src/utils/utils";
+import { ReportType, ReportValueType } from "../constants/enums";
 
 @Injectable()
 export class DiscoveryService {
@@ -43,12 +43,14 @@ export class DiscoveryService {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
 
-      this.logger.log("procedure started")
+      this.logger.log("procedure started");
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
       if (!validateFilePath(pdfFilePath)) {
-        this.logger.error(`File path contains invalid characters: ${pdfFilePath}`);
-        throw new Error('File path contains invalid characters.');
+        this.logger.error(
+          `File path contains invalid characters: ${pdfFilePath}`
+        );
+        throw new Error("File path contains invalid characters.");
       } else {
         this.logger.log(`File path validation passed: ${pdfFilePath}`);
       }
@@ -58,7 +60,7 @@ export class DiscoveryService {
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
         [jobRunId, process.env.SCHEMA]
       );
-      this.logger.log(`procedure ended in ${Date.now() - startTime}`)
+      this.logger.log(`procedure ended in ${Date.now() - startTime}`);
       const latestReport = await this.reportsRepo.find({
         where: { jobRunId: jobRunId, reportType: reportType },
         order: { createdAt: "DESC" },
@@ -67,33 +69,31 @@ export class DiscoveryService {
 
       if (latestReport?.length === 0) {
         throw new Error("No report data found");
+      } else {
+        const reportData = JSON.parse(latestReport[0]?.reportData);
+        const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
+        const csvFilePath = path.join(this.reportsDirectory, csvFileName);
+        this.formatAndWriteToFile(reportData, csvFilePath);
+
+        const pdfBuffer = await this.generatePdfFromData(reportData);
+        fs.writeFileSync(pdfFilePath, pdfBuffer);
+
+        return {
+          message: "Report generated successfully",
+        };
       }
-
-      const reportData = JSON.parse(latestReport[0]?.reportData);
-      console.log("Report Data: ", reportData);
-      const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
-      const csvFilePath = path.join(this.reportsDirectory, csvFileName);
-      this.formatAndWriteToFile(reportData, csvFilePath);
-
-      const pdfBuffer = await this.generatePdfFromData(reportData);
-      fs.writeFileSync(pdfFilePath, pdfBuffer);
-
-      return {
-        message: "Report generated successfully",
-      };
     } catch (error) {
       this.logger.log(error);
       throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
+        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
       );
     }
   }
   generateHtmlTable(data: any[]): string {
     const categories: { [key: string]: any[] } = groupAndOrder(
       data,
-      ReportType.DISCOVERY,
+      ReportType.DISCOVERY
     );
-    console.log("inside the categories>>>> ", JSON.stringify(categories));
     let htmlString = `
       <html>
       <head>
@@ -133,15 +133,16 @@ export class DiscoveryService {
 
       categories[category].forEach((entry) => {
         const subCategory = entry.sub_category;
-        const value =  entry.value;
-        htmlString += `
+        const value = entry.value;
+        if (!!value) {
+          htmlString += `
           <tr>
             <td>${subCategory}</td>
             <td>${value}</td>
           </tr>
         `;
+        }
       });
-
       htmlString += `</table>`;
     }
 
@@ -163,73 +164,86 @@ export class DiscoveryService {
         "--disable-setuid-sandbox",
         "--disable-gpu",
         "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas"
+        "--disable-accelerated-2d-canvas",
       ],
-      executablePath: "/usr/bin/chromium-browser",
+      // executablePath: "/opt/homebrew/bin/chromium",
       protocolTimeout: 60000,
     });
     const page = await browser.newPage();
-    await page.setContent(htmlOutput, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+    await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
+    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
 
     await browser.close();
     return Buffer.from(pdfBuffer);
-}
-
+  }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
     this.logger.log(`Creating jobs report data for jobRunId: ${jobRunId}`);
     try {
       this.logger.log(`Schema used: ${process.env.SCHEMA}`);
-      this.logger.log(`Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`);
-      await this.inventoryRepo.query(`CALL ${process.env.SCHEMA}.jobs_report_data_v2($1::UUID, $2);`, [jobRunId, process.env.SCHEMA]);
+      this.logger.log(
+        `Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`
+      );
+      await this.inventoryRepo.query(
+        `CALL ${process.env.SCHEMA}.jobs_report_data_v2($1::UUID, $2);`,
+        [jobRunId, process.env.SCHEMA]
+      );
       return { message: "Report data generated successfully for jobs report" };
     } catch (error) {
-      this.logger.log(`Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`);
-      throw new InternalServerErrorException(`Failed to generate report for jobRunId: ${jobRunId}`);
+      this.logger.log(
+        `Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`
+      );
+      throw new InternalServerErrorException(
+        `Failed to generate report for jobRunId: ${jobRunId}`
+      );
     }
   }
 
- formatAndWriteToFile(reportData: any[], filePath: string) {
-  if (!validateFilePath(filePath)) {
-    this.logger.error(`File path contains invalid characters: ${filePath}`);
-    throw new Error('File path contains invalid characters.');
-  } else {
-    this.logger.log(`File path validation passed: ${filePath}`);
-  }
-  const predefinedHeaders = Object.values(ReportHeaders);
-  const dynamicHeaders = new Set<string>();
-      if (reportData && reportData.length > 0) {
-      reportData.forEach((entry) => {
-          const subCategory = entry.sub_category;
-          if (subCategory && !predefinedHeaders.includes(subCategory)) {
-              dynamicHeaders.add(subCategory);
-          }
+  formatAndWriteToFile(reportData: any[], filePath: string) {
+    if (!validateFilePath(filePath)) {
+      this.logger.error(`File path contains invalid characters: ${filePath}`);
+      throw new Error("File path contains invalid characters.");
+    } else {
+      this.logger.log(`File path validation passed: ${filePath}`);
+    }
+    const csvReportData = Object.values(
+      groupAndOrder(reportData, ReportType.DISCOVERY)
+    ).flat();
+    const dynamicHeaders = new Set<string>();
+    if (csvReportData && csvReportData.length > 0) {
+      csvReportData.forEach((entry) => {
+        const subCategory = entry.sub_category;
+        if (subCategory && entry.value !== null) {
+          dynamicHeaders.add(subCategory);
+        }
       });
     }
 
-  const allHeaders = [...predefinedHeaders, ...Array.from(dynamicHeaders)];
+    const allHeaders = [...Array.from(dynamicHeaders)];
 
-  const row: string[] = [];
-  allHeaders.forEach((header) => {
+    const row: string[] = [];
+    allHeaders.forEach((header) => {
       let value = "";
-      if (reportData && reportData.length > 0) {
-      reportData?.forEach((entry) => {
+      if (csvReportData && csvReportData.length > 0) {
+        csvReportData?.forEach((entry) => {
           if (header in entry) {
-              value = entry[header] !== undefined ? entry[header]?.toString() : "";
+            value =
+              entry[header] !== undefined ? entry[header]?.toString() : "";
           } else if (header === entry?.sub_category) {
-              value = entry?.value !== undefined ? entry?.value?.toString() : "";
+            value = entry?.value !== undefined ? entry?.value?.toString() : "";
           }
-      });
-    }
+        });
+      }
       row.push(value);
-  });
+    });
 
-  const csvContent = [allHeaders.join(","), row.join(",")].join("\n");
+    const csvContent = [
+      allHeaders.join(","),
+      row.map(escapeCsvValue).join(","),
+    ].join("\n");
 
-  fs.writeFileSync(filePath, csvContent);
-  console.log(`Data has been written to ${filePath}`);
-}
+    fs.writeFileSync(filePath, csvContent);
+  }
 
   async getReportsAsZip(
     jobRunIds: string[],
