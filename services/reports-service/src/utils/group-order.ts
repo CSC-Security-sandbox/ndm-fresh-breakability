@@ -5,9 +5,11 @@ import {
   ReportEntry,
   ReportSubCategoriesHeader,
 } from "../constants/report";
+import { BadRequestException, Logger } from "@nestjs/common";
 
 // Helper to format value if needed
 export const formatValue = (entry: ReportEntry): string | number => {
+
   const value = Number(entry.value) || 0;
 
   switch (entry.valueType) {
@@ -26,12 +28,15 @@ export const groupAndOrder = (
   data: any[],
   reportType: string
 ): Record<string, any[]> | null => {
+ const logger = new Logger()
   try {
     if (!Array.isArray(data)) {
-      throw new Error("Invalid input: 'data' must be an array.");
+      logger.error("Invalid input: 'data' must be an array.")
+      throw new BadRequestException("Invalid input: 'data' must be an array.");
     }
     if (typeof reportType !== "string") {
-      throw new Error("Invalid input: 'reportType' must be a string.");
+      logger.error("\"Invalid input: 'reportType' must be a string.")
+      throw new BadRequestException("Invalid input: 'reportType' must be a string.");
     }
     if (data.length === 0) return null;
 
@@ -40,7 +45,6 @@ export const groupAndOrder = (
       (acc, entry) => {
         const category = entry.category;
         if (!category) {
-          console.error("Missing 'category' in entry:", entry);
           return acc;
         }
         if (!acc[category]) acc[category] = [];
@@ -87,7 +91,7 @@ export const groupAndOrder = (
       })
     );
   } catch (error) {
-    console.error("Error in groupAndOrder function:", error);
+    logger.error("Error in groupAndOrder function:", error);
     return null;
   }
 };

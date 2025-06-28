@@ -2,7 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  Logger,
+  Logger, BadRequestException
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
@@ -12,8 +12,7 @@ import * as fs from "fs";
 import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
-import { ReportHeaders } from "./pattern.enum";
-import { formatValue, groupAndOrder } from "../utils/group-order";
+import { groupAndOrder } from "../utils/group-order";
 import { escapeCsvValue, validateFilePath } from "src/utils/utils";
 import { ReportType, ReportValueType } from "../constants/enums";
 
@@ -48,7 +47,8 @@ export class DiscoveryService {
         this.logger.error(
           `File path contains invalid characters: ${pdfFilePath}`
         );
-        throw new Error("File path contains invalid characters.");
+        throw new BadRequestException("File path contains invalid characters.");
+
       } else {
         this.logger.log(`File path validation passed: ${pdfFilePath}`);
       }
@@ -81,7 +81,7 @@ export class DiscoveryService {
         };
       }
     } catch (error) {
-      this.logger.log(error);
+      this.logger.error(error);
       throw new InternalServerErrorException(
         `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
       );
@@ -164,7 +164,7 @@ export class DiscoveryService {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
       ],
-      // executablePath: "/opt/homebrew/bin/chromium",
+      executablePath: "/usr/bin/chromium-browser",
       protocolTimeout: 60000,
     });
     const page = await browser.newPage();
@@ -178,7 +178,7 @@ export class DiscoveryService {
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
     this.logger.log(`Creating jobs report data for jobRunId: ${jobRunId}`);
     try {
-      this.logger.log(`Schema used: ${process.env.SCHEMA}`);
+      this.logger.log(`Schema used: ${process.env.SCHEMA} for jobRunId: ${jobRunId}`);
       this.logger.log(
         `Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`
       );
@@ -188,7 +188,7 @@ export class DiscoveryService {
       );
       return { message: "Report data generated successfully for jobs report" };
     } catch (error) {
-      this.logger.log(
+      this.logger.error(
         `Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`
       );
       throw new InternalServerErrorException(
