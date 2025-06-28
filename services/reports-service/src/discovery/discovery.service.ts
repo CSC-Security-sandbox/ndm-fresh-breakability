@@ -58,7 +58,7 @@ export class DiscoveryService {
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
         [jobRunId, process.env.SCHEMA]
       );
-      this.logger.log(`procedure ended in ${Date.now() - startTime}`);
+      this.logger.log(`procedure ended in ${Date.now() - startTime}`)
       const latestReport = await this.reportsRepo.find({
         where: { jobRunId: jobRunId, reportType: reportType },
         order: { createdAt: "DESC" },
