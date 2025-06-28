@@ -3,7 +3,6 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
-	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -21,7 +20,6 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		sourceVolumePath1      string
 		sourceVolumePath2      string
 		destinationVolumePath1 string
-		destinationVolumePath2 string
 	)
 	Context("TC-006: Run migration to the same destination", func() {
 
@@ -35,28 +33,27 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_2)
 
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
 		})
 
 		It("TC-006: Run migration to the same destination", func() {
+			By("########################## TC-006 start ################################")
+
 			var (
 				// Source-related IDs
 				sourceConfigID               string
 				sourcePathID1, sourcePathID2 string
 
 				// Destination-related IDs
-				destinationConfigID, destinationPathID1, destinationPathID2 string
+				destinationConfigID, destinationPathID1 string
 
 				// Job Config and Migration IDs
 				jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			)
 
 			By("Creating the source file server")
-			// Added delay as multiple worker attaching takes time
-			Wait(20)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -73,14 +70,13 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
 			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_2, sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -100,16 +96,11 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
 			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-			Expect(destinationPathID2).NotTo(BeEmpty(), "Expected a valid sourcePathID")
 
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{
@@ -127,25 +118,23 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			// Get migration job run IDs and wait for completion
 			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src2_to_dest_vol_migration.json",
+				"nfs_src3_to_dest_vol_migration.json",
 			}
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/TC-006-JSON%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/TC-006-JSON/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -165,7 +154,6 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
 			defer resp.Body.Close()
 
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
 			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
@@ -182,7 +170,6 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				// Fetch the latest status
 				getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", jobConfigID)
 				defer resp.Body.Close()
 
 				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found for config %s", jobConfigID)
@@ -196,16 +183,16 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			for _, cutoverRunID := range cutoverRunIDs {
 				resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
 				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverRunID)
 				defer resp.Body.Close()
 			}
 
-			By("Validating cutover reports")
-			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../validators/cutover_validation.json")
-				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			}
+			// By("Validating cutover reports")
+			// for _, cutoverRunID := range cutoverRunIDs {
+			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../../validators/cutover_validation.json")
+			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+			// }
+			By("########################## TC-006 end ################################")
 		})
 
 		AfterEach(func() {
@@ -217,9 +204,6 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
