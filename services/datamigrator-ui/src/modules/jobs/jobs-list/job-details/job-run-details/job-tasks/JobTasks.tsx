@@ -23,7 +23,7 @@ import {
 const JobTasks = () => {
   const [searchParams] = useSearchParams();
   const status = searchParams.get("status");
-
+  const jobTasksCount = Number(searchParams.get("count"));
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
   const navigate = useNavigate();
   const [tableRows, setTableRows] = useState([]);
@@ -181,6 +181,11 @@ const JobTasks = () => {
           rowState={rowState}
           fixedHeight="calc(100vh - 330px)"
           rowMenu={rowMenu}
+          {...
+            (jobTasksCount > 0 && {
+              noDataLabel: import.meta.env.VITE_REFRESH_TO_GET_LATEST_DATA,
+            })
+          }
         />
         {tableRows.length > 0 && totalCount >= tableRows.length && (
           <Box>{RenderTablePager}</Box>

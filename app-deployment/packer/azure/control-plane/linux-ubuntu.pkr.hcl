@@ -12,6 +12,12 @@ packer {
   }
 }
 
+# Build Version
+variable "build_version" {
+  type        = string
+  description = "The version of the build."
+}
+
 # General Variables
 variable "project_name" {
   type        = string
@@ -255,7 +261,8 @@ build {
     ]
     extra_arguments = [
       "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "@../../../ansible/control-plane/config/group_vars/vars.yaml"
+      "--extra-vars", "@../../../ansible/control-plane/config/group_vars/vars.yaml",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 

@@ -67,10 +67,57 @@ init_microk8s() {
 
         # Recheck MicroK8s status after refreshing certificates
         log "Rechecking MicroK8s status after refreshing certificates..."
-        if ! microk8s status | grep -q "microk8s is running"; then
+        local STATUS_RETRY_DELAY=15
+        local STATUS_RETRY_TIMEOUT=120
+        if ! retry $MAX_RETRIES "microk8s status | grep -q 'microk8s is running'" $STATUS_RETRY_DELAY $STATUS_RETRY_TIMEOUT; then
             handle_failure "MicroK8s is still not running after certificate refresh"
         fi
     fi
+}
+
+echo "Determining current build version..."
+BUILD_VERSION=$(grep '^initial_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2)
+echo "Current build version: $BUILD_VERSION"
+
+load_docker_images() {
+    log "Loading Docker images into MicroK8s registry..."
+    retry $MAX_RETRIES "microk8s images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load Docker images"
+}
+
+install_helm_chart() {
+    log "Installing Datamigrator Helm chart..."
+    retry $MAX_RETRIES "microk8s helm3 upgrade --install datamigrator -n datamigrator $HOME/datamigrator-helmchart-$BUILD_VERSION.tgz" || handle_failure "Failed to install Helm chart"
+    retry $MAX_RETRIES "kubectl wait --namespace datamigrator --for=condition=ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "Pods are not ready"
+}
+
+install_keycloak_chart() {
+    log "Installing Keycloak Helm chart..."
+    
+    log "Installing Keycloak chart from tarball..."
+    local KEYCLOAK_CHART=$(find $HOME/keycloak -name "keycloak-*.tgz" | head -1)
+    [ -z "$KEYCLOAK_CHART" ] && handle_failure "Keycloak chart tarball not found"
+    
+    retry $MAX_RETRIES "microk8s helm3 upgrade --install keycloak $KEYCLOAK_CHART -f $HOME/keycloak/keycloak-values.yaml --namespace keycloak" || handle_failure "Failed to install Keycloak Helm chart"
+    
+    log "Waiting for Keycloak pods to be ready..."
+    retry $MAX_RETRIES "kubectl wait --namespace keycloak --for=condition=ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "Keycloak pods are not ready"
+    
+    log "Keycloak installation completed successfully"
+}
+
+apply_admin_configs() {
+    log "Applying admin-entry configmap..."
+    retry $MAX_RETRIES "kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator" || handle_failure "Failed to apply admin-entry-configmap"
+
+    log "Applying admin-entry job..."
+    retry $MAX_RETRIES "kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrator" || handle_failure "Failed to apply admin-entry-job"
+
+    log "Waiting for admin-entry job to complete..."
+    retry $MAX_RETRIES "kubectl wait --for=condition=complete job/admin-entry-job -n datamigrator --timeout=${WAIT_TIMEOUT}s" || handle_failure "admin-entry job did not complete"
+    POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
+    kubectl logs $POD_NAME -n datamigrator
+    echo "Admin entry job completed successfully."
+    echo ""
 }
 
 unseal_openbao() {
@@ -210,11 +257,12 @@ main() {
     sleep $MICROK8S_INIT_DELAY
     
     unseal_openbao
+    load_docker_images
+    install_keycloak_chart
+    install_helm_chart
     restart_statefulsets
+    apply_admin_configs
     restart_temporal_deployments
-    
-    log "Restarting datamigrator pods..."
-    restart_datamigrator_deployments
     
     setup_metallb
     retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"

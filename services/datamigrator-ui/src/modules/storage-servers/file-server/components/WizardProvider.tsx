@@ -10,7 +10,7 @@ import AppFooter from "@components/layout/app-footer/AppFooter";
 
 const WizardProvider = () => {
   return (
-    <Box className="w-full py-5 h-[70vh]">
+    <Box className="w-full py-5 h-[75vh]">
       <Wizard
         stepsMap={STEPS_MAP}
         stepPaths={STEPS_PATHS}
@@ -18,8 +18,8 @@ const WizardProvider = () => {
         initialStep="server-type"
         initialPath="default"
       >
-        <AppFooter footerContent={<FileServerFooter />} />
         <CustomStepLayout />
+        <AppFooter footerContent={<FileServerFooter />} />
       </Wizard>
     </Box>
   );

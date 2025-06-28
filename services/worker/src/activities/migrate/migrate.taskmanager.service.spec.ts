@@ -122,5 +122,20 @@ describe('MigrationTaskService', () => {
       const result = await service.updateCutOverStatus({ jobRunId: 'job-123', status:  CutOverStatus.REJECTED });
       expect(result.message).toContain('Error');
     });
+
+
+    it('should handle error thrown inside groupReadWithoutAckDirs', async () => {
+      const mockJobContextWithError = {
+      groupReadWithoutAckDirs: jest.fn(() => {
+        throw new Error('Iterator error');
+      }),
+      ackDirAndCreateTask: jest.fn(),
+      };
+      redisService.getJobContext.mockResolvedValue(mockJobContextWithError);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-789' });
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('Failed to publish task');
+    });
   });
 });

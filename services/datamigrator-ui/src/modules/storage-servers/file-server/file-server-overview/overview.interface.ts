@@ -12,6 +12,7 @@ export interface ExportPathsTablePropsType {
   setSelectedExportPathsIds: (ids: string[]) => void;
   defaultColumnState?: any;
   jobType?: string;
+  notReachableExportPaths: string[];
 }
 
 export interface TableRendererPropsType {

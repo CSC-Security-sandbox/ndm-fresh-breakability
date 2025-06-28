@@ -83,7 +83,7 @@ export const FILE_SERVER_LIST_COLUMN_DEFS: any[] = [
     id: 8,
   },
   {
-    header: "Created On",
+    header: "Created On (UTC)",
     accessor: "createdAt",
     id: 9,
     Renderer: (

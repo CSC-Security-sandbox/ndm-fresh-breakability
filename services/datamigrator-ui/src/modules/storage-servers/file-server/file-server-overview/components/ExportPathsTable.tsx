@@ -29,6 +29,7 @@ const ExportPathsTable = ({
   setSelectedExportPathsIds,
   defaultColumnState,
   jobType,
+  notReachableExportPaths,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
@@ -152,6 +153,7 @@ const ExportPathsTable = ({
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
       noDataLabel={getDataLabel()}
+      notReachableExportPaths={notReachableExportPaths}
     />
   );
 };

@@ -22,6 +22,12 @@ packer {
 //  BLOCK: variable
 //  Defines the input variables.
 
+// Build Version
+variable "build_version" {
+  type        = string
+  description = "The version of the build."
+}
+
 // Project Settings
 variable "project_name" {
   type    = string
@@ -551,8 +557,7 @@ locals {
   manifest_date   = formatdate("YYYY-MM-DD hh:mm:ss", timestamp())
   manifest_path   = "${path.cwd}/manifests/"
   manifest_output = "${local.manifest_path}${local.manifest_date}.json"
-  // ovf_export_path = "${path.cwd}/artifacts/${local.vm_name}"
-  ovf_export_path = "/ova/${local.vm_name}"
+  ovf_export_path = "${path.cwd}/artifacts/${local.vm_name}"
   data_source_content = {
     "/meta-data" = file("${abspath(path.root)}/data/meta-data")
     "/user-data" = templatefile("${abspath(path.root)}/data/user-data.pkrtpl.hcl", {
@@ -707,7 +712,8 @@ build {
       "--extra-vars", "display_skipped_hosts=false",
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
-      "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}"
+      "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
   provisioner "ansible" {
@@ -723,7 +729,8 @@ build {
       "--extra-vars", "display_skipped_hosts=false",
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
-      "--extra-vars", "local_binary_path=${var.worker_binary_path}"
+      "--extra-vars", "local_binary_path=${var.worker_binary_path}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 
@@ -741,6 +748,7 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+      "--extra-vars", "build_version=${var.build_version}"
     ]
   }
 

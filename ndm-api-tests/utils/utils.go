@@ -6,9 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
-	"ndm-api-tests/internal/scenario"
+	"ndm-api-tests/tests/smoke/parser"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,20 +37,6 @@ type KeycloakCredentials struct {
 	AdminUser     string
 	AdminPassword string
 	ClientSecret  string
-}
-
-type Volume struct {
-	ID         string `json:"id"`
-	VolumePath string `json:"volumePath"`
-	// other fields omitted for brevity
-}
-type FileServer struct {
-	ID      string   `json:"id"`
-	Volumes []Volume `json:"volumes"`
-	// other fields omitted for brevity
-}
-type Response struct {
-	FileServers []FileServer `json:"fileServers"`
 }
 
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
@@ -219,7 +204,7 @@ func FetchUserID(email, accessToken string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -385,17 +370,17 @@ func sendPostAPIRequest(url string, data map[string]string, authToken string) (m
 func createAccount(authToken string) (string, error) {
 	// var fullURL = os.Getenv("ADMIN_SERVICE_URL") + "/api/v1/accounts"
 	// data := map[string]string{
-	// 	"account_name": os.Getenv("BASE_ACCOUNT_NAME"),
+	//  "account_name": os.Getenv("BASE_ACCOUNT_NAME"),
 	// }
 
 	// jsonResponse, err := sendPostAPIRequest(fullURL, data, authToken)
 	// if err != nil {
-	// 	log.Printf("Error sending API request: %v", err)
-	// 	return "", err
+	//  log.Printf("Error sending API request: %v", err)
+	//  return "", err
 	// }
 	// accountId, ok := jsonResponse["id"].(string)
 	// if !ok {
-	// 	return "", errors.New("id not found in response in createAccount")
+	//  return "", errors.New("id not found in response in createAccount")
 	// }
 
 	// return accountId, nil
@@ -405,7 +390,7 @@ func createAccount(authToken string) (string, error) {
 // buildRequestBody builds the JSON payload directly from the YAML "data" field.
 // Only keys defined in the YAML data are included; values that start with "$" are replaced
 // using sharedVars.
-func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
+func BuildRequestBody(s parser.Scenario, sharedVars map[string]interface{}) ([]byte, error) {
 	// Convert s.Data into a map[string]interface{}.
 	converted, ok := ConvertToStringMap(s.Data)
 	if !ok {
@@ -422,7 +407,7 @@ func BuildRequestBody(s scenario.Scenario, sharedVars map[string]interface{}) ([
 
 // buildFullURL constructs the full API URL by substituting any URL placeholders (from s.Params)
 // with values from sharedVars. Also uses service_name to compute the base URL.
-func BuildFullURL(s scenario.Scenario, sharedVars map[string]interface{}) string {
+func BuildFullURL(s parser.Scenario, sharedVars map[string]interface{}) string {
 	apiPath := s.URL
 	for paramKey, paramVal := range s.Params {
 		if v, exists := sharedVars[paramVal]; exists {
@@ -499,10 +484,9 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		req.Header.Set(key, value)
 	}
 
-	LogDebug(fmt.Sprintf("Sending Request: %s %s\nPayload:\n%s\n", req.Method, url, string(body)))
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   10 * time.Second,
+		Timeout:   60 * time.Second,
 	}
 
 	return client.Do(req)
@@ -510,9 +494,9 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 
 // handleResponse validates the response by checking the status code, verifying expected fields,
 // and extracting any parsed fields into sharedVars.
-func HandleResponse(resp *http.Response, s scenario.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
+func HandleResponse(resp *http.Response, s parser.Scenario, callKey string, sharedVars map[string]interface{}) (map[string]interface{}, error) {
 	defer resp.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return sharedVars, err
 	}
@@ -754,7 +738,7 @@ func DeleteAllUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -798,7 +782,7 @@ func DeleteAllUserRoles(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -844,7 +828,7 @@ func DeleteAllKeycloakUsers(token string) error {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %w", err)
 	}
@@ -898,20 +882,36 @@ func AutoGenerateProjectName(prefix string) string {
 	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
 }
 
-func DelayBetweenCalls(delay int) {
+func Wait(delay int) {
 	time.Sleep(time.Duration(delay) * time.Second)
 }
 
 // loadEnvFromEnvFile loads environment variables from the .env file.
 func loadEnvFromEnvFile() error {
-	if err := godotenv.Load("../.env"); err != nil {
-		log.Printf("No .env file found or error loading it: %v", err)
+	currentPath, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting current working directory: %v", err)
+		return err
+	}
+	LogDebug(fmt.Sprintf("Current working directory: %s", currentPath))
+	envFilePath := "../.env"
+	if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+		envFilePath = "../../.env"
+
+		if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+			log.Printf("No .env file found at path: %s", envFilePath)
+			return fmt.Errorf("no .env file found at path: %s", envFilePath)
+		}
+
+	}
+	if err := godotenv.Load(envFilePath); err != nil {
+		log.Printf("Error loading .env file: %v", err)
 		return err
 	}
 	return nil
 }
 
-func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{}) (string, string, error) {
+func HandleNewLogin(scData parser.Scenario, sharedVars map[string]interface{}) (string, string, error) {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return "", "", fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
@@ -941,7 +941,7 @@ func HandleNewLogin(scData scenario.Scenario, sharedVars map[string]interface{})
 
 // handleKeycloakResetPassword processes keycloak-reset-password scenarios by converting data,
 // resolving required fields, and resetting user password.
-func HandleKeycloakResetPassword(scData scenario.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
+func HandleKeycloakResetPassword(scData parser.Scenario, sharedVars map[string]interface{}, kcUser, kcPassword string) error {
 	converted, ok := ConvertToStringMap(scData.Data)
 	if !ok {
 		return fmt.Errorf("failed to convert scenario Data to map[string]interface{}")
@@ -1001,60 +1001,46 @@ func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
 	return nil
 }
 
-func GetVolumeID(response Response, volumePath string) (string, error) {
-	for _, fileServer := range response.FileServers {
-		for _, volume := range fileServer.Volumes {
-			if volume.VolumePath == volumePath {
-				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
-				return volume.ID, nil // Return the found ID and no error
-			}
-		}
+// sshRunScript connects via SSH to a worker and runs the provided script.
+func sshRunScript(config SSHConfig, script string) (string, error) {
+	sshConfig := &ssh.ClientConfig{
+		User: config.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(config.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	// If no volume is found, return an error
-	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
+
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	err = session.Run(script)
+	if err != nil {
+		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
+	}
+
+	return stdout.String(), nil
 }
 
-func GetVolumByID(volumeType string, authToken string, configId string) (string, error) {
-	// Build the full URL
-	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
-	var reqBody []byte
+func GetCurrentUTCTimestamp() string {
+	return time.Now().UTC().Format(TIME_FORMAT)
+}
 
-	// Get extra headers
-	headers := GetHeaders(authToken, ContentTypeForm)
-	// Send the API request
-	resp, err := SendAPIRequest("get", fullURL, reqBody, headers)
-	if err != nil {
-		return "", fmt.Errorf("error sending API request: %w", err)
-	}
-	defer resp.Body.Close() // Ensure the response body is closed
-	// Read the response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Unmarshal the response
-	var response Response
-	err = json.Unmarshal(bodyBytes, &response)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling response: %w", err)
-	}
-
-	// Determine the volume path based on the scData.Type
-	var volumePath string
-	if volumeType == "source" {
-		volumePath = NFS_SOURCE_VOLUME
-	} else if volumeType == "destination" {
-		volumePath = NFS_DESTINATION_VOLUME
-	} else {
-		return "", fmt.Errorf("invalid scData.Type: %s", volumeType)
-	}
-
-	// Find the volume ID
-	foundID, err := GetVolumeID(response, volumePath)
-	if err != nil {
-		return "", fmt.Errorf("error finding volume ID: %w", err)
-	}
-
-	return foundID, nil // Return the found ID and no error
+func GetFutureUTCTimestamp(timeInterval int) string {
+	return time.Now().UTC().
+		Add(time.Duration(timeInterval) * time.Second).
+		Format(TIME_FORMAT)
 }

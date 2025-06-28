@@ -61,6 +61,9 @@ const stream = {
   consumerGroupCount:2,
   readAndPurge: jest.fn(),
   getLength: jest.fn(),
+  groupReadWithoutAck: jest.fn(),
+  groupReadWithoutAckDirs: jest.fn(),
+  ackAndCreateTask: jest.fn(),
 }
 
 describe('MigrationScanService', () => {
@@ -152,23 +155,153 @@ describe('MigrationScanService', () => {
   });
 
   describe('getDirectoryContents', () => {
-    it('should return an empty array if the directory does not exist', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const result = await service.getDirectoryContents('non-existent-path');
+    let mockJobContext: Partial<JobContext>;
+
+    beforeEach(() => {
+      mockJobContext = {
+        jobRunId: 'test-job-run-id'
+      };
+
+      // Mock the external functions
+      jest.spyOn(require('../utils/utils'), 'getServerInfoFromPath').mockReturnValue({
+        serverName: 'test-server',
+        serverUrl: 'test-url'
+      });
+
+      jest.spyOn(require('../utils/utils'), 'createServerDownErrorMessage').mockReturnValue(
+        'Server test-server is down or unreachable'
+      );
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+      jest.clearAllTimers();
+    });
+
+    it('should return directory contents when directory is accessible', async () => {
+      const directoryPath = '/test/directory';
+      const expectedContents = ['file1.txt', 'file2.txt', 'folder1'];
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
+
+      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+
+      expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
+      expect(fs.promises.readdir).toHaveBeenCalledWith(directoryPath);
+      expect(result).toEqual(expectedContents);
+    });
+
+    it('should throw an error when directory is not accessible', async () => {
+      const directoryPath = '/inaccessible/directory';
+      const accessError = new Error('Permission denied');
+      (accessError as any).code = 'EACCES';
+
+      jest.spyOn(fs.promises, 'access').mockRejectedValue(accessError);
+
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+        .rejects.toThrow('Permission denied');
+
+      expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
+      expect(fs.promises.readdir).not.toHaveBeenCalled();
+    });
+
+    it('should throw timeout error when readdir operation takes too long - alternative', async () => {
+      // Test with a very short timeout instead of using fake timers
+      const originalTimeout = service.operationTimeout;
+      (service as any).operationTimeout = 100; // 100ms timeout
+
+      const directoryPath = '/slow/directory';
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve(['file.txt'] as any), 200)) // Takes 200ms
+      );
+
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+        .rejects.toThrow('Server test-server is down or unreachable');
+
+      // Restore original timeout
+      (service as any).operationTimeout = originalTimeout;
+    }, 1000);
+
+    it('should handle readdir errors properly', async () => {
+      const directoryPath = '/error/directory';
+      const readdirError = new Error('Read error');
+      (readdirError as any).code = 'EIO';
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValue(readdirError);
+
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+        .rejects.toThrow('Read error');
+
+      expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
+      expect(fs.promises.readdir).toHaveBeenCalledWith(directoryPath);
+    });
+
+    it('should return empty array for empty directory', async () => {
+      const directoryPath = '/empty/directory';
+      const expectedContents: string[] = [];
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
+
+      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+
       expect(result).toEqual([]);
     });
 
-    it('should return directory contents if the directory exists', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      const returnValue = [
-        { name: 'file1.txt', isDirectory: () => false } as any,
-        { name: 'file2.txt', isDirectory: () => false } as any,
-      ];
+    it('should complete successfully when readdir resolves before timeout', async () => {
+      jest.useFakeTimers();
 
-      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(returnValue);
-      const result = await service.getDirectoryContents('existing-path');
-      expect(result).toEqual(returnValue);
+      const directoryPath = '/fast/directory';
+      const expectedContents = ['quick-file.txt'];
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
+
+      const promise = service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+
+      // Since readdir resolves immediately, we don't need to advance timers
+      const result = await promise;
+
+      expect(result).toEqual(expectedContents);
+
+      jest.useRealTimers();
     });
+
+    it('should use correct server info for timeout error message', async () => {
+      const directoryPath = '/timeout/directory';
+      const mockServerInfo = { serverName: 'custom-server', serverUrl: 'custom-url' };
+
+      // Set a very short timeout for this test
+      const originalTimeout = service.operationTimeout;
+      (service as any).operationTimeout = 50; // 50ms timeout
+
+      jest.spyOn(require('../utils/utils'), 'getServerInfoFromPath')
+        .mockReturnValue(mockServerInfo);
+
+      jest.spyOn(require('../utils/utils'), 'createServerDownErrorMessage')
+        .mockReturnValue('Custom server error message');
+
+      jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'readdir').mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve(['file.txt'] as any), 100)) // Takes 100ms, longer than timeout
+      );
+
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+        .rejects.toThrow('Custom server error message');
+
+      expect(require('../utils/utils').getServerInfoFromPath)
+        .toHaveBeenCalledWith(directoryPath, mockJobContext);
+      expect(require('../utils/utils').createServerDownErrorMessage)
+        .toHaveBeenCalledWith('ETIMEDOUT', mockServerInfo);
+
+      // Restore original timeout
+      (service as any).operationTimeout = originalTimeout;
+    }, 1000);
+
   });
 
   describe('scanContent', () => {

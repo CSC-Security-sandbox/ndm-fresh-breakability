@@ -70,12 +70,13 @@ describe('PdfService', () => {
       const jobRunId = 'test-jobRunId';
       const reportType = ReportType.JOBS_RREPORT;
       const pdfBuffer = Buffer.from('newPdfBuffer');
-      const filePath = '/path/to/report.pdf';
+      const filePath = '/mock/reports/report.pdf';
 
       jest.spyOn(path, 'join').mockReturnValue(filePath);
       jest.spyOn(pdfService, 'generateJobsReportPdf').mockResolvedValue(pdfBuffer);
       jest.spyOn(fs, 'existsSync').mockReturnValue(false);
       jest.spyOn(fs, 'writeFileSync').mockImplementation();
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/reports');
 
       const result = await pdfService.generatePdf(jobRunId, reportType);
 
@@ -86,7 +87,7 @@ describe('PdfService', () => {
       const jobRunId = "test-jobRunId";
       const reportType = ReportType.DISCOVERY;
       const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
-      const filePath = `/path/to/${fileName}`;
+      const filePath = `/mock/reports/${fileName}`;
 
       jest.spyOn(path, "join").mockReturnValue(filePath);
       jest.spyOn(fs, "existsSync").mockReturnValue(true);
@@ -106,6 +107,18 @@ describe('PdfService', () => {
 
       await expect(pdfService.generatePdf(jobRunId, reportType)).rejects.toThrow(
         "Report not found, try again later"
+      );
+    });
+    it("should throw error if file path escapes reports directory", async () => {
+      const jobRunId = '../escape';
+      const reportType = ReportType.DISCOVERY;
+      const filePath = '/some/other/path/escape-discovery-report.pdf';
+   
+      jest.spyOn(path, 'join').mockReturnValue(filePath);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/reports');
+   
+      await expect(pdfService.generatePdf(jobRunId, reportType)).rejects.toThrow(
+        'Invalid file path'
       );
     });
   });

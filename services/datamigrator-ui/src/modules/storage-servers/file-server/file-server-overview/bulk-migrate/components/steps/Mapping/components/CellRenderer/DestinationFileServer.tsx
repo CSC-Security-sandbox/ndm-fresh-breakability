@@ -1,4 +1,8 @@
-import { BlueXpTableRowType, ConfigListTypeApiType, FILE_SERVER_STATUS } from "@/types/app.type";
+import {
+  BlueXpTableRowType,
+  ConfigListTypeApiType,
+  FILE_SERVER_STATUS,
+} from "@/types/app.type";
 import { Autocomplete, TextField } from "@mui/material";
 import { useContext, useMemo } from "react";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
@@ -30,6 +34,14 @@ const DestinationFileServer = ({
     mappingStepForm.setFieldValue(
       `migrationDetailsTableConfigurationValue.${rowId}.destinationFileServerDetails.destinationFileServerName`,
       selectedName
+    );
+    mappingStepForm.setFieldValue(
+      `migrationDetailsTableConfigurationValue[${rowId}].destinationPathDetails.destinationPathId`,
+      ""
+    );
+    mappingStepForm.setFieldValue(
+      `migrationDetailsTableConfigurationValue[${rowId}].destinationPathDetails.destinationPathName`,
+      ""
     );
   };
 

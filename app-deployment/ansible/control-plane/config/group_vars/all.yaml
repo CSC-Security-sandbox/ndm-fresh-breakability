@@ -1,4 +1,7 @@
 ---
+# Build Version
+build_version: "0.1.0"
+
 # Microservices release tags of docker images
 datamigrator_ui_tag: "latest"
 config_service_tag: "latest"
@@ -9,7 +12,16 @@ admin_service_tag: "latest"
 keycloak_customizations_tag: "latest"
 db_migrations_tag: "latest"
 
-acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else 'datamigratedev.azurecr.io' }}"
+chart_names:
+  - admin-service
+  - config-service
+  - db-writer
+  - jobs-service
+  - reports-service
+  - datamigrator-ui
+  - db-migrations
+
+acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else '' }}"
 
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"
 azure_client_secret: "{{ lookup('env', 'ARM_CLIENT_SECRET') }}"

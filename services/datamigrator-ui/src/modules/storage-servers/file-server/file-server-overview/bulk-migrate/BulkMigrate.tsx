@@ -16,7 +16,7 @@ const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
 
 const BulkMigrate = () => {
   return (
-    <Box className="h-[80vh]">
+    <Box className="h-[70vh]">
       <BulkMigrateContextWrapper>
         <Box className="font-semibold text-lg pt-8 px-8">Bulk Migrate</Box>
         <Wizard
