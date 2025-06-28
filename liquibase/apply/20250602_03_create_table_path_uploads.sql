@@ -8,6 +8,7 @@ CREATE TABLE
         file_name TEXT NOT NULL,
         action path_upload_action_enum NOT NULL,
         file_server_id UUID NOT NULL REFERENCES file_server (id),
+        validation_response TEXT NULL,
         created_at timestamp DEFAULT now () NOT NULL,
         created_by uuid NULL,
         updated_at timestamp DEFAULT now () NOT NULL,

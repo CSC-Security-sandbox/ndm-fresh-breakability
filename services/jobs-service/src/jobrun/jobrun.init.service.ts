@@ -109,9 +109,13 @@ export class JobRunInitService {
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
 
     // check if source and target paths are flagged as valid
-    const isPathValid = (details.connection?.sourceCredential?.isValidPath) || (details.connection?.targetCredential?.isValidPath)
-    if(!isPathValid) {
-      this.logger.warn(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);
+    const source = details.connection?.sourceCredential;
+    const target = details.connection?.targetCredential;
+
+    const isSourceValid = (source?.isValidPath) && (!source?.isDisabled);
+    const isTargetValid = !target || (target.isValidPath && !target.isDisabled);
+    if (!isSourceValid || !isTargetValid) {
+      await this.jobConfigRepo.update({ id: jobConfigId }, { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED });
       throw new NotFoundException(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);
     }
 
@@ -182,6 +186,7 @@ export class JobRunInitService {
           path: jobConfig?.sourcePath?.volumePath,
           pathId: jobConfig?.sourcePath?.id,
           isValidPath: jobConfig?.sourcePath?.isValid,
+          isDisabled: jobConfig?.sourcePath?.isDisabled,
           protocol: jobConfig?.sourcePath?.fileServer?.protocol,
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
@@ -222,6 +227,7 @@ export class JobRunInitService {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
           isValidPath: jobConfig?.sourcePath?.isValid,
+          isDisabled: jobConfig?.sourcePath?.isDisabled,
           pathId: jobConfig?.sourcePath?.id,
           protocol: jobConfig?.sourcePath?.fileServer?.protocol,
           username: jobConfig?.sourcePath?.fileServer?.userName,
@@ -264,6 +270,7 @@ export class JobRunInitService {
         path: jobConfig?.targetPath?.volumePath,
         pathId: jobConfig?.targetPath?.id,
         isValidPath: jobConfig?.targetPath?.isValid,
+        isDisabled: jobConfig?.targetPath?.isDisabled,
         protocol: jobConfig?.targetPath?.fileServer?.protocol,
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,

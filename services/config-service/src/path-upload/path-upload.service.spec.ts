@@ -368,6 +368,7 @@ describe('PathUploadService', () => {
       jest.spyOn(volumeRepo, 'findOne').mockResolvedValue(null);
       jest.spyOn(volumeRepo, 'save').mockResolvedValue(mockValidationResult.validPaths[0] as any);
       jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockValidationResult.validPaths as any);
+      jest.spyOn(uploadRepo, 'update').mockResolvedValue(mockValidationResult.validPaths as any);
       const result = await service.processUploadUpdate(mockValidationResult.validPaths, uploadId);
       expect(result).toBeDefined();
       expect(result.validPaths.length).toBe(2);
@@ -401,7 +402,7 @@ describe('PathUploadService', () => {
       jest.spyOn(volumeRepo, 'findOne').mockResolvedValue({ id: 'path_1' } as any);
       jest.spyOn(volumeRepo, 'save').mockResolvedValue(mockValidationResult.validPaths[0] as any);
       jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockValidationResult.validPaths as any);
-
+      jest.spyOn(uploadRepo, 'update').mockResolvedValue(mockValidationResult.validPaths as any);
       const result = await service.processUploadUpdate(mockValidationResult.validPaths, uploadId);
       expect(result).toBeDefined();
       expect(result.validPaths.length).toBe(1);

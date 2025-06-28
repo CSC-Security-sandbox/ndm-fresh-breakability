@@ -1110,11 +1110,13 @@ export class JobConfigService {
               id: true,
               volumePath: true,
               reachableCount: true,
+              isDisabled: true,
+              isValid: true,
             },
           },
         },
       },
-      where: { id: projectId, configs: { fileServers: { volumes: { isValid: true, isDisabled: false } }} },
+      where: { id: projectId },
       relations: {
         configs: {
           fileServers: {

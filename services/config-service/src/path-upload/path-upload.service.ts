@@ -263,6 +263,10 @@ export class PathUploadService {
         });
         newPaths.push(newVolume);
       }
+      // update the upload record with validation response
+      await this.uploadRepo.update(path.id, {
+        validationResponse: JSON.stringify(`${path.isValid ? 'SUCCESS: ' : 'ERROR: '} ${path.message}`)
+      })
     }
     if (newPaths.length > 0) await this.volumeRepo.save(newPaths);
 
@@ -295,7 +299,7 @@ export class PathUploadService {
     return await this.volumeRepo.save(volumeEntity);
   }
 
-  async processValidationResult(fileServerId: string, validationResult: any[]): Promise<{ validPaths: VolumeEntity[], invalidPaths: VolumeEntity[] }> {
+  async processValidationResult(fileServerId: string, validationResult: any[]): Promise<{ validPaths: any[], invalidPaths: any[] }> {
     const validPaths = new Map<string, any>();
     const invalidPaths = new Map<string, any>();
 
@@ -308,6 +312,7 @@ export class PathUploadService {
             volumePath: path,
             reachableCount: 0,
             fileServerId,
+            message: result.result.message,
           };
         }
         if (result.result.status === 'success') {
@@ -316,15 +321,15 @@ export class PathUploadService {
         } else {
           // if a path is invalid and already exists in validPaths, remove it from validPaths
           if (validPaths.has(path)) validPaths.delete(path);
-          invalidPaths.set(path, { ...acc[path], id: result.result.pathId, message: result.result.message || 'Unknown error' });
+          invalidPaths.set(path, acc[path]);
         }
       });
       return acc;
     }, {});
 
     return {
-      validPaths: Array.from(validPaths.values()),
-      invalidPaths: Array.from(invalidPaths.values())
+      validPaths: Array.from(validPaths.values()) as any,
+      invalidPaths: Array.from(invalidPaths.values()) as any,
     };
   }
 

@@ -14,6 +14,7 @@ interface Credential {
     username: string,
     path:string,
     isValidPath: boolean,
+    isDisabled: boolean,
     host: string,
     workingDirectory:string,
     protocolVersion: string

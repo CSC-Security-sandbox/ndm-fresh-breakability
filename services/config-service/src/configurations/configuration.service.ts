@@ -233,6 +233,7 @@ export class ConfigurationService {
               volumePath: true,
               isValid: true,
               isDisabled: true,
+              reachableCount: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -261,6 +262,9 @@ export class ConfigurationService {
         },
       });
 
+      const uploads = await this.pathUploadsRepo.find({
+        where: { fileServerId: In(config.fileServers.map(fs => fs.id)), id: In(config.fileServers.flatMap(fs => fs.volumes.map(v => v.id))) },
+      });
 
       if (!config)
         throw new NotFoundException(`Config for id ${id} not found.`);
@@ -268,6 +272,10 @@ export class ConfigurationService {
       if(config?.fileServers) {
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
+          volumes: fileServer.volumes.map((volume) => ({
+            ...volume,
+            validationResult: uploads.find(upload => upload.id === volume.id)?.validationResponse || '',
+          })),
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
@@ -1027,12 +1035,6 @@ export class ConfigurationService {
         ...payload.options,
       };
 
-      // make all the current source paths invalid and disabled
-      await this.volumes.update(
-        { fileServerId: In(config.fileServers.map((it) => it.id)) },
-        { isValid: false, isDisabled: true },
-      );
-
       const workflow = await this.workFlowService.startWorkflow(
         WorkFlows.LIST_PATHS,
         startWorkFlowPayload,
@@ -1116,7 +1118,6 @@ export class ConfigurationService {
         },
       });
       const fileServersIds = config.fileServers.map(it=>it.id)
-      await this.volumes.update({fileServerId: In(fileServersIds)}, { reachableCount: 0, isValid: true, isDisabled: false })     
       for (let fileServer of config.fileServers) {
         await this.volumes.update(
           {

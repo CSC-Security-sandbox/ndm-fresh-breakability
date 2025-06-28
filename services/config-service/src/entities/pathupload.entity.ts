@@ -30,6 +30,10 @@ export class PathUploadsEntity extends Base {
     @Column({ type: 'uuid', name: 'file_server_id' })
     fileServerId: string;
 
+    @ApiProperty({ description: 'Validation response for the path upload', required: false })
+    @Column({ type: 'text', name: 'validation_response', nullable: true })
+    validationResponse?: string;
+
     @ManyToOne(() => FileServerEntity, (fileServer) => fileServer.uploads)
     @JoinColumn({ name: 'file_server_id' })
     fileServer: FileServerEntity;

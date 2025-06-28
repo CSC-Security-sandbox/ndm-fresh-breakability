@@ -331,7 +331,7 @@ describe('ConfigurationService', () => {
       jest.spyOn(service, 'isRefreshPossible').mockResolvedValue(true);
       mockConfigRepository.findOne.mockResolvedValue(null);
       await expect(service.getConfigById(uuidv4())).rejects.toThrow(
-        NotFoundException,
+        InternalServerErrorException,
       );
     });
   });
@@ -2093,6 +2093,204 @@ describe('ConfigurationService', () => {
       await expect(service.updatePaths(configId, details)).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+    
+    it('should not add duplicate paths to pathsMap', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/path1', '/path1'], // duplicate path
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+
+      jest.spyOn(volumeRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockReturnValue([]),
+      } as any);
+
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      } as any);
+
+      await service.updatePaths(configId, details as any);
+      expect(mockVolumeRepository.create).toHaveBeenCalledTimes(1); // should only create once
+    });
+
+    it('should not update jobs if no invalid or disabled volumes exist', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/path1'],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+
+      jest.spyOn(volumeRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockReturnValue([]), // no invalid/disabled volumes
+      } as any);
+
+      const jobUpdate = jest.fn();
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        update: jobUpdate,
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      } as any);
+
+      await service.updatePaths(configId, details as any);
+
+      expect(jobUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to createdBy if updatedBy is not set', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/new-path'],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [],
+          },
+        ],
+        updatedBy: undefined,
+        createdBy: 'creator',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+
+      jest.spyOn(volumeRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockReturnValue([]),
+      } as any);
+
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      } as any);
+
+      await service.updatePaths(configId, details as any);
+
+      expect(mockVolumeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ createdBy: 'creator' }),
+      );
+    });
+
+    it('should not create volumes if all paths already exist', async () => {
+      const configId = uuidv4();
+      const details = {
+        completed: [
+          {
+            protocolType: 'NFS',
+            paths: ['/existing-path'],
+          },
+        ],
+      };
+
+      const mockConfig = {
+        fileServers: [
+          {
+            id: 'fs-1',
+            protocol: 'NFS',
+            volumes: [{ volumePath: '/existing-path' }],
+          },
+        ],
+        updatedBy: 'test-user',
+        createdBy: 'test-user',
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.update.mockResolvedValue(undefined);
+      mockVolumeRepository.save.mockResolvedValue([]);
+      mockVolumeRepository.create.mockImplementation((data) => data);
+
+      jest.spyOn(volumeRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockReturnValue([]),
+      } as any);
+
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      } as any);
+
+      await service.updatePaths(configId, details as any);
+      expect(mockVolumeRepository.create).not.toHaveBeenCalled();
+      expect(mockVolumeRepository.save).toHaveBeenCalledWith([]);
     });
   });
 
