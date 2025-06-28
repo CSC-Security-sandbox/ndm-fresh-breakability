@@ -562,6 +562,8 @@ export interface AllFileServerWithVolumesApiType {
     volumes: {
       id: string;
       volumePath: string;
+      isValid?: boolean;
+      isDisabled?: boolean;
       reachableCount: number;
     }[];
   }[];

@@ -50,6 +50,9 @@ const DestinationFileServer = ({
         !mappingStepForm?.values?.selectedMountPathsId?.includes(String(row.id))
       }
       getOptionLabel={(option) => option?.pathName || ""}
+      getOptionDisabled={(option) =>
+        option.isDisabled || !option.isValid || option.reachableCount === 0
+      }
       className="w-full"
       size="small"
       value={

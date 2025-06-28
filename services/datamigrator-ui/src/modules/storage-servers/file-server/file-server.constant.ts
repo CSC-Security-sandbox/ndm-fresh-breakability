@@ -94,6 +94,6 @@ export const FILE_SERVER_LIST_COLUMN_DEFS: any[] = [
 ];
 
 export enum FILE_SERVER_LIST_ENUM {
-  SHOW_MOUNT = "Auto Discover",
+  AUTO_DISCOVER = "Auto Discover",
   MANUAL_UPLOAD = "Manual Upload",
 }
