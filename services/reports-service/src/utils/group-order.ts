@@ -7,6 +7,8 @@ import {
 } from "../constants/report";
 import { BadRequestException, Logger } from "@nestjs/common";
 
+const logger = new Logger("groupAndOrder");
+
 // Helper to format value if needed
 export const formatValue = (entry: ReportEntry): string | number => {
 
@@ -28,7 +30,6 @@ export const groupAndOrder = (
   data: any[],
   reportType: string
 ): Record<string, any[]> | null => {
- const logger = new Logger()
   try {
     if (!Array.isArray(data)) {
       logger.error("Invalid input: 'data' must be an array.")
