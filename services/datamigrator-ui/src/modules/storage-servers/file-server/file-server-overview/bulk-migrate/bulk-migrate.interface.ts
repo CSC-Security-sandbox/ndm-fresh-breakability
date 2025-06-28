@@ -35,7 +35,6 @@ export interface MappingStepFormikFormType {
 
 export interface MigrationDetailsTableConfigurationType {
   id: number;
-  isValid: boolean;
   sourceFileServerDetails: ConfigListTypeApiType;
   sourcePath: {
     volume: VolumeType;
@@ -60,6 +59,9 @@ export interface DestinationPathsOptionsType {
   protocol: string;
   pathId: string;
   pathName: string;
+  isDisabled?: boolean;
+  isValid?: boolean;
+  reachableCount?: number;
 }
 
 export interface ProtocolFormType {

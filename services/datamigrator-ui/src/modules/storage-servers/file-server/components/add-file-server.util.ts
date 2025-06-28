@@ -108,7 +108,7 @@ export const patchCredentialsFormValue = (
     userName: protocolValue?.userName || "",
     protocolVersion: protocolValue.protocolVersion,
     exportPathSource:
-      protocolValue?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.SHOW_MOUNT,
+      protocolValue?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
   };
 };
 

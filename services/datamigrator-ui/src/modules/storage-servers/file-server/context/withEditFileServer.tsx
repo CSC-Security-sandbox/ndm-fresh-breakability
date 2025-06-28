@@ -87,7 +87,7 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
           },
           exportPathSource:
             nfsCredentialsInitialValues.exportPathSource ||
-            EXPORT_PATH_SOURCE_ENUM.SHOW_MOUNT,
+            EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
         })
       );
 

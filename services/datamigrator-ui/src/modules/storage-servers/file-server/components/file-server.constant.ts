@@ -19,7 +19,7 @@ export const HOST_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
 });
 
 export enum EXPORT_PATH_SOURCE_ENUM {
-  SHOW_MOUNT = "SHOW_MOUNT",
+  AUTO_DISCOVER = "AUTO_DISCOVER",
   MANUAL_UPLOAD = "MANUAL_UPLOAD",
 }
 
@@ -130,7 +130,7 @@ export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {
     label: "",
     value: "",
   },
-  exportPathSource: EXPORT_PATH_SOURCE_ENUM.SHOW_MOUNT,
+  exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
 };
 
 export const INITIAL_VALUE_JOB_CONFIG = {
