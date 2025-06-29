@@ -7,6 +7,12 @@ on:
     paths:
       - 'services/worker/**'
   workflow_dispatch:
+  workflow_call: 
+    inputs:
+      build:
+        description: 'Build to release'
+        required: true
+        type: string
 
 permissions: 
   contents: read
@@ -50,13 +56,18 @@ jobs:
       - name: Zip pkg folder
         run: zip -r pkg.zip pkg
       
-      - name: Set SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+      - name: Set Release Tag
+        run: |
+          if [ -n "${{ inputs.build }}" ]; then
+            echo "RELEASE_TAG=${{ inputs.build }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=${GITHUB_SHA::6}" >> $GITHUB_ENV
+          fi
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: worker-binary-${{ env.SHORT_SHA }}
+          name: worker-binary-${{ env.RELEASE_TAG }}
           path: services/worker/pkg.zip
 
   build:
@@ -70,16 +81,19 @@ jobs:
         - name: Checkout code
           uses: actions/checkout@v4
 
-        - name: Set SHA
-          shell: pwsh
+        - name: Set Release Tag
+          shell: bash
           run: |
-            $shortSha = $env:GITHUB_SHA.Substring(0, 6)
-            echo "SHORT_SHA=$shortSha" >> $env:GITHUB_ENV
+            if [ -n "${{ inputs.build }}" ]; then
+              echo "RELEASE_TAG=${{ inputs.build }}" >> $GITHUB_ENV
+            else
+              echo "RELEASE_TAG=${GITHUB_SHA::6}" >> $GITHUB_ENV
+            fi
 
         - name: Download Binary Artifact
           uses: actions/download-artifact@v4
           with:
-            name: worker-binary-${{ env.SHORT_SHA }}
+            name: worker-binary-${{ env.RELEASE_TAG }}
             path: pkg
 
 
@@ -126,7 +140,7 @@ jobs:
         - name: Upload Installer Artifact
           uses: actions/upload-artifact@v4
           with:
-            name: windows-installer-${{ env.SHORT_SHA }}
+            name: windows-installer-${{ env.RELEASE_TAG }}
             path: wininstaller\datamigrator-worker-setup.exe
 
   release:
@@ -139,41 +153,37 @@ jobs:
 
     steps:
       - name: Set SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+        run: |
+          if [ -n "${{ inputs.build }}" ]; then
+            echo "RELEASE_TAG=${{ inputs.build }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=${GITHUB_SHA::6}" >> $GITHUB_ENV
+          fi
 
       - name: Download Binary Artifact
         uses: actions/download-artifact@v4
         with:
-          name: worker-binary-${{ env.SHORT_SHA }}
+          name: worker-binary-${{ env.RELEASE_TAG }}
           path: artifacts
 
       - name: Download Installer Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-installer-${{ env.SHORT_SHA }}
+          name: windows-installer-${{ env.RELEASE_TAG }}
           path: artifacts
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Rename Release Assets
+        run: |
+          cp artifacts/pkg.zip artifacts/${{ env.RELEASE_TAG }}-worker.zip
+          cp artifacts/datamigrator-worker-setup.exe artifacts/${{ env.RELEASE_TAG }}-windows-worker-installer.exe
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2.3.2
         with:
-          tag_name: ${{ env.SHORT_SHA }}
-          release_name: Release-${{ env.SHORT_SHA }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Release-${{ env.RELEASE_TAG }}
           draft: false
           prerelease: true
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1.0.1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/pkg.zip
-          asset_name: ${{ env.SHORT_SHA }}-worker.zip
-          asset_content_type: application/zip
-
-      - name: Upload Installer Release Asset
-        uses: actions/upload-release-asset@v1.0.1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/datamigrator-worker-setup.exe
-          asset_name: ${{ env.SHORT_SHA }}-windows-worker-installer.exe
-          asset_content_type: application/octet-stream
+          files: |
+            artifacts/${{ env.RELEASE_TAG }}-worker.zip
+            artifacts/${{ env.RELEASE_TAG }}-windows-worker-installer.exe

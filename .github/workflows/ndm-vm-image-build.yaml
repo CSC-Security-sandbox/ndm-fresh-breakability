@@ -69,6 +69,12 @@ on:
       #   type: string
   schedule:
     - cron: '45 19 * * *'
+  workflow_call:
+    inputs:
+      build:
+        description: 'Build to release'
+        required: true
+        type: string
 
 permissions: 
   contents: read
@@ -102,11 +108,10 @@ jobs:
           VERSION_BASE="${DATE_BASE}${TIME_PART}"
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             BUILD_VERSION="${VERSION_BASE}-nightly"
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            BUILD_VERSION="${{ inputs.build }}"
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             BUILD_VERSION="${VERSION_BASE}-adhoc"
-          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            SUFFIX="${BASH_REMATCH[1]}"
-            BUILD_VERSION="${VERSION_BASE}-${SUFFIX}"
           else
             echo "Error: Unsupported event type or branch format for build versioning."
             exit 1
