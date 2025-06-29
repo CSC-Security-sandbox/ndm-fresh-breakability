@@ -1,0 +1,38 @@
+name: Release Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Build to release'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+   
+jobs:
+  check-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure branch is release/**
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') }}
+        run: |
+          echo "This workflow can only be run on release/** branches."
+          exit 1
+
+  build-docker-images:
+    needs: check-branch
+    uses: ./.github/workflows/build-push-service-images.yaml
+    with:
+      build: ${{ github.event.inputs.build }}
+
+  build-worker-binary:
+    needs: check-branch
+    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
+    with:
+      build: ${{ github.event.inputs.build }}
+  
+  build-vm-images:
+    needs: check-branch
+    uses: ./.github/workflows/ndm-vm-image-build.yaml
