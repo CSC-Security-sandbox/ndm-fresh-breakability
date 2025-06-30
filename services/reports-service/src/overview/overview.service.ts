@@ -82,14 +82,50 @@ export class OverviewService {
 
     const scanRunDetailsStart = Date.now();
 
-    const totalDiscoverJobs =
-      projectDetails
-        .flatMap((project) => project.configs || [])
-        .flatMap((config) => config.fileServers || [])
-        .flatMap((server) => server.volumes || [])
-        .flatMap((volume) => volume.sourceConfig || [])
-        .find((source) => source.jobType === JobType.Discover)?.jobRuns
-        ?.length || 0;
+    // const totalDiscoverJobs =
+    //   projectDetails?.flatMap((project) =>
+    //     project?.configs?.flatMap((config) =>
+    //       config?.fileServers?.flatMap((fileServer) =>
+    //         fileServer?.volumes?.flatMap((volume) =>
+    //           volume?.sourceConfig?.filter(
+    //             (jobConfig) => jobConfig.jobType === JobType.Discover
+    //           )
+    //         )
+    //       )
+    //     )
+    //   )?.length || 0;
+
+    // const totalMigrationJobs =
+    //   projectDetails?.flatMap((project) =>
+    //     project?.configs?.flatMap((config) =>
+    //       config?.fileServers?.flatMap((fileServer) =>
+    //         fileServer?.volumes?.flatMap((volume) =>
+    //           volume?.sourceConfig?.filter(
+    //             (jobConfig) => jobConfig.jobType === JobType.Migrate
+    //           )
+    //         )
+    //       )
+    //     )
+    //   )?.length || 0;
+
+    // const totalCutOverJobs =
+    //   projectDetails?.flatMap((project) =>
+    //     project?.configs?.flatMap((config) =>
+    //       config?.fileServers?.flatMap((fileServer) =>
+    //         fileServer?.volumes?.flatMap((volume) =>
+    //           volume?.sourceConfig?.filter(
+    //             (jobConfig) => jobConfig.jobType === JobType.CutOver
+    //           )
+    //         )
+    //       )
+    //     )
+    //   )?.length || 0;
+
+    const {
+      totalDiscoverJobs,
+      totalMigrationJobs,
+      totalCutOverJobs
+    } = this.countAllJobTypes(projectDetails);
 
     const scanRunDetails = projectDetails
       ?.flatMap((project) =>
@@ -236,11 +272,8 @@ export class OverviewService {
       },
       jobDetails: {
         totalDiscoverJobs,
-        totalMigrateJobs: {
-          baseLineJob: migrateRun?.length > 0 ? 1 : 0,
-          incrementalJob: migrateRun?.length > 1 ? migrateRun.length - 1 : 0,
-        },
-        totalCutoverJobs: cutOverRun?.length,
+        totalMigrateJobs: totalMigrationJobs,
+        totalCutoverJobs: totalCutOverJobs,
       },
     };
     const getStorageAndJobsOverviewEnd = Date.now();
@@ -250,4 +283,33 @@ export class OverviewService {
     this.logger.log(`OVERVIEW DATA: ${overViewData} ms`);
     return overViewData;
   }
+
+  countAllJobTypes(projects) {
+    try {
+      const allConfigs =
+        projects?.flatMap((project) =>
+          project?.configs?.flatMap((config) =>
+            config?.fileServers?.flatMap((fileServer) =>
+              fileServer?.volumes?.flatMap((volume) =>
+                volume?.sourceConfig || []
+              )
+            )
+          )
+        ) || [];
+  
+      return {
+        totalDiscoverJobs: allConfigs.filter((config) => config.jobType === JobType.Discover).length,
+        totalMigrationJobs: allConfigs.filter((config) => config.jobType === JobType.Migrate).length,
+        totalCutOverJobs: allConfigs.filter((config) => config.jobType === JobType.CutOver).length,
+      };
+    } catch (error) {
+      console.error('Error counting job configs:', error);
+      return {
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      };
+    }
+  }
+  
 }
