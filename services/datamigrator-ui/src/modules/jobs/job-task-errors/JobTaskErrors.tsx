@@ -11,15 +11,35 @@ import JobTaskErrorsBreadcrumbs from "@modules/jobs/job-task-errors/components/J
 import JobTaskErrorsTabs from "@modules/jobs/job-task-errors/components/JobTaskErrorsTabs";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import {
+  useIsErrorLogsCsvReadyQuery,
+  useLazyGenerateErrorLogsQuery,
+  useLazyDownloadErrorLogsCSVQuery,
+} from "@api/reportApi";
+import { createUrl, handleDownloadErrorsLogs } from "@modules/jobs/jobs.utils";
+import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
 
 const JobTaskErrors = () => {
   const [jobConfigDetails, setJobConfigDetails] =
     useState<JobConfigDetailsApiType>();
-  const [getJobConfigDetailsApi] = useLazyGetJobConfigDetailsQuery();
-  const { jobId } = useParams<{ jobRunId: string; jobId: string }>();
   const [currentErrorType, setCurrentErrorType] = useState<string>(
     JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR
   );
+
+  const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
+
+  const queryParams = createUrl({ jobRunId: jobRunId });
+
+  // API hooks
+  const { data } = useIsErrorLogsCsvReadyQuery(queryParams, {
+    pollingInterval: Number(
+      window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+    ),
+    skipPollingIfUnfocused: true,
+  });
+  const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
+  const [getJobConfigDetailsApi] = useLazyGetJobConfigDetailsQuery();
+  const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
 
   useEffect(() => {
     (async () => {
@@ -36,9 +56,31 @@ const JobTaskErrors = () => {
     })();
   }, [jobId]);
 
+  const handleErrorLogsDownload = async () => {
+    try {
+      const queryParams = createUrl({ jobRunId: jobRunId });
+      await generateErrorLogs(queryParams).unwrap();
+    } catch (error) {
+      const errorMsg = "Error while downloading error logs.";
+      notify.error(errorMsg);
+      console.error(`errorMsg ${error}`);
+    }
+  };
+
   return (
     <Box className="flex flex-col gap-8">
-      <JobTaskErrorsBreadcrumbs />
+      <Box className="flex flex-row justify-between items-center">
+        <JobTaskErrorsBreadcrumbs />
+
+        <ErrorLogActionButton
+          data={data}
+          handleGenerate={handleErrorLogsDownload}
+          handleDownload={() =>
+            handleDownloadErrorsLogs(downloadErrorLogs, { jobRunId }, "CSV")
+          }
+        />
+      </Box>
+
       <JobTaskErrorsTabs
         currentErrorType={currentErrorType}
         setCurrentErrorType={setCurrentErrorType}
