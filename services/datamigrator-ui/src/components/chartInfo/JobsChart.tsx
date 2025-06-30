@@ -1,7 +1,11 @@
 import { FileServerOverviewApi } from "@/types/app.type";
 import { Box } from "@components/container/index";
 import {
+<<<<<<< HEAD
   DoughnutChart,
+=======
+  DoughnutChart
+>>>>>>> 9e256b04 (removed the code related baseline and incremental legends)
 } from "@netapp/bxp-design-system-react";
 import LegendWrapper from "@components/chartInfo/LegendWrapper";
 import { Tooltip } from "@netapp/bxp-design-system-react";
