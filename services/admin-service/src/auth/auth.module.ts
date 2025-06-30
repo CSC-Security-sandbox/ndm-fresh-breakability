@@ -10,6 +10,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { Permission } from '../entities/permission.entity';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Permission } from '../entities/permission.entity';
       Permission,
     ]),
     AuthKeycloakModule,
+    LoggerModule.forRoot(),
   ],
   controllers: [AuthController],
   providers: [AuthService],

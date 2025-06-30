@@ -5,7 +5,8 @@ import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { SyncEmail, IncidentStatus } from 'src/entities/sync-email.entity';
-import { Logger } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../project/project.service.spec';
 
 enum EmailContentStatus {
   FIRING = 'firing',
@@ -42,12 +43,12 @@ describe('EmailService', () => {
             update: jest.fn().mockResolvedValue({}),
           },
         },
-        {
-          provide: Logger,
-          useValue: {
-            error: jest.fn(),
-          },
-        },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
     service = module.get<EmailService>(EmailService);
