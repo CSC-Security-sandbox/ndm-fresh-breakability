@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", func() {
+var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -23,7 +23,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 		sourceVolumePath2      string
 	)
 
-	Context("TC-010: Run migration with 'Exclude Path Patterns' option", func() {
+	Context("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -40,12 +40,12 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 		})
 
-		It("TC-010: Run migration with 'Exclude Path Patterns' option", func() {
+		It("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
 			By("########################## TC-010 starts ################################")
 
-			var sourceConfigID, sourcePathID1, sourcePathID2 string
+			var sourceFileServerID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
-			var destinationConfigID, destinationPathID1, destinationPathID2 string
+			var destinationFileServerID, destinationPathID1, destinationPathID2 string
 
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
@@ -61,17 +61,17 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
+			sourceFileServerID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
+			Expect(sourceFileServerID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
-			LogDebug(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source by providing exclude files type and file patterns")
@@ -111,7 +111,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 
 				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-010-JSON/%s", discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-				LogDebug(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
 			}
 
 			By("Creating the destination file server")
@@ -128,16 +128,16 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+			destinationFileServerID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
-			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
+			Expect(destinationFileServerID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job by providing exclude files type and file patterns")
@@ -150,7 +150,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/folder_2/*, */symlink_2_to_jpg/*, */hardlink_2_to_pdf/*, /*.mp4/, /*.mp3/, /*.pdf/, /*.txt/, /*.csv/, /*.doc/, /*.text/, /*.jpg/, /*.json/, /*.png/",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -174,7 +174,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-010-JSON/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Adding Delta Data")
@@ -232,7 +232,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 			// for i, cutoverRunID := range cutoverRunIDs {
 			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-010-JSON/%s", cutover_validators[i]))
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
 			By("########################## TC-010 end ################################")
 		})
@@ -252,7 +252,7 @@ var _ = Describe("TC-010: Run migration with 'Exclude Path Patterns' option", fu
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })
