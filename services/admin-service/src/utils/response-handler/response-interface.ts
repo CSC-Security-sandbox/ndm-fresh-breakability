@@ -4,7 +4,6 @@
 export enum MessageKey {
   CreateUser = 'create-user',
   UserStatus = 'user-status',
-  Projects = 'projects:id',
 }
 
 export enum ErrorKey {
@@ -64,9 +63,6 @@ export const MessageCatalog: Record<MessageKey, MessageCatalogValue> = {
   [MessageKey.CreateUser]: {
     message: 'User Created successfully.',
   },
-  [MessageKey.Projects]: (method: string) => ({
-    message: `Project has been successfully ${method == 'PATCH' ? 'Updated' : 'Created'} .`,
-  }),
   [MessageKey.UserStatus]: (state: string, email: string) => ({
     message: `Access has been successfully ${state} for a user: ${email}`,
   }),

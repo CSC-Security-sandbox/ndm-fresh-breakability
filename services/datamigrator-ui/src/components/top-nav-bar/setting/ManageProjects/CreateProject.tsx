@@ -126,6 +126,7 @@ const CreateProjectForm = ({
         resetProjectForm();
         notify.success(message);
       } catch (err) {
+        // improvement needs to be done here to handle the error better
         notify.warning(
           `Project - "${createProjectForm.formState.project_name}" successfully created. But failed to associate the users.`,
         );
@@ -156,9 +157,8 @@ const CreateProjectForm = ({
         let associateUserResult = await handleAssociateUsers(
           editSelectedProject?.id,
         );
-        console.log("associateUserResult>>>>>>>>>>>>>>>", result);
         resetProjectForm();
-        notify.success(message);
+        notify.success(result.message || message);
         handleClose();
         submitAction && submitAction();
       } catch (err) {

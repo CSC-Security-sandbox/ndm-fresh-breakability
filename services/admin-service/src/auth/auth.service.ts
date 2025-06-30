@@ -186,7 +186,7 @@ export class AuthService {
   async setUserStatus(email: string, enable: boolean): Promise<User> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(`User not found, Please verify the user ID and try again.`);
     }
 
     user.user_status = enable ? 'active' : 'inactive';
@@ -203,7 +203,7 @@ export class AuthService {
       });
 
       if (users.length === 0) {
-        throw new NotFoundException('User not found in Keycloak');
+        throw new NotFoundException(`User not found in Keycloak', Please verify the user ID and try again.`);
       }
 
       const keycloakUser = users[0];

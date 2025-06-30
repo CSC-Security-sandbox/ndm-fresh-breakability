@@ -37,16 +37,12 @@ const ManageUsers = () => {
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
-      .then(() => {
-        notify.success(
-          `${body.enable ? "Enabled" : "Disabled"} access for user ${
-            body.email
-          }`,
-        );
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
-        notify.error(`Failed to update status of user ${body.email}.`);
-        console.error(err);
+        const errorDetails = err.data?.error;
+        notify.error(errorDetails?.displayMessage);
       });
   };
 
