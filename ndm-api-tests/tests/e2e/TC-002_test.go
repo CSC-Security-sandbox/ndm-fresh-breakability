@@ -175,7 +175,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 
 				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 
 			}
 
@@ -256,7 +256,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 				res, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", res))
+				By(fmt.Sprintf("validate report result : %s", res))
 			}
 
 			By("Adding Delta Data")
@@ -334,7 +334,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })

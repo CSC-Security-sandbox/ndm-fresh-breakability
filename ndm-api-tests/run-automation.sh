@@ -14,7 +14,7 @@ run_tests() {
     local test_path=$2
 
     echo " \n\n Running $test_type tests  \n\n" | tee -a "$report_file"
-    ginkgo run "$test_path" | tee -a "$report_file"
+    ginkgo run  -v "$test_path" | tee -a "$report_file"
 }
 
 # Run regression tests
