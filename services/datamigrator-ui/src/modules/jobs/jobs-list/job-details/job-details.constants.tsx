@@ -247,3 +247,5 @@ export {
   ERRORS_DUMMY_DATA,
   ERRORS_LIST_COLUMN_DEFS,
 };
+
+export const GENERATING_REPORT_LABEL = "Generating reports, please wait";

@@ -44,3 +44,6 @@ export const ERROR_COLUMN_DEF = [
       React.createElement(TooltipCellRenderer, { ...props }),
   },
 ];
+
+export const GENERATING_ERRORS_LOGS_LABEL =
+  "Generating Error Logs, please wait";
