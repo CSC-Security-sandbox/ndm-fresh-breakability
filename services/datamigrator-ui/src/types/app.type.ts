@@ -416,10 +416,7 @@ export interface JobRowType {
 export interface FileServerOverviewApi {
   jobDetails: {
     totalDiscoverJobs: number;
-    totalMigrateJobs: {
-      baseLineJob: number;
-      incrementalJob: number;
-    };
+    totalMigrateJobs: number;
     totalCutoverJobs: number;
   };
   storageDetails: {
