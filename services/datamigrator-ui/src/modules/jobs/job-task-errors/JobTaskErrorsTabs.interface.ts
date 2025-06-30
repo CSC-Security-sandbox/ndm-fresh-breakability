@@ -12,3 +12,10 @@ export type JobTaskDetailsPropsType = {
 export type ErrorsListTablePropsType = {
   currentErrorType: string;
 };
+
+export type ErrorLogActionButtonPropsType = {
+  data: { ready: boolean; processing: boolean };
+  handleGenerate: () => void;
+  handleDownload: () => void;
+  disabled?: boolean;
+};

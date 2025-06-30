@@ -5,7 +5,9 @@ export const reportApi = createApi({
   reducerPath: "reportApi",
   tagTypes: ["JOB_RUN_DETAILS"],
   baseQuery: fetchBaseQuery({
-    baseUrl: window?.env?.VITE_REPORTS_SERVICE_URL || import.meta.env.VITE_REPORTS_SERVICE_URL,
+    baseUrl:
+      window?.env?.VITE_REPORTS_SERVICE_URL ||
+      import.meta.env.VITE_REPORTS_SERVICE_URL,
     prepareHeaders,
   }),
   endpoints: (builder) => ({
@@ -48,6 +50,25 @@ export const reportApi = createApi({
       query: (payload) =>
         `job-run/job-report?jobRunId=${payload.jobRunId}&reportType=${payload.reportType}`,
     }),
+
+    downloadErrorLogsCSV: builder.query({
+      query: (queryParams) => ({
+        url: `job-run/download-error-csv?${queryParams}`,
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
+
+    generateErrorLogs: builder.query({
+      query: (queryParams) => `job-run/generate-error-csv?${queryParams}`,
+    }),
+
+    isErrorLogsCsvReady: builder.query({
+      query: (queryParams) => `job-run/is-error-csv-ready?${queryParams}`,
+    }),
   }),
 });
 
@@ -61,4 +82,7 @@ export const {
   useDownloadReportsMutation,
   useGetJobRunDetailsQuery,
   useLazyGetJobRunDetailsQuery,
+  useLazyDownloadErrorLogsCSVQuery,
+  useLazyGenerateErrorLogsQuery,
+  useIsErrorLogsCsvReadyQuery,
 } = reportApi;

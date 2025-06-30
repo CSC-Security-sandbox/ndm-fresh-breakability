@@ -111,7 +111,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.DISCOVERY,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -126,7 +126,7 @@ export const getReportActions = (
               getPdfReportApi,
               row.jobRunId,
               ReportENUM.DISCOVERY,
-              "pdf"
+              "PDF"
             );
           },
           disabled: !isReportReady,
@@ -141,7 +141,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.COC,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -156,7 +156,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.COC,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -168,7 +168,7 @@ export const getReportActions = (
               getPdfReportApi,
               row.jobRunId,
               ReportENUM.JOBS_REPORT,
-              "pdf"
+              "PDF"
             );
           },
           disabled: !isReportReady,
