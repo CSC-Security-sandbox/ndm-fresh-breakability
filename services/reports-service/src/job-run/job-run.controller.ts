@@ -1,15 +1,36 @@
-import { Controller, Get, Param, Query, SerializeOptions, Logger } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JobRunService } from './job-run.service';
-import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Query,
+  SerializeOptions,
+  StreamableFile,
+  Logger,
+} from "@nestjs/common";
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { JobRunService } from "./job-run.service";
+import {
+  JobReportResponseDto,
+  JobRunDetailsResponseDto,
+  serializeJobRunDetailsResponse,
+} from "./dto/job-rundetails.dto";
+import { ErrorLogService } from "src/csv/error_log_csv.service";
 
 @ApiTags("job-run")
 @Controller("job-run")
 export class JobRunController {
-   constructor(
-    private readonly jobRunService: JobRunService,    
+  constructor(
+    private readonly jobRunService: JobRunService,
     private readonly logger: Logger,
+    private readonly errorLogService: ErrorLogService
   ) {}
+
   @ApiOperation({ summary: "Get job run Report by JobRunId" })
   @ApiOkResponse({
     description: "Returns a job run report by its JobRunId.",
@@ -32,6 +53,58 @@ export class JobRunController {
     return JSON.parse(response);
   }
 
+  @ApiOperation({
+    summary: "Generate Error Logs using JobRunId or jobConfigId",
+  })
+  @ApiOkResponse({
+    description: "Returns Error Logs using JobRunId or jobConfigId",
+  })
+  @ApiResponse({ status: 404, description: "Error log file not found." })
+  @Get("generate-error-csv")
+  async generateErrorCsv(
+    @Query("jobRunId") jobRunId?: string,
+    @Query("jobConfigId") jobConfigId?: string
+  ) {
+    if ((!jobRunId && !jobConfigId) || (jobRunId && jobConfigId)) {
+      throw new BadRequestException(
+        "Provide either jobRunId or jobConfigId, not both."
+      );
+    }
+    if (!jobRunId && !jobConfigId) {
+      throw new BadRequestException("jobRunId or jobConfigId is required.");
+    }
+    try {
+      await this.errorLogService.createCsvFileForJob(jobRunId, jobConfigId);
+      return { message: "CSV generation started" };
+    } catch (err) {
+      this.logger.error("Error generating CSV:", err);
+      return { error: err.message };
+    }
+  }
+
+  @Get("download-error-csv")
+  async downloadErrorCsv(
+    @Query("jobRunId") jobRunId?: string,
+    @Query("jobConfigId") jobConfigId?: string
+  ): Promise<StreamableFile> {
+    if (!jobRunId && !jobConfigId) {
+      throw new BadRequestException("Provide jobRunId or jobConfigId.");
+    }
+
+    return this.errorLogService.downloadErrorLogCsvFile(jobRunId, jobConfigId);
+  }
+
+  @Get("is-error-csv-ready")
+  isErrorCsvReady(
+    @Query("jobRunId") jobRunId?: string,
+    @Query("jobConfigId") jobConfigId?: string
+  ) {
+    if (!jobRunId && !jobConfigId) {
+      return { error: "Either jobRunId or jobConfigId is required" };
+    }
+    return this.errorLogService.isCsvFileReady(jobRunId, jobConfigId);
+  }
+
   @ApiOperation({ summary: "Get job run Details by ID" })
   @ApiOkResponse({
     description: "Returns a job run by its ID.",
@@ -43,7 +116,8 @@ export class JobRunController {
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
     const jobSubStatus = await this.jobRunService.getJobSubStatus(id);
-    response.status = !!jobSubStatus && jobSubStatus.subStatus || response.status;
+    response.status =
+      (!!jobSubStatus && jobSubStatus.subStatus) || response.status;
     return serializeJobRunDetailsResponse(response);
   }
 
