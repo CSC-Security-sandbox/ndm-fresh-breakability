@@ -9,11 +9,17 @@ import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-se
 import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
+import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
+import { hasManualUploadPath } from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
+import {
+  EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT,
+  NO_DATA_TEXT,
+} from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -22,6 +28,7 @@ const ExportPathsTable = ({
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
   defaultColumnState,
+  jobType,
   notReachableExportPaths,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
@@ -29,7 +36,7 @@ const ExportPathsTable = ({
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
   const dispatch = useDispatch();
-  
+
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
     rows: allExportPaths,
@@ -95,27 +102,57 @@ const ExportPathsTable = ({
     };
   }, []);
 
+  const isManualUploadPath = useMemo(() => {
+    if (fileServerDetails?.fileServers)
+      return hasManualUploadPath(fileServerDetails);
+  }, [fileServerDetails?.fileServers]);
+
   const FETCHING_DETAILS = (
     <Box className="flex gap-3 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
       <Button
         variant="text"
         onClick={handleRefetchExportPaths}
-        disabled={disableRefresh}
+        disabled={!fileServerDetails?.isRefreshAvailable || disableRefresh}
       >
         Click here to refresh
       </Button>
     </Box>
   );
 
+  const getBulkManualUpload = () => (
+    <BulkManualUploadFile
+      fileServerDetails={fileServerDetails}
+      allExportPaths={allExportPaths}
+    />
+  );
+
+  const contentValue = useMemo(() => {
+    if (jobType === "bulk-discovery") return "";
+
+    if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
+
+    return allExportPaths.length > 0 ? getBulkManualUpload() : "";
+  }, [isManualUploadPath, showRefetch, allExportPaths]);
+
+  const getDataLabel = useCallback(() => {
+    if (jobType === "bulk-discovery") return NO_DATA_TEXT;
+
+    if (fileServerDetails?.isUploadInProgress)
+      return EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT;
+
+    return isManualUploadPath ? getBulkManualUpload() : NO_DATA_TEXT;
+  }, [fileServerDetails, isManualUploadPath]);
+
   return (
     <TableWrapper
       tableStateProps={tableStateProps}
-      content={showRefetch ? FETCHING_DETAILS : ""}
+      content={contentValue}
       showLabel={false}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
+      noDataLabel={getDataLabel()}
       notReachableExportPaths={notReachableExportPaths}
     />
   );
