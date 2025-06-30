@@ -154,16 +154,15 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 					err = WaitForJobState(jobRunID, "STOPPED")
 					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-					adHocJobRunId, resp, err := TriggerAdHocJobRun(configID)
+					_, _, err := TriggerAdHocJobRun(configID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
-					LogDebug(fmt.Sprintf("Adhoc job run ID is %s and response is %+v", adHocJobRunId, resp))
 					continue
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
 				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Creating a new discovery job for destination")
@@ -257,10 +256,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					flag = true
 
-					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+					_, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
-					LogDebug("Ad-hoc JobRunId: " + adHocJobRunId)
 					err = WaitForJobState(adHocJobRunId, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
 					continue
@@ -272,7 +270,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-				LogDebug(fmt.Sprintf("validate COC report result : %s", result))
+				By(fmt.Sprintf("validate COC report result : %s", result))
 			}
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
@@ -318,7 +316,6 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
-					LogDebug("Ad-hoc JobRunId: " + adHocJobRunId)
 					err = WaitForJobState(adHocJobRunId, BLOCKED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
 
@@ -366,7 +363,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })
