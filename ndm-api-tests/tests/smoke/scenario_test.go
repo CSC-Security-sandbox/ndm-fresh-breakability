@@ -39,7 +39,7 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 
 	It("executes scenario files", func() {
 		for _, filePath := range ScenarioFiles {
-			LogDebug(fmt.Sprintf("Processing scenario file: %s", filePath))
+			By(fmt.Sprintf("Processing scenario file: %s", filePath))
 			fp := filePath // capture current value of filePath
 			localAuthToken := AuthToken
 
@@ -100,13 +100,11 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 				}
 
 				fullURL := BuildFullURL(scData, sharedVars)
-				LogDebug(fmt.Sprintf("Request URL: %s\nHTTP Method: %s\n", fullURL, strings.ToUpper(scData.Method)))
 				var reqBody []byte
 				lowerMethod := strings.ToLower(scData.Method)
 				if lowerMethod == "post" || lowerMethod == "put" || lowerMethod == "patch" {
 					reqBody, err = BuildRequestBody(scData, sharedVars)
 					Expect(err).To(BeNil(), fmt.Sprintf("Error building request body for '%s'", scData.Name))
-					LogDebug(fmt.Sprintf("Constructed Request Body: %s\n", string(reqBody)))
 				} else {
 					LogDebug("No request body for this HTTP method\n")
 				}
