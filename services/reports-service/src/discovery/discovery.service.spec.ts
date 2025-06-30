@@ -1,19 +1,22 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { DiscoveryService } from './discovery.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { InventoryEntity } from '../entities/inventory.entity';
-import { ReportsEntity } from '../entities/reports.entity';
-import * as fs from 'fs';
-import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import * as validation from '../utils/utils';
-import * as puppeteer from 'puppeteer';
+import { Test, TestingModule } from "@nestjs/testing";
+import { DiscoveryService } from "./discovery.service";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { ReportsEntity } from "../entities/reports.entity";
+import * as fs from "fs";
+import {
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
+import * as validation from "../utils/utils";
+import * as puppeteer from "puppeteer";
 
-jest.mock('puppeteer', () => {
+jest.mock("puppeteer", () => {
   const mockPuppeteer = {
     launch: jest.fn().mockResolvedValue({
       newPage: jest.fn().mockResolvedValue({
         setContent: jest.fn().mockResolvedValue(null),
-        pdf: jest.fn().mockResolvedValue(Buffer.from('mock pdf')),
+        pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf")),
       }),
       close: jest.fn().mockResolvedValue(null),
     }),
@@ -81,11 +84,11 @@ describe("DiscoveryService", () => {
           useValue: mockReportsRepo,
         },
         {
-          provide: 'SANITIZE_HTML',
+          provide: "SANITIZE_HTML",
           useValue: mockSanitizeHtml,
         },
         {
-          provide: 'ESCAPE_HTML',
+          provide: "ESCAPE_HTML",
           useValue: mockEscapeHtml,
         },
       ],
@@ -115,7 +118,7 @@ describe("DiscoveryService", () => {
       // Mock the procedure call
       jest
         .spyOn(validation, "validateFilePath")
-        .mockImplementation((filePath: string) => true);
+        .mockImplementation((filePath: string) => true || false);
 
       mockInventoryRepo.query.mockImplementation((query, params) => {
         if (query.includes("generate_discovery_report")) {
@@ -217,7 +220,9 @@ describe("DiscoveryService", () => {
 
       await expect(
         service.createReportFile(jobRunId, reportType)
-      ).rejects.toThrow("Failed to generate report for jobRunId: job123 and reportType: DISCOVERY");
+      ).rejects.toThrow(
+        "Failed to generate report for jobRunId: job123 and reportType: DISCOVERY"
+      );
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining("File path contains invalid characters:")
@@ -233,8 +238,8 @@ describe("DiscoveryService", () => {
 
       jest
         .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true)  // Reports directory exists
-        .mockReturnValueOnce(true);  // File exists
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(true);
 
       jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
 
@@ -249,8 +254,8 @@ describe("DiscoveryService", () => {
 
       jest
         .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true)  // Reports directory exists
-        .mockReturnValueOnce(false);  // File doesn't exist
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
 
       await expect(
         service.getReportsAsZip(jobRunIds, reportType)
@@ -267,8 +272,8 @@ describe("DiscoveryService", () => {
 
       jest
         .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true)  // Reports directory exists
-        .mockReturnValueOnce(true)  // First file exists
+        .mockReturnValueOnce(true) // Reports directory exists
+        .mockReturnValueOnce(true) // First file exists
         .mockReturnValueOnce(false); // Second file doesn't exist
 
       jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
@@ -293,9 +298,7 @@ describe("DiscoveryService", () => {
       // Use a more specific matcher to check both the error type and message in one assertion
       await expect(
         service.getReportsAsZip(jobRunIds, reportType)
-      ).rejects.toThrowError(
-        "Reports directory does not exist: ./reports"
-      );
+      ).rejects.toThrowError("Reports directory does not exist: ./reports");
     });
   });
 
@@ -324,18 +327,8 @@ describe("DiscoveryService", () => {
   describe("generateHtmlTable", () => {
     it("should generate HTML table from data", () => {
       const mockData = [
-        {
-          category: "Files",
-          sub_category: "Total",
-          valueType: "count",
-          value: "100",
-        },
-        {
-          category: "Files",
-          sub_category: "Processed",
-          valueType: "count",
-          value: "50",
-        },
+        { category: "Files", sub_category: "Total", value: "100" },
+        { category: "Files", sub_category: "Processed", value: "50" },
       ];
 
       const groupAndOrderSpy = jest
@@ -351,9 +344,12 @@ describe("DiscoveryService", () => {
 
       expect(result).toContain("<table>");
       expect(result).toContain("<h2>Files</h2>");
-      expect(result).toContain("<tr>\n            <th>Sub Category</th>\n            <th></th>\n          </tr>");
+      expect(result).toContain(
+        "<tr>\n            <th>Sub Category</th>\n            <th></th>\n          </tr>"
+      );
       expect(result).toContain("Total");
       expect(result).toContain("Processed");
+      expect(result).toContain("Files");
       expect(result).toContain("100");
       expect(result).toContain("50");
     });
@@ -390,13 +386,17 @@ describe("DiscoveryService", () => {
 
       const result = await service.createJobsPDFReportData(jobRunId);
 
-      expect(result).toEqual({ message: "Report data generated successfully for jobs report" });
+      expect(result).toEqual({
+        message: "Report data generated successfully for jobs report",
+      });
       expect(mockInventoryRepo.query).toHaveBeenCalledWith(
         expect.stringContaining("jobs_report_data_v2"),
         [jobRunId, process.env.SCHEMA]
       );
       expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Creating jobs report data for jobRunId: ${jobRunId}`)
+        expect.stringContaining(
+          `Creating jobs report data for jobRunId: ${jobRunId}`
+        )
       );
     });
 
@@ -406,12 +406,14 @@ describe("DiscoveryService", () => {
 
       mockInventoryRepo.query.mockRejectedValue(new Error("Procedure failed"));
 
-      await expect(
-        service.createJobsPDFReportData(jobRunId)
-      ).rejects.toThrow(InternalServerErrorException);
+      await expect(service.createJobsPDFReportData(jobRunId)).rejects.toThrow(
+        InternalServerErrorException
+      );
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Failed to generate report for jobRunId: ${jobRunId}`)
+        expect.stringContaining(
+          `Failed to generate report for jobRunId: ${jobRunId}`
+        )
       );
     });
   });
@@ -502,16 +504,18 @@ describe("DiscoveryService", () => {
           sub_category: "SubCat3",
           value: null,
           valueType: "count",
-        }
+        },
       ];
       const mockFilePath = "test.txt";
 
       // Mock groupAndOrder to return a specific structure
-      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
-        Category1: [{ sub_category: "SubCat1", value: "100" }],
-        Category2: [{ sub_category: "SubCat2", value: "200" }],
-        Category3: [{ sub_category: "SubCat3", value: null }]
-      });
+      jest
+        .spyOn(require("../utils/group-order"), "groupAndOrder")
+        .mockReturnValue({
+          Category1: [{ sub_category: "SubCat1", value: "100" }],
+          Category2: [{ sub_category: "SubCat2", value: "200" }],
+          Category3: [{ sub_category: "SubCat3", value: null }],
+        });
 
       const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
 
@@ -538,15 +542,17 @@ describe("DiscoveryService", () => {
       const mockFilePath = "test.txt";
 
       // Mock groupAndOrder to return a specific structure
-      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
-        Category1: [
-          {
-            category: "Category1",
-            sub_category: "SubCat1",
-            value: "100"
-          }
-        ]
-      });
+      jest
+        .spyOn(require("../utils/group-order"), "groupAndOrder")
+        .mockReturnValue({
+          Category1: [
+            {
+              category: "Category1",
+              sub_category: "SubCat1",
+              value: "100",
+            },
+          ],
+        });
 
       const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
 
@@ -569,21 +575,23 @@ describe("DiscoveryService", () => {
           value: "100",
           SubCat2: "200", // Direct property
           valueType: "count",
-        }
+        },
       ];
       const mockFilePath = "test.txt";
 
       // Mock groupAndOrder to return a specific structure
-      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
-        Category1: [
-          {
-            category: "Category1",
-            sub_category: "SubCat1",
-            value: "100",
-            SubCat2: "200"
-          }
-        ]
-      });
+      jest
+        .spyOn(require("../utils/group-order"), "groupAndOrder")
+        .mockReturnValue({
+          Category1: [
+            {
+              category: "Category1",
+              sub_category: "SubCat1",
+              value: "100",
+              SubCat2: "200",
+            },
+          ],
+        });
 
       const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
 
@@ -622,19 +630,117 @@ describe("DiscoveryService", () => {
       delete process.env.REPORT_DOWNLOAD_LOCATION;
       expect(service.getReportsDirectory).toBe("./reports");
     });
+
+    describe("generatePdfFromData", () => {
+      it("should generate a PDF buffer from report data", async () => {
+        const mockData = [
+          { category: "Files", sub_category: "Total", value: "100" },
+        ];
+        const pdfBuffer = await service.generatePdfFromData(mockData);
+        expect(pdfBuffer).toBeInstanceOf(Buffer);
+        expect(pdfBuffer.toString()).toContain("mock pdf");
+      });
+    });
+
+    describe("createJobsPDFReportData", () => {
+      it("should call the jobs_report_data_v2 procedure and return success message", async () => {
+        mockInventoryRepo.query.mockResolvedValue([]);
+        process.env.SCHEMA = "myschema";
+        const jobRunId = "job-xyz";
+        const result = await service.createJobsPDFReportData(jobRunId);
+        expect(result).toEqual({
+          message: "Report data generated successfully for jobs report",
+        });
+        expect(mockInventoryRepo.query).toHaveBeenCalledWith(
+          `CALL ${process.env.SCHEMA}.jobs_report_data_v2($1::UUID, $2);`,
+          [jobRunId, process.env.SCHEMA]
+        );
+      });
+
+      it("should throw InternalServerErrorException if procedure fails", async () => {
+        mockInventoryRepo.query.mockRejectedValue(new Error("fail"));
+        await expect(
+          service.createJobsPDFReportData("job-err")
+        ).rejects.toThrow(InternalServerErrorException);
+      });
+
+      describe("generatePdfFromData", () => {
+        it("should generate a PDF buffer from valid report data", async () => {
+          const mockData = [
+            { category: "Files", sub_category: "Total", value: "100" },
+            { category: "Files", sub_category: "Processed", value: "50" },
+          ];
+          const pdfBuffer = await service.generatePdfFromData(mockData);
+          expect(pdfBuffer).toBeInstanceOf(Buffer);
+          expect(pdfBuffer.toString()).toContain("mock pdf");
+        });
+
+        it("should call generateHtmlTable with the provided data", async () => {
+          const mockData = [
+            { category: "Test", sub_category: "Sub", value: "1" },
+          ];
+          const htmlSpy = jest.spyOn(service, "generateHtmlTable");
+          await service.generatePdfFromData(mockData);
+          expect(htmlSpy).toHaveBeenCalledWith(mockData);
+          htmlSpy.mockRestore();
+        });
+
+        it("should throw if puppeteer.launch throws", async () => {
+          const mockData = [
+            { category: "Error", sub_category: "Test", value: "0" },
+          ];
+          puppeteer.launch.mockRejectedValueOnce(new Error("Puppeteer failed"));
+          await expect(service.generatePdfFromData(mockData)).rejects.toThrow(
+            "Puppeteer failed"
+          );
+        });
+
+        it("should generate a PDF buffer from valid report data", async () => {
+          const mockData = [
+            { category: "Files", sub_category: "Total", value: "100" },
+            { category: "Files", sub_category: "Processed", value: "50" },
+          ];
+          const pdfBuffer = await service.generatePdfFromData(mockData);
+          expect(pdfBuffer).toBeInstanceOf(Buffer);
+          expect(pdfBuffer.toString()).toContain("mock pdf");
+        });
+
+        it("should call generateHtmlTable with the provided data", async () => {
+          const mockData = [
+            { category: "Test", sub_category: "Sub", value: "1" },
+          ];
+          const htmlSpy = jest.spyOn(service, "generateHtmlTable");
+          await service.generatePdfFromData(mockData);
+          expect(htmlSpy).toHaveBeenCalledWith(mockData);
+          htmlSpy.mockRestore();
+        });
+
+        it("should throw if puppeteer.launch throws", async () => {
+          const mockData = [
+            { category: "Error", sub_category: "Test", value: "0" },
+          ];
+          (puppeteer.launch as jest.Mock).mockRejectedValueOnce(
+            new Error("Puppeteer failed")
+          );
+          await expect(service.generatePdfFromData(mockData)).rejects.toThrow(
+            "Puppeteer failed"
+          );
+        });
+      });
+    });
   });
 
-  describe('generatePdfFromData', () => {
-    it('should sanitize and escape HTML in report data', async () => {
+  describe("generatePdfFromData", () => {
+    it("should sanitize and escape HTML in report data", async () => {
       const maliciousData = [
         {
           category: '<script>alert("xss")</script>',
-          sub_category: 'Total <b>Files</b>',
-          value: '<img src=x onerror=alert(1)>'
-        }
+          sub_category: "Total <b>Files</b>",
+          value: "<img src=x onerror=alert(1)>",
+        },
       ];
 
-      const mockPdfBuffer = Buffer.from('mock pdf');
+      const mockPdfBuffer = Buffer.from("mock pdf");
       const mockSetContent = jest.fn().mockResolvedValue(undefined);
       const mockPdf = jest.fn().mockResolvedValue(mockPdfBuffer);
       const mockNewPage = jest.fn().mockResolvedValue({
@@ -650,8 +756,8 @@ describe("DiscoveryService", () => {
       await service.generatePdfFromData(maliciousData);
 
       const htmlArg = mockSetContent.mock.calls[0][0];
-      expect(htmlArg).not.toContain('<script>');
-      expect(htmlArg).not.toContain('<img');
+      expect(htmlArg).not.toContain("<script>");
+      expect(htmlArg).not.toContain("<img");
     });
   });
 });
