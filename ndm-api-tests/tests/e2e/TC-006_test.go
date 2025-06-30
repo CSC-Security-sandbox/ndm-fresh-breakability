@@ -136,7 +136,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/TC-006-JSON/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Adding Delta Data")
@@ -207,7 +207,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })

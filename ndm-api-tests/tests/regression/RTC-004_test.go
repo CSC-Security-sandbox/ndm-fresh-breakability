@@ -51,7 +51,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(SourceConfigId).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
-			LogDebug(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
 			sourceVolumeId, err := GetExportPathID("source", NFS_SOURCE_VOLUME, SourceConfigId, headers)
@@ -139,7 +139,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(err).To(BeNil(), "Error during clearing destination volume")
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 
 	})

@@ -37,12 +37,12 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 				if workerIdWithStatus[workerId1] == "Online" {
 					break
 				}
-				LogDebug(fmt.Sprintf("Worker %s status: %s. Retrying...", workerId1, workerIdWithStatus[workerId1]))
+				By(fmt.Sprintf("Worker %s status: %s. Retrying...", workerId1, workerIdWithStatus[workerId1]))
 				Wait(5)
 			}
 
 			// Detach the worker to simulate going down
-			LogDebug(fmt.Sprintf("Detaching worker: %s", workerId1))
+			By(fmt.Sprintf("Detaching worker: %s", workerId1))
 
 			_, err = StopWorker(attachedWorkersConfig[workerId1])
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error detaching worker : %s ", workerId1))
@@ -66,7 +66,6 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 				onlineWorkers := 0
 				for _, workerId := range workerIds {
 					if workerIdWithStatus[workerId] == "Online" {
-						LogDebug(fmt.Sprintf("Worker %s is Online", workerId))
 						onlineWorkers++
 					}
 				}
@@ -85,7 +84,7 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 		AfterEach(func() {
 			err := CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 
 	})
