@@ -1,17 +1,30 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class SettingService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SettingService.name);
+  }
   async create(createSettingDto: CreateSettingDto[]) {
     try {
       if (
