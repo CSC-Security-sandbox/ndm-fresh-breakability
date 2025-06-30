@@ -5,6 +5,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from "typeorm";
+import { WorkerEntity } from "./worker.entity";
 import { JobRunEntity } from "./jobrun.entity";
 
 @Entity({ name: "worker_jobrun_mapping" })
@@ -24,10 +25,25 @@ export class WorkerJobRunMap {
   @Column({ name: "is_path_mounted", type: "boolean", default: "false" })
   isPathMounted: boolean = false;
 
-  @ManyToOne(() => JobRunEntity, (jonRun) => jonRun.worker, {
+  @ManyToOne(() => WorkerEntity, (worker) => worker.jobRunMap, {
+    onDelete: "CASCADE",
+    orphanedRowAction: "delete",
+  })
+  @JoinColumn({ name: "worker_id" })
+  worker: WorkerEntity;
+
+  @ManyToOne(() => JobRunEntity, (jonRun) => jonRun.workerMap, {
     onDelete: "CASCADE",
     orphanedRowAction: "delete",
   })
   @JoinColumn({ name: "job_run_id" })
   jobRun: JobRunEntity;
+
+  @Column({
+    name: "worker_response",
+    type: "jsonb",
+    nullable: true,
+    default: null,
+  })
+  workerResponse?: Record<string, any>;
 }

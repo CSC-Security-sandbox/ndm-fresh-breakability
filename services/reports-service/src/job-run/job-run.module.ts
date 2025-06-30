@@ -1,16 +1,29 @@
-import { Module,Logger} from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { JobRunEntity } from 'src/entities/jobrun.entity';
-import { JobRunController } from './job-run.controller';
-import { JobRunService } from './job-run.service';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { TaskEntity } from 'src/entities/task.entity';
-import { ReportsEntity } from 'src/entities/reports.entity';
-import { CsvService } from 'src/csv/csv_export.service';
+import { Logger } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { JobRunController } from "./job-run.controller";
+import { JobRunService } from "./job-run.service";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { ReportsEntity } from "src/entities/reports.entity";
+import { CsvService } from "src/csv/csv_export.service";
+import { ErrorLogService } from "src/csv/error_log_csv.service";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { TaskEntity } from "src/entities/task.entity";
+import { JobRunEntity } from "src/entities/jobrun.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([JobRunEntity,InventoryEntity, TaskEntity, ReportsEntity])],
+  imports: [
+    TypeOrmModule.forFeature([
+      JobRunEntity,
+      InventoryEntity,
+      TaskEntity,
+      ReportsEntity,
+      OperationErrorEntity,
+      WorkerJobRunMap,
+    ]),
+  ],
   controllers: [JobRunController],
-  providers: [JobRunService, CsvService,Logger]
+  providers: [JobRunService, CsvService, Logger, ErrorLogService],
 })
 export class JobRunModule {}
