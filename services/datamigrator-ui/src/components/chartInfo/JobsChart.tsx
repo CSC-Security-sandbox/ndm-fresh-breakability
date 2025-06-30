@@ -1,10 +1,8 @@
 import { FileServerOverviewApi } from "@/types/app.type";
 import { Box } from "@components/container/index";
 import {
-  DoughnutChart,
-  MetricItemAdvance,
+  DoughnutChart
 } from "@netapp/bxp-design-system-react";
-import Divider from "@mui/material/Divider";
 import LegendWrapper from "@components/chartInfo/LegendWrapper";
 import { Tooltip } from "@netapp/bxp-design-system-react";
 import React, { useMemo } from "react";
@@ -78,27 +76,12 @@ const JobChart = ({
           color="bg-purple-500"
           unit=""
         />
-        <Box className="w-4.5/12 h-1/3 flex items-baseline">
-          <Box
-            className={`w-6 h-6 rounded-md mx-2 bg-teal-500`}
-          />
-          <MetricItemAdvance
-            label="Migration Jobs"
-            value={baseLineJob + incrementalJob}
-            unit=""
-          />
-        </Box>
-        {/* <Box className="w-5.5/12 h-1/3 flex items-baseline">
-          <Box
-            className={`w-6 h-6 rounded-md mx-2 bg-blue-800`}
-          />
-          <MetricItemAdvance className="w-2/12" label="Baseline" value={baseLineJob} />
-          <Divider orientation="vertical" flexItem style={{ margin: '0.5rem 0.5rem' }}/>
-          <Box
-            className={`rounded-md mx-2 bg-blue-400 w-6 h-6`}
-          />
-          <MetricItemAdvance className="w-2/12" label="Incremental" value={incrementalJob} />
-        </Box> */}
+        <LegendWrapper
+          title="Migration Jobs"
+          value={totalMigrateJobs}
+          color="bg-teal-500"
+          unit=""
+        />
       </Box>
     </>
   );
