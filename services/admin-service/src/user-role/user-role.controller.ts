@@ -24,6 +24,7 @@ import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
@@ -70,7 +71,7 @@ export class UserRoleController {
     description: UserRoleDescription.UpdateUserRoleDescription,
   })
   async update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {

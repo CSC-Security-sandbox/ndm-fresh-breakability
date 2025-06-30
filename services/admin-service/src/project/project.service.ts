@@ -71,12 +71,13 @@ export class ProjectService {
     id: string,
     updateProjectDto: UpdateProjectDto,
     userPermissionResponse: UserPermissionResponse,
-  ): Promise<void> {
+  ):Promise<{message :string}> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
       updated_by: userPermissionResponse.user.id,
     });
     this.logger.log(`Done updating the project ${id} with update data ${JSON.stringify(updateProjectDto)}`);
+    return{ message: `Project updated successfully` };
   }
 
   async delete(id: string): Promise<void> {

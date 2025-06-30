@@ -65,13 +65,13 @@ export class SettingService {
       );
 
       return {
-        message: 'Settings created successfully',
+        message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating settings',
+          message: 'Error while creating SMTP settings',
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           error: error.message,
         },

@@ -342,15 +342,12 @@ describe('ProjectController', () => {
   describe('update', () => {
     it('should update a project', async () => {
       const updateDto = { project_name: 'updated test' } as any;
+      jest.spyOn(service, 'update').mockResolvedValue({message: 'Project updated successfully'});
 
-      jest.spyOn(service, 'update').mockResolvedValue();
+      const result = await controller.update('1', updateDto, userPermissionResponseMock);
 
-      await controller.update('1', updateDto, userPermissionResponseMock);
-      expect(service.update).toHaveBeenCalledWith(
-        '1',
-        updateDto,
-        userPermissionResponseMock,
-      );
+      expect(service.update).toHaveBeenCalledWith('1', updateDto, userPermissionResponseMock);
+      expect(result).toBe('updated');
     });
 
     it('should handle errors during update', async () => {
