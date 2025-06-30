@@ -56,15 +56,13 @@ const JobChart = ({
         <DoughnutChart
           unit=""
           label="Total Jobs"
-          colors={[
-            ["chart-4", "chart-6", "chart-9"],
-            ["chart-1", "chart-2", "chart-6", "chart-9"],
-          ]}
+          colors={
+            ["chart-4", "chart-6", "chart-9"]
+          }
           valueFormatter={formattedTotal}
-          data={[
-            [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs],
-            [baseLineJob, incrementalJob, totalDiscoverJobs, totalCutoverJobs],
-          ]}
+          data={
+            [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs]
+          }
         />
       </Box>
       <Box className="flex gap-4 w-full flex-wrap">
@@ -90,7 +88,7 @@ const JobChart = ({
             unit=""
           />
         </Box>
-        <Box className="w-5.5/12 h-1/3 flex items-baseline">
+        {/* <Box className="w-5.5/12 h-1/3 flex items-baseline">
           <Box
             className={`w-6 h-6 rounded-md mx-2 bg-blue-800`}
           />
@@ -100,7 +98,7 @@ const JobChart = ({
             className={`rounded-md mx-2 bg-blue-400 w-6 h-6`}
           />
           <MetricItemAdvance className="w-2/12" label="Incremental" value={incrementalJob} />
-        </Box>
+        </Box> */}
       </Box>
     </>
   );
