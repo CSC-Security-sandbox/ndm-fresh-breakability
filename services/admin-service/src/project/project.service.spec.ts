@@ -11,6 +11,17 @@ import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
 import { UserRole } from '../entities/user-role.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+
+// Create a fresh mock for each test run
+const mockLoggerService = {
+  log: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  verbose: jest.fn(),
+  setContext: jest.fn(),
+};
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any): Promise<any> {
@@ -60,6 +71,11 @@ describe('ProjectService', () => {
             findOne: jest.fn(),
             query: jest.fn(),
           },
+        },
+        { provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLoggerService),
+          }
         },
       ],
     }).compile();
@@ -143,6 +159,13 @@ describe('ProjectService', () => {
         createProjectDto,
         userPermissionResponseMock,
       );
+
+      expect(accountRepository.findOneBy).toHaveBeenCalledWith({
+        id: accountId,
+      });
+      await expect(
+        service.create(accountId, createProjectDto, userPermissionResponseMock)
+      ).rejects.toThrow(new NotFoundException(`Account with ${accountId} not found`));
 
       expect(accountRepository.findOneBy).toHaveBeenCalledWith({
         id: accountId,

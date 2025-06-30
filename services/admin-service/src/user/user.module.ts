@@ -9,6 +9,7 @@ import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
       RolePermission,
     ]),
     AuthKeycloakModule,
+    LoggerModule.forRoot(),
   ],
   controllers: [UserController],
   providers: [UserService],

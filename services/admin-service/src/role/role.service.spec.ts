@@ -8,10 +8,13 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('RoleService', () => {
   let service: RoleService;
   let repository: Repository<Role>;
+  let projectRepository: Repository<Project>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -25,11 +28,18 @@ describe('RoleService', () => {
           provide: getRepositoryToken(Project),
           useClass: Repository,
         },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
+        },
       ],
     }).compile();
 
     service = module.get<RoleService>(RoleService);
     repository = module.get<Repository<Role>>(getRepositoryToken(Role));
+    projectRepository = module.get<Repository<Project>>(
+      getRepositoryToken(Project),
+    );
   });
 
   const userPermissionResponseMock = {

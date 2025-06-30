@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { config } from 'dotenv';
 import keycloakConfig from './keycloak.config';
 import workerRegisterConfig from './workerregister.config';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 config(); // Load .env file
 
@@ -24,6 +25,7 @@ config(); // Load .env file
       autoLoadEntities: process.env.AUTOLOAD_ENTITIES === 'true',
       synchronize: process.env.SYNCHRONIZE === 'true',
     }),
+    LoggerModule.forRoot(),
   ],
 })
 export class AppConfigModule {}
