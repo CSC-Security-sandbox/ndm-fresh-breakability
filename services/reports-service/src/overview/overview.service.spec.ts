@@ -66,7 +66,7 @@ describe("OverviewService", () => {
           baseLineJob: 0,
           incrementalJob: 0,
         },
-        totalCutoverJobs: undefined,
+        totalCutoverJobs: 0,
       },
     });
   });

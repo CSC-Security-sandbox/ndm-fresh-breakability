@@ -1,76 +1,132 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
 import { JobRunController } from './job-run.controller';
 import { JobRunService } from './job-run.service';
+import { ErrorLogService } from 'src/csv/error_log_csv.service';
 import { Logger } from '@nestjs/common';
-
-const mockJobRunService = {
-  getJobStatsId: jest.fn(),
-  jobRunReportByJobRunId: jest.fn(),
-  getJobSubStatus: jest.fn(),
-};
+import { StreamableFile } from '@nestjs/common';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
-  let service: JobRunService;
-  let logger: Logger;
+  let jobRunService: jest.Mocked<JobRunService>;
+  let errorLogService: jest.Mocked<ErrorLogService>;
 
+  const mockResponse = { some: 'data' };
+  const mockCsvFile = new StreamableFile(Buffer.from('file content'));
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobRunController],
       providers: [
-        { provide: JobRunService, useValue: mockJobRunService },
+        {
+          provide: JobRunService,
+          useValue: {
+            jobRunReportByJobRunId: jest.fn(),
+            getJobStatsId: jest.fn(),
+            getJobSubStatus: jest.fn(),
+            getCocReportByJobRunId: jest.fn(),
+          },
+        },
+        {
+          provide: ErrorLogService,
+          useValue: {
+            createCsvFileForJob: jest.fn(),
+            downloadErrorLogCsvFile: jest.fn(),
+            isCsvFileReady: jest.fn(),
+          },
+        },
         Logger,
       ],
     }).compile();
 
     controller = module.get<JobRunController>(JobRunController);
-    service = module.get<JobRunService>(JobRunService);
+    jobRunService = module.get(JobRunService);
+    errorLogService = module.get(ErrorLogService);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  describe('getJobReportById', () => {
+    it('should return parsed job report', async () => {
+      jobRunService.jobRunReportByJobRunId.mockResolvedValue(JSON.stringify(mockResponse));
+      const result = await controller.getJobReportById('id-1', 'JOBS_REPORT');
+      expect(result).toEqual(mockResponse);
+    });
   });
 
-  it('should return job run details by ID when found', async () => {
-    const jobRunId = '1';
-    const mockResponse = { id: jobRunId, status: 'Completed' };
-    
-    mockJobRunService.getJobStatsId.mockResolvedValue(mockResponse);
-    mockJobRunService.getJobSubStatus.mockResolvedValue(null);
+  describe('generateErrorCsv', () => {
+    it('should throw if both jobRunId and jobConfigId are provided', async () => {
+      await expect(
+        controller.generateErrorCsv('jobRunId', 'jobConfigId'),
+      ).rejects.toThrow('Provide either jobRunId or jobConfigId, not both.');
+    });
 
-    const result = await controller.getJobStatsId(jobRunId);
+    it('should start CSV generation and return success message', async () => {
+      const result = await controller.generateErrorCsv('jobRunId', undefined);
+      expect(errorLogService.createCsvFileForJob).toHaveBeenCalledWith('jobRunId', undefined);
+      expect(result).toEqual({ message: 'CSV generation started' });
+    });
 
-    expect(result).toEqual(serializeJobRunDetailsResponse(mockResponse));
-    expect(mockJobRunService.getJobStatsId).toHaveBeenCalledWith(jobRunId);
+    it('should handle error and return error message', async () => {
+      (errorLogService.createCsvFileForJob as jest.Mock).mockRejectedValueOnce(
+        new Error('Failing intentionally'),
+      );
+
+      const result = await controller.generateErrorCsv('jobRunId', undefined);
+      expect(result).toEqual({ error: 'Failing intentionally' });
+    });
   });
 
-  it('should throw 404 error when job run is not found', async () => {
-    const jobRunId = '1';
-    mockJobRunService.getJobStatsId.mockResolvedValue({ status: 'Completed' });
-    mockJobRunService.getJobSubStatus.mockResolvedValue({ subStatus: '' });
+  describe('downloadErrorCsv', () => {
+    it('should throw if neither jobRunId nor jobConfigId provided', async () => {
+      await expect(
+        controller.downloadErrorCsv(undefined, undefined),
+      ).rejects.toThrow('Provide jobRunId or jobConfigId.');
+    });
 
-    try {
-      await controller.getJobStatsId(jobRunId);
-    } catch (e) {
-      expect(e.response.statusCode).toBe(404);
-      expect(e.response.message).toBe('Job run not found.');
-    }
+    it('should return a streamable file', async () => {
+      errorLogService.downloadErrorLogCsvFile.mockResolvedValue(mockCsvFile);
+      const result = await controller.downloadErrorCsv('jobRunId', undefined);
+      expect(result).toEqual(mockCsvFile);
+    });
   });
 
-  it("should return parsed job report data when found", async () => {
-    const jobRunId = "1";
-    const mockReportData = `[{"category": "Number of Files", "sub_category": "<8KiB", "value": 119897}]`;
+  describe('isErrorCsvReady', () => {
+    it('should return error if no IDs are provided', () => {
+      const result = controller.isErrorCsvReady(undefined, undefined);
+      expect(result).toEqual({ error: 'Either jobRunId or jobConfigId is required' });
+    });
 
-    mockJobRunService.jobRunReportByJobRunId.mockResolvedValue(mockReportData);
+    it('should return status if ID is provided', () => {
+      errorLogService.isCsvFileReady.mockReturnValue({ ready: true } as any);
+      const result = controller.isErrorCsvReady('jobRunId', undefined);
+      expect(result).toEqual({ ready: true });
+    });
+  });
 
-    const result = await controller.getJobReportById(jobRunId, "");
+  describe('getJobStatsId', () => {
+    it('should return merged job run details', async () => {
+      const mockStats = { id: '123', status: 'complete' };
+      const mockSubStatus = { subStatus: 'partial' };
+      jobRunService.getJobStatsId.mockResolvedValue(mockStats);
+      jobRunService.getJobSubStatus.mockResolvedValue(mockSubStatus as any);
 
-    expect(result).toEqual(JSON.parse(mockReportData));
-    expect(mockJobRunService.jobRunReportByJobRunId).toHaveBeenCalledWith(
-      jobRunId,
-      ""
-    );
+      const result = await controller.getJobStatsId('123');
+      expect(result.status).toBe('partial'); // overridden
+    });
+
+    it('should keep original status if no subStatus found', async () => {
+      const mockStats = { id: '123', status: 'complete' };
+      jobRunService.getJobStatsId.mockResolvedValue(mockStats);
+      jobRunService.getJobSubStatus.mockResolvedValue(undefined);
+
+      const result = await controller.getJobStatsId('123');
+      expect(result.status).toBe('complete');
+    });
+  });
+
+  describe('getCocReportByJobRunId', () => {
+    it('should return COC report response', async () => {
+      jobRunService.getCocReportByJobRunId.mockResolvedValue(mockResponse as any);
+      const result = await controller.getCocReportByJobRunId('job-1');
+      expect(result).toEqual(mockResponse);
+    });
   });
 });
