@@ -1,4 +1,8 @@
-import { MiddlewareConsumer, Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+} from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AccountModule } from './account/account.module';
@@ -29,7 +33,7 @@ import {
 
 @Module({
   imports: [
-    // LoggerModule.forRoot(),
+    LoggerModule.forRoot(),
     TypeOrmModule.forFeature([
       User,
       Role,
@@ -56,8 +60,8 @@ import {
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {
-  /* configure(consumer: MiddlewareConsumer) {
+export class AppModule implements NestModule{
+  configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestContextMiddleware).forRoutes('*');
-  }*/
+  }
 }
