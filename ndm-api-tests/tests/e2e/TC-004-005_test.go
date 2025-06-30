@@ -256,7 +256,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					flag = true
 
-					_, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
 					err = WaitForJobState(adHocJobRunId, COMPLETED_JOBRUN)
