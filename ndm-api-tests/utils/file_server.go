@@ -9,16 +9,41 @@ import (
 )
 
 type Volume struct {
-	ID         string `json:"id"`
-	VolumePath string `json:"volumePath"`
+	ID             string `json:"id"`
+	VolumePath     string `json:"volumePath"`
+	IsValid        bool   `json:"isValid"`
+	IsDisabled     bool   `json:"isDisabled"`
+	ReachableCount int    `json:"reachableCount"`
 }
 
 type FileServer struct {
-	Volumes []Volume `json:"volumes"`
+	Id               string           `json:"id"`
+	Volumes          []Volume         `json:"volumes"`
+	ExportPathSource ExportPathSource `json:"exportPathSource"`
+	Protocol         Protocol         `json:"protocol"`
+	ProtocolVersion  ProtocolVersion  `json:"protocolVersion"`
+	ServerType       ServerType       `json:"serverType"`
+	Host             string           `json:"host"`
 }
 
 type FileServerInfo struct {
 	FileServers []FileServer `json:"fileServers"`
+}
+
+type ExportPathSource string
+
+const (
+	AutoDiscover ExportPathSource = "AUTO_DISCOVER"
+	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
+)
+
+type FileServerDetails struct {
+	ConfigName  string       `json:"configName"`
+	ID          string       `json:"id"`
+	ConfigType  ConfigType   `json:"configType"`
+	ProjectID   string       `json:"projectId"`
+	FileServers []FileServer `json:"fileServers"`
+	Status      string       `json:"status"`
 }
 
 type CreateServereParams struct {
@@ -33,6 +58,7 @@ type CreateServereParams struct {
 	Host             string
 	Workers          []string
 	WorkingDirectory string
+	ExportPathSource ExportPathSource
 }
 
 var sshConfig SSHConfig
@@ -61,14 +87,15 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"projectId":  params.ProjectID,
 		"fileServers": []map[string]interface{}{
 			{
-				"serverType":      params.ServerType,
-				"userName":        params.UserName,
-				"password":        params.Password,
-				"protocol":        params.Protocol,
-				"protocolVersion": params.ProtocolVersion,
-				"host":            params.Host,
-				"volumes":         []interface{}{},
-				"workers":         params.Workers,
+				"serverType":       params.ServerType,
+				"userName":         params.UserName,
+				"password":         params.Password,
+				"protocol":         params.Protocol,
+				"protocolVersion":  params.ProtocolVersion,
+				"host":             params.Host,
+				"volumes":          []interface{}{},
+				"workers":          params.Workers,
+				"exportPathSource": params.ExportPathSource,
 			},
 		},
 		"workingDirectory": map[string]interface{}{
@@ -430,4 +457,37 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 	}
 
 	return foundID, nil // Return the found ID and no error
+}
+
+func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetails, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
+
+	fmt.Printf("GetConfigById Full URL: %s\n", fullURL)
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, nil, headers)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error sending API request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	var response FileServerDetails
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error unmarshalling response: %w", err)
+	}
+
+	return response, nil
+}
+
+func GetVolumeDetailsFromFileServer(Volumes []Volume, volumePath string) (Volume, error) {
+	for _, volume := range Volumes {
+		if volume.VolumePath == volumePath {
+			return volume, nil
+		}
+	}
+	return Volume{}, fmt.Errorf("no volume found with path '%s'", volumePath)
 }
