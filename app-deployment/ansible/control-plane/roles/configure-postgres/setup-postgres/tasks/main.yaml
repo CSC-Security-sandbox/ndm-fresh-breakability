@@ -1,4 +1,6 @@
 ---
+# ...existing code...
+
 - name: Creates postgres directory
   become: yes
   file:
@@ -75,6 +77,7 @@
     kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
     kubectl delete -f $HOME/postgres/postgres-secret.yaml
     kubectl delete -f $HOME/postgres/postgres-namespace.yaml
+    kubectl delete -f $HOME/postgres/postgres-exporter.yaml
   when: postgres_uninstall is defined
   args:
     chdir: $HOME
@@ -131,6 +134,19 @@
 
 - debug:
     var: pod_status.stdout
+
+- name: postgres-exporter template
+  become: yes
+  template:
+    src: ./templates/postgres-exporter.j2
+    dest: $HOME/postgres/postgres-exporter.yaml
+
+- name: Deploy postgres-exporter manifests
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/postgres/postgres-exporter.yaml
+  args:
+    chdir: $HOME
 
 - name: Delete postgres directory
   become: yes
