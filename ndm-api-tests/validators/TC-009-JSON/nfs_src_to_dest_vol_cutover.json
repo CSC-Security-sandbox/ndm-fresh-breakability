@@ -402,5 +402,10 @@
   {
     "source path": "/volSrcAuto/delta/file100.txt",
     "target checksum": "f627ca4c2c322f15db26152df306bd4f983f0146409b81a4341b9b340c365a16"
+  },
+   {
+    "source path": "/volSrcAuto/oldfile.txt",
+    "target checksum": "472faec7591f18d5c7c1785eef2ddea8165b63941672e0e7dbb37339ddcf12d1"
   }
 ]
+ 

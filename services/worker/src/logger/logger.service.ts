@@ -42,7 +42,7 @@ export class Logger implements LoggerService {
     }
 
     const fluentConfig = {
-      host: process.env.FLUENT_HOST || '192.168.64.189',
+      host: process.env.CONTROL_PLANE_IP || '192.168.64.189',
       port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
       timeout: 3.0,
       reconnectInterval: 60000,

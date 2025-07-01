@@ -5,6 +5,10 @@ on:
     
 permissions: 
   contents: write
+  actions: read
+  pull-requests: write
+  security-events: write
+  id-token: write
   
 jobs:
   check-branch:
