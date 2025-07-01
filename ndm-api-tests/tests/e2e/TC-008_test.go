@@ -143,9 +143,9 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 				response, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-008-JSON/%s", validationPath[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("Report validation response: %v", response))
+				By(fmt.Sprintf("Report validation response: %v", response))
 			}
-			
+
 			By("########################## TC-008 end ################################")
 		})
 
@@ -160,7 +160,7 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 			Expect(err).NotTo(HaveOccurred(), "Error while clearing volume of %s", destinationVolumePath2)
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })
