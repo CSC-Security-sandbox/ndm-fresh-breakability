@@ -101,6 +101,22 @@ export class ErrorLogService {
     return resolvedPath;
   }
 
+  // Utility to strictly validate identifier for regex/file usage
+  private sanitizeIdentifier(identifier: string): string {
+    // Only allow alphanumeric, dash, and underscore
+    if (!/^[\w-]+$/.test(identifier)) {
+      throw new Error(
+        "Invalid identifier: Only alphanumeric, dash, and underscore allowed"
+      );
+    }
+    return identifier;
+  }
+
+  // Utility to escape regex metacharacters in user input
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   async writeLargeCsvToDisk(
     filePath: string,
     jobRunId?: string,
@@ -198,7 +214,9 @@ export class ErrorLogService {
       errorCount = await this.getTotalErrorCountForJobRun(identifier);
     }
     fileName = `${identifier}-error-${errorCount}.csv`;
-    filePattern = new RegExp(`^${identifier}-error-\\d+\\.csv$`);
+    // Escape identifier before using in regex
+    const safeIdentifier = this.escapeRegex(identifier);
+    filePattern = new RegExp(`^${safeIdentifier}-error-\\d+\\.csv$`);
 
     const dir = this.getErrorLogsDirectory;
     const filePath = this.sanitizeAndValidateFilePath(fileName);
