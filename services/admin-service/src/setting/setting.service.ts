@@ -71,7 +71,7 @@ export class SettingService {
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating SMTP settings',
+          message: 'SMTP server is not reachable',
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           error: error.message,
         },
