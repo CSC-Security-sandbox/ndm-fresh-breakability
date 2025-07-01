@@ -15,7 +15,7 @@
   shell: |
     kubectl delete -f $HOME/admin-entry-configmap.yaml -n datamigrator
     kubectl delete -f $HOME/admin-entry-job.yaml -n datamigrator
-  when: reset_job is defined    
+  when: reset_job is defined and local_cluster is defined
   args:
     chdir: $HOME
 
@@ -25,6 +25,7 @@
     kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator
     sleep 5
     kubectl apply -f $HOME/admin-entry-job.yaml -n datamigrator
+  when: local_cluster is defined
 
 - name: Wait for job to complete successfully
   become: yes
@@ -34,6 +35,7 @@
   retries: 5
   delay: 10
   until: job_wait_result.rc == 0
+  when: local_cluster is defined
 
 - name: Get logs from the job pod
   become: yes
@@ -41,12 +43,12 @@
     POD_NAME=$(kubectl get pods -n datamigrator -l job-name=admin-entry-job -o jsonpath='{.items[0].metadata.name}')
     kubectl logs $POD_NAME -n datamigrator
   register: job_logs
-  when: job_wait_result.rc == 0
+  when: local_cluster is defined and (job_wait_result is defined and job_wait_result.rc == 0)
 
 - name: Debug job logs
   debug:
     var: job_logs.stdout_lines
-  when: job_wait_result.rc == 0
+  when: local_cluster is defined and (job_wait_result is defined and job_wait_result.rc == 0)
 
 - name: Clean up admin entry configmap and job files
   become: yes
@@ -56,3 +58,4 @@
   loop:
     - $HOME/admin-entry-configmap.yaml
     - $HOME/admin-entry-job.yaml
+  when: local_cluster is defined

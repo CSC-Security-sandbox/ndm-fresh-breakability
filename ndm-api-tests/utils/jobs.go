@@ -4,32 +4,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
 type GetJobResponse struct {
-	JobConfigId  string `json:"jobConfigId"`
-	JobType      string `json:"jobType"`
-	SourceServer struct {
-		ServerName string `json:"serverName"`
-		Path       string `json:"path"`
-		Protocol   string `json:"protocol"`
-	} `json:"sourceServer"`
-	DestinationServer struct{} `json:"destinationServer"`
-	Status            string   `json:"status"`
-	CreatedAt         string   `json:"createdAt"`
-	JobRuns           []struct {
-		JobRunId string `json:"jobRunId"`
-		Status   string `json:"status"`
-	} `json:"jobRuns"`
-	AggregateData struct {
-		TimeElapsed             int    `json:"timeElapsed"`
-		ScannedFilesCount       string `json:"scannedFilesCount"`
-		ScannedDirectoriesCount string `json:"scannedDirectoriesCount"`
-		TotalScannedSize        string `json:"totalScannedSize"`
-	} `json:"aggregateData"`
-	Errors []interface{} `json:"errors"`
+	JobConfigId       string          `json:"jobConfigId"`
+	JobType           string          `json:"jobType"`
+	SourceServer      ServerInfo      `json:"sourceServer"`
+	DestinationServer ServerInfo      `json:"destinationServer"`
+	Status            string          `json:"status"`
+	NextScheduleDate  string          `json:"nextScheduleDate"`
+	CreatedAt         string          `json:"createdAt"`
+	JobRuns           []JobRun        `json:"jobRuns"`
+	AggregateData     AggregateData   `json:"aggregateData"`
+	Errors            json.RawMessage `json:"errors"`
+}
+
+type ServerInfo struct {
+	ServerName string `json:"serverName"`
+	Path       string `json:"path"`
+	Protocol   string `json:"protocol"`
+}
+
+type JobRun struct {
+	JobRunId string `json:"jobRunId"`
+	Status   string `json:"status"`
+}
+
+type AggregateData struct {
+	TimeElapsed             int    `json:"timeElapsed"`
+	ScannedFilesCount       string `json:"scannedFilesCount"`
+	ScannedDirectoriesCount string `json:"scannedDirectoriesCount"`
+	TotalScannedSize        string `json:"totalScannedSize"`
 }
 
 type JobResponse []struct {
@@ -101,7 +107,7 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -168,7 +174,7 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -221,7 +227,7 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 		return nil, nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -294,7 +300,7 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return getJobsResp, resp, nil
 		}
 
-		IntroduceDelay(DefaultPollInterval)
+		Wait(DefaultPollInterval)
 	}
 
 	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d ", MaxPollRetries)
@@ -316,11 +322,18 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 		if err != nil {
 			return err
 		}
+
+		LogDebug(fmt.Sprintf("Current job run status: %s", status))
+
+		if status == ERRORED_JOBRUN {
+			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
+		}
+
 		if status == desiredJobState {
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
-		IntroduceDelay(DefaultPollInterval)
+		Wait(DefaultPollInterval)
 
 	}
 
@@ -354,7 +367,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-			IntroduceDelay(DefaultPollInterval)
+			Wait(DefaultPollInterval)
 		}
 		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
@@ -433,7 +446,7 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 
 	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
 	// Read response
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp, err
 	}
@@ -450,4 +463,48 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 	}
 
 	return jobRunResp.ID, resp, nil
+}
+
+// This function gets the summary of Job config which includes NextScheduled Time
+// GetJobSummaryByConfigID is different than GetJobRunDetails because the later only gives state
+// of current job runs using configID and not of NextScheduled Time which are already present whereas
+// prior gives NextScheduled Time details, both functions end points are also different
+func GetJobSummaryByConfigID(
+	projectID,
+	desiredConfigID string,
+	headers map[string]string,
+) (*GetJobResponse, error) {
+	// build URL
+	url := fmt.Sprintf("%s/api/v1/jobs?projectId=%s", JOB_SERVICE_URL, projectID)
+
+	// send request
+	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	// read & unmarshal
+	buf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	var allJobs []GetJobResponse
+	if err := json.Unmarshal(buf, &allJobs); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// find the one matching desiredConfigID
+	for i := range allJobs {
+		if allJobs[i].JobConfigId == desiredConfigID {
+			return &allJobs[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("jobConfigId %q not found", desiredConfigID)
 }

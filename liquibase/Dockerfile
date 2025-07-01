@@ -1,4 +1,4 @@
-FROM liquibase/liquibase:4.31.0-alpine
+FROM liquibase/liquibase:4.32.0-alpine
 
 ENV LIQUIBASE_COMMAND_DRIVER=org.postgresql.Driver \
     LIQUIBASE_COMMAND_CHANGELOG_FILE=./liquibase/changelog-master.xml

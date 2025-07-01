@@ -6,10 +6,11 @@ import {
   Inject,
   InternalServerErrorException,
   Post,
+  Req,
+  Logger
 } from "@nestjs/common";
 import { HealthcheckService } from "./healthcheck.service";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
-import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 import { ApiTags } from "@nestjs/swagger";
@@ -19,15 +20,17 @@ import { ApiTags } from "@nestjs/swagger";
 export class HealthcheckController {
   constructor(
     private healthcheckService: HealthcheckService,
-    private logger: LoggerService,
+    private logger: Logger,
   ) {}
 
   @Post("/")
   @AuthWorker()
   async healthCheck(
     @Body() healthStats: HealthcheckStats,
+    @Req() req: any
   ): Promise<HealthCheckResponse> {
     try {
+      this.logger.log(`Received health check stats from worker: ${req['worker_id']}`);
       await this.healthcheckService.createOrUpdateHealthCheckStats(healthStats);
       return this.createResponse(HttpStatus.OK);
     } catch (error) {

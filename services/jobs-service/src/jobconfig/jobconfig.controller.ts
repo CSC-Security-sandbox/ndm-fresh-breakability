@@ -1,8 +1,8 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
-
+import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
@@ -156,6 +156,8 @@ export class JobConfigController {
     return await this.jobConfigService.getNoticeBoardDetailsByProjectId(projectId);
   }
 
+  @Auth(Permission.ManageConfig)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
@@ -182,3 +184,4 @@ export class JobConfigController {
   }
 
 }
+
