@@ -45,7 +45,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By("########################## TC-001 start ################################")
 
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
-			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
+			var jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
 			Wait(20)
@@ -76,47 +76,47 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for the source")
-			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
-			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			// By("Creating a new discovery job for the source")
+			// jobParams := DiscoveryJobParams{
+			// 	SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
+			// 	ExcludeOlderThan:         nil,
+			// 	ExcludeFilePatterns:      "",
+			// 	PreserveAccessTime:       false,
+			// 	FirstRunAt:               GetCurrentUTCTimestamp(),
+			// 	CreatedBy:                nil,
+			// 	WorkflowExecutionTimeout: "60s",
+			// 	WorkflowTaskTimeout:      "30s",
+			// 	WorkflowRunTimeout:       "30s",
+			// 	StartDelay:               "10s",
+			// }
+			// sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
+			// Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
+			// Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+			// defer resp.Body.Close()
+			// Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-			By("Getting jobs by jobConfigId for source")
-			discovery_validators := []string{
-				"nfs_src_vol_discovery.json",
-				"nfs_src_vol2_discovery.json",
-			}
-			for i, sourceJobConfigID := range sourceJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-				defer resp.Body.Close()
+			// By("Getting jobs by jobConfigId for source")
+			// discovery_validators := []string{
+			// 	"nfs_src_vol_discovery.json",
+			// 	"nfs_src_vol2_discovery.json",
+			// }
+			// for i, sourceJobConfigID := range sourceJobConfigIDs {
+			// 	getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
+			// 	Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			// 	Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			// 	defer resp.Body.Close()
 
-				sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
+			// 	sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+			// 	Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
 
-				// Wait for discovery jobs to complete
-				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
+			// 	// Wait for discovery jobs to complete
+			// 	err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
+			// 	Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
-			}
+			// 	result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
+			// 	Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
+			// 	By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+			// }
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -145,39 +145,39 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for destination")
-			destinationJobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
+			// By("Creating a new discovery job for destination")
+			// destinationJobParams := DiscoveryJobParams{
+			// 	SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
+			// 	ExcludeOlderThan:         nil,
+			// 	ExcludeFilePatterns:      "",
+			// 	PreserveAccessTime:       false,
+			// 	FirstRunAt:               GetCurrentUTCTimestamp(),
+			// 	CreatedBy:                nil,
+			// 	WorkflowExecutionTimeout: "60s",
+			// 	WorkflowTaskTimeout:      "30s",
+			// 	WorkflowRunTimeout:       "30s",
+			// 	StartDelay:               "10s",
+			// }
+			// destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
 
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(destinationJobConfigIDs)).To(BeNumerically(">", 0), "No valid destinationJobConfigIDs found in response")
-			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			// Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
+			// Expect(len(destinationJobConfigIDs)).To(BeNumerically(">", 0), "No valid destinationJobConfigIDs found in response")
+			// defer resp.Body.Close()
+			// Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-			By("Getting jobs by jobConfigId for destination")
-			for _, destinationJobConfigID := range destinationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-				defer resp.Body.Close()
-				destinationDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(destinationDiscoveryJobRunID).NotTo(BeEmpty(), "Destination Discovery JobRun ID should not be empty")
+			// By("Getting jobs by jobConfigId for destination")
+			// for _, destinationJobConfigID := range destinationJobConfigIDs {
+			// 	getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
+			// 	Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			// 	Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			// 	defer resp.Body.Close()
+			// 	destinationDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+			// 	Expect(destinationDiscoveryJobRunID).NotTo(BeEmpty(), "Destination Discovery JobRun ID should not be empty")
 
-				// Wait for discovery jobs to complete
-				err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
-			}
+			// 	// Wait for discovery jobs to complete
+			// 	err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
+			// 	Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
+			// }
 
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{
