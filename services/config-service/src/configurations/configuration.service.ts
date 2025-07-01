@@ -47,10 +47,15 @@ import { ProjectEntity } from 'src/entities/project.entity';
 import { SendMailService } from 'src/util/send-email';
 import { ConfigService } from '@nestjs/config';
 import { isWorkerHealthy } from 'src/utils/transformers';
+import sanitizeHtml from 'sanitize-html';
+import escapeHtml from 'escape-html';
+
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
   private timeout: number;
+  private escapeHtml: typeof escapeHtml;
+  private sanitizeHtml: typeof sanitizeHtml;
   constructor(
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
@@ -71,6 +76,8 @@ export class ConfigurationService {
   ) {
     this.logger = this.loggerFactory.create(ConfigurationService.name);
     this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
+    this.sanitizeHtml = sanitizeHtml;    
+    this.escapeHtml = escapeHtml;
   }
 
   async getAllFileServers(): Promise<any[]> {
@@ -318,8 +325,11 @@ export class ConfigurationService {
       throw new NotFoundException('Invalid Project ID');
     }
 
+    // Sanitize configName input
+    const sanitizedConfigName = await this.sanitizeConfigName(configName);
+
     const existingConfig = await this.configEntity.findOne({
-      where: { projectId, configName },
+      where: { projectId, configName: sanitizedConfigName },
     });
 
     if (existingConfig) {
@@ -329,6 +339,13 @@ export class ConfigurationService {
     }
 
     return { isUnique: true };
+  }
+
+  private async sanitizeConfigName(configName: string) {
+    return this.sanitizeHtml(configName, {
+      allowedTags: [],
+      allowedAttributes: {},
+    }).trim();
   }
 
   private async fetchConfigWithRelations(configId: string) {
@@ -547,12 +564,15 @@ export class ConfigurationService {
   ) {
     this.logger.debug('Config creation started');
 
+    // Sanitize configName input
+    const sanitizedConfigName = await this.sanitizeConfigName(createConfig.configName);
+
     const credentials: Credentials[] = [];
     let allUnHealthy = false;
     try {
       await this.isConfigNameUnique(
         createConfig.projectId,
-        createConfig.configName,
+        sanitizedConfigName,
       );
 
       const fileServerPromises = createConfig.fileServers.map(
@@ -592,7 +612,7 @@ export class ConfigurationService {
         (fs) => fs?.workers?.length > 0,
       );
       const config = this.configEntity.create({
-        configName: createConfig.configName,
+        configName: sanitizedConfigName,
         configType: createConfig.configType,
         projectId: createConfig.projectId,
         status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
@@ -620,18 +640,18 @@ export class ConfigurationService {
             return worker?.workerName;
           });
         });
-
+        
         const htmlContent = `
             <p>Hello</p>
-            <p>Config ${update.configName} has been created successfully</p>
+            <p>Config ${this.escapeHtml(update.configName)} has been created successfully</p>
             <p>with below server details:</p>
             ${createConfig.fileServers
               .map(
                 (fileServer) => `
-                <p>Server Name: ${fileServer.host.trim()}</p>
-                <p>Server Type: ${fileServer.serverType}</p>
-                <p>Protocol: ${fileServer.protocol}</p>
-                <p>Workers: ${workerNames.length > 0 ? workerNames.join(', ') : 'Workers are not associated with the file server'}</p>
+                <p>Server Name: ${this.escapeHtml(fileServer.host.trim())}</p>
+                <p>Server Type: ${this.escapeHtml(fileServer.serverType)}</p>
+                <p>Protocol: ${this.escapeHtml(fileServer.protocol)}</p>
+                <p>Workers: ${workerNames.length > 0 ? this.escapeHtml(workerNames.join(', ')) : 'Workers are not associated with the file server'}</p>
             `,
               )
               .join('')}
