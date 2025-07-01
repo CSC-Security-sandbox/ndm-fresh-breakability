@@ -47,7 +47,7 @@ export class WorkManagerService {
       if (workerMetaConfig) {
         const jobRunConfig = await this.jobRunRepo.find({
           where: {
-            status: In([JobRunStatus.Running, JobRunStatus.Ready]),
+            status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Stopping, JobRunStatus.Paused]),
             workerMap: {
               workerId: id,
               metaConfig: Not(IsNull()),

@@ -50,6 +50,7 @@ import { In, LessThan, Repository } from "typeorm";
 import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
+import { getWorkflowId } from "./jobrun.utli";
 
 @Injectable()
 export class JobRunInitService {
@@ -144,6 +145,8 @@ export class JobRunInitService {
       await this.buildJobContext(jobRun.id, details);
     }
     await this.initiateWorkflow(jobRun.id, details);
+    const workflowId = getWorkflowId(jobRun.id, details.jobType);
+    await this.jobRunRepo.update({ id: jobRun.id },{ workFlowId: workflowId });
     return jobRun;
   }
 
@@ -324,6 +327,7 @@ export class JobRunInitService {
           ],
           options: options,
         };
+
         jobRunWorkflow = await this.workFlowService.startWorkflow(
           WorkFlows.DISCOVERY,
           startWorkFlowPayload,

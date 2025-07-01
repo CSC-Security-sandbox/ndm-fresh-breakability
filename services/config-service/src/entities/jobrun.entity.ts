@@ -5,17 +5,20 @@ import { WorkerConfiguration } from 'src/constants/types';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 
+// ---------- Job Run -----------/
 export enum JobRunStatus {
   Ready = 'READY',
-  Pending = 'PENDING',
   Running = 'RUNNING',
   Paused = 'PAUSED',
+  Pausing = 'PAUSING',
   Stopped = 'STOPPED',
+  Stopping = 'STOPPING',
   Completed = 'COMPLETED',
   Failed = 'FAILED',
   Errored = 'ERRORED',
   Blocked = 'BLOCKED'
 }
+
 
 @Entity({ name: 'jobrun' })
 export class JobRunEntity extends Base {

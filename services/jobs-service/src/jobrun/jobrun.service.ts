@@ -182,10 +182,30 @@ export class JobRunService {
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      jobContext.jobState.status = JobContextStatus.Paused;
+      jobContext.jobState.status = JobContextStatus.Paused;            
       await this.redisService.setJobContext(jobRunId, jobContext);
+
+      const workflowId = `${jobContext.jobConfig.jobType}-${jobContext.jobRunId}`
+      const signal: SignalWorkFlowPayload = {
+          payload: JobRunStatus.Paused,
+          signalName: "action",
+          workflowId: workflowId
+      };
+      try{
+        await this.workFlowService.sendSignal(signal);
+      }catch (error) {
+        this.logger.error(`Failed to send signal to workflow ${workflowId}: ${error.message}`); 
+        return {details: "Operation Failed"};
+      }
+      
     }
     return { details: "Operation Completed Successfully" };
+
+     
+
+
+
+
   }
 
   //  ------------------- JobRun actions STOP ------------------ //
@@ -326,18 +346,14 @@ export class JobRunService {
         jobRunId,
         details.jobType
       );
-      const workflowStatus =
-        await this.workFlowService.getWorkflowStatus(workflowId);
-      this.logger.debug(`Workflow Status ${workflowStatus}`);
-      if (workflowStatus === JobContextStatus.Running) {
-        this.logger.debug(`Terminating Workflow ${workflowId}`);
-        await this.workFlowService.terminateWorkflow(workflowId);
-        this.logger.debug(`Workflow Terminated ${workflowId}`);
-      }
-      this.logger.debug(`Resuming Workflow ${workflowId}`);
-      await this.jobRunInitService.initiateWorkflow(jobRunId, details);
-      this.logger.debug(`Workflow Resumed ${workflowId}`);
-      return;
+
+      const signal: SignalWorkFlowPayload = {
+          payload: JobRunStatus.Running,
+          signalName: "action",
+          workflowId: workflowId
+      };
+      await this.workFlowService.sendSignal(signal);
+      this.logger.debug(`Workflow resumed sucessfully for ${workflowId}`);
     } catch (error) {
       this.logger.error(`Failed to resume Job Run ${jobRunId} ${error}`);
       throw new Error(`Failed to resume Job Run ${jobRunId} ${error}`);

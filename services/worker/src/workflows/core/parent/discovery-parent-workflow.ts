@@ -1,10 +1,12 @@
 import * as wf from '@temporalio/workflow';
 import { ChildWorkflowCancellationType, ParentClosePolicy } from "@temporalio/workflow";
 import { CommonActivityService } from "src/activities/common/common.service";
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
+
 import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { CleanupWorkerWorkflow } from "src/workflows/workflows";
+import { WorkflowStatus } from '../chid-scan.workflow.type';
+import { ReportingWorkflow } from '../common/reporting-workflow';
+import { JobRunStatus } from 'src/activities/discovery/enums';
 
 interface MigrationWorkflowInput {
   traceId: string;
@@ -24,13 +26,14 @@ interface MigrationWorkflowOutput {
   isJobFailed: boolean;
 }
 
-export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
-
+const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
+const actionSignal = wf.defineSignal<[string]>('action');
 
 const {
   updateJobErrorStatus: updateJobErrorActivity,
   updateWorkerResponse: updateWorkerResponse,
   cleanupJobContext: cleanupJobContextActivity,
+  updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
@@ -40,6 +43,7 @@ export const DiscoveryWorkflow = async ({
   options = {},
 }: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> => {
   console.log(`[${traceId}] Parent workflow started for ${traceId}`);
+
 
   const workFlowStatus: MigrationWorkflowOutput = {
     failedWorkers: [],
@@ -53,6 +57,13 @@ export const DiscoveryWorkflow = async ({
   }
 
   let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
+
+
+  wf.setHandler(actionSignal, async (action:string) => {
+    if(workFlowStatus.isScanIsRunning)
+      scanWorkflow.signal('scanActionSignal', action);
+    console.log(`[${traceId}] action signal called with value: ${action}`);
+  });
 
   payload.workers.map(async (worker) => {
     const workerFuture = await wf.startChild('SetupWorkerWorkflow', {
@@ -116,15 +127,20 @@ export const DiscoveryWorkflow = async ({
     parentClosePolicy: ParentClosePolicy.TERMINATE,
   });
   workFlowStatus.isScanIsRunning = true;
+  let scanWorkflowStatus = WorkflowStatus.Completed
+  try{
+     const scanWorkflowResult = await scanWorkflow.result()
+     scanWorkflowStatus = scanWorkflowResult.status === JobRunStatus.Completed ? WorkflowStatus.Completed : WorkflowStatus.Stopped;
+  }catch(error) {
+    scanWorkflowStatus = WorkflowStatus.Failed;
 
+  }
   // wait for scan workflow to complete
-  const scanWorkflowResult = await scanWorkflow.result()
   workFlowStatus.isScanIsRunning = false;
+  await updateLastEntryActivity(traceId);
 
-  if(scanWorkflowResult.status === JobRunStatus.Errored) 
-    workFlowStatus.isJobFailed = true;
 
-  await ReportingWorkflow(traceId, reportingSignal, workFlowStatus.isJobFailed);
+  await ReportingWorkflow(traceId, reportingSignal, scanWorkflowStatus);
 
   if (workFlowStatus.setupCompletedWorkers.length > 0) {
     await Promise.all(
@@ -149,7 +165,7 @@ export const DiscoveryWorkflow = async ({
     }),
     )
   }
-  // const response = await cleanupJobContextActivity(traceId)
-  // console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
+  const response = await cleanupJobContextActivity(traceId)
+  console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
   return workFlowStatus;
 };

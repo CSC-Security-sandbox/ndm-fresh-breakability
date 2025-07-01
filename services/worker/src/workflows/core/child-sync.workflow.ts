@@ -1,22 +1,18 @@
 
-import { proxyActivities, log } from '@temporalio/workflow';
-import { JobRunStatus } from "src/activities/discovery/enums";
-import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
-import { isScanCompletedSignal } from "../migration/core/sync.workflow";
 import * as wf from '@temporalio/workflow';
+import { proxyActivities } from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
-import { FatalError, RetryableError } from 'src/errors/errors.types';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
+import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
+import { JobRunStatus } from "src/activities/discovery/enums";
+import { ScanWorkflowStatus, SyncWorkflowOutput } from './chid-scan.workflow.type';
+import { updateJobStatusIfNotRunning } from './common/workflow-utils';
+import { JobStatus as JobContextStatus } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/enums';
 
-interface SyncWorkflowOutput{
-    jobRunId: string;
-    status: JobRunStatus;
-    error?: string;
-}
 
 interface SyncWorkflowInput {
     jobRunId: string;
-    isScanCompleted: boolean;
+    scanWorkflowStatus: ScanWorkflowStatus;
 }
 
 const {
@@ -37,53 +33,53 @@ const {
     startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
 
-/*
-    Task - existing Task in current code .  <id, command[] > pushed while scan . 
+const actionSignal = wf.defineSignal<[string]>('syncActionSignal');
+const scanResultSignal = wf.defineSignal<[ScanWorkflowStatus]>('scanResultSignal');
 
-    getGroupOfTasksActivity
-    
 
-------
-    Scan: 
-             push commands in a command stream  
+function isScanFinished(scanWorkflowStatus: ScanWorkflowStatus) : boolean {
+    return scanWorkflowStatus === ScanWorkflowStatus.Completed || scanWorkflowStatus === ScanWorkflowStatus.Failed;
+}
 
-    Sync:
-         taskIDs[] =  getGroupOfTasksActivity 
-                        - fetch a group of commands (1000) and create a 10 tasks out of  it 
-                                - it will calculate the taskID based on the commands btach(100)
-                                - in redis created   taskId - Task( UUID?, command[] ,  status )
-        for each taskID in taskIds
-                SyncTaskActivity(taskID)
-                    - stream.add(task)                  
-                    - do sync .     
-                    - stream.add(task, Compelted)
-                    - delete taskID from redis 
-
-                                
-                        
-        DB Writer: 
-            - upsert based on taskID. 
-
-*/
-
-export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
+export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = ScanWorkflowStatus.Running } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
     console.log(`Starting SyncWorkflow ${jobRunId}`)
-
-    wf.setHandler(isScanCompletedSignal, () => {
-        console.log(jobRunId, `isScanCompletedSignal called with value: ${isScanCompleted}`);
-        isScanCompleted = true;
+    let jobState:JobRunStatus = JobRunStatus.Running;
+    
+    wf.setHandler(actionSignal, async (action:string)=>{
+        console.log(jobRunId, `action signal called with value: ${action}`);
+        jobState= action as JobRunStatus;
     });
+
+    wf.setHandler(scanResultSignal, (status:ScanWorkflowStatus) => {
+        console.log(jobRunId, `scan workflow signal called with value: ${status}`);
+        scanWorkflowStatus = status
+    });
+    
+    
     let failedTasks = [];
     const syncWorkflowOutput: SyncWorkflowOutput = {
         jobRunId,
         status: JobRunStatus.Ready,
     }
-    let syncInProgress = true; 
-    while(syncInProgress){
+    let continueSync = true; 
+    let isManualStop = false;
+    while(continueSync) {
+        
+        await updateJobStatusIfNotRunning(jobState, jobRunId);
+        
+        await wf.condition(() => jobState !== JobRunStatus.Paused);
+
+        if(jobState === JobRunStatus.Stopped as JobRunStatus) {
+            console.log(`SyncWorkflow ${jobRunId} received stop signal.`);
+            isManualStop = true
+            break;
+        }
+
         const taskIds: string[] = await getGroupOfTasksActivity(jobRunId, 1000);
 
-        if(taskIds.length === 0 && isScanCompleted) {
-            syncInProgress = false;
+        if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
+            console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
+            continueSync = false;
             continue;
         }
         const results = await Promise.all(
@@ -108,7 +104,7 @@ export const ChildSyncWorkflow = async ({jobRunId, isScanCompleted = false } : S
         syncWorkflowOutput.status = JobRunStatus.Failed;
         console.error(`Failed tasks in this iteration: ${JSON.stringify(failedTasks)}`);
     }else{
-        syncWorkflowOutput.status = JobRunStatus.Completed;
+        syncWorkflowOutput.status = isManualStop ? JobRunStatus.Stopped : JobRunStatus.Completed;
     }
     await updateLastEntryActivity(jobRunId)
     return syncWorkflowOutput; 
