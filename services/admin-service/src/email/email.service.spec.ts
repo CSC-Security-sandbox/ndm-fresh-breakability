@@ -315,17 +315,6 @@ describe('EmailService', () => {
           populateWhoColumns: jest.fn(),
         },
         {
-          settingKey: 'SMTP_FROM_EMAIL',
-          settingValue: 'from@example.com',
-          settingType: SettingType.SMTP,
-          id: '1',
-          created_at: new Date(),
-          created_by: '',
-          updated_at: new Date(),
-          updated_by: '',
-          populateWhoColumns: jest.fn(),
-        },
-        {
           settingKey: 'SMTP_TO_EMAIL',
           settingValue: 'to@example.com',
           settingType: SettingType.SMTP,
