@@ -98,33 +98,6 @@ describe("ErrorLogService", () => {
     });
   });
 
-  // describe("writeLargeCsvToDisk", () => {
-  //   beforeEach(() => {
-  //     (fs.createWriteStream as any).mockReturnValue({
-  //       on: jest.fn((event, cb) => {
-  //         if (event === "finish") setTimeout(cb, 0);
-  //       }),
-  //     });
-  //     (fs.writeFileSync as any).mockImplementation(() => {});
-  //     (fs.unlinkSync as any).mockImplementation(() => {});
-  //   });
-
-  //   // it("writes paginated errors and setup errors to CSV", async () => {
-  //   //   jest
-  //   //     .spyOn(service, "getPaginatedErrors")
-  //   //     .mockResolvedValueOnce([{ id: "1" }])
-  //   //     .mockResolvedValueOnce([]);
-  //   //   jest.spyOn(service, "getJobRunIds").mockResolvedValue(["run1"]);
-  //   //   jest
-  //   //     .spyOn(service as any, "fetchFormattedSetupErrors")
-  //   //     .mockResolvedValue([{ id: "setup1" }]);
-  //   //   await service.writeLargeCsvToDisk("file.csv", "run1", undefined, 1);
-  //   //   expect(fs.createWriteStream).toHaveBeenCalled();
-  //   //   expect(fs.writeFileSync).toHaveBeenCalled();
-  //   //   expect(fs.unlinkSync).toHaveBeenCalled();
-  //   // });
-  // });
-
   describe("fetchFormattedSetupErrors", () => {
     it("formats worker setup errors", async () => {
       jest.spyOn(service, "getWorkerSetupErrors").mockResolvedValue([
@@ -181,33 +154,6 @@ describe("ErrorLogService", () => {
         "Either jobRunId or jobConfigId must be provided"
       );
     });
-
-    // it("returns filePath if file exists", async () => {
-    //   (fs.existsSync as any).mockImplementation((filePath) =>
-    //     filePath.includes("job1-error-5.csv")
-    //   );
-    //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(5);
-    //   const filePath = path.join(
-    //     service.getErrorLogsDirectory,
-    //     "job1-error-5.csv"
-    //   );
-    //   const result = await service.createCsvFileForJob("job1");
-    //   expect(result).toBe(filePath);
-    // });
-
-    // it("cleans up old files and creates new file", async () => {
-    //   (fs.existsSync as any)
-    //     .mockReturnValueOnce(false)
-    //     .mockReturnValueOnce(true);
-    //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(3);
-    //   const filePath = path.join(
-    //     service.getErrorLogsDirectory,
-    //     "job1-error-3.csv"
-    //   );
-    //   const result = await service.createCsvFileForJob("job1");
-    //   expect(service.writeLargeCsvToDisk).toHaveBeenCalled();
-    //   expect(result).toBe(filePath);
-    // });
   });
 
   describe("downloadErrorLogCsvFile", () => {
@@ -332,109 +278,6 @@ describe("ErrorLogService", () => {
         );
       });
 
-      // it("returns filePath if file already exists (jobRunId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(5);
-      //   const filePath = path.join(
-      //     service.getErrorLogsDirectory,
-      //     "job1-error-5.csv"
-      //   );
-      //   (fs.existsSync as any).mockImplementation((p) => p === filePath);
-      //   const result = await service.createCsvFileForJob("job1");
-      //   expect(result).toBe(filePath);
-      //   expect(service.writeLargeCsvToDisk).not.toHaveBeenCalled();
-      // });
-
-      // it("returns filePath if file already exists (jobConfigId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(7);
-      //   const filePath = path.join(
-      //     service.getErrorLogsDirectory,
-      //     "cfg1-error-7.csv"
-      //   );
-      //   (fs.existsSync as any).mockImplementation((p) => p === filePath);
-      //   const result = await service.createCsvFileForJob(undefined, "cfg1");
-      //   expect(result).toBe(filePath);
-      //   expect(service.writeLargeCsvToDisk).not.toHaveBeenCalled();
-      // });
-
-      // it("cleans up old files and creates new file (jobRunId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(3);
-      //   const dir = service.getErrorLogsDirectory;
-      //   const fileName = "job1-error-3.csv";
-      //   const filePath = path.join(dir, fileName);
-      //   (fs.existsSync as any).mockImplementation((p) => {
-      //     if (p === filePath) return false;
-      //     if (p === dir) return true;
-      //     return false;
-      //   });
-      //   (fs.readdirSync as any).mockReturnValue([
-      //     "job1-error-2.csv",
-      //     "job1-error-1.csv",
-      //     fileName,
-      //   ]);
-      //   (fs.unlinkSync as any).mockImplementation(() => {});
-      //   const result = await service.createCsvFileForJob("job1");
-      //   expect(fs.unlinkSync).toHaveBeenCalledWith(
-      //     path.join(dir, "job1-error-2.csv")
-      //   );
-      //   expect(fs.unlinkSync).toHaveBeenCalledWith(
-      //     path.join(dir, "job1-error-1.csv")
-      //   );
-      //   expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
-      //     filePath,
-      //     "job1",
-      //     undefined
-      //   );
-      //   expect(result).toBe(filePath);
-      // });
-
-      // it("cleans up old files and creates new file (jobConfigId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(4);
-      //   const dir = service.getErrorLogsDirectory;
-      //   const fileName = "cfg1-error-4.csv";
-      //   const filePath = path.join(dir, fileName);
-      //   (fs.existsSync as any).mockImplementation((p) => {
-      //     if (p === filePath) return false;
-      //     if (p === dir) return true;
-      //     return false;
-      //   });
-      //   (fs.readdirSync as any).mockReturnValue([
-      //     "cfg1-error-2.csv",
-      //     "cfg1-error-4.csv",
-      //   ]);
-      //   (fs.unlinkSync as any).mockImplementation(() => {});
-      //   const result = await service.createCsvFileForJob(undefined, "cfg1");
-      //   expect(fs.unlinkSync).toHaveBeenCalledWith(
-      //     path.join(dir, "cfg1-error-2.csv")
-      //   );
-      //   expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
-      //     filePath,
-      //     undefined,
-      //     "cfg1"
-      //   );
-      //   expect(result).toBe(filePath);
-      // });
-
-      // it("does not delete the file being created", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(2);
-      //   const dir = service.getErrorLogsDirectory;
-      //   const fileName = "job2-error-2.csv";
-      //   const filePath = path.join(dir, fileName);
-      //   (fs.existsSync as any).mockImplementation((p) => {
-      //     if (p === filePath) return false;
-      //     if (p === dir) return true;
-      //     return false;
-      //   });
-      //   (fs.readdirSync as any).mockReturnValue([fileName, "job2-error-1.csv"]);
-      //   (fs.unlinkSync as any).mockImplementation(() => {});
-      //   await service.createCsvFileForJob("job2");
-      //   expect(fs.unlinkSync).toHaveBeenCalledWith(
-      //     path.join(dir, "job2-error-1.csv")
-      //   );
-      //   expect(fs.unlinkSync).not.toHaveBeenCalledWith(
-      //     path.join(dir, fileName)
-      //   );
-      // });
-
       it("does not throw if unlinkSync throws, but logs a warning", async () => {
         jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(2);
         const dir = service.getErrorLogsDirectory;
@@ -458,46 +301,6 @@ describe("ErrorLogService", () => {
           )
         );
       });
-
-      // it("creates the file if it does not exist (jobRunId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(8);
-      //   const dir = service.getErrorLogsDirectory;
-      //   const fileName = "job4-error-8.csv";
-      //   const filePath = path.join(dir, fileName);
-      //   (fs.existsSync as any).mockImplementation((p) => {
-      //     if (p === filePath) return false;
-      //     if (p === dir) return true;
-      //     return false;
-      //   });
-      //   (fs.readdirSync as any).mockReturnValue([]);
-      //   const result = await service.createCsvFileForJob("job4");
-      //   expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
-      //     filePath,
-      //     "job4",
-      //     undefined
-      //   );
-      //   expect(result).toBe(filePath);
-      // });
-
-      // it("creates the file if it does not exist (jobConfigId)", async () => {
-      //   jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(9);
-      //   const dir = service.getErrorLogsDirectory;
-      //   const fileName = "cfg9-error-9.csv";
-      //   const filePath = path.join(dir, fileName);
-      //   (fs.existsSync as any).mockImplementation((p) => {
-      //     if (p === filePath) return false;
-      //     if (p === dir) return true;
-      //     return false;
-      //   });
-      //   (fs.readdirSync as any).mockReturnValue([]);
-      //   const result = await service.createCsvFileForJob(undefined, "cfg9");
-      //   expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
-      //     filePath,
-      //     undefined,
-      //     "cfg9"
-      //   );
-      //   expect(result).toBe(filePath);
-      // });
 
       it("handles error when writeLargeCsvToDisk rejects", async () => {
         jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(2);
