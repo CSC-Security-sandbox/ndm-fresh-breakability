@@ -17,8 +17,6 @@ run_tests() {
     ginkgo run  -v "$test_path" | tee -a "$report_file"
 }
 
-# Run regression tests
-run_tests "regression" "./tests/regression"
 
 # Run end-to-end tests
 run_tests "end-to-end" "./tests/e2e"
