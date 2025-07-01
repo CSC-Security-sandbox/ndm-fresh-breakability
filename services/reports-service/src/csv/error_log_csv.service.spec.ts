@@ -337,6 +337,56 @@ describe("ErrorLogService", () => {
           expected
         );
       });
+
+      it("throws if identifier contains invalid characters in sanitizeIdentifier", () => {
+        expect(() => (service as any).sanitizeIdentifier("bad$id")).toThrow(
+          "Invalid identifier: Only alphanumeric, dash, and underscore allowed"
+        );
+        expect(() =>
+          (service as any).sanitizeIdentifier("good_id-123")
+        ).not.toThrow();
+      });
+
+      it("escapes regex metacharacters in escapeRegex", () => {
+        const input = "foo.bar*baz?^$";
+        const escaped = (service as any).escapeRegex(input);
+        expect(escaped).toBe("foo\\.bar\\*baz\\?\\^\\$");
+      });
+
+      it("calls writeLargeCsvToDisk with correct params for jobRunId", async () => {
+        jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(3);
+        (fs.existsSync as any).mockReturnValue(false);
+        (fs.readdirSync as any).mockReturnValue([]);
+        await service.createCsvFileForJob("job7");
+        expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
+          expect.stringContaining("job7-error-3.csv"),
+          "job7",
+          undefined
+        );
+      });
+
+      it("calls writeLargeCsvToDisk with correct params for jobConfigId", async () => {
+        jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(5);
+        (fs.existsSync as any).mockReturnValue(false);
+        (fs.readdirSync as any).mockReturnValue([]);
+        await service.createCsvFileForJob(undefined, "cfg7");
+        expect(service.writeLargeCsvToDisk).toHaveBeenCalledWith(
+          expect.stringContaining("cfg7-error-5.csv"),
+          undefined,
+          "cfg7"
+        );
+      });
+
+      it("returns filePath if file already exists", async () => {
+        jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(2);
+        const dir = service.getErrorLogsDirectory;
+        const fileName = "job8-error-2.csv";
+        const filePath = path.resolve(dir, fileName);
+        (fs.existsSync as any).mockImplementation((p) => p === filePath);
+        const result = await service.createCsvFileForJob("job8");
+        expect(result).toBe(filePath);
+        expect(service.writeLargeCsvToDisk).not.toHaveBeenCalled();
+      });
     });
   });
 });
