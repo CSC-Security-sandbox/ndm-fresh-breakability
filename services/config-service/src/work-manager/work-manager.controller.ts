@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Logger, Param, Post, Req } from '@nestjs/common';
-import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
+import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiBearerAuth   } from '@nestjs/swagger';
+import { Auth, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 import { WorkerConfiguration } from 'src/constants/types';
 import { ClientIp } from 'src/middleware/clientip';
 import { WorkManagerService } from './work-manager.service';
@@ -27,6 +27,8 @@ export class WorkManagerController {
   @ApiOperation({ summary: 'Create a new request' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @Auth()
   @Post('/validate-connection')
   async create(@Body() request: CreateRequestDto, @Req() req: any) {
     return await this.workManagerService.validateConnection(
@@ -38,6 +40,8 @@ export class WorkManagerController {
   @ApiOperation({ summary: 'Validating export path and working directory' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @Auth()
   @Post('/validate/working-directory')
   async validateWorkingDirectory(@Body() data: ConfigStatusPayloadDTO) {
     return await this.workManagerService.validateWorkingDirectory(data);
@@ -46,11 +50,15 @@ export class WorkManagerController {
   @ApiOperation({ summary: 'Get Workflow Result' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @Auth()
   @Get('/workflow/details/:id')
   async getChildWorkFlowRes(@Param('id') id: string) {
     return await this.workManagerService.getChildWorkFlowRes(id);
   }
 
+  @ApiBearerAuth()
+  @AuthWorker()
   @Post('/update/configs')
   @ApiOperation({
     summary: 'Update worker configurations',

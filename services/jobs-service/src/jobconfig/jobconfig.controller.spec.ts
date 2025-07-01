@@ -46,6 +46,23 @@ describe("JobConfigController", () => {
     createSpeedTest: jest.fn(),
   };
 
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobConfigController],
@@ -55,10 +72,9 @@ describe("JobConfigController", () => {
           useValue: mockJobConfigService,
         },
         {
-        provide: PreCheckService,
-        useValue: mockPreCheckService,
-      },
-       
+          provide: PreCheckService,
+          useValue: mockPreCheckService,
+        },
         {
           provide: "JobConfigRepository",
           useValue: {},
@@ -77,7 +93,7 @@ describe("JobConfigController", () => {
         },
         {
           provide: JwtService,
-          useValue: {},
+          useValue: mockJwtService,
         },
       ],
     }).compile();
