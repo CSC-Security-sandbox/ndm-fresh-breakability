@@ -214,8 +214,10 @@ export class ErrorLogService {
       errorCount = await this.getTotalErrorCountForJobRun(identifier);
     }
     fileName = `${identifier}-error-${errorCount}.csv`;
-    // Escape identifier before using in regex
-    const safeIdentifier = this.escapeRegex(identifier);
+    // Sanitize and escape identifier before using in regex
+    const safeIdentifier = this.escapeRegex(
+      this.sanitizeIdentifier(identifier)
+    );
     filePattern = new RegExp(`^${safeIdentifier}-error-\\d+\\.csv$`);
 
     const dir = this.getErrorLogsDirectory;
