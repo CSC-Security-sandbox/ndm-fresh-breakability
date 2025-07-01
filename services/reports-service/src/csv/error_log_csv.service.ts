@@ -168,10 +168,12 @@ export class ErrorLogService {
         offset += pageSize;
       }
       csvStream.end();
-      writeStream.on("finish", () => resolve());
+      writeStream.on("finish", () => {
+        fs.unlinkSync(processingFilePath);
+        resolve();
+      });
       writeStream.on("error", reject);
       csvStream.on("error", reject);
-      fs.unlinkSync(processingFilePath);
     });
   }
 
