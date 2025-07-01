@@ -85,6 +85,22 @@ export class ErrorLogService {
     });
   }
 
+  // Utility to sanitize and validate file paths for security
+  private sanitizeAndValidateFilePath(filePath: string): string {
+    const baseDir = path.resolve(this.getErrorLogsDirectory);
+    const resolvedPath = path.resolve(baseDir, filePath);
+    // Ensure the resolved path is within the base directory
+    if (!resolvedPath.startsWith(baseDir + path.sep)) {
+      throw new Error("Invalid file path: Path traversal detected");
+    }
+    // Optionally, restrict file name pattern (alphanumeric, dash, underscore, .csv)
+    const fileName = path.basename(resolvedPath);
+    if (!/^[\w\-]+-error-\d+\.csv(\.processing)?$/.test(fileName)) {
+      throw new Error("Invalid file name");
+    }
+    return resolvedPath;
+  }
+
   async writeLargeCsvToDisk(
     filePath: string,
     jobRunId?: string,
@@ -92,10 +108,15 @@ export class ErrorLogService {
     pageSize: number = 10000
   ): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
-      const writeStream = fs.createWriteStream(filePath);
+      const safeFilePath = this.sanitizeAndValidateFilePath(
+        path.basename(filePath)
+      );
+      const writeStream = fs.createWriteStream(safeFilePath);
       const csvStream = fastCsv.format({ headers: true });
       csvStream.pipe(writeStream);
-      const processingFilePath = `${filePath}.processing`;
+      const processingFilePath = this.sanitizeAndValidateFilePath(
+        `${path.basename(filePath)}.processing`
+      );
       fs.writeFileSync(processingFilePath, "processing");
 
       let offset = 0;
@@ -180,7 +201,7 @@ export class ErrorLogService {
     filePattern = new RegExp(`^${identifier}-error-\\d+\\.csv$`);
 
     const dir = this.getErrorLogsDirectory;
-    const filePath = path.join(dir, fileName);
+    const filePath = this.sanitizeAndValidateFilePath(fileName);
 
     // If the latest file already exists, return it
     if (fs.existsSync(filePath)) {
@@ -192,7 +213,7 @@ export class ErrorLogService {
       for (const f of fs.readdirSync(dir)) {
         if (filePattern.test(f) && f !== fileName) {
           try {
-            fs.unlinkSync(path.join(dir, f));
+            fs.unlinkSync(this.sanitizeAndValidateFilePath(f));
           } catch (err) {
             this.logger.warn(
               `Failed to delete old error log file: ${f}. Reason: ${err instanceof Error ? err.message : err}`
@@ -222,7 +243,7 @@ export class ErrorLogService {
       const errorCount = await this.getTotalErrorCountForJobRun(jobRunId!);
       fileName = `${jobRunId}-error-${errorCount}.csv`;
     }
-    const filePath = path.join(this.getErrorLogsDirectory, fileName);
+    const filePath = this.sanitizeAndValidateFilePath(fileName);
     if (!fs.existsSync(filePath)) {
       // If file does not exist, create it first
       await this.createCsvFileForJob(jobRunId, jobConfigId);
@@ -237,7 +258,7 @@ export class ErrorLogService {
   async isCsvFileUpToDate(jobConfigId: string): Promise<boolean> {
     const errorCount = await this.getTotalErrorCountForConfig(jobConfigId);
     const fileName = `${jobConfigId}-error-${errorCount}.csv`;
-    const filePath = path.join(this.getErrorLogsDirectory, fileName);
+    const filePath = this.sanitizeAndValidateFilePath(fileName);
     return fs.existsSync(filePath);
   }
 
@@ -305,8 +326,10 @@ export class ErrorLogService {
       errorCount = await this.getTotalErrorCountForJobRun(identifier);
     }
     const fileName = `${identifier}-error-${errorCount}.csv`;
-    const filePath = path.join(this.getErrorLogsDirectory, fileName);
-    const processingFilePath = `${filePath}.processing`;
+    const filePath = this.sanitizeAndValidateFilePath(fileName);
+    const processingFilePath = this.sanitizeAndValidateFilePath(
+      `${fileName}.processing`
+    );
     const processing = fs.existsSync(processingFilePath);
     const ready = !processing && fs.existsSync(filePath);
     return { ready, processing };
