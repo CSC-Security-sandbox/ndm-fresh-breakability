@@ -7,6 +7,8 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { SettingType } from './dto/create-setting.dto';
 import { CreateSettingDto } from './dto/create-setting.dto';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../project/project.service.spec';
 
 const mockSettingsRepo = {
   find: jest.fn(),
@@ -36,6 +38,12 @@ describe('SettingService', () => {
           provide: getRepositoryToken(GlobalSettings),
           useValue: mockSettingsRepo,
         },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
 

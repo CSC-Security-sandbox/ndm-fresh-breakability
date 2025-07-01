@@ -244,7 +244,7 @@ describe('ProjectService', () => {
       await expect(
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
-        new NotFoundException(`Account with ${accountId} not found`),
+        new ConflictException(`Account with ${accountId} not found`),
       );
     });
   });

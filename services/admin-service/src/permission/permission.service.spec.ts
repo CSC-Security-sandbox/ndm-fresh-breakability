@@ -7,6 +7,8 @@ import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { randomUUID } from 'crypto';
 import { PermissionService } from './permission.service';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../project/project.service.spec';
 
 describe('PermissionService', () => {
   let service: PermissionService;
@@ -20,6 +22,12 @@ describe('PermissionService', () => {
           provide: getRepositoryToken(Permission),
           useClass: Repository,
         },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
 
