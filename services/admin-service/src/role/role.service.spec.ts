@@ -8,6 +8,8 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../project/project.service.spec';
 
 describe('RoleService', () => {
   let service: RoleService;
@@ -25,6 +27,12 @@ describe('RoleService', () => {
           provide: getRepositoryToken(Project),
           useClass: Repository,
         },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
 
