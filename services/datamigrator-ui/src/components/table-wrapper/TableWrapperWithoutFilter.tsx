@@ -86,7 +86,7 @@ const TableWrapperWithoutFilter = ({
                   variant="icon"
                   isSubmitting={isRefreshing}
                   onClick={!isRefreshing ? refetchTableData : undefined}
-                  className="w-[16px] h-[16px]"
+                  className="w-[17px] h-[17px]"
                 >
                   <RefreshIcon />
                 </Button>

@@ -5,7 +5,7 @@ import {
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
 } from "@/types/app.type";
-import { useLazyGetAllCutOverPathsQuery } from "@api/configApi";
+import { useGetAllCutOverPathsQuery } from "@api/configApi";
 import { useBulkCutOverMutation, useGetJobRunsQuery } from "@api/jobsApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import useFileServerDetails from "@hooks/useFileServerDetails";
@@ -21,6 +21,7 @@ import { SELECT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-
 import { useForm, useTable } from "@netapp/bxp-design-system-react";
 import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 const INIT_VALUE: bulkCutOverFormType = {
   isReviewConformed: false,
@@ -57,27 +58,14 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       }
     );
     const { fileServerDetails } = useFileServerDetails();
-    const [getAllCutOverPathsApi] = useLazyGetAllCutOverPathsQuery();
-    const [allCutOverPaths, setAllCutOverPaths] = useState<
-      GetAllCutOverPathsApiType[]
-    >([]);
-
-    // GET ALL MIGRATION PATHS (STEP 1
-    useEffect(() => {
-      if (!fileServerDetails?.id) return;
-      (async () => {
-        try {
-          const _allCutOverPaths: GetAllCutOverPathsApiType[] =
-            await getAllCutOverPathsApi({
-              fileServerId: fileServerDetails?.id,
-            }).unwrap();
-
-          setAllCutOverPaths(_allCutOverPaths);
-        } catch (error) {
-          console.error(error);
-        }
-      })();
-    }, [fileServerDetails]);
+    const {
+      data: allCutOverPaths = [],
+      isFetching: isCutOverPathsFetching,
+      refetch: refetchCutOverPaths,
+      error: cutOverPathsError,
+    } = useGetAllCutOverPathsQuery(
+      fileServerDetails?.id ? { fileServerId: fileServerDetails.id } : skipToken
+    );
 
     useEffect(() => {
       if (error) {
@@ -139,6 +127,8 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
       isSubmittingBulkCutover,
       isFetching,
       refetch,
+      isCutOverPathsFetching,
+      refetchCutOverPaths,
     };
     return <WrappedComponent {...props} {...bulkCutOverHelpers} />;
   };
