@@ -57,10 +57,8 @@ export const handleDownloadErrorsLogs = async (
       `error-log-${Id}-${timestamp}.${extension}`
     );
   } catch (error) {
-    console.error("Failed to download the error logs:", error);
-    notify.error(
-      "Error logs not generated yet, please try again after some time."
-    );
+    console.error("Failed to download the error logs:", error?.data?.message);
+    notify.error(error?.data?.message || "Failed to download the file.");
   }
 };
 
