@@ -1,7 +1,4 @@
-import {
-  useGetJobRunErrorsQuery,
-  useLazyGetJobRunErrorsOverviewQuery,
-} from "@api/jobsApi";
+import { useGetJobRunErrorsQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import { ERROR_COLUMN_DEF } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 import { ErrorsListTablePropsType } from "@modules/jobs/job-task-errors/JobTaskErrorsTabs.interface";
@@ -43,7 +40,6 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
     refetch,
     isFetching,
   } = useGetJobRunErrorsQuery(queryParams);
-  useLazyGetJobRunErrorsOverviewQuery();
 
   useEffect(() => {
     if (errorDetails) {
@@ -69,7 +65,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
   return (
     <Box className="flex flex-col gap-4">
       <Box className="flex justify-end p-2">
-        {isFetching !== undefined && (
+        {isFetching && (
           <Button
             variant="icon"
             isSubmitting={isFetching}
