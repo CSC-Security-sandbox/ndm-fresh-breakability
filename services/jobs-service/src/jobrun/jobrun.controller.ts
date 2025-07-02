@@ -28,6 +28,7 @@ import { AdHocRunDTO } from "./dto/adhockjobrun.dto";
 import { CutOverStatus, JobRunStatus } from "src/constants/enums";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { JobRunActionService } from "./jobrun-action.service";
 
 @ApiTags("jobs run")
 @Controller("job-run")
@@ -35,7 +36,8 @@ export class JobRunController {
   private readonly logger = new Logger(JobRunController.name);
   constructor(
     private readonly jobRunService: JobRunService,
-    private readonly jobRunInitService: JobRunInitService
+    private readonly jobRunInitService: JobRunInitService,
+    private readonly jobRunActionService: JobRunActionService
   ) {}
 
   // remove the schedule cron job
@@ -92,7 +94,7 @@ export class JobRunController {
   })
   @Put("/action")
   async actions(@Body() jobRunActions: JobRunActionsReq) {
-    return this.jobRunService.actions(jobRunActions);
+    return this.jobRunActionService.actions(jobRunActions);
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })

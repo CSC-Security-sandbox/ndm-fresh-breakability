@@ -2272,9 +2272,6 @@ describe("JobRunService", () => {
     it("should pause the job runs and update their status", async () => {
       const jobRuns = ["jobRunId1", "jobRunId2"];
       const jobContextMock = { jobState: { status: JobRunStatus.Paused } };
-      const workerJobRunMapUpdateSpy = jest
-        .spyOn(workerJobRunMapRepo, "update")
-        .mockResolvedValue(undefined);
       const jobRunRepoUpdateSpy = jest
         .spyOn(jobRunRepo, "update")
         .mockResolvedValue(undefined);
@@ -2283,11 +2280,6 @@ describe("JobRunService", () => {
         .mockResolvedValue(jobContextMock as any);
 
       await service.pauseJobRuns(jobRuns);
-
-      expect(workerJobRunMapUpdateSpy).toHaveBeenCalledWith(
-        { jobRunId: In(jobRuns) },
-        { isActive: false }
-      );
       expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
         { id: In(jobRuns) },
         { status: JobRunStatus.Paused }
@@ -2490,7 +2482,7 @@ describe("JobRunService", () => {
       const result = await service.stopJobRuns(jobRuns);
 
       expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
-        where: { jobRunId: In(jobRuns), isActive: true },
+        where: { jobRunId: In(jobRuns)},
         select: { workerId: true, jobRunId: true },
       });
 
@@ -2542,12 +2534,6 @@ describe("JobRunService", () => {
   describe("resumeJobRuns", () => {
     it("should resume job runs and update necessary states", async () => {
       const jobRuns = ["jobRun1", "jobRun2"];
-      const mappings = [{ workerId: "worker1" }, { workerId: "worker2" }];
-
-      jest
-        .spyOn(workerJobRunMapRepo, "find")
-        .mockResolvedValue(mappings as any);
-      jest.spyOn(workerJobRunMapRepo, "update").mockResolvedValue(undefined);
       jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
 
       const jobContextMock: any = {
@@ -2565,15 +2551,6 @@ describe("JobRunService", () => {
       jest.spyOn(service, "resumeJobRun").mockResolvedValue(undefined);
 
       const result = await service.resumeJobRuns(jobRuns);
-
-      expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
-        where: { jobRunId: expect.anything() },
-        select: { workerId: true },
-      });
-      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
-        { jobRunId: expect.anything() },
-        { isActive: true }
-      );
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: expect.anything(), status: JobRunStatus.Paused },
         { status: JobRunStatus.Running, pausedReason: null }
