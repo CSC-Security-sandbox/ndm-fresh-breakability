@@ -65,21 +65,10 @@ export class JobRunController {
     @Query("jobRunId") jobRunId?: string,
     @Query("jobConfigId") jobConfigId?: string
   ) {
-    if ((!jobRunId && !jobConfigId) || (jobRunId && jobConfigId)) {
-      throw new BadRequestException(
-        "Provide either jobRunId or jobConfigId, not both."
-      );
-    }
-    if (!jobRunId && !jobConfigId) {
-      throw new BadRequestException("jobRunId or jobConfigId is required.");
-    }
-    try {
-      await this.errorLogService.createCsvFileForJob(jobRunId, jobConfigId);
-      return { message: "CSV generation started" };
-    } catch (err) {
-      this.logger.error("Error generating CSV:", err);
-      return { error: err.message };
-    }
+    return await this.errorLogService.createCsvFileForJob(
+      jobRunId,
+      jobConfigId
+    );
   }
 
   @Get("download-error-csv")
@@ -87,10 +76,6 @@ export class JobRunController {
     @Query("jobRunId") jobRunId?: string,
     @Query("jobConfigId") jobConfigId?: string
   ): Promise<StreamableFile> {
-    if (!jobRunId && !jobConfigId) {
-      throw new BadRequestException("Provide jobRunId or jobConfigId.");
-    }
-
     return this.errorLogService.downloadErrorLogCsvFile(jobRunId, jobConfigId);
   }
 
@@ -99,9 +84,6 @@ export class JobRunController {
     @Query("jobRunId") jobRunId?: string,
     @Query("jobConfigId") jobConfigId?: string
   ) {
-    if (!jobRunId && !jobConfigId) {
-      return { error: "Either jobRunId or jobConfigId is required" };
-    }
     return this.errorLogService.isCsvFileReady(jobRunId, jobConfigId);
   }
 
