@@ -5,8 +5,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { Repository } from "typeorm";
 import * as fs from "fs";
-import * as path from "path";
-import { PassThrough, Readable } from "stream";
+import { PassThrough } from "stream";
 
 jest.mock("fs");
 
@@ -134,23 +133,6 @@ describe("ErrorLogService", () => {
     const result = await service.isCsvFileReady("run456");
     expect(result).toEqual({ ready: false, processing: true });
   });
-
-  // it("should call getPaginatedErrors with correct params", async () => {
-  //   const spy = jest
-  //     .spyOn(service, "getPaginatedErrors")
-  //     .mockResolvedValueOnce([{ foo: "bar" }]);
-  //   mockWorkerJobRunMapRepo.find.mockResolvedValue([]);
-  //   mockOperationErrorRepo.query.mockResolvedValue([{ count: "1" }]);
-  //   mockWorkerJobRunMapRepo.count.mockResolvedValue(0);
-
-  //   await service.writeLargeCsvToDisk("file.csv", "run789", undefined, 100);
-  //   expect(spy).toHaveBeenCalledWith({
-  //     jobConfigId: undefined,
-  //     jobRunId: "run789",
-  //     pageSize: 100,
-  //     offset: 0,
-  //   });
-  // });
 
   it("should clean up old files except the one being created", async () => {
     mockOperationErrorRepo.query.mockImplementation((sql, params) => {

@@ -28,4 +28,39 @@ describe("sanitizeAndValidateFilePath", () => {
     const expected = path.resolve("/tmp/logs", fileName);
     expect(sanitizeAndValidateFilePath(fileName)).toBe(expected);
   });
+
+  it("should throw BadRequestException for path traversal", () => {
+    const fileName = "../evil-error-123.csv";
+    expect(() => sanitizeAndValidateFilePath(fileName, baseDir)).toThrow(
+      /Invalid file path/
+    );
+  });
+
+  it("should throw BadRequestException for invalid file name", () => {
+    const fileName = "test-error-abc.csv";
+    expect(() => sanitizeAndValidateFilePath(fileName, baseDir)).toThrow(
+      /Invalid file name/
+    );
+  });
+
+  it("should throw BadRequestException and not call logger for invalid file name", () => {
+    // logger is not used anymore, just check exception
+    const fileName = "bad name.csv";
+    expect(() => sanitizeAndValidateFilePath(fileName, baseDir)).toThrow(
+      BadRequestException
+    );
+  });
+});
+
+describe("sanitizeIdentifier", () => {
+  const { sanitizeIdentifier } = require("./file-utils");
+
+  it("should return identifier if valid", () => {
+    expect(sanitizeIdentifier("abc_123-xyz")).toBe("abc_123-xyz");
+  });
+
+  it("should throw BadRequestException for invalid identifier", () => {
+    expect(() => sanitizeIdentifier("bad id!@#")).toThrow(BadRequestException);
+    expect(() => sanitizeIdentifier("with space")).toThrow(BadRequestException);
+  });
 });
