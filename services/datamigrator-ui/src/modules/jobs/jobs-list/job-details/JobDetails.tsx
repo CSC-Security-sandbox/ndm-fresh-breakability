@@ -77,6 +77,7 @@ const JobDetails = () => {
       window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
     ),
     skipPollingIfUnfocused: true,
+    skip: !jobId,
   });
 
   useEffect(() => {
@@ -202,8 +203,8 @@ const JobDetails = () => {
       await generateErrorLogs(queryParams).unwrap();
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
-      notify.error(errorMsg);
-      console.error(`errorMsg ${error}`);
+      notify.error(error?.data?.message || errorMsg);
+      console.error(`errorMsg ${error?.data?.message}`);
     }
   };
 
