@@ -1,4 +1,9 @@
-import { Injectable, StreamableFile, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  StreamableFile,
+  Logger,
+  BadRequestException,
+} from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { Raw, Repository, In } from "typeorm";
 import * as fs from "fs";
@@ -6,6 +11,10 @@ import * as fastCsv from "fast-csv";
 import { InjectRepository } from "@nestjs/typeorm";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import * as path from "path";
+import {
+  sanitizeAndValidateFilePath,
+  sanitizeIdentifier,
+} from "../utils/file-utils";
 
 @Injectable()
 export class ErrorLogService {
@@ -28,88 +37,69 @@ export class ErrorLogService {
     pageSize: number;
     offset: number;
   }) {
-    if (!jobConfigId && !jobRunId) {
-      throw new Error("Either jobConfigId or jobRunId must be provided");
-    }
+    await this.handleError(jobRunId, jobConfigId);
+    try {
+      const params: (string | number)[] = [];
+      let whereClause = "";
 
-    const params: any[] = [];
-    let whereClause = "";
+      if (jobConfigId) {
+        const jobRunIds = await this.getJobRunIds(jobConfigId);
+        if (!jobRunIds.length) return [];
+        whereClause = `o.job_run_id IN (${jobRunIds.map((_, i) => `$${i + 1}`).join(",")})`;
+        params.push(...jobRunIds);
+      } else {
+        whereClause = "o.job_run_id = $1";
+        params.push(jobRunId);
+      }
 
-    if (jobConfigId) {
-      const jobRunIds = await this.getJobRunIds(jobConfigId);
-      if (!jobRunIds.length) return [];
-      whereClause = `o.job_run_id IN (${jobRunIds.map((_, i) => `$${i + 1}`).join(",")})`;
-      params.push(...jobRunIds);
-    } else {
-      whereClause = "o.job_run_id = $1";
-      params.push(jobRunId);
-    }
+      params.push(pageSize, offset);
 
-    params.push(pageSize, offset);
-
-    const query = `
+      const query = `
     SELECT
-      MIN(oe.id::text)           AS "Id",
-      MIN(oe.error_message)      AS "Error Message",
-      MIN(oe.error_type)         AS "Error Type",
+      MIN(oe.id::text)           AS "Error Id",
+      (o.job_run_id)      AS "Job Run Id",
       MIN(oe.created_at)         AS "Created At",
+      MIN(oe.error_type)         AS "Error Type",
+      MIN(oe.error_message)      AS "Error Details",
       MIN(oe.file_name)          AS "File Name",
       MIN(oe.file_path)          AS "File Path",
       MIN(oe.origin)             AS "Origin",
-      MIN(oe.operation_type)     AS "Operation Type",
-      MIN(oe.error_code)         AS "Error Code",
+      MIN(oe.operation_type)     AS "Operation",
+      MIN(oe.error_code)         AS "Code",
       COUNT(*)                   AS "Occurrence"
     FROM datamigrator.operation_errors oe
     LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
     WHERE ${whereClause}
-    GROUP BY oe.file_path
+    GROUP BY oe.file_path, o.job_run_id
     ORDER BY MIN(oe.created_at)
     LIMIT $${params.length - 1}
     OFFSET $${params.length}
   `;
 
-    return this.operationErrorRepo.query(query, params);
+      return this.operationErrorRepo.query(query, params);
+    } catch (error) {
+      this.logger.error(`Query fetching errors :${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   async getWorkerSetupErrors(
     jobRunIds: string | string[]
   ): Promise<WorkerJobRunMap[]> {
-    return this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId: Array.isArray(jobRunIds) ? In(jobRunIds) : jobRunIds,
-        workerResponse: Raw(
-          (alias) =>
-            `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`
-        ),
-      },
-    });
-  }
-
-  // Utility to sanitize and validate file paths for security
-  private sanitizeAndValidateFilePath(filePath: string): string {
-    const baseDir = path.resolve(this.getErrorLogsDirectory);
-    const resolvedPath = path.resolve(baseDir, filePath);
-    // Ensure the resolved path is within the base directory
-    if (!resolvedPath.startsWith(baseDir + path.sep)) {
-      throw new Error("Invalid file path: Path traversal detected");
+    try {
+      return this.workerJobRunMapRepo.find({
+        where: {
+          jobRunId: Array.isArray(jobRunIds) ? In(jobRunIds) : jobRunIds,
+          workerResponse: Raw(
+            (alias) =>
+              `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`
+          ),
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Error fetching worker setup errors: ${error.message}`);
+      throw new BadRequestException(error.message);
     }
-    // Optionally, restrict file name pattern (alphanumeric, dash, underscore, .csv)
-    const fileName = path.basename(resolvedPath);
-    if (!/^[\w\-]+-error-\d+\.csv(\.processing)?$/.test(fileName)) {
-      throw new Error("Invalid file name");
-    }
-    return resolvedPath;
-  }
-
-  // Utility to strictly validate identifier for regex/file usage
-  private sanitizeIdentifier(identifier: string): string {
-    // Only allow alphanumeric, dash, and underscore
-    if (!/^[\w-]+$/.test(identifier)) {
-      throw new Error(
-        "Invalid identifier: Only alphanumeric, dash, and underscore allowed"
-      );
-    }
-    return identifier;
   }
 
   // Utility to escape regex metacharacters in user input
@@ -124,236 +114,285 @@ export class ErrorLogService {
     pageSize: number = 10000
   ): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
-      const safeFilePath = this.sanitizeAndValidateFilePath(
-        path.basename(filePath)
-      );
-      const writeStream = fs.createWriteStream(safeFilePath);
-      const csvStream = fastCsv.format({ headers: true });
-      csvStream.pipe(writeStream);
-      const processingFilePath = this.sanitizeAndValidateFilePath(
-        `${path.basename(filePath)}.processing`
-      );
-      fs.writeFileSync(processingFilePath, "processing");
+      try {
+        const safeFilePath = sanitizeAndValidateFilePath(
+          path.basename(filePath)
+        );
+        const writeStream = fs.createWriteStream(safeFilePath);
+        const csvStream = fastCsv.format({ headers: true });
+        csvStream.pipe(writeStream);
+        const processingFilePath = sanitizeAndValidateFilePath(
+          `${path.basename(filePath)}.processing`
+        );
+        fs.writeFileSync(processingFilePath, "processing");
 
-      let offset = 0;
-      let hasMore = true;
+        let offset = 0;
+        let hasMore = true;
 
-      while (hasMore) {
-        const ErrorsHashMap = await this.getPaginatedErrors({
-          jobConfigId,
-          jobRunId,
-          pageSize,
-          offset,
-        });
+        while (hasMore) {
+          const ErrorsHashMap = await this.getPaginatedErrors({
+            jobConfigId,
+            jobRunId,
+            pageSize,
+            offset,
+          });
 
-        const totalJobRunIds = jobConfigId
-          ? await this.getJobRunIds(jobConfigId)
-          : jobRunId;
+          const totalJobRunIds = jobConfigId
+            ? await this.getJobRunIds(jobConfigId)
+            : jobRunId;
 
-        const setupFailedError =
-          offset === 0
-            ? await this.fetchFormattedSetupErrors(totalJobRunIds)
-            : [];
+          const setupFailedError =
+            offset === 0
+              ? await this.fetchFormattedSetupErrors(totalJobRunIds)
+              : [];
 
-        const chunk =
-          offset === 0
-            ? [...ErrorsHashMap, ...setupFailedError]
-            : ErrorsHashMap;
+          const chunk =
+            offset === 0
+              ? [...ErrorsHashMap, ...setupFailedError]
+              : ErrorsHashMap;
 
-        for (const row of chunk) {
-          csvStream.write(row);
+          for (const row of chunk) {
+            csvStream.write(row);
+          }
+
+          hasMore = ErrorsHashMap.length === pageSize;
+          offset += pageSize;
         }
-
-        hasMore = ErrorsHashMap.length === pageSize;
-        offset += pageSize;
+        csvStream.end();
+        writeStream.on("finish", () => {
+          fs.unlinkSync(processingFilePath);
+          resolve();
+        });
+        writeStream.on("error", reject);
+        csvStream.on("error", reject);
+      } catch (error) {
+        this.logger.error(`Error while writing CSV:${error.message}`);
+        throw new BadRequestException(error.message);
       }
-      csvStream.end();
-      writeStream.on("finish", () => {
-        fs.unlinkSync(processingFilePath);
-        resolve();
-      });
-      writeStream.on("error", reject);
-      csvStream.on("error", reject);
     });
   }
 
   private async fetchFormattedSetupErrors(
     jobRunId: string
   ): Promise<Record<string, any>[]> {
-    const rawErrors = await this.getWorkerSetupErrors(jobRunId);
-    return rawErrors.map((err) => ({
-      Id: err.id,
-      "Error Message": err.workerResponse.message,
-      "Error Type": "FATAL_ERROR",
-      "Created At": err.workerResponse.createdAt,
-      "Operation Type": err.workerResponse.operation,
-      "Error Code": err.workerResponse.code,
-      Origin: err.workerResponse.origin,
-      Occurrence: err.workerResponse.occurrence || 1,
-    }));
+    try {
+      const rawErrors = await this.getWorkerSetupErrors(jobRunId);
+      return rawErrors.map((err) => ({
+        "Error Id": err.id,
+        "Job Run Id": err.jobRunId,
+        "Created At": err.workerResponse.createdAt,
+        "Error Type": "FATAL_ERROR",
+        "Error Details": err.workerResponse.message,
+        Origin: err.workerResponse.origin,
+        Operation: err.workerResponse.operation,
+        Code: err.workerResponse.code,
+        Occurrence: err.workerResponse.occurrence || 1,
+      }));
+    } catch (error) {
+      this.logger.error(`Error while fetching worker data:${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   get getErrorLogsDirectory(): string {
     return process.env.ERROR_LOGS_DOWNLOAD_LOCATION || "./error-logs";
   }
 
+  async handleError(jobRunId?: string, jobConfigId?: string) {
+    const isMissing = !jobRunId || jobRunId === "undefined";
+    const isMissingConfig = !jobConfigId || jobConfigId === "undefined";
+    if (isMissing && isMissingConfig) {
+      throw new BadRequestException("jobRunId or jobConfigId is required.");
+    }
+    if (
+      jobRunId &&
+      jobConfigId &&
+      jobRunId !== "undefined" &&
+      jobConfigId !== "undefined"
+    ) {
+      throw new BadRequestException(
+        "Provide either jobRunId or jobConfigId, not both."
+      );
+    }
+  }
+
   async createCsvFileForJob(
     jobRunId?: string,
     jobConfigId?: string
-  ): Promise<string> {
-    const identifier = jobRunId || jobConfigId;
-    if (!identifier) {
-      throw new Error("Either jobRunId or jobConfigId must be provided");
-    }
+  ): Promise<any> {
+    await this.handleError(jobRunId, jobConfigId);
+    try {
+      const identifier = jobRunId || jobConfigId;
+      let errorCount: number;
+      let fileName: string;
+      let filePattern: RegExp;
 
-    let errorCount: number;
-    let fileName: string;
-    let filePattern: RegExp;
+      if (jobConfigId) {
+        errorCount = await this.getTotalErrorCountForConfig(identifier);
+      } else {
+        errorCount = await this.getTotalErrorCountForJobRun(identifier);
+      }
+      fileName = `${identifier}-error-${errorCount}.csv`;
+      // Sanitize and escape identifier before using in regex
+      const safeIdentifier = this.escapeRegex(sanitizeIdentifier(identifier));
+      filePattern = new RegExp(`^${safeIdentifier}-error-\\d+\\.csv$`);
 
-    if (jobConfigId) {
-      errorCount = await this.getTotalErrorCountForConfig(identifier);
-    } else {
-      errorCount = await this.getTotalErrorCountForJobRun(identifier);
-    }
-    fileName = `${identifier}-error-${errorCount}.csv`;
-    // Sanitize and escape identifier before using in regex
-    const safeIdentifier = this.escapeRegex(
-      this.sanitizeIdentifier(identifier)
-    );
-    filePattern = new RegExp(`^${safeIdentifier}-error-\\d+\\.csv$`);
+      const dir = this.getErrorLogsDirectory;
+      const filePath = sanitizeAndValidateFilePath(fileName);
 
-    const dir = this.getErrorLogsDirectory;
-    const filePath = this.sanitizeAndValidateFilePath(fileName);
+      // If the latest file already exists, return it
+      if (fs.existsSync(filePath)) {
+        return filePath;
+      }
 
-    // If the latest file already exists, return it
-    if (fs.existsSync(filePath)) {
-      return filePath;
-    }
-
-    // Clean up old files matching the pattern (except the one being created)
-    if (fs.existsSync(dir)) {
-      for (const f of fs.readdirSync(dir)) {
-        if (filePattern.test(f) && f !== fileName) {
-          try {
-            fs.unlinkSync(this.sanitizeAndValidateFilePath(f));
-          } catch (err) {
-            this.logger.warn(
-              `Failed to delete old error log file: ${f}. Reason: ${err instanceof Error ? err.message : err}`
-            );
+      // Clean up old files matching the pattern (except the one being created)
+      if (fs.existsSync(dir)) {
+        for (const f of fs.readdirSync(dir)) {
+          if (filePattern.test(f) && f !== fileName) {
+            try {
+              fs.unlinkSync(sanitizeAndValidateFilePath(f));
+            } catch (err) {
+              this.logger.error(
+                `Failed to delete old error log file: ${f}. Reason: ${err instanceof Error ? err.message : err}`
+              );
+              throw new BadRequestException(err.message);
+            }
           }
         }
       }
-    }
 
-    await this.writeLargeCsvToDisk(filePath, jobRunId, jobConfigId);
-    return filePath;
+      await this.writeLargeCsvToDisk(filePath, jobRunId, jobConfigId);
+      return { message: "CSV generation started" };
+    } catch (error) {
+      this.logger.error(`Error generating CSV:${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   async downloadErrorLogCsvFile(
     jobRunId?: string,
     jobConfigId?: string
   ): Promise<StreamableFile> {
-    const identifier = jobRunId || jobConfigId;
-    if (!identifier) {
-      throw new Error("A jobRunId or jobConfigId must be provided.");
+    try {
+      const identifier = jobRunId || jobConfigId;
+      await this.handleError(jobRunId, jobConfigId);
+      let fileName: string;
+      if (jobConfigId) {
+        const errorCount = await this.getTotalErrorCountForConfig(jobConfigId);
+        fileName = `${jobConfigId}-error-${errorCount}.csv`;
+      } else {
+        const errorCount = await this.getTotalErrorCountForJobRun(jobRunId!);
+        fileName = `${jobRunId}-error-${errorCount}.csv`;
+      }
+      const filePath = sanitizeAndValidateFilePath(fileName);
+      if (!fs.existsSync(filePath)) {
+        // If file does not exist, create it first
+        await this.createCsvFileForJob(jobRunId, jobConfigId);
+      }
+      const fileStream = fs.createReadStream(filePath);
+      return new StreamableFile(fileStream, {
+        type: "text/csv",
+        disposition: `attachment; filename=\"${fileName}\"`,
+      });
+    } catch (error) {
+      this.logger.error(`Error while downloading file:${error.message}`);
+      throw new BadRequestException(error.message);
     }
-    let fileName: string;
-    if (jobConfigId) {
-      const errorCount = await this.getTotalErrorCountForConfig(jobConfigId);
-      fileName = `${jobConfigId}-error-${errorCount}.csv`;
-    } else {
-      const errorCount = await this.getTotalErrorCountForJobRun(jobRunId!);
-      fileName = `${jobRunId}-error-${errorCount}.csv`;
-    }
-    const filePath = this.sanitizeAndValidateFilePath(fileName);
-    if (!fs.existsSync(filePath)) {
-      // If file does not exist, create it first
-      await this.createCsvFileForJob(jobRunId, jobConfigId);
-    }
-    const fileStream = fs.createReadStream(filePath);
-    return new StreamableFile(fileStream, {
-      type: "text/csv",
-      disposition: `attachment; filename=\"${fileName}\"`,
-    });
-  }
-
-  async isCsvFileUpToDate(jobConfigId: string): Promise<boolean> {
-    const errorCount = await this.getTotalErrorCountForConfig(jobConfigId);
-    const fileName = `${jobConfigId}-error-${errorCount}.csv`;
-    const filePath = this.sanitizeAndValidateFilePath(fileName);
-    return fs.existsSync(filePath);
   }
 
   getJobRunIds = async (jobConfigId) => {
-    const result = await this.operationErrorRepo.query(
-      `SELECT id FROM datamigrator.jobrun WHERE job_config_id = $1`,
-      [jobConfigId]
-    );
-    return result.map((row: any) => row.id);
+    try {
+      const result = await this.operationErrorRepo.query(
+        `SELECT id FROM datamigrator.jobrun WHERE job_config_id = $1`,
+        [jobConfigId]
+      );
+      return result.map((row: any) => row.id);
+    } catch (error) {
+      this.logger.error(`Error to get jobRunIds:${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   };
 
   async getTotalErrorCountForJobRun(jobRunId: string): Promise<number> {
-    const [{ count: opCount }] = await this.operationErrorRepo.query(
-      `SELECT COUNT(*) as count
+    try {
+      const [{ count: opCount }] = await this.operationErrorRepo.query(
+        `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id = $1`,
-      [jobRunId]
-    );
-    const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
-    return Number(opCount) + workerSetupCount;
+        [jobRunId]
+      );
+      const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
+      return Number(opCount) + workerSetupCount;
+    } catch (error) {
+      this.logger.error(`Error counting error for jobRunId:${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   async getTotalErrorCountForConfig(jobConfigId: string): Promise<number> {
-    const jobRunIds = await this.getJobRunIds(jobConfigId);
-    if (jobRunIds.length === 0) return 0;
-    const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
-    const [{ count: opCount }] = await this.operationErrorRepo.query(
-      `SELECT COUNT(*) as count
+    try {
+      const jobRunIds = await this.getJobRunIds(jobConfigId);
+      if (jobRunIds.length === 0) return 0;
+      const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
+      const [{ count: opCount }] = await this.operationErrorRepo.query(
+        `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id IN (${placeholders})`,
-      jobRunIds
-    );
-    const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
-    return Number(opCount) + workerSetupCount;
+        jobRunIds
+      );
+      const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
+      return Number(opCount) + workerSetupCount;
+    } catch (error) {
+      this.logger.error(`Error counting error for config:${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   private async getWorkerSetupCount(
     jobRunIds: string | string[]
   ): Promise<number> {
-    return this.workerJobRunMapRepo.count({
-      where: {
-        jobRunId: Array.isArray(jobRunIds) ? In(jobRunIds) : jobRunIds,
-        workerResponse: Raw(
-          (alias) =>
-            `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`
-        ),
-      },
-    });
+    try {
+      return this.workerJobRunMapRepo.count({
+        where: {
+          jobRunId: Array.isArray(jobRunIds) ? In(jobRunIds) : jobRunIds,
+          workerResponse: Raw(
+            (alias) =>
+              `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`
+          ),
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Error counting worker setup errors: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   async isCsvFileReady(
     jobRunId?: string,
     jobConfigId?: string
   ): Promise<{ ready: boolean; processing: boolean }> {
-    const identifier = jobRunId || jobConfigId;
-    if (!identifier) {
-      throw new Error("A jobRunId or jobConfigId must be provided.");
+    try {
+      const identifier = jobRunId || jobConfigId;
+      await this.handleError(jobRunId, jobConfigId);
+      let errorCount: number;
+      if (jobConfigId) {
+        errorCount = await this.getTotalErrorCountForConfig(identifier);
+      } else {
+        errorCount = await this.getTotalErrorCountForJobRun(identifier);
+      }
+      const fileName = `${identifier}-error-${errorCount}.csv`;
+      const filePath = sanitizeAndValidateFilePath(fileName);
+      const processingFilePath = sanitizeAndValidateFilePath(
+        `${fileName}.processing`
+      );
+      const processing = fs.existsSync(processingFilePath);
+      const ready = !processing && fs.existsSync(filePath);
+      return { ready, processing };
+    } catch (error) {
+      this.logger.error(`CSV file ready error:${error.message}`);
+      throw new BadRequestException(error.message);
     }
-    let errorCount: number;
-    if (jobConfigId) {
-      errorCount = await this.getTotalErrorCountForConfig(identifier);
-    } else {
-      errorCount = await this.getTotalErrorCountForJobRun(identifier);
-    }
-    const fileName = `${identifier}-error-${errorCount}.csv`;
-    const filePath = this.sanitizeAndValidateFilePath(fileName);
-    const processingFilePath = this.sanitizeAndValidateFilePath(
-      `${fileName}.processing`
-    );
-    const processing = fs.existsSync(processingFilePath);
-    const ready = !processing && fs.existsSync(filePath);
-    return { ready, processing };
   }
 }
