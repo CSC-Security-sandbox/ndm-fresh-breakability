@@ -367,10 +367,10 @@ func RestoreOriginalDataOnVolume(export string) error {
     sudo mkdir -p "%s"
     sudo mount -t nfs "%s" "%s"
 
-    # Remove appended lines from each file
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify1.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify2.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify3.text"
+    # Empty each file
+    sudo truncate -s 0 "%s/modify1.text"
+    sudo truncate -s 0 "%s/modify2.text"
+    sudo truncate -s 0 "%s/modify3.text"
 
     # Unmount and cleanup
     sudo umount "%s"
@@ -380,7 +380,6 @@ func RestoreOriginalDataOnVolume(export string) error {
 		destMount,
 		destMount,
 		destMount, destMount)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)

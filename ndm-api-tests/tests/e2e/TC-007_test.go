@@ -117,7 +117,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -186,7 +186,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, ".././validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
