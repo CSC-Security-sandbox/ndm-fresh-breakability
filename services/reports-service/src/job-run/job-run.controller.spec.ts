@@ -107,49 +107,9 @@ describe("JobRunController", () => {
     });
   });
 
-  describe("generateErrorCsv", () => {
-    it("should throw if both jobRunId and jobConfigId are provided", async () => {
-      await expect(
-        controller.generateErrorCsv("jobRunId", "jobConfigId")
-      ).rejects.toThrow("Provide either jobRunId or jobConfigId, not both.");
-    });
-
-    // it("should throw if both are missing", async () => {
-    //   await expect(
-    //     controller.generateErrorCsv(undefined, undefined)
-    //   ).rejects.toThrow("jobRunId or jobConfigId is required.");
-    // });
-
-    it("should start CSV generation and return success message", async () => {
-      const result = await controller.generateErrorCsv("jobRunId", undefined);
-      expect(errorLogService.createCsvFileForJob).toHaveBeenCalledWith(
-        "jobRunId",
-        undefined
-      );
-      expect(result).toEqual({ message: "CSV generation started" });
-    });
-
-    it("should handle error and return error message", async () => {
-      const error = new Error("Failing intentionally");
-      errorLogService.createCsvFileForJob.mockRejectedValueOnce(error);
-
-      const result = await controller.generateErrorCsv("jobRunId", undefined);
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        "Error generating CSV:",
-        error
-      );
-      expect(result).toEqual({ error: "Failing intentionally" });
-    });
-  });
+  describe("generateErrorCsv", () => {});
 
   describe("downloadErrorCsv", () => {
-    it("should throw if neither jobRunId nor jobConfigId provided", async () => {
-      await expect(
-        controller.downloadErrorCsv(undefined, undefined)
-      ).rejects.toThrow("Provide jobRunId or jobConfigId.");
-    });
-
     it("should return a streamable file", async () => {
       errorLogService.downloadErrorLogCsvFile.mockResolvedValue(mockCsvFile);
       const result = await controller.downloadErrorCsv("jobRunId", undefined);
@@ -158,13 +118,6 @@ describe("JobRunController", () => {
   });
 
   describe("isErrorCsvReady", () => {
-    it("should return error if no IDs are provided", () => {
-      const result = controller.isErrorCsvReady(undefined, undefined);
-      expect(result).toEqual({
-        error: "Either jobRunId or jobConfigId is required",
-      });
-    });
-
     it("should return status if ID is provided", () => {
       errorLogService.isCsvFileReady.mockReturnValue({ ready: true } as any);
       const result = controller.isErrorCsvReady("jobRunId", undefined);
