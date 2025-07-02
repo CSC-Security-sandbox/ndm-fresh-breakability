@@ -11,6 +11,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
+import { RetryableError } from 'src/errors/errors.types';
 @Injectable()
 export class SetupActivityService {
 
@@ -138,7 +139,7 @@ export class SetupActivityService {
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
@@ -182,7 +183,6 @@ export class SetupActivityService {
         protocolType,
         workerId: this.workerId,
         message: `Worker ${this.workerId} successfully set up.`,
-        state: context.jobState
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
@@ -228,7 +228,7 @@ export class SetupActivityService {
 
   async cleanup(jobRunId: string): Promise<SetupOutput> {
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
 
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
@@ -278,12 +278,7 @@ export class SetupActivityService {
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
-      return {
-        jobRunId,
-        status: 'error',
-        workerId: this.workerId,
-        message: `Cleanup failed: ${error.message}`,
-      };
+      throw new RetryableError(`Cleanup failed: ${error.message}`);
     }
   }
 }

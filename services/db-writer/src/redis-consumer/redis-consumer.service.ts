@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DMError, GroupReaderType, JobContext, JobContextFactory, JobType, RedisUtils, Task } from '@netapp-cloud-datamigrate/jobs-lib';
+import { GroupReaderType, JobContextFactory, JobManagerContext, RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib';
+import { defaultDataConverter } from '@temporalio/common';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Worker } from 'worker_threads';
+import { ConsumerType, StreamStatus, WorkFlows } from '../enum/redis-consumer.enum';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
-import { defaultDataConverter } from '@temporalio/common';
-import { ConsumerType, StreamStatus, WorkFlows } from '../enum/redis-consumer.enum';
-import { Worker } from 'worker_threads';
-import * as path from 'path';
-import * as fs from 'fs';
 
 const getWorkflowId = (jobRunId: string, jobType: string) => {
     if (jobType === 'CUT_OVER') return `${WorkFlows.CUT_OVER}-${jobRunId}`;
@@ -199,8 +199,8 @@ export class RedisConsumerService {
                 const isAllStopped = await this.areAllConsumersStopped(jobRunId);
                 if (isAllStopped) {
 
-                    const contextProvider = JobContextFactory.getProvider('redis', this.redisClient);
-                    const jobContext = await contextProvider.getJobContext(jobRunId);
+                    const contextProvider = JobContextFactory.getJobManagerProvider('redis', this.redisClient);
+                    const jobContext = await contextProvider.getContext(jobRunId);
                     if (jobContext) {
                         this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
                         try {
@@ -381,10 +381,10 @@ export class RedisConsumerService {
             if (!this.redisClient.isOpen) await this.redisClient.connect();
 
             // Get the job context provider for Redis
-            const contextProvider = JobContextFactory.getProvider("redis", this.redisClient);
+            const contextProvider = JobContextFactory.getJobManagerProvider("redis", this.redisClient);
 
             // Retrieve job context using jobRunId
-            const jobContext = await contextProvider.getJobContext(jobRunId);
+            const jobContext = await contextProvider.getContext(jobRunId);
 
             // const speedTestContextProvider = JobContextFactory.getSpeedTestProvider("redis", this.redisClient);
 
@@ -448,46 +448,42 @@ export class RedisConsumerService {
      * @param jobRunId - The unique identifier for the job.
      * @param jobContext - The job context containing metadata.
      */
-    private async processData(data: any, consumerType: string, jobRunId: string, jobContext: any) {
+
+
+    private async processData(stream: any, consumerType: string, jobRunId: string, jobContext: JobManagerContext) {
         try {
 
             switch (consumerType) {
                 case ConsumerType.errors:
                     // If a specific task ID is encountered, stop the "errors" consumer
                     try {
-                        if (data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
+                        if (stream?.data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                             await this.stopConsumer(jobRunId, ConsumerType.errors);
                         } else {
-                            await this.handleErrors(data);
+                            await this.handleErrors(stream.data);
                         }
+                        await jobContext.groupAckErrorStream([stream.id], GroupReaderType.DB_WRITER);
                     } catch (e) {
                         this.logger.error(`${jobRunId} :${consumerType} Data updating error`)
                     }
                     break;
 
                 case ConsumerType.tasks:
-                case ConsumerType.migrationTask:
-                case ConsumerType.updatedTask:
-                    if (data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
+                    if (stream?.data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                         await this.stopConsumer(jobRunId, consumerType);
                         this.logger.log(`${consumerType} : killing `)
                     } else {
                         // Save task data to inventory service
-                        await this.inventoryService.saveTasks(data);
+                        await this.inventoryService.saveTasks(stream?.data);
                     }
-                    break;
-
-                case ConsumerType.directories:
-                    // Stop consumer if processing the same file again
-                    if (data.fileName === this.lastFile) {
-                        await this.stopConsumer(jobRunId, ConsumerType.directories);
-                    }
+                    await jobContext.groupAckTaskStream([stream.id], GroupReaderType.DB_WRITER);
                     break;
 
                 case ConsumerType.files:
                     // Handle file processing
                     const { pathId } = jobContext.jobConfig.sourceFileServer;
-                    this.handleFiles(data, jobRunId, pathId, jobContext);
+                    this.handleFiles(stream?.data, jobRunId, pathId, jobContext);
+                    await jobContext.groupAckFileStream([stream.id], GroupReaderType.DB_WRITER);
                     break;
 
                 // case ConsumerType.speedtestTask:
@@ -584,8 +580,6 @@ export class RedisConsumerService {
      */
     private async handleErrors(data: any): Promise<void> {
         try {
-
-
             const { operation, tasks } = data || {};
 
             // Save operation error if present
@@ -613,18 +607,15 @@ export class RedisConsumerService {
      * @returns The appropriate reader function.
      * @throws Error if the consumer type is invalid.
      */
-    private getReader(jobContext: JobContext,  readerName: string, consumerType: string) {
+    private getReader(jobContext: JobManagerContext,  readerName: string, consumerType: string) {
         if (!jobContext) {
             throw new Error("getReader: jobContext is null or undefined.");
         }
 
         const readerMap: Record<string, any> = {
-            [ConsumerType.files]: jobContext.readFiles(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.directories]: jobContext.groupReadDirs(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.errors]: jobContext.groupReadErrors(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.tasks]: jobContext.groupReadTasks(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.migrationTask]: jobContext.groupReadMigrationTask(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.updatedTask]: jobContext.readUpdatedTaskInfo(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.files]: jobContext.groupReadFileStream(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.errors]: jobContext.groupReadErrorStream(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.tasks]: jobContext.groupReadTaskStream(readerName, 500, GroupReaderType.DB_WRITER),
         };
 
         if (!(consumerType in readerMap)) {

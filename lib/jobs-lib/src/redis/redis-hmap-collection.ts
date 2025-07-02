@@ -33,6 +33,11 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         await this.redisClient.hSet(this.redisMapKey, key, JSON.stringify(value));
     }
 
+    async setValueIfNotExists(key: string, value: T): Promise<boolean> {
+        const result = await this.redisClient.hSetNX(this.redisMapKey, key, JSON.stringify(value));
+        return result;
+    }
+
     async getAll(): Promise<any> {
         return await this.redisClient.hGetAll(this.redisMapKey);
     }
