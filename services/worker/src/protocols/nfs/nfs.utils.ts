@@ -41,7 +41,8 @@ export const parseExports = (output: string): string[] =>{
     const lines = output.split('\n');
     const exports = lines
       .filter((line) => line.startsWith('/'))
-      .map((line) => line.split(' ')[0]);
+      .map((line) => line.split(' ')[0])
+      .filter((path) => path !== '/');
 
     return exports;
   }
