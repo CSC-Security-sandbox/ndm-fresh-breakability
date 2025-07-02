@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, InternalServerErrorException, NotFound
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { Repository, IsNull, Not } from 'typeorm';
+import { Repository, IsNull, Not, In } from 'typeorm';
 import { WorkerConfiguration } from 'src/constants/types';
 import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { WorkerEntity } from 'src/entities/worker.entity';
@@ -47,7 +47,7 @@ export class WorkManagerService {
       if (workerMetaConfig) {
         const jobRunConfig = await this.jobRunRepo.find({
           where: {
-            status: Not(JobRunStatus.Completed),
+            status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Stopping, JobRunStatus.Paused]),
             workerMap: {
               workerId: id,
               metaConfig: Not(IsNull()),

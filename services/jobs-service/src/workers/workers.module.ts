@@ -5,10 +5,11 @@ import { WorkersController } from "./workers.controller";
 import { WorkersService } from "./workers.service";
 import appConfig from "src/config/app.config";
 import { ConfigModule } from "@nestjs/config";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkerEntity]),
+    TypeOrmModule.forFeature([WorkerEntity, WorkerJobRunMap]),
     ConfigModule.forRoot({ load: [appConfig] }),
   ],
   controllers: [WorkersController],
