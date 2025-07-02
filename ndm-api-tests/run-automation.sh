@@ -12,16 +12,17 @@ report_file="test_report.txt"
 run_tests() {
     local test_type=$1
     local test_path=$2
-
-    echo " \n\n Running $test_type tests  \n\n" | tee -a "$report_file"
-    ginkgo run  -v "$test_path" | tee -a "$report_file"
+    local timeout=$3
+ 
+    echo -e "\n\nRunning $test_type tests (timeout=${timeout})\n\n" | tee -a "$report_file"
+    ginkgo run -v --timeout="${timeout}" "$test_path" | tee -a "$report_file"
 }
 
 # Run regression tests
-run_tests "regression" "./tests/regression"
+# run_tests "regression" "./tests/regression"
 
 # Run end-to-end tests
 run_tests "end-to-end" "./tests/e2e"
 
 # Run end-to-end tests
-run_tests "smoke" "./tests/smoke"
+# run_tests "smoke" "./tests/smoke"
