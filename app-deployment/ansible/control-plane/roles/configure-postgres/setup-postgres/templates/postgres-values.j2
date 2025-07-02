@@ -39,6 +39,7 @@ primary:
     wal_buffers = 8MB
     checkpoint_completion_target = 0.9
     max_wal_size = 1GB
+    shared_preload_libraries = 'pg_stat_statements'
               
   initdb:
     scriptsConfigMap: postgres-init-config

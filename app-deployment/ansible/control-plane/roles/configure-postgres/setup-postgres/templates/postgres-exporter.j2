@@ -30,6 +30,8 @@ spec:
       containers:
         - name: postgres-exporter
           image: prometheuscommunity/postgres-exporter:latest
+          args:
+            - --extend.query-path=/config/queries.yaml
           env:
             - name: DATA_SOURCE_NAME
               valueFrom:
@@ -38,6 +40,10 @@ spec:
                   key: data_source_name
           ports:
             - containerPort: 9187
+          volumeMounts:
+            - name: query-config
+              mountPath: /config
+              readOnly: true
           resources:
             requests:
               cpu: 50m
@@ -45,6 +51,10 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+      volumes:
+        - name: query-config
+          configMap:
+            name: pg-exporter-queries
 
 ---
 apiVersion: v1
@@ -54,4 +64,4 @@ metadata:
   namespace: postgres
 type: Opaque
 data:
-  data_source_name: {{ (('postgresql://dmadmin:' ~ dmadmin_password ~ '@postgresql:5432/datamigrator?sslmode=disable') | b64encode) }}
+  data_source_name: {{ (('postgresql://postgres:' ~ postgres_root_password ~ '@postgresql:5432/datamigrator?sslmode=disable') | b64encode) }}

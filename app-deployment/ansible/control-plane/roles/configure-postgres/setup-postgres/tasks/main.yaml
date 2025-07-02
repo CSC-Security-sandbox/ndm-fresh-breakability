@@ -61,6 +61,10 @@
   become: yes
   template: src=./templates/postgres-values.j2 dest=$HOME/postgres/postgres-values.yaml
 
+- name: pg-queries template
+  become: yes
+  template: src=./templates/pg-queries.yaml dest=$HOME/postgres/pg-queries.yaml
+
 - name: Cleanup service account
   become: yes
   shell: |
@@ -70,14 +74,15 @@
 - name: remove previous installation
   become: yes
   shell: |
-    helm delete postgres --namespace "postgres"
+    helm delete postgresql --namespace "postgres"
     kubectl delete pvc --all --namespace "postgres"
     kubectl delete -f $HOME/postgres/postgres-configmap.yaml
     kubectl delete -f $HOME/postgres/postgres-primary-pv.yaml
     kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
     kubectl delete -f $HOME/postgres/postgres-secret.yaml
-    kubectl delete -f $HOME/postgres/postgres-namespace.yaml
     kubectl delete -f $HOME/postgres/postgres-exporter.yaml
+    kubectl delete -f $HOME/postgres/pg-queries.yaml
+    kubectl delete -f $HOME/postgres/postgres-namespace.yaml
   when: postgres_uninstall is defined
   args:
     chdir: $HOME
@@ -90,6 +95,7 @@
     kubectl apply -f $HOME/postgres/postgres-primary-pv.yaml
     kubectl apply -f $HOME/postgres/postgres-configmap.yaml
     kubectl apply -f $HOME/postgres/postgres-secret.yaml
+    kubectl apply -f $HOME/postgres/pg-queries.yaml
   args:
     chdir: $HOME
 
