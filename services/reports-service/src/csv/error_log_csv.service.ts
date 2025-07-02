@@ -1,7 +1,6 @@
 import {
   Injectable,
   StreamableFile,
-  Logger,
   BadRequestException,
 } from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
@@ -18,7 +17,6 @@ import {
 
 @Injectable()
 export class ErrorLogService {
-  private readonly logger = new Logger(ErrorLogService.name);
   constructor(
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
@@ -78,7 +76,6 @@ export class ErrorLogService {
 
       return this.operationErrorRepo.query(query, params);
     } catch (error) {
-      this.logger.error(`Query fetching errors :${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -97,7 +94,6 @@ export class ErrorLogService {
         },
       });
     } catch (error) {
-      this.logger.error(`Error fetching worker setup errors: ${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -166,7 +162,6 @@ export class ErrorLogService {
         writeStream.on("error", reject);
         csvStream.on("error", reject);
       } catch (error) {
-        this.logger.error(`Error while writing CSV:${error.message}`);
         throw new BadRequestException(error.message);
       }
     });
@@ -189,7 +184,6 @@ export class ErrorLogService {
         Occurrence: err.workerResponse.occurrence || 1,
       }));
     } catch (error) {
-      this.logger.error(`Error while fetching worker data:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -252,9 +246,6 @@ export class ErrorLogService {
             try {
               fs.unlinkSync(sanitizeAndValidateFilePath(f));
             } catch (err) {
-              this.logger.error(
-                `Failed to delete old error log file: ${f}. Reason: ${err instanceof Error ? err.message : err}`
-              );
               throw new BadRequestException(err.message);
             }
           }
@@ -264,7 +255,6 @@ export class ErrorLogService {
       await this.writeLargeCsvToDisk(filePath, jobRunId, jobConfigId);
       return { message: "CSV generation started" };
     } catch (error) {
-      this.logger.error(`Error generating CSV:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -295,7 +285,6 @@ export class ErrorLogService {
         disposition: `attachment; filename=\"${fileName}\"`,
       });
     } catch (error) {
-      this.logger.error(`Error while downloading file:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -308,7 +297,6 @@ export class ErrorLogService {
       );
       return result.map((row: any) => row.id);
     } catch (error) {
-      this.logger.error(`Error to get jobRunIds:${error.message}`);
       throw new BadRequestException(error.message);
     }
   };
@@ -325,7 +313,6 @@ export class ErrorLogService {
       const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
       return Number(opCount) + workerSetupCount;
     } catch (error) {
-      this.logger.error(`Error counting error for jobRunId:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -345,7 +332,6 @@ export class ErrorLogService {
       const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
       return Number(opCount) + workerSetupCount;
     } catch (error) {
-      this.logger.error(`Error counting error for config:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -364,7 +350,6 @@ export class ErrorLogService {
         },
       });
     } catch (error) {
-      this.logger.error(`Error counting worker setup errors: ${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
@@ -391,7 +376,6 @@ export class ErrorLogService {
       const ready = !processing && fs.existsSync(filePath);
       return { ready, processing };
     } catch (error) {
-      this.logger.error(`CSV file ready error:${error.message}`);
       throw new BadRequestException(error.message);
     }
   }
