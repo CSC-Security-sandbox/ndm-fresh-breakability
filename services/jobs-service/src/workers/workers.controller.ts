@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Logger, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
-import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Logger, Param, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WorkersStatusPageDto, WorkerStatusPageResponseDto } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
 import { Ctx, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
+import { WorkerJobRunActivationParamsDto } from './dto/woker-jobrun-activation.dto';
 
 
 
@@ -20,6 +21,20 @@ export class WorkersController {
     @Get('/')
     async getWorkers(@Query(new ValidationPipe({ transform: false, whitelist: true }))  workerStatusPageDto: WorkersStatusPageDto) {
         return await this.workersService.findAllWorkers(workerStatusPageDto);
+    }
+
+
+    @Post(':workerId/jobrun/:jobrunId/activation-statue/:active')
+    @ApiOperation({ summary: 'Update the activation status of a worker job run' })
+    @ApiResponse({ status: 200, description: 'Worker job run status updated successfully.' })
+    @ApiResponse({ status: 400, description: 'Invalid input parameters.' })
+    @ApiResponse({ status: 404, description: 'Worker or Job Run not found.' })
+    async updateWorkerJobRunStatus(
+        @Param(new ValidationPipe({ transform: true })) 
+        params: WorkerJobRunActivationParamsDto,
+    ) {
+        const { workerId, jobrunId, active } = params;
+        return this.workersService.updateWorkerJobRunStatus(workerId, jobrunId, active);        
     }
 }
 

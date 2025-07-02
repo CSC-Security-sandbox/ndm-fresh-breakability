@@ -176,26 +176,42 @@ export class JobRunService {
 
   //  ------------------- JobRun actions PAUSE ------------------ //
   async pauseJobRuns(jobRuns: string[], reason?: PausedReason) {
-    await this.workerJobRunMapRepo.update(
-      { jobRunId: In(jobRuns) },
-      { isActive: false }
-    );
     await this.jobRunRepo.update(
       { id: In(jobRuns) },
       { status: JobRunStatus.Paused, pausedReason: reason }
     );
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
-      jobContext.jobState.status = JobContextStatus.Paused;
+      jobContext.jobState.status = JobContextStatus.Paused;            
       await this.redisService.setJobContext(jobRunId, jobContext);
+
+      const workflowId = `${jobContext.jobConfig.jobType}-${jobContext.jobRunId}`
+      const signal: SignalWorkFlowPayload = {
+          payload: JobRunStatus.Paused,
+          signalName: "action",
+          workflowId: workflowId
+      };
+      try{
+        await this.workFlowService.sendSignal(signal);
+      }catch (error) {
+        this.logger.error(`Failed to send signal to workflow ${workflowId}: ${error.message}`); 
+        return {details: "Operation Failed"};
+      }
+      
     }
     return { details: "Operation Completed Successfully" };
+
+     
+
+
+
+
   }
 
   //  ------------------- JobRun actions STOP ------------------ //
   async stopJobRuns(jobRuns: string[]) {
     const mappings = await this.workerJobRunMapRepo.find({
-      where: { jobRunId: In(jobRuns), isActive: true },
+      where: { jobRunId: In(jobRuns)},
       select: { workerId: true, jobRunId: true },
     });
     const worker = new Map<string, string[]>();
@@ -295,20 +311,11 @@ export class JobRunService {
 
   //  ------------------- JobRun actions RESUME ------------------ //
   async resumeJobRuns(jobRuns: string[]) {
-    const mappings = await this.workerJobRunMapRepo.find({
-      where: { jobRunId: In(jobRuns) },
-      select: { workerId: true },
-    });
-    await this.workerJobRunMapRepo.update(
-      { jobRunId: In(jobRuns) },
-      { isActive: true }
-    );
     await this.jobRunRepo.update(
       { id: In(jobRuns), status: JobRunStatus.Paused },
       { status: JobRunStatus.Running, pausedReason: null }
     );
-    this.logger.debug(mappings);
-
+    
     for (const jobRunId of jobRuns) {
       const jobContext = await this.redisService.getJobContext(jobRunId);
       jobContext.jobState.status = JobContextStatus.Running;
@@ -319,7 +326,6 @@ export class JobRunService {
     }
     return { details: "Operation Completed Successfully" };
   }
-
 
   async resumeJobRun(jobRunId: string) {
     try {
@@ -340,18 +346,14 @@ export class JobRunService {
         jobRunId,
         details.jobType
       );
-      const workflowStatus =
-        await this.workFlowService.getWorkflowStatus(workflowId);
-      this.logger.debug(`Workflow Status ${workflowStatus}`);
-      if (workflowStatus === JobContextStatus.Running) {
-        this.logger.debug(`Terminating Workflow ${workflowId}`);
-        await this.workFlowService.terminateWorkflow(workflowId);
-        this.logger.debug(`Workflow Terminated ${workflowId}`);
-      }
-      this.logger.debug(`Resuming Workflow ${workflowId}`);
-      await this.jobRunInitService.initiateWorkflow(jobRunId, details);
-      this.logger.debug(`Workflow Resumed ${workflowId}`);
-      return;
+
+      const signal: SignalWorkFlowPayload = {
+          payload: JobRunStatus.Running,
+          signalName: "action",
+          workflowId: workflowId
+      };
+      await this.workFlowService.sendSignal(signal);
+      this.logger.debug(`Workflow resumed sucessfully for ${workflowId}`);
     } catch (error) {
       this.logger.error(`Failed to resume Job Run ${jobRunId} ${error}`);
       throw new Error(`Failed to resume Job Run ${jobRunId} ${error}`);
@@ -695,7 +697,7 @@ export class JobRunService {
         targetPath: { fileServer: true },
       },
     });
-    if (status !== JobRunStatus.Running && status !== JobRunStatus.Pending) {
+    if (status !== JobRunStatus.Running) {
       if (
         jobConfig &&
         jobConfig.futureScheduleAt &&
