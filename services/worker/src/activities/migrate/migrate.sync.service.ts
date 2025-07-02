@@ -139,8 +139,8 @@ export class MigrationSyncService {
         let gid = metadata.gid?.toString();
         let uid = metadata.uid?.toString();
         if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-          gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
-          uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
+          gid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.gid?.toString(), 'GID')
+          uid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.uid?.toString(), 'UID')
         }
         if(gid && uid)
           await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
@@ -166,7 +166,7 @@ export class MigrationSyncService {
         const usersAcls:ACL[] = getUserACLs(metadata.sid, sourcePath)
         await Promise.all(
           usersAcls.map(async (userAcl) => {
-            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext, userAcl.user, 'SID');
+            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
             if (user) {
               const commandExec = command.ops[0].cmd !== OPS_CMD.COPY_DIR
                 ? CommandPattern.SET_SID_FOR_OBJECT

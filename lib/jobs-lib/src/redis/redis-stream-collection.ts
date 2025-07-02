@@ -33,15 +33,16 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async init(): Promise<void> {
-    if (await this.redisClient.exists(this.streamKey)) {
-     return
-    }
+    console.log(`Initializing stream collection for ${this.streamKey}`);
     for( const groupType of Object.values(GroupReaderType)) {
       await this.redisClient.xGroupCreate(this.streamKey, `${this.jobRunId}-${groupType}`, '0', {
         MKSTREAM: true,
       }).catch(err => {
         if (err.message.includes('BUSYGROUP')) {
           console.warn(`Consumer group ${this.jobRunId} already exists`);
+        }
+        else {
+          console.error(`Error creating consumer group ${this.jobRunId}-${groupType}:`, err);
         }
       })
     }
@@ -195,6 +196,22 @@ export class RedisStreamCollection<T extends Serializable>
         await this.redisClient.xDel(this.streamKey, id);
         await this.redisClient.hDel(`${this.streamKey}:ackCounter`, id);
       }
+    }
+  }
+
+  async ackAndPurge(ids: string[], groupType: GroupReaderType): Promise<boolean> {
+    const multi = this.redisClient.multi();
+    for (const id of ids) {
+      multi.xAck(this.streamKey, `${this.jobRunId}-${groupType}`, id);
+      multi.xDel(this.streamKey, id);
+    }
+    try {
+      const result = await multi.exec();
+      // Return true if result is an array and all commands succeeded (not null)
+      return Array.isArray(result) && result.every(res => res !== null);
+    } catch (error) {
+      console.error('Redis multi.exec error:', error);
+      return false;
     }
   }
 
