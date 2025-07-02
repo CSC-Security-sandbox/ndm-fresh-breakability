@@ -6,7 +6,10 @@ import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-server-overview/components/ReFreshExportPathsTime";
-import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
+import {
+  BULK_DISCOVERY,
+  EXPORT_PATHS_TABLE_COLS_DEF,
+} from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -128,7 +131,7 @@ const ExportPathsTable = ({
   );
 
   const contentValue = useMemo(() => {
-    if (jobType === "bulk-discovery") return "";
+    if (jobType === BULK_DISCOVERY) return "";
 
     if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
 
@@ -136,7 +139,7 @@ const ExportPathsTable = ({
   }, [isManualUploadPath, showRefetch, allExportPaths]);
 
   const getDataLabel = useCallback(() => {
-    if (jobType === "bulk-discovery") return NO_DATA_TEXT;
+    if (jobType === BULK_DISCOVERY) return NO_DATA_TEXT;
 
     if (fileServerDetails?.isUploadInProgress)
       return EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT;
