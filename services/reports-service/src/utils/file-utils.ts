@@ -18,7 +18,6 @@ export function sanitizeAndValidateFilePath(
     }
     return resolvedPath;
   } catch (error) {
-    this.logger.error(`File path validation error: ${error.message}`);
     throw new BadRequestException(error.message);
   }
 }
@@ -34,7 +33,6 @@ export function sanitizeIdentifier(identifier: string): string {
     }
     return identifier;
   } catch (error) {
-    this.logger.error(`Identifier validation error: ${error.message}`);
     throw new BadRequestException(error.message);
   }
 }
