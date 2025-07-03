@@ -117,7 +117,7 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "0-M",
+					"skipFile":            "15-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
